@@ -2022,4 +2022,14 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
+TEST_F(VectorizedCastExprTest, unsupported_test) {
+    // can't cast array<bool> to bool rather than crash
+    expr_node.child_type = gen_array_type_desc(to_thrift(LogicalType::TYPE_BOOLEAN));
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    ASSERT_TRUE(expr == nullptr);
+}
+
 } // namespace starrocks
