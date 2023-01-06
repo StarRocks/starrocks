@@ -219,4 +219,18 @@ public class JsonTypeTest extends PlanTestBase {
                         "CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), " +
                         "CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
     }
+
+    @Test
+    public void testCastJsonToArray() throws Exception {
+        assertPlanContains("select cast(json_array(1,2,3) as array<int>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<INT>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<varchar>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<VARCHAR>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<JSON>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<JSON>)");
+
+        // Multi-dimension array casting is not supported
+        assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
+                "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`");
+    }
 }
