@@ -40,7 +40,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -76,6 +75,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
 
 public class QueryAnalyzer {
     private final ConnectContext session;
@@ -301,11 +304,9 @@ public class QueryAnalyzer {
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
 
             List<Column> fullSchema = node.isBinlogQuery()
-                    ? BinlogScanNode.appendBinlogMetaColumns(table.getFullSchema())
-                    : table.getFullSchema();
+                    ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
             List<Column> baseSchema = node.isBinlogQuery()
-                    ? BinlogScanNode.appendBinlogMetaColumns(table.getBaseSchema())
-                    : table.getBaseSchema();
+                    ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
             for (Column column : fullSchema) {
                 Field field;
                 if (baseSchema.contains(column)) {
@@ -342,6 +343,15 @@ public class QueryAnalyzer {
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
             return scope;
+        }
+
+        private List<Column> appendBinlogMetaColumns(List<Column> schema) {
+            List<Column> columns = new ArrayList<>(schema);
+            columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
+            columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
+            columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
+            columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, Type.BIGINT));
+            return columns;
         }
 
         @Override
