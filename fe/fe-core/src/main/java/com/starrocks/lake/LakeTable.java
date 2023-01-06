@@ -187,6 +187,9 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Short getDefaultReplicationNum() {
+        if (tableProperty != null) {
+            return tableProperty.getReplicationNum();
+        }
         return 1;
     }
 }
