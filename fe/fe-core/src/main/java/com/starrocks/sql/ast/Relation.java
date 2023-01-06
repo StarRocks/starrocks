@@ -21,9 +21,13 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
+import java.util.List;
+
 public abstract class Relation implements ParseNode {
     private Scope scope;
+
     protected TableName alias;
+    protected List<String> explicitColumnNames;
 
     public Relation() {
     }
@@ -53,6 +57,18 @@ public abstract class Relation implements ParseNode {
 
     public TableName getResolveTableName() {
         return alias;
+    }
+
+    public List<String> getColumnOutputNames() {
+        return explicitColumnNames;
+    }
+
+    public void setColumnOutputNames(List<String> explicitColumnNames) {
+        this.explicitColumnNames = explicitColumnNames;
+    }
+
+    public List<String> getExplicitColumnNames() {
+        return explicitColumnNames;
     }
 
     @Override
