@@ -755,16 +755,12 @@ public class ShowExecutor {
         // create table catalogName.dbName.tableName (
         StringBuilder createTableSql = new StringBuilder();
         createTableSql.append("CREATE TABLE ")
-                .append(catalogName)
-                .append(".")
-                .append(dbName)
-                .append(".")
-                .append(tableName)
+                .append("`").append(tableName).append("`")
                 .append(" (\n");
 
         // Columns
         List<String> columns = table.getFullSchema().stream().map(
-                column -> toDDL(column)).collect(Collectors.toList());
+                this::toMysqlDDL).collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
 
@@ -793,8 +789,46 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private String toDDL(Column column) {
-        return "`" + column.getName() + "` " + column.getType();
+    private String toMysqlDDL(Column column) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  `").append(column.getName()).append("` ");
+        switch (column.getType().getPrimitiveType())  {
+            case TINYINT:
+                sb.append("tinyint(4)");
+                break;
+            case SMALLINT:
+                sb.append("smallint(6)");
+                break;
+            case INT:
+                sb.append("int(11)");
+                break;
+            case BIGINT:
+                sb.append("bigint(20)");
+                break;
+            case FLOAT:
+                sb.append("float");
+                break;
+            case DOUBLE:
+                sb.append("double");
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMALV2:
+                sb.append("decimal");
+                break;
+            case DATE:
+            case DATETIME:
+                sb.append("datetime");
+                break;
+            case CHAR:
+            case VARCHAR:
+                sb.append("varchar(1048576)");
+                break;
+            default:
+                sb.append("binary(1048576)");
+        }
+        sb.append(" DEFAULT NULL");
+        return  sb.toString();
     }
 
     private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
