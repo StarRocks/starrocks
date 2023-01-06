@@ -333,7 +333,7 @@ public class SimpleQueryAnalyzer {
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
-            if (node.getColumnNames() == null) {
+            if (node.getColumnOutputNames() == null) {
                 if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
@@ -341,20 +341,22 @@ public class SimpleQueryAnalyzer {
                     for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
                         columnNames.add("unnest");
                     }
-                    node.setColumnNames(columnNames);
+                    node.setColumnOutputNames(columnNames);
                 } else {
-                    node.setColumnNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
+                    node.setColumnOutputNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
                 }
             } else {
-                if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                if (node.getColumnOutputNames().size() != tableFunction.getTableFnReturnTypes().size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
-                            node.getAlias().getTbl(), node.getColumnNames().size(), tableFunction.getTableFnReturnTypes().size());
+                            node.getAlias().getTbl(),
+                            tableFunction.getTableFnReturnTypes().size(),
+                            node.getColumnOutputNames().size());
                 }
             }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                String colName = node.getColumnNames().get(i);
+                String colName = node.getColumnOutputNames().get(i);
 
                 Field field = new Field(colName,
                         tableFunction.getTableFnReturnTypes().get(i),

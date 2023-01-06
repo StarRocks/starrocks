@@ -38,8 +38,6 @@ public class TableFunctionRelation extends Relation {
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
-    private List<String> columnNames;
-
     public TableFunctionRelation(String functionName, FunctionParams functionParams) {
         this.functionName = new FunctionName(functionName);
         this.functionParams = functionParams;
@@ -67,14 +65,6 @@ public class TableFunctionRelation extends Relation {
 
     public void setChildExpressions(List<Expr> childExpressions) {
         this.childExpressions = childExpressions;
-    }
-
-    public List<String> getColumnNames() {
-        return columnNames;
-    }
-
-    public void setColumnNames(List<String> columnNames) {
-        this.columnNames = columnNames;
     }
 
     @Override
