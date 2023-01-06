@@ -16,8 +16,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -314,7 +316,11 @@ public class ResourceGroupStmtTest {
         String rgName = rows.get(0).get(0);
         List<String> classifierIds = rows.stream().filter(row -> row.get(0).equals(rgName))
                 .map(row -> getClassifierId(row.get(row.size() - 1))).collect(Collectors.toList());
-        rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
+        rows = rows.stream().peek(row -> {
+            if (row.get(0).equals(rgName)) {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
+        }).distinct().collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
@@ -330,6 +336,9 @@ public class ResourceGroupStmtTest {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         Random rand = new Random();
+        Map<String, Integer> classifierCount = new HashMap<>();
+        rows.forEach(row -> classifierCount
+                .compute(row.get(0), (rg, countClassifier) -> countClassifier == null ? 1 : countClassifier + 1));
         Iterator<List<String>> it = rows.iterator();
         while (it.hasNext()) {
             List<String> row = it.next();
@@ -339,7 +348,13 @@ public class ResourceGroupStmtTest {
             String rgName = row.get(0);
             String classifier = row.get(row.size() - 1);
             String id = getClassifierId(classifier);
-            it.remove();
+            Integer count = classifierCount.computeIfPresent(rgName, (rg, countClassifier) -> countClassifier - 1);
+            if (count != 0) {
+                // not last classifier of the rg, remove it
+                it.remove();
+            } else {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
             starRocksAssert.executeResourceGroupDdlSql(alterSql);
         }
@@ -355,7 +370,11 @@ public class ResourceGroupStmtTest {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String rgName = "rg2";
-        rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
+        rows = rows.stream().peek(row -> {
+            if (row.get(0).equals(rgName)) {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
+        }).distinct().collect(Collectors.toList());
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP ALL", rgName);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
@@ -405,7 +424,9 @@ public class ResourceGroupStmtTest {
 
         starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertTrue(rows.isEmpty());
+        String actual = rowsToString(rows);
+        String expect = "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=0.0)";
+        Assert.assertEquals(actual, expect);
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         assertResourceGroupNotExist("rg1");
