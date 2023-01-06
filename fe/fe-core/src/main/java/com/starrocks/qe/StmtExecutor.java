@@ -1310,9 +1310,14 @@ public class StmtExecutor {
                 context.getSessionVariable().setPreferComputeNode(false);
                 context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-                dataSink.init(context.getExecutionId(), transactionId, database.getId(),
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                dataSink.complete();
+                database.readLock();
+                try {
+                    dataSink.init(context.getExecutionId(), transactionId, database.getId(),
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    dataSink.complete();
+                } finally {
+                    database.readUnlock();
+                }
             }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
