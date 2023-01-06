@@ -59,6 +59,11 @@ public class JoinAssociativityRule extends TransformationRule {
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
+    protected JoinAssociativityRule(RuleType type, Pattern pattern) {
+        super(type, pattern);
+    }
+
+
     private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
 
     public static JoinAssociativityRule getInstance() {
