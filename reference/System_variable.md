@@ -224,6 +224,16 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
 
+* enable_scan_block_cache
+
+  是否开启 Block Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Block cache](../data_source/Block_cache.md)。
+
+  该特性从 2.5 版本开始支持。
+
+* enable_populate_block_cache
+
+  StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。该变量从 2.5 版本开始支持。
+
 * language
 
   用于兼容 MySQL 客户端。无实际作用。
