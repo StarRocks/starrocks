@@ -590,4 +590,17 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: 26: cast = 8: c_0_1\n" +
                 "  |  other join predicates: 8: c_0_1 <= 26: cast, 8: c_0_1 < 26: cast, 8: c_0_1 >= 26: cast"));
     }
+
+    @Test
+    public void testManyPartitions() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/many_partitions"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:OlapScanNode\n" +
+                "     TABLE: segment_profile\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 11: segment_id = 6259, 12: version = 20221221\n" +
+                "     partitions=17727/17727\n" +
+                "     rollup: segment_profile\n" +
+                "     tabletRatio=88635/88635"));
+    }
 }
