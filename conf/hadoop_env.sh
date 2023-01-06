@@ -1,6 +1,5 @@
 # This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-export HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/*
 export HADOOP_USER_NAME=${USER}
 
 # the purpose is to use local hadoop configuration first.
@@ -13,3 +12,14 @@ export HADOOP_USER_NAME=${USER}
 if [ ${HADOOP_CONF_DIR}"X" != "X" ]; then
     export HADOOP_CLASSPATH=${HADOOP_CONF_DIR}:${HADOOP_CLASSPATH}
 fi
+
+hadoop_jars=`find $STARROCKS_HOME/lib -name *.jar`
+HADOOP_CLASSPATH=
+for jar in $hadoop_jars
+do
+if [ ! -n "$HADOOP_CLASSPATH" ]; then
+    HADOOP_CLASSPATH=$jar
+else
+    HADOOP_CLASSPATH=$jar:$HADOOP_CLASSPATH
+fi
+done
