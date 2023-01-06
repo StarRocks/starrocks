@@ -127,9 +127,14 @@ public class CompactionScheduler extends Daemon {
                 try {
                     commitCompaction(partition, context);
                 } catch (Exception e) {
+                    LOG.error("Fail to commit compaction. {} error={}", context.getDebugString(), e.getMessage());
                     iterator.remove();
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    LOG.error("Fail to commit compaction. {} error={}", context.getDebugString(), e.getMessage());
+                    try {
+                        transactionMgr.abortTransaction(partition.getDbId(), context.getTxnId(), e.getMessage());
+                    } catch (UserException ex) {
+                        LOG.error("Fail to abort txn " + context.getTxnId(), ex);
+                    }
                     continue;
                 }
             }
