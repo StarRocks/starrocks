@@ -54,6 +54,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -1856,6 +1857,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
+                            table.getCurBinlogConfig(),
                             table.getPartitionInfo().getTabletType(partition.getId()),
                             table.getCompressionType(), indexMeta.getSortKeyIdxes());
                     tasks.add(task);
@@ -2154,6 +2156,25 @@ public class LocalMetastore implements ConnectorMetadata {
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
+
+        boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
+        if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
+            try {
+                Long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
+                Long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
+                BinlogConfig binlogConfig = new BinlogConfig(0, enableBinlog,
+                        binlogTtl, binlogMaxSize);
+                olapTable.setCurBinlogConfig(binlogConfig);
+                LOG.info("create table set binlog config, binlogTtl = " + binlogTtl +
+                        " ,binlog_max_size =" + " ,binlog_enable = " + enableBinlog);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
 
         // write quorum
         try {
@@ -3971,6 +3992,21 @@ public class LocalMetastore implements ConnectorMetadata {
 
     }
 
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
+                db.getId(),
+                table.getId(),
+                binlogConfig.toProperties());
+        editLog.logModifyBinlogConfig(log);
+
+        if (!binlogConfig.getBinlogEnable()) {
+            table.clearBinlogAvailableVersion();
+            table.setBinlogTxnId(BinlogConfig.INVALID);
+        }
+        table.setCurBinlogConfig(binlogConfig);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
@@ -4140,6 +4176,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
+                } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
+                    olapTable.setCurBinlogConfig(tableProperty.getBinlogConfig());
+                    if (!olapTable.enableBinlog()) {
+                        olapTable.clearBinlogAvailableVersion();
+                    }
                 }
             }
         } finally {

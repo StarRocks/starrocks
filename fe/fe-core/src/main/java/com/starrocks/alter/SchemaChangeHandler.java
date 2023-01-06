@@ -45,6 +45,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -1338,6 +1339,109 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    // return true means that the modification of FEMeta is successful,
+    // and as long as the modification of metadata is successful,
+    // the final consistency will be achieved through the report handler
+    public boolean updateBinlogConfigMeta(Database db, Long tableId, Map<String, String> properties,
+                                          TTabletMetaType metaType) {
+        List<Partition> partitions = Lists.newArrayList();
+        OlapTable olapTable;
+        BinlogConfig newBinlogConfig;
+        boolean hasChanged = false;
+        boolean isModifiedSuccess = true;
+        db.readLock();
+        try {
+            olapTable = (OlapTable) db.getTable(tableId);
+            if (olapTable == null) {
+                return false;
+            }
+            partitions.addAll(olapTable.getPartitions());
+            if (!olapTable.isHaveBinlogConfig()) {
+                newBinlogConfig = new BinlogConfig();
+                hasChanged = true;
+            } else {
+                newBinlogConfig = new BinlogConfig(olapTable.getCurBinlogConfig());
+            }
+        } finally {
+            db.readUnlock();
+        }
+
+        // judge whether the attribute has changed
+        // no exception will be thrown, for the analyzer has checked
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)) {
+            boolean binlogEnable = Boolean.parseBoolean(properties.get(
+                    PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE));
+            if (binlogEnable != newBinlogConfig.getBinlogEnable()) {
+                newBinlogConfig.setBinlogEnable(binlogEnable);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)) {
+            Long binlogTtl = Long.parseLong(properties.get(
+                    PropertyAnalyzer.PROPERTIES_BINLOG_TTL));
+            if (binlogTtl != newBinlogConfig.getBinlogTtlSecond()) {
+                newBinlogConfig.setBinlogTtlSecond(binlogTtl);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+            Long binlogMaxSize = Long.parseLong(properties.get(
+                    PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+            if (binlogMaxSize != newBinlogConfig.getBinlogMaxSize()) {
+                newBinlogConfig.setBinlogMaxSize(binlogMaxSize);
+                hasChanged = true;
+            }
+        }
+        if (!hasChanged) {
+            LOG.info("table {} binlog config is same as the previous version, so nothing need to do", olapTable.getName());
+            return true;
+        }
+
+        if (olapTable.getCurBinlogConfig() != null) {
+            LOG.info("update binlog config of table {}, the current binlog is : {}",
+                    olapTable.getName(), olapTable.getCurBinlogConfig().toString());
+        } else {
+            LOG.info("update binlog config of table {}, it has no binlog config previously",
+                    olapTable.getName());
+        }
+
+        db.writeLock();
+        // check for concurrent modifications by version
+        if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
+            // binlog config has been modified,
+            // no need to judge whether the binlog config is the same as previous one,
+            // just modify even if they are the same
+            Map<String, String> newProperties = olapTable.getCurBinlogConfig().toProperties();
+            newProperties.putAll(properties);
+            newBinlogConfig.buildFromProperties(newProperties);
+        }
+        newBinlogConfig.incVersion();
+        try {
+            GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
+        } catch (Exception e) {
+            // defensive programming, it normally should not throw an exception,
+            // here is just to ensure that a correct result can be returned
+            isModifiedSuccess = false;
+        } finally {
+            db.writeUnlock();
+        }
+
+        // TODO optimize by asynchronous rpc
+        if (metaType != TTabletMetaType.DISABLE_BINLOG) {
+            try {
+                for (Partition partition : partitions) {
+                    updateBinlogPartitionTabletMeta(db, olapTable.getName(), partition.getName(), olapTable.getCurBinlogConfig(),
+                            TTabletMetaType.BINLOG_CONFIG);
+                }
+            } catch (DdlException e) {
+                LOG.warn(e);
+                return isModifiedSuccess;
+            }
+
+        }
+        return isModifiedSuccess;
+    }
+
     /**
      * Update some specified partitions' in-memory property of table
      */
@@ -1372,6 +1476,89 @@ public class SchemaChangeHandler extends AlterHandler {
             } catch (Exception e) {
                 String errMsg = "Failed to update partition[" + partitionName + "]'s 'in_memory' property. " +
                         "The reason is [" + e.getMessage() + "]";
+                throw new DdlException(errMsg);
+            }
+        }
+    }
+
+    /**
+     * Update one specified partition's binlog config by partition name of table
+     * This operation may return partial successfully, with a exception to inform user to retry
+     */
+    public void updateBinlogPartitionTabletMeta(Database db,
+                                                String tableName,
+                                                String partitionName,
+                                                BinlogConfig binlogConfig,
+                                                TTabletMetaType metaType) throws DdlException {
+        // be id -> <tablet id,schemaHash>
+        Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
+        db.readLock();
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(tableName);
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+
+            MaterializedIndex baseIndex = partition.getBaseIndex();
+            int schemaHash = olapTable.getSchemaHashByIndexId(baseIndex.getId());
+            for (Tablet tablet : baseIndex.getTablets()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                    Set<Pair<Long, Integer>> tabletIdWithHash =
+                            beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                    tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+                }
+            }
+
+        } finally {
+            db.readUnlock();
+        }
+
+        int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
+        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        AgentBatchTask batchTask = new AgentBatchTask();
+        for (Map.Entry<Long, Set<Pair<Long, Integer>>> kv : beIdToTabletIdWithHash.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(kv.getKey(), kv.getValue(),
+                    binlogConfig, countDownLatch, metaType);
+            batchTask.addTask(task);
+        }
+        if (!FeConstants.runningUnitTest) {
+            // send all tasks and wait them finished
+            AgentTaskQueue.addBatchTask(batchTask);
+            AgentTaskExecutor.submit(batchTask);
+            LOG.info("send update tablet meta task for table {}, partitions {}, number: {}",
+                    tableName, partitionName, batchTask.getTaskNum());
+
+            // estimate timeout
+            long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+            timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+            boolean ok = false;
+            try {
+                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                LOG.warn("InterruptedException: ", e);
+            }
+
+            if (!ok || !countDownLatch.getStatus().ok()) {
+                String errMsg = "Failed to update partition[" + partitionName + "]. tablet meta.";
+                // clear tasks
+                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+
+                if (!countDownLatch.getStatus().ok()) {
+                    errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+                } else {
+                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                    // only show at most 3 results
+                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> subList =
+                            unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                    if (!subList.isEmpty()) {
+                        errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                    }
+                }
+                errMsg += ". This operation maybe partial successfully, You should retry until success.";
+                LOG.warn(errMsg);
                 throw new DdlException(errMsg);
             }
         }

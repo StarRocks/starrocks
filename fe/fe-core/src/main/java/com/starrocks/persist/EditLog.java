@@ -1640,6 +1640,14 @@ public class EditLog {
         logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
+    public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
+    }
+
+    public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
+    }
+
     public void logMVJobState(MVMaintenanceJob job) {
         logEdit(OperationType.OP_MV_JOB_STATE, job);
     }
@@ -1647,4 +1655,5 @@ public class EditLog {
     public void logMVEpochChange(MVEpoch epoch) {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
+
 }

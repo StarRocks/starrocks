@@ -193,7 +193,6 @@ public class LeaderImpl {
         long backendId = backend.getId();
         TTaskType taskType = request.getTask_type();
         long signature = request.getSignature();
-
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE

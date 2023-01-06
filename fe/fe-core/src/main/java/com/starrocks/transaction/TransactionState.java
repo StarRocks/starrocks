@@ -441,7 +441,7 @@ public class TransactionState implements Writable {
     }
 
     public void notifyVisible() {
-        // To avoid the method not having to be called repeatedly or in advance, 
+        // To avoid the method not having to be called repeatedly or in advance,
         // the following trigger conditions have been added
         // 1. the transactionStatus status must be VISIBLE
         // 2. this.latch.countDown(); has not been called before

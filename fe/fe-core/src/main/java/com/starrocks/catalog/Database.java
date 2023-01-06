@@ -437,7 +437,6 @@ public class Database extends MetaObject implements Writable {
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
                 }
-
                 table.onCreate();
             }
             return true;

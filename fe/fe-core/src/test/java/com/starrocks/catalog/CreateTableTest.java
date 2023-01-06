@@ -579,7 +579,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.t_binary_bf(\n" +
                         "k1 INT,\n" +
-                        "k2 VARCHAR(20),\n" +
+                        "k2 INT,\n" +
                         "k3 VARBINARY\n" +
                         ") ENGINE=OLAP\n" +
                         "DUPLICATE KEY(k1)\n" +
@@ -614,7 +614,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.t_binary_primary_key (\n" +
                         "k1 INT,\n" +
-                        "k2 INT\n" +
+                        "k2 VARCHAR(20)\n" +
                         ") ENGINE=OLAP\n" +
                         "PRIMARY KEY(k1)\n" +
                         "COMMENT \"OLAP\"\n" +
@@ -625,5 +625,73 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.t_binary_primary_key ADD COLUMN k3 VARBINARY(21)"));
+    }
+
+    @Test
+    public void testCreateTableWithBinlogProperties() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.binlog_table(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n," +
+                        "\"binlog_max_size\" = \"100\"\n," +
+                        "\"binlog_enable\" = \"true\"\n," +
+                        "\"binlog_ttl\" = \"100\"\n" +
+                        ");"
+        ));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("binlog_table");
+        Assert.assertNotNull(table.getCurBinlogConfig());
+        Assert.assertTrue(table.enableBinlog());
+
+        long version = table.getBinlogVersion();
+        Assert.assertEquals(0, version);
+        long binlogMaxSize = table.getCurBinlogConfig().getBinlogMaxSize();
+        Assert.assertEquals(100, binlogMaxSize);
+        long binlogTtlSecond = table.getCurBinlogConfig().getBinlogTtlSecond();
+        Assert.assertEquals(100, binlogTtlSecond);
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.binlog_table SET " +
+                        "(\"binlog_enable\" = \"false\",\"binlog_max_size\" = \"200\")"));
+        Assert.assertFalse(table.enableBinlog());
+        Assert.assertEquals(1, table.getBinlogVersion());
+        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+
+    }
+
+    @Test
+    public void testCreateTableWithoutBinlogProperties() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.not_binlog_table(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("not_binlog_table");
+
+        Assert.assertFalse(table.isHaveBinlogConfig());
+        Assert.assertFalse(table.enableBinlog());
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.not_binlog_table SET " +
+                        "(\"binlog_enable\" = \"true\",\"binlog_max_size\" = \"200\")"));
+        Assert.assertTrue(table.enableBinlog());
+        Assert.assertEquals(0, table.getBinlogVersion());
+        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
     }
 }
