@@ -565,7 +565,7 @@ public class JournalEntity implements Writable {
                 data = TaskRunStatusChange.read(in);
                 isRead = true;
                 break;
-                // only update the progress of task run
+            // only update the progress of task run
             case OperationType.OP_UPDATE_TASK_RUN_STATE:
                 data = TaskRunPeriodStatusChange.read(in);
                 isRead = true;
@@ -606,6 +606,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
@@ -788,4 +790,3 @@ public class JournalEntity implements Writable {
         Preconditions.checkState(isRead);
     }
 }
-

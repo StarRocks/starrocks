@@ -46,6 +46,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -191,6 +192,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    protected BinlogConfig curBinlogConfig;
+
+    // After ensuring that all binlog config of tablets in BE have taken effect,
+    // apply for a transaction id as binlogtxnId.
+    // The purpose is to ensure that in the case of concurrent imports,
+    // need to wait for the completion of concurrent imports,
+    // that is, all transactions which id is smaller than binlogTxnId have been finished/aborted,
+    // then binlog is available
+    protected long binlogTxnId = -1;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -252,6 +263,53 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.tableProperty = null;
     }
 
+    public BinlogConfig getCurBinlogConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getBinlogConfig();
+        }
+        return null;
+    }
+
+    public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        Map<String, String> properties = curBinlogConfig.toProperties();
+
+        // log binlogAvilableVerison when it's valid
+        // need't log if it's invalid
+        // for replay updateBinlogConfigInfo will invalidate binlogAvailableVersion
+        if (curBinlogConfig.getBinlogEnable()) {
+            Collection<Partition> allPartitions = getAllPartitions();
+            Map<String, String> partitonIdToAvailableVersion = new HashMap<>();
+            allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(
+                    TableProperty.BINLOG_PARTITION + partition.getId(),
+                    String.valueOf(partition.getVisibleVersion())));
+            properties.putAll(partitonIdToAvailableVersion);
+        }
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setBinlogConfig(curBinlogConfig);
+        if (curBinlogConfig.getBinlogEnable()) {
+            tableProperty.buildBinlogAvailableVersion();
+        }
+    }
+
+    public boolean isHaveBinlogConfig() {
+        if (tableProperty == null ||
+                tableProperty.getBinlogConfig() == null ||
+                tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public long getBinlogTxnId() {
+        return binlogTxnId;
+    }
+
+    public void setBinlogTxnId(long binlogTxnId) {
+        this.binlogTxnId = binlogTxnId;
+    }
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
     }
@@ -1222,7 +1280,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             out.writeBoolean(true);
             tableProperty.write(out);
         }
-
         tempPartitions.write(out);
     }
 
@@ -1349,7 +1406,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 tableProperty = TableProperty.read(in);
             }
         }
-
         // temp partitions
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             tempPartitions = TempPartitions.read(in);
@@ -1657,6 +1713,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
+    public Boolean enableBinlog() {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+            return false;
+        }
+        return tableProperty.getBinlogConfig().getBinlogEnable();
+    }
+
+    public long getBinlogVersion() {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+            return BinlogConfig.INVALID;
+        }
+        return tableProperty.getBinlogConfig().getVersion();
+    }
+
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1922,6 +1992,37 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
+    public Map<String, String> buildBinlogAvailableVersion() {
+        Map<String, String> result = new HashMap<>();
+        Collection<Partition> partitions =  getPartitions();
+        for (Partition partition : partitions) {
+            result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
+                    String.valueOf(partition.getVisibleVersion()));
+        }
+        return result;
+    }
+
+    public void setBinlogAvailableVersion(Map<String, String> properties) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.buildBinlogAvailableVersion();
+    }
+
+    public Map<Long, Long> getBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return new HashMap<>();
+        }
+        return tableProperty.getBinlogAvailaberVersions();
+    }
+
+    public void clearBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.clearBinlogAvailableVersion();
+    }
 
     @Override
     public void onCreate() {

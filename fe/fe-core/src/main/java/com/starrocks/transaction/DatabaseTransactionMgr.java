@@ -811,7 +811,7 @@ public class DatabaseTransactionMgr {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
-                            // which means publish version task finished in replica  
+                            // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
