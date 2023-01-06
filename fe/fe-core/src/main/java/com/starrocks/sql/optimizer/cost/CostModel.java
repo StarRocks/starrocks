@@ -36,7 +36,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.List;
 
@@ -217,9 +217,12 @@ public class CostModel {
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
-                        return CostEstimate.of(result.getCpuCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
-                                result.getMemoryCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
-                                result.getNetworkCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
+                        return CostEstimate.of(
+                                result.getCpuCost() * StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
+                                result.getMemoryCost() *
+                                        StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
+                                result.getNetworkCost() *
+                                        StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
                     break;
                 case SHUFFLE:
@@ -293,7 +296,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
+                                * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 2, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -309,15 +312,16 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = leftSize * rightSize + StatsConstants.CROSS_JOIN_COST_PENALTY;
-            double memCost = rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2;
+            double cpuCost = leftSize * rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
+            double memCost = rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D;
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost += StatsConstants.CROSS_JOIN_RIGHT_COST_PENALTY;
+                cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
                 memCost += rightSize;
             }
-            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||
+                    join.getJoinType().isAntiJoin()) {
                 cpuCost += leftSize;
             }
 
