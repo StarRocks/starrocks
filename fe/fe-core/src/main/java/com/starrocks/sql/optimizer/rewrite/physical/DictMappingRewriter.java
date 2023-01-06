@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -208,6 +209,11 @@ public class DictMappingRewriter {
         public ScalarOperator visitLikePredicateOperator(LikePredicateOperator operator, RewriterContext context) {
             operator.setChild(0, operator.getChild(0).accept(this, context));
             return operator;
+        }
+
+        @Override
+        public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator operator, RewriterContext context) {
+            return rewriteForScalarOperator(operator, context);
         }
 
     }
