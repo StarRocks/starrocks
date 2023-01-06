@@ -16,18 +16,28 @@
 package com.starrocks.sql.analyzer;
 
 
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
 public class AlterSystemStmtAnalyzerTest {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+    }
 
     @Mocked
     InetAddress addr1;
@@ -75,5 +85,12 @@ public class AlterSystemStmtAnalyzerTest {
                 new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyFrontendHostClause(clause, null);
+    }
+
+    @Test
+    public void testAnalyzeCancelAlterSystem() {
+        CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) analyzeSuccess(
+                "CANCEL DECOMMISSION BACKEND \"127.0.0.1:8080\", \"127.0.0.2:8080\"");
+        Assert.assertEquals("[127.0.0.1:8080, 127.0.0.2:8080]", cancelAlterSystemStmt.getHostPortPairs().toString());
     }
 }

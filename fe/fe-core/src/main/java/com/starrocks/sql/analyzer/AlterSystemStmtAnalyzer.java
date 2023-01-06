@@ -39,7 +39,19 @@ import java.net.UnknownHostException;
 public class AlterSystemStmtAnalyzer {
 
     public static void analyze(DdlStmt ddlStmt, ConnectContext session) {
-        new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor().analyze((AlterSystemStmt) ddlStmt, session);
+        if (ddlStmt instanceof AlterSystemStmt) {
+            new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor().analyze((AlterSystemStmt) ddlStmt, session);
+        } else if (ddlStmt instanceof CancelAlterSystemStmt) {
+            CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
+            try {
+                for (String hostPort : stmt.getHostPorts()) {
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    stmt.getHostPortPairs().add(pair);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException("frontend host or port is wrong!");
+            }
+        }
     }
 
     static class AlterSystemStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -132,19 +144,6 @@ public class AlterSystemStmtAnalyzer {
                 }
             } catch (AnalysisException e) {
                 throw new SemanticException("broker host or port is wrong!");
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt stmt, ConnectContext context) {
-            try {
-                for (String hostPort : stmt.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-                    stmt.getHostPortPairs().add(pair);
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException("frontend host or port is wrong!");
             }
             return null;
         }
