@@ -223,6 +223,16 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Boolean value to enable query queues for statistics queries.
 
+* enable_scan_block_cache
+  
+  Whether to enable the Block Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Block cache](../data_source/Block_cache.md).
+
+  This feature is supported in v2.5.
+
+* enable_populate_block_cache
+  
+  Whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+
 * language
 
   Used for MySQL client compatibility. No practical usage.

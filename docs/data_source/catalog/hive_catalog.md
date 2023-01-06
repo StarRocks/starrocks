@@ -125,7 +125,7 @@ The properties of the Hive catalog. This parameter is required. You can configur
     | **Property**        | **Required** | **Description**                                              |
     | ------------------- | ------------ | ------------------------------------------------------------ |
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+    | hive.metastore.uris | Yes          | The URI of the Hive metastore. Format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
     > **Note**
     >
