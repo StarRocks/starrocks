@@ -43,7 +43,6 @@ import com.starrocks.common.Status;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
@@ -151,18 +150,6 @@ public class CreateReplicaTask extends AgentTask {
         this.tabletType = tabletType;
 
         this.compressionType = compressionType;
-    }
-
-    public CreateReplicaTask(TNetworkAddress backendAddr, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-                             short shortKeyColumnCount, int schemaHash, long version,
-                             KeysType keysType, TStorageType storageType,
-                             TStorageMedium storageMedium, List<Column> columns,
-                             Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
-                             List<Index> indexes,
-                             boolean isInMemory,
-                             boolean enablePersistentIndex,
-                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
-        super(null, backendAddr, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
     }
 
     public void setIsRecoverTask(boolean isRecoverTask) {

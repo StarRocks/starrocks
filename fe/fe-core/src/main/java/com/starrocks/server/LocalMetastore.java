@@ -214,7 +214,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -1811,16 +1810,15 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isLakeTable()) {
-                // long primaryBackendId = -1;
-                TNetworkAddress backendAddr = null;
+                long primaryBackendId = -1;
                 try {
-                    backendAddr = ((LakeTablet) tablet).getPrimaryBackendAddr();
+                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
 
                 CreateReplicaTask task = new CreateReplicaTask(
-                        backendAddr,
+                        primaryBackendId,
                         dbId,
                         table.getId(),
                         partition.getId(),
