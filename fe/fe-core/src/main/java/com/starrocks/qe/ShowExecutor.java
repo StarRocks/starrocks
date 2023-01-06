@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -57,6 +58,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -551,14 +553,20 @@ public class ShowExecutor {
     private void handleShowDb() throws AnalysisException, DdlException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = new ArrayList<>();
+        List<String> dbNames;
         String catalogName;
+        String currentCatalog = ctx.getCurrentCatalog();
         if (showDbStmt.getCatalogName() == null) {
-            catalogName = ctx.getCurrentCatalog();
+            catalogName = currentCatalog;
         } else {
             catalogName = showDbStmt.getCatalogName();
         }
         dbNames = metadataMgr.listDbNames(catalogName);
+
+        // The db of the external table will display the name of the catalog
+        if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(currentCatalog))  {
+            dbNames = dbNames.stream().map(u -> String.format("%s.%s", currentCatalog, u)).collect(Collectors.toList());
+        }
 
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
@@ -601,6 +609,13 @@ public class ShowExecutor {
             catalogName = ctx.getCurrentCatalog();
         }
         String dbName = showTableStmt.getDb();
+
+        // support show full tables from `external_catalog.database`
+        if (dbName.contains(".")) {
+            List<String> catalogAndDb = Splitter.on('.').trimResults().splitToList(dbName);
+            catalogName = catalogAndDb.get(0);
+            dbName = catalogAndDb.get(1);
+        }
         Database db = metadataMgr.getDb(catalogName, dbName);
 
         PatternMatcher matcher = null;

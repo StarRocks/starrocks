@@ -16,6 +16,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -5442,6 +5443,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (parts.size() == 3) {
             return new TableName(parts.get(0), parts.get(1), parts.get(2));
         } else if (parts.size() == 2) {
+            String pendingDbName = qualifiedName.getParts().get(0);
+            // support query `external_catalog.database`
+            if (pendingDbName.contains(".")) {
+                List<String> catalogAndDb = Splitter.on('.').trimResults().splitToList(pendingDbName);
+                String catalogName = catalogAndDb.get(0);
+                String dbName = catalogAndDb.get(1);
+                return new TableName(catalogName, dbName, qualifiedName.getParts().get(1));
+            }
             return new TableName(null, qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
         } else if (parts.size() == 1) {
             return new TableName(null, null, qualifiedName.getParts().get(0));

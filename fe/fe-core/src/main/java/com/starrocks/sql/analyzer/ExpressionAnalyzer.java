@@ -57,6 +57,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
@@ -1128,7 +1129,12 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase("DATABASE") || funcType.equalsIgnoreCase("SCHEMA")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                String databaseName = ClusterNamespace.getNameFromFullName(session.getDatabase());
+                if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(session.getCurrentCatalog())) {
+                    node.setStrValue(databaseName);
+                } else {
+                    node.setStrValue(String.format("%s.%s", session.getCurrentCatalog(), databaseName));
+                }
             } else if (funcType.equalsIgnoreCase("USER")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getUserIdentity().toString());
