@@ -962,31 +962,10 @@ public abstract class Type implements Cloneable {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-<<<<<<< HEAD
-        } else if ((from.isStringType() || from.isJsonType()) && to.isArrayType()) {
-=======
-        } else if (from.isMapType() && to.isMapType()) {
-            MapType fromMap = (MapType) from;
-            MapType toMap = (MapType) to;
-            return canCastTo(fromMap.getKeyType(), toMap.getKeyType()) &&
-                    canCastTo(fromMap.getValueType(), toMap.getValueType());
-        } else if (from.isStructType() && to.isStructType()) {
-            StructType fromStruct = (StructType) from;
-            StructType toStruct = (StructType) to;
-            if (fromStruct.getFields().size() != toStruct.getFields().size()) {
-                return false;
-            }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
-                    return false;
-                }
-            }
-            return true;
         } else if (from.isStringType() && to.isArrayType()) {
             return true;
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array
->>>>>>> f1d550d5b ([BugFix] Fix type casting from json to array (#16267))
             return true;
         } else {
             return false;
