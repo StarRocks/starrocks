@@ -8,10 +8,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -44,7 +41,6 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -445,35 +441,6 @@ public class Utils {
             }
         }
         return smallestColumnRef;
-    }
-
-    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
-                                              Collection<Long> selectedPartitionId,
-                                              Collection<Long> selectedTabletId) {
-        int backendSize = GlobalStateMgr.getCurrentSystemInfo().backendSize();
-        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
-        int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
-        for (Long partitionId : selectedPartitionId) {
-            Partition partition = table.getPartition(partitionId);
-            if (partition.isUseStarOS()) {
-                // TODO(wyb): necessary to support?
-                return false;
-            }
-            if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
-                return false;
-            }
-            long visibleVersion = partition.getVisibleVersion();
-            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
-            // TODO(kks): improve this for loop
-            for (Long id : selectedTabletId) {
-                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
-                if (tablet != null && tablet.getQueryableReplicasSize(visibleVersion, schemaHash)
-                        != aliveBackendSize) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {
