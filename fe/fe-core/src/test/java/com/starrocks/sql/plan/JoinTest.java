@@ -28,6 +28,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
@@ -1168,7 +1169,8 @@ public class JoinTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";

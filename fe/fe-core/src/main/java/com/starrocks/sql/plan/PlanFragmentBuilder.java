@@ -279,14 +279,7 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
-            Projection projection = (optExpression.getOp()).getProjection();
-
-            if (projection == null) {
-                return fragment;
-            } else {
-                return buildProjectNode(optExpression, projection, fragment, context);
-            }
+            return visit(optExpression, context);
         }
 
         @Override
@@ -576,31 +569,24 @@ public class PlanFragmentBuilder {
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
+                long localBeId = -1;
+                if (Config.enable_local_replica_selection) {
+                    localBeId = GlobalStateMgr.getCurrentSystemInfo()
+                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+                }
+
                 for (Long partitionId : node.getSelectedPartitionId()) {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
-
-                    final List<Tablet> tablets = Lists.newArrayList();
-                    for (Long id : node.getSelectedTabletId()) {
-                        if (selectedTable.getTablet(id) != null) {
-                            tablets.add(selectedTable.getTablet(id));
-                        }
-                    }
-
-                    long localBeId = -1;
-                    if (Config.enable_local_replica_selection) {
-                        localBeId = GlobalStateMgr.getCurrentSystemInfo()
-                                .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
-                    }
-
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
                     Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                     for (int i = 0; i < allTabletIds.size(); i++) {
                         tabletId2BucketSeq.put(allTabletIds.get(i), i);
                     }
-
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                    List<Tablet> tablets = selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
@@ -2812,7 +2798,7 @@ public class PlanFragmentBuilder {
                 } else if (isShuffleJoin(optExpr)) {
                     distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    Preconditions.checkState(false, "Must be replicate join or colocate join");
+                    Preconditions.checkState(false, "Must be colocate/bucket/replicate join");
                     distributionMode = JoinNode.DistributionMode.COLOCATE;
                 }
             } else if (isShuffleJoin(optExpr)) {

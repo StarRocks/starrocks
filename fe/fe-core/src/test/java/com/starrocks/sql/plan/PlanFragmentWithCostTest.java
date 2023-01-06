@@ -31,6 +31,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -525,7 +526,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "rollup: bitmap_mv");
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
