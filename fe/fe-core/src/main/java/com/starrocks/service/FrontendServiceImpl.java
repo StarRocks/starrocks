@@ -1642,7 +1642,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
-
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
     }
 
