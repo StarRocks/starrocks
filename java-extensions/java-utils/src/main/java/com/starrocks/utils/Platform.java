@@ -23,6 +23,8 @@ import java.lang.reflect.Field;
  */
 public final class Platform {
 
+    private static boolean isUsingUnsafeMemoryTracker = false;
+
     private static final Unsafe _UNSAFE;
 
     public static final int BOOLEAN_ARRAY_OFFSET;
@@ -95,14 +97,28 @@ public final class Platform {
         _UNSAFE.putDouble(object, offset, value);
     }
 
+    public static void enableUnsafeMemoryTracker() {
+        isUsingUnsafeMemoryTracker = true;
+    }
+
+    public static void disableUnsafeMemoryTracker() {
+        isUsingUnsafeMemoryTracker = true;
+    }
+
     public static void freeMemory(long address) {
-        //_UNSAFE.freeMemory(address);
-        com.starrocks.utils.NativeMethodHelper.memoryTrackerFree(address);
+        if (isUsingUnsafeMemoryTracker) {
+            _UNSAFE.freeMemory(address);
+        } else {
+            com.starrocks.utils.NativeMethodHelper.memoryTrackerFree(address);
+        }
     }
 
     public static long allocateMemory(long size) {
-        //return _UNSAFE.allocateMemory(size);
-        return com.starrocks.utils.NativeMethodHelper.memoryTrackerMalloc(size);
+        if (isUsingUnsafeMemoryTracker) {
+            return _UNSAFE.allocateMemory(size);
+        } else {
+            return com.starrocks.utils.NativeMethodHelper.memoryTrackerMalloc(size);
+        }
     }
 
     public static long reallocateMemory(long address, long oldSize, long newSize) {
