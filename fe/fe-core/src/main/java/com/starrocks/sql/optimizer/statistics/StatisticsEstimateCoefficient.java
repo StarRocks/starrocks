@@ -38,4 +38,8 @@ public class StatisticsEstimateCoefficient {
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
     // default or predicate limit
     public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
+
+    public static final int CROSS_JOIN_COST_PENALTY = 2;
+    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
+    public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 }
