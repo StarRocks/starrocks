@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -127,6 +130,18 @@ public class LogicalTopNOperator extends LogicalOperator {
             }
             return columns;
         }
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnEntries()) {
+            entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getScalarOp()));
+        }
+        for (Ordering ordering : orderByElements) {
+            entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
+        }
+        return new RowOutputInfo(entryList);
     }
 
     @Override

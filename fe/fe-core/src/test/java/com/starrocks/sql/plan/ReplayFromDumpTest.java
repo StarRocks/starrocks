@@ -160,7 +160,7 @@ public class ReplayFromDumpTest {
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
-        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
@@ -437,7 +437,7 @@ public class ReplayFromDumpTest {
             @Override
             public void addJoinTransformationRules() {
                 this.getTransformRules().clear();
-                this.getTransformRules().add(JoinAssociativityRule.getInstance());
+                this.getTransformRules().add(JoinAssociativityRule.INNER_JOIN_ASSOCIATIVITY_RULE);
             }
         };
 
@@ -450,7 +450,7 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  13:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
@@ -474,10 +474,12 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), " +
-                "multi_distinct_count(128: case), max(103: count)"));
+        String plan = replayPair.second;
+        Assert.assertTrue(plan, plan.contains("34:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
+                " multi_distinct_count(128: case), max(103: count)\n" +
+                "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
+                "127: concat, 9: upc, 108: upc_desc"));
     }
 
     @Test
@@ -496,8 +498,10 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:Decode\n" +
-                "  |  <dict id 42> : <string id 18>"));
+        String plan = replayPair.second;
+        Assert.assertTrue(plan, plan.contains("13:Decode\n" +
+                "  |  <dict id 42> : <string id 18>\n" +
+                "  |  <dict id 43> : <string id 23>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 

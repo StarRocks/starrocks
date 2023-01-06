@@ -14,16 +14,20 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class LogicalRepeatOperator extends LogicalOperator {
@@ -67,6 +71,16 @@ public class LogicalRepeatOperator extends LogicalOperator {
         }
 
         return outputColumns;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        Map<ColumnRefOperator, ScalarOperator> map = Maps.newHashMap();
+        outputGrouping.stream().forEach(e -> map.put(e, e));
+        for (List<ColumnRefOperator> refSets : repeatColumnRefList) {
+            refSets.stream().forEach(e -> map.put(e, e));
+        }
+        return new RowOutputInfo(map);
     }
 
     @Override
