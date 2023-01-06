@@ -830,8 +830,8 @@ public class ExpressionAnalyzer {
                 }
                 // force the second array be of Type.ARRAY_BOOLEAN
                 if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
-                    throw new SemanticException("The second input of array_filter " + node.getChild(1).toString() +
-                            "  cannot cast to ARRAY<BOOL>");
+                    throw new SemanticException("The second input of array_filter " +
+                            node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                 }
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
