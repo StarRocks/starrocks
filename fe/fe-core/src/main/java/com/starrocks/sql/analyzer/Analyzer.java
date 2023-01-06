@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BaseViewStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
@@ -452,12 +453,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-            AlterSystemStmtAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
         public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
             return null;
@@ -571,6 +566,21 @@ public class Analyzer {
         @Override
         public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+
+        // ------------------------------------------- Cluster Management Statement ----------------------------------------
+
+        @Override
+        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
+            AlterSystemStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
+            AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
