@@ -1514,7 +1514,7 @@ public class PrivilegeCheckerV2Test {
                 "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
 
         // CancelAlterSystemStmt
-        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";",
+        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"127.0.0.1:9010\", \"127.0.0.1:9011\";",
                 "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
     }
 
