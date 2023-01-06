@@ -11,8 +11,7 @@ A Hive catalog is an external catalog supported in StarRocks 2.3 and later versi
 
     > **Note**
     >
-    > - An error occurs if you query Hive data in unsupported data types.
-    > - StarRocks only supports querying data of MAP and STRUCT types in Parquet or ORC data files.
+    > An error occurs if you query Hive data in unsupported data types.
 
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
