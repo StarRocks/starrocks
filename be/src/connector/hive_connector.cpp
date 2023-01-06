@@ -374,6 +374,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         jni_scanner_params["serde"] = hudi_table->get_serde_lib();
         jni_scanner_params["input_format"] = hudi_table->get_input_format();
 
+#ifndef NDEBUG
+        for (const auto& it : jni_scanner_params) {
+            VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
+        }
+#endif
         std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
 
         scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));

@@ -25,6 +25,7 @@ import java.util.Objects;
 
 public class HudiSliceScannerFactory implements ScannerFactory {
     static ChildFirstClassLoader classLoader;
+
     static {
         String basePath = System.getenv("STARROCKS_HOME");
         File dir = new File(basePath + "/lib/hudi-reader-lib");
