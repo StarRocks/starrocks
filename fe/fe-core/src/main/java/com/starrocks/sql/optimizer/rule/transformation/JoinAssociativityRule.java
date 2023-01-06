@@ -130,9 +130,29 @@ public class JoinAssociativityRule extends TransformationRule {
             }
         }
 
+        Projection leftChildJoinProjection = leftChildJoin.getProjection();
+        HashMap<ColumnRefOperator, ScalarOperator> leftChild2Expression = new HashMap<>();
+        if (leftChildJoinProjection != null) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
+                    .entrySet()) {
+                String keyIdentifier = entry.getKey().toString();
+                String valueIdentifier = entry.getValue().toString();
+                boolean isProjectToColumnRef = Objects.equals(keyIdentifier, valueIdentifier);
+                if (!isProjectToColumnRef &&
+                        leftChild2.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
+
+
+                    boolean is = false;
+
+                    leftChild2Expression.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
         ColumnRefSet newRightChildColumns = new ColumnRefSet();
         newRightChildColumns.union(rightChild.getOutputColumns());
         newRightChildColumns.union(leftChild2.getOutputColumns());
+        newRightChildColumns.union(leftChild2Expression.keySet());
 
         List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
         List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
@@ -151,7 +171,7 @@ public class JoinAssociativityRule extends TransformationRule {
 
         LogicalJoinOperator.Builder topJoinBuilder = new LogicalJoinOperator.Builder();
 
-        // If left child join contains predicate, it's means the predicate must can't push down to child, it's
+        // If left child join contains predicate, it's means the predicate must can't push down to child, it
         // will use columns which from all children, so we should add the predicate to new top join
         ScalarOperator topJoinPredicate = parentJoin.getPredicate();
         if (leftChildJoin.getPredicate() != null) {
@@ -170,7 +190,6 @@ public class JoinAssociativityRule extends TransformationRule {
                 .filter(parentJoinRequiredColumns::contains)
                 .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
-        Projection leftChildJoinProjection = leftChildJoin.getProjection();
         HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         HashMap<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         if (leftChildJoinProjection != null) {
@@ -212,7 +231,28 @@ public class JoinAssociativityRule extends TransformationRule {
                     .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
                     .setProjection(new Projection(rightExpression))
                     .build();
-            newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
+
+            OptExpression left;
+            Map<ColumnRefOperator, ScalarOperator> expressionProject;
+            if (leftChild2.getOp().getProjection() == null) {
+                expressionProject = leftChild2.getOutputColumns().getStream()
+                        .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
+                        .collect(Collectors.toMap(Function.identity(), Function.identity()));
+            } else {
+                expressionProject = Maps.newHashMap(leftChild2.getOp().getProjection().getColumnRefMap());
+            }
+            // Use leftChild2 projection to rewrite the leftExpression, it's like two project node merge.
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
+            Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChild2Expression.entrySet()) {
+                rewriteMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+            }
+            Operator.Builder builder = OperatorBuilderFactory.build(leftChild2.getOp());
+            Operator newOp = builder.withOperator(leftChild2.getOp())
+                    .setProjection(new Projection(rewriteMap)).build();
+            left = OptExpression.create(newOp, leftChild2.getInputs());
+
+            newRightChildJoin = OptExpression.create(rightChildJoinOperator, left, rightChild);
 
             newRightOutputColumns = new ArrayList<>(rightExpression.keySet());
         }
