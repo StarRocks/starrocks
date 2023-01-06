@@ -25,7 +25,10 @@
 
 namespace starrocks::lake {
 
-GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(tablet) {}
+GeneralTabletWriter::GeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema>& tschema)
+        : _tablet(tablet) {
+    _schema = tschema;
+}
 
 GeneralTabletWriter::~GeneralTabletWriter() = default;
 
@@ -73,9 +76,7 @@ void GeneralTabletWriter::close() {
 }
 
 Status GeneralTabletWriter::reset_segment_writer() {
-    if (_schema == nullptr) {
-        ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
-    }
+    CHECK(_schema != nullptr);
     auto name = random_segment_filename();
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;

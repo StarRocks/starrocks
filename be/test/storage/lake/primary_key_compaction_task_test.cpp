@@ -373,4 +373,58 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
     EXPECT_EQ(1, input_rowsets3.size());
 }
 
+TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
+    // Prepare data for writing
+    std::vector<Chunk> chunks;
+    std::vector<std::vector<uint32_t>> indexes_list;
+    for (int i = 0; i < 3; i++) {
+        chunks.push_back(generate_data(kChunkSize * (i + 1), i));
+        auto indexes = std::vector<uint32_t>(kChunkSize * (i + 1));
+        for (int j = 0; j < kChunkSize * (i + 1); j++) {
+            indexes[j] = j;
+        }
+        indexes_list.push_back(indexes);
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        _txn_id++;
+        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    {
+        _txn_id++;
+        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 6, read(version));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+
+    config::max_update_compaction_num_singleton_deltas = 4;
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
+    EXPECT_EQ(4, input_rowsets.size());
+
+    // check the rowset order, pick rowset#1 first, because it have deleted rows.
+    // Next order is rowset#4#2#3, by their byte size.
+    EXPECT_EQ(input_rowsets[0]->id(), 1);
+    EXPECT_EQ(input_rowsets[1]->id(), 4);
+    EXPECT_EQ(input_rowsets[2]->id(), 2);
+    EXPECT_EQ(input_rowsets[3]->id(), 3);
+}
+
 } // namespace starrocks::lake

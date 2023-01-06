@@ -40,7 +40,6 @@ private:
 };
 
 struct RowsetStat {
-    double score_per_row = 0.0;
     size_t num_rows = 0;
     size_t num_dels = 0;
     size_t bytes = 0;
@@ -58,32 +57,36 @@ private:
     double calc_compaction_score(const RowsetStat& stats);
     static const size_t compaction_result_bytes_threashold = 1000000000;
     static const size_t compaction_result_rows_threashold = 10000000;
-    static const int64_t compaction_cost_seek = 32 * 1024 * 1024;
 
 private:
     TabletPtr _tablet;
 };
 
-double PrimaryCompactionPolicy::calc_compaction_score(const RowsetStat& stat) {
-    if (stat.num_rows < 10) {
-        return compaction_cost_seek;
-    }
-    const int64_t cost_record_write = 1;
-    const int64_t cost_record_read = 4;
-    // use double to prevent overflow
-    auto delete_bytes = (int64_t)(stat.bytes * (double)stat.num_dels / stat.num_rows);
-    return compaction_cost_seek + (cost_record_read + cost_record_write) * delete_bytes -
-           cost_record_write * stat.bytes;
-}
-
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
 
     std::vector<RowsetPtr> input_rowsets;
-    // pick high score rowset
+    // The goal of lake primary table compaction:
+    // 1. clean up deleted bytes.
+    // 2. merge small rowsets to bigger rowset.
+    // so we pick rowset to compact by this logic:
+    // First, pick out rowset with more deleted bytes.
+    // Second, pick out rowset with less bytes.
     struct RowsetCompare {
+        static double calc_del_bytes(const RowsetCandidate& rc) {
+            return (double)rc.second.bytes * (double)rc.second.num_dels / (double)rc.second.num_rows;
+        }
         bool operator()(const RowsetCandidate& a, const RowsetCandidate& b) const {
-            return a.second.score_per_row < b.second.score_per_row;
+            double delete_bytes_a = calc_del_bytes(a);
+            double delete_bytes_b = calc_del_bytes(b);
+            if (delete_bytes_a < delete_bytes_b) {
+                return true;
+            } else if (delete_bytes_a > delete_bytes_b) {
+                return false;
+            } else {
+                // may happen when deleted rows is zero
+                return a.second.bytes > b.second.bytes;
+            }
         }
     };
     UpdateManager* mgr = _tablet->update_mgr();
@@ -93,8 +96,6 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t v
         stat.num_rows = rowset_pb.num_rows();
         stat.bytes = rowset_pb.data_size();
         stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), version, rowset_pb);
-        // calc rowset compaction score, and get per row score
-        stat.score_per_row = calc_compaction_score(stat) / (stat.num_rows - stat.num_dels);
         rowset_queue.push(std::make_pair(std::make_shared<RowsetMetadata>(rowset_pb), stat));
     }
     size_t cur_compaction_result_bytes = 0;

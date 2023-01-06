@@ -75,13 +75,13 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
     return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
 }
 
-StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(RowsetTxnMetaPB* rowset_txn_meta,
-                                                           std::shared_ptr<const TabletSchema>& tschema) {
-    return std::make_unique<PkTabletWriter>(*this, rowset_txn_meta, tschema);
-}
-
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
-    return std::make_unique<GeneralTabletWriter>(*this);
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        return std::make_unique<PkTabletWriter>(*this, tablet_schema);
+    } else {
+        return std::make_unique<GeneralTabletWriter>(*this, tablet_schema);
+    }
 }
 
 StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, VectorizedSchema schema) {
@@ -94,7 +94,6 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
-    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {

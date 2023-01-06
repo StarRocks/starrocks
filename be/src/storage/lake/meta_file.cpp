@@ -26,8 +26,9 @@
 namespace starrocks {
 namespace lake {
 
-MetaFileBuilder::MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr) {
+MetaFileBuilder::MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr, UpdateManager* update_mgr) {
     _tablet_meta = metadata_ptr;
+    _update_mgr = update_mgr;
 }
 
 void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
@@ -111,6 +112,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 }
 
 Status MetaFileBuilder::_finalize_delvec(LocationProvider* location_provider, int64_t version) {
+    if (!is_primary_key(_tablet_meta.get())) return Status::OK();
     const size_t delvec_size = _tablet_meta->delvec_meta().delvecs_size();
     for (size_t i = 0; i < delvec_size; i++) {
         auto* each_delvec = _tablet_meta->mutable_delvec_meta()->mutable_delvecs(i);
@@ -146,28 +148,6 @@ Status MetaFileBuilder::_finalize_delvec(LocationProvider* location_provider, in
     return Status::OK();
 }
 
-Status MetaFileBuilder::finalize(LocationProvider* location_provider, UpdateManager* mgr) {
-    MonotonicStopWatch watch;
-    watch.start();
-    const int64_t version = _tablet_meta->version();
-    auto filepath = location_provider->tablet_metadata_location(_tablet_meta->id(), version);
-    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    auto writer_file = fs::new_writable_file(options, filepath);
-    if (!writer_file.ok()) {
-        return writer_file.status();
-    }
-    // finalize delvec
-    _finalize_delvec(location_provider, version);
-    // write tablet meta
-    RETURN_IF_ERROR((*writer_file)->append(_tablet_meta->SerializeAsString()));
-    RETURN_IF_ERROR((*writer_file)->close());
-    mgr->set_cached_del_vec(_cache_delvec_updates, version);
-    if (watch.elapsed_time() > 10 * 1000 * 1000) {
-        LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
-    }
-    return Status::OK();
-}
-
 Status MetaFileBuilder::finalize(LocationProvider* location_provider) {
     MonotonicStopWatch watch;
     watch.start();
@@ -178,9 +158,14 @@ Status MetaFileBuilder::finalize(LocationProvider* location_provider) {
     if (!writer_file.ok()) {
         return writer_file.status();
     }
+    // finalize delvec
+    RETURN_IF_ERROR(_finalize_delvec(location_provider, version));
     // write tablet meta
     RETURN_IF_ERROR((*writer_file)->append(_tablet_meta->SerializeAsString()));
     RETURN_IF_ERROR((*writer_file)->close());
+    if (is_primary_key(_tablet_meta.get())) {
+        _update_mgr->set_cached_del_vec(_cache_delvec_updates, version);
+    }
     if (watch.elapsed_time() > 10 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
@@ -198,6 +183,10 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
         return true;
     }
     return false;
+}
+
+void MetaFileBuilder::handle_failure() {
+    _update_mgr->remove_primary_index_cache(_tablet_meta->id());
 }
 
 MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {

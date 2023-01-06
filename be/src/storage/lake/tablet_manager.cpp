@@ -225,12 +225,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    MetaFileBuilder builder(tablet_metadata_pb);
-    if (is_primary_key(tablet_metadata_pb.get())) {
-        RETURN_IF_ERROR(builder.finalize(_location_provider, _update_mgr));
-    } else {
-        RETURN_IF_ERROR(builder.finalize(_location_provider));
-    }
+    MetaFileBuilder builder(tablet_metadata_pb, _update_mgr);
+    RETURN_IF_ERROR(builder.finalize(_location_provider));
     return Status::OK();
 }
 
@@ -270,7 +266,7 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // write to meta file
-    MetaFileBuilder builder(metadata);
+    MetaFileBuilder builder(metadata, _update_mgr);
     RETURN_IF_ERROR(builder.finalize(_location_provider));
 
     // put into metacache
@@ -490,7 +486,7 @@ static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* table
         auto st = tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply_pk_write_log: " << tablet->id() << " st: " << st;
-            tablet->update_mgr()->remove_primary_index_cache(tablet->id());
+            builder->handle_failure();
             return st;
         }
     }
@@ -507,7 +503,7 @@ static Status apply_pk_compaction_log(const TxnLogPB_OpCompaction& op_compaction
     auto st = tablet->update_mgr()->publish_primary_compaction(op_compaction, metadata, tablet, builder, base_version);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to apply_pk_compaction_log: " << tablet->id() << " st: " << st;
-        tablet->update_mgr()->remove_primary_index_cache(tablet->id());
+        builder->handle_failure();
     }
     return st;
 }
@@ -670,7 +666,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
     new_metadata->set_version(new_version);
 
     // Meta file builder
-    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata);
+    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata, tablet->update_mgr());
 
     // Apply txn logs
     int64_t alter_version = -1;
@@ -698,6 +694,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
         }
 
         Status st = Status::OK();
+        // TODO(yixin) : move apply txn log logic(both pk, dup, uniq table) to MetaBuilder
         if (is_primary_key(new_metadata.get())) {
             st = apply_pk_txn_log(*txn_log, tablet, new_metadata.get(), builder.get(), base_version);
         } else {
@@ -740,15 +737,11 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
     }
 
     // Save new metadata
-    if (is_primary_key(new_metadata.get())) {
-        auto st = builder->finalize(location_provider, tablet->update_mgr());
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to builder finalize: " << new_metadata->id() << " st: " << st;
-            tablet->update_mgr()->remove_primary_index_cache(tablet->id());
-            return st;
-        }
-    } else {
-        RETURN_IF_ERROR(builder->finalize(location_provider));
+    auto st = builder->finalize(location_provider);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to builder finalize: " << new_metadata->id() << " st: " << st;
+        builder->handle_failure();
+        return st;
     }
 
     // Delete txn logs

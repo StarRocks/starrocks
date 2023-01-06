@@ -33,23 +33,23 @@ class UpdateManager;
 
 class MetaFileBuilder {
 public:
-    explicit MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr);
+    explicit MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr, UpdateManager* update_mgr);
     ~MetaFileBuilder() {}
     //// for PK table
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
-    Status finalize(LocationProvider* location_provider, UpdateManager* mgr);
-    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
-
-    //// for non-PK table
     Status finalize(LocationProvider* location_provider);
+    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
+    // when apply or finalize fail, need to clear primary index cache
+    void handle_failure();
 
 private:
     Status _finalize_delvec(LocationProvider* location_provider, int64_t version);
 
 private:
     std::shared_ptr<TabletMetadata> _tablet_meta;
+    UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
     std::vector<std::pair<TabletSegmentId, DelVectorPtr>> _cache_delvec_updates;

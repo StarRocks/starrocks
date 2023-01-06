@@ -30,7 +30,7 @@ namespace starrocks::lake {
 
 class GeneralTabletWriter : public TabletWriter {
 public:
-    explicit GeneralTabletWriter(Tablet tablet);
+    explicit GeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema>& tschema);
 
     ~GeneralTabletWriter() override;
 
@@ -57,6 +57,10 @@ public:
     int64_t data_size() const override { return _data_size; }
 
     int64_t num_rows() const override { return _num_rows; }
+
+    RowsetTxnMetaPB* rowset_txn_meta() { return nullptr; }
+
+    void set_tablet_schema(std::shared_ptr<const TabletSchema>& tschema) {}
 
 private:
     Status reset_segment_writer();

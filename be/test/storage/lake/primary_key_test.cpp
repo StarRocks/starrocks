@@ -168,7 +168,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_primary_key";
+    constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
     constexpr static const int kChunkSize = 12;
 
     std::unique_ptr<TestLocationProvider> _location_provider;
@@ -197,7 +197,7 @@ TEST_F(PrimaryKeyTest, test_write_success) {
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(rowset_txn_meta.get(), const_schema));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
     ASSERT_OK(writer->open());
 
     // write segment #1
@@ -305,12 +305,12 @@ TEST_F(PrimaryKeyTest, test_write_fail_retry) {
         ASSIGN_OR_ABORT(auto base_metadata, tablet.get_metadata(version));
         auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
         new_metadata->set_version(version + 1);
-        std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata);
+        std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata, tablet.update_mgr());
         // update primary table state, such as primary index
         ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), new_metadata.get(), &tablet,
                                                                   builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry
-        tablet.update_mgr()->remove_primary_index_cache(tablet_id);
+        builder->handle_failure();
     }
     // write success
     for (int i = 3; i < 5; i++) {
