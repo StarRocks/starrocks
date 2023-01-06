@@ -400,5 +400,3 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * wait_timeout
 
   Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
-
-
