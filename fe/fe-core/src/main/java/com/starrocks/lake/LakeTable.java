@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.staros.proto.FileCacheInfo;
@@ -69,6 +68,12 @@ public class LakeTable extends OlapTable {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
+    public static LakeTable read(DataInput in) throws IOException {
+        // type is already read in Table
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
+    }
+
     public String getStorageGroup() {
         return getDefaultFilePathInfo().getFullPath();
     }
@@ -118,12 +123,6 @@ public class LakeTable extends OlapTable {
         // write type first
         Text.writeString(out, type.name());
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
     }
 
     @Override
@@ -184,5 +183,13 @@ public class LakeTable extends OlapTable {
             index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
+    }
+
+    @Override
+    public Short getDefaultReplicationNum() {
+        if (tableProperty != null) {
+            return tableProperty.getReplicationNum();
+        }
+        return 1;
     }
 }
