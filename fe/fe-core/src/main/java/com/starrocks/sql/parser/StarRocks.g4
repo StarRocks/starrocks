@@ -1990,16 +1990,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameColonType
-    : identifier ':' type comment?
+subfieldDesc
+    : identifier type
     ;
 
-columnNameColonTypeList
-    : columnNameColonType (',' columnNameColonType)*
+subfieldDescs
+    : subfieldDesc (',' subfieldDesc)*
     ;
 
 structType
-    : STRUCT '<' columnNameColonTypeList '>'
+    : STRUCT '<' subfieldDescs '>'
     ;
 
 typeParameter
