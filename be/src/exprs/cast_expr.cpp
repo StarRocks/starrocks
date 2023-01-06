@@ -1609,6 +1609,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
     return nullptr;
 }
 
+// NOTE: should return error status to avoid null in ASSIGN_OR_RETURN, otherwise causing crash
 StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
                                                                             const TypeDescriptor& from_type,
                                                                             const TypeDescriptor& to_type,
@@ -1652,7 +1653,6 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
     }
     auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
     if (res == nullptr) {
-        // should return error status to return in ASSIGN_OR_RETURN
         return Status::NotSupported(fmt::format("vectorized engine not support cast {} to {}.",
                                                 from_type.debug_string(), to_type.debug_string()));
     }
