@@ -139,6 +139,8 @@ public class DescribeStmt extends ShowStmt {
         } else {
             if (isOlapTable) {
                 return DESC_OLAP_TABLE_ALL_META_DATA;
+            } else if (isMaterializedView) {
+                return DESC_OLAP_TABLE_META_DATA;
             } else {
                 return DESC_MYSQL_TABLE_ALL_META_DATA;
             }
