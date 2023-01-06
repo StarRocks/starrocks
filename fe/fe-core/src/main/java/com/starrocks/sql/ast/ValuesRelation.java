@@ -30,9 +30,9 @@ public class ValuesRelation extends QueryRelation {
     */
     private boolean isNullValues;
 
-    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
+    public ValuesRelation(List<ArrayList<Expr>> rows, List<String> explicitColumnNames) {
         this.rows = new ArrayList<>(rows);
-        this.setColumnOutputNames(columnOutputNames);
+        this.explicitColumnNames = explicitColumnNames;
     }
 
     public void addRow(ArrayList<Expr> row) {

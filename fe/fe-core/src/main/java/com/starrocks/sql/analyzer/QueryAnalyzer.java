@@ -548,7 +548,6 @@ public class QueryAnalyzer {
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
             Scope queryOutputScope = process(node.getQueryStatement(), scope);
-
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
@@ -749,8 +748,9 @@ public class QueryAnalyzer {
             } else {
                 if (node.getColumnOutputNames().size() != tableFunction.getTableFnReturnTypes().size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
-                            node.getAlias().getTbl(), node.getColumnOutputNames().size(),
-                            tableFunction.getTableFnReturnTypes().size());
+                            node.getAlias().getTbl(),
+                            tableFunction.getTableFnReturnTypes().size(),
+                            node.getColumnOutputNames().size());
                 }
             }
 

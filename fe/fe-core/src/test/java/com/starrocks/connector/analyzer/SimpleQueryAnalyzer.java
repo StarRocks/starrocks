@@ -349,8 +349,8 @@ public class SimpleQueryAnalyzer {
                 if (node.getColumnOutputNames().size() != tableFunction.getTableFnReturnTypes().size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
                             node.getAlias().getTbl(),
-                            node.getColumnOutputNames().size(),
-                            tableFunction.getTableFnReturnTypes().size());
+                            tableFunction.getTableFnReturnTypes().size(),
+                            node.getColumnOutputNames().size());
                 }
             }
 
