@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 // BitSet used to accelerate column processing
@@ -171,6 +172,10 @@ public class ColumnRefSet implements Cloneable {
 
     public boolean containsAll(List<Integer> rhs) {
         return rhs.stream().allMatch(bit -> bitSet.get(bit));
+    }
+
+    public List<ColumnRefOperator> getColumnRefOperators(ColumnRefFactory columnRefFactory) {
+        return getStream().mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList());
     }
 
     @Override

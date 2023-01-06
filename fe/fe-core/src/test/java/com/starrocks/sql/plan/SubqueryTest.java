@@ -328,18 +328,18 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "20:NESTLOOP JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN\n" +
+        assertContains(plan, "20:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
                 "  |  \n" +
                 "  |----19:EXCHANGE\n" +
                 "  |    \n" +
-                "  13:HASH JOIN");
-        assertContains(plan, "  13:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  13:NESTLOOP JOIN");
+        assertContains(plan, "13:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
     }
 
@@ -1797,23 +1797,25 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testCorrelatedPredicateRewrite_1() throws Exception {
+
         String sql = "select v1 from t0 where v1 = 1 or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        assertContains(plan, "7:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "15:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 8: v4\n" +
                 "  |  \n" +
-                "  6:EXCHANGE");
-        assertContains(plan, "13:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(1), count(9: v4)\n" +
+                "  14:EXCHANGE");
+        assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: v4 = 2: v2\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  6:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(11: countRows), count(12: countNotNulls)\n" +
                 "  |  group by: 10: v4\n" +
                 "  |  \n" +
-                "  12:Project\n" +
-                "  |  <slot 9> : 4: v4\n" +
-                "  |  <slot 10> : 4: v4\n" +
-                "  |  \n" +
-                "  11:EXCHANGE");
+                "  5:EXCHANGE");
     }
 
     @Test
@@ -1822,19 +1824,21 @@ public class SubqueryTest extends PlanTestBase {
                 "or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "24:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "33:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 12: v4\n" +
                 "  |  \n" +
-                "  23:EXCHANGE");
-        assertContains(plan, "30:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(1), count(13: v4)\n" +
-                "  |  group by: 14: v4\n" +
+                "  32:EXCHANGE");
+        assertContains(plan, "27:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 14: v4\n" +
                 "  |  \n" +
-                "  29:Project\n" +
-                "  |  <slot 13> : 8: v4\n" +
-                "  |  <slot 14> : 8: v4\n" +
-                "  |  \n" +
-                "  28:EXCHANGE");
+                "  |----26:AGGREGATE (merge finalize)\n" +
+                "  |    |  output: count(15: countRows), count(16: countNotNulls)\n" +
+                "  |    |  group by: 14: v4\n" +
+                "  |    |  \n" +
+                "  |    25:EXCHANGE\n" +
+                "  |    \n" +
+                "  21:EXCHANGE");
     }
 }

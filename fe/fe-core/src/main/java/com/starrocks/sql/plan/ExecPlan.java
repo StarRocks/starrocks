@@ -58,7 +58,7 @@ public class ExecPlan {
         connectContext = new ConnectContext();
         connectContext.setQueryId(new UUID(1, 2));
         colNames = new ArrayList<>();
-        physicalPlan = new OptExpression();
+        physicalPlan = null;
         outputColumns = new ArrayList<>();
     }
 

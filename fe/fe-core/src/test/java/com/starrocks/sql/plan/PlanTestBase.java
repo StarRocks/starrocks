@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -49,6 +51,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1488,5 +1491,14 @@ public class PlanTestBase {
 
     public OlapTable getOlapTable(String t) {
         return (OlapTable) getTable(t);
+    }
+
+    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+        Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
+        List<Pair<String, String>> zips = Lists.newArrayList();
+        for (int i = 0; i < sqls.size(); i++) {
+            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+        }
+        return zips;
     }
 }

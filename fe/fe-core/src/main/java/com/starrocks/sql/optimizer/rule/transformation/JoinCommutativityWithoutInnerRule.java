@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 import java.util.Map;
 
-public class JoinCommutativityWithOutInnerRule extends TransformationRule {
+public class JoinCommutativityWithoutInnerRule extends TransformationRule {
 
     // NOTE: not support transform LEFT ANTI/SEMI to RIGHT ANTI/SEMI, since we don't want to support it
     private static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
@@ -41,18 +41,19 @@ public class JoinCommutativityWithOutInnerRule extends TransformationRule {
                     .put(JoinOperator.FULL_OUTER_JOIN, JoinOperator.FULL_OUTER_JOIN)
                     .build();
 
-    private JoinCommutativityWithOutInnerRule() {
+    private JoinCommutativityWithoutInnerRule() {
         super(RuleType.TF_JOIN_COMMUTATIVITY_WITHOUT_INNER, Pattern.create(OperatorType.LOGICAL_JOIN).
                 addChildren(Pattern.create(OperatorType.PATTERN_LEAF),
                         Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    private static final JoinCommutativityWithOutInnerRule INSTANCE = new JoinCommutativityWithOutInnerRule();
+    private static final JoinCommutativityWithoutInnerRule INSTANCE = new JoinCommutativityWithoutInnerRule();
 
-    public static JoinCommutativityWithOutInnerRule getInstance() {
+    public static JoinCommutativityWithoutInnerRule getInstance() {
         return INSTANCE;
     }
 
+    @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         return ((LogicalJoinOperator) input.getOp()).getJoinHint().isEmpty();
     }

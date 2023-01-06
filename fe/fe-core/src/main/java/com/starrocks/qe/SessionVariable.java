@@ -331,6 +331,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_DIALECT = "sql_dialect";
 
+    public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
+
+    public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -815,6 +819,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SQL_DIALECT)
     private String sqlDialect = "StarRocks";
+
+    @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
+    private boolean enableOuterJoinReorder = true;
+
+    // This value is different from cboMaxReorderNodeUseExhaustive which only counts innerOrCross join node, while it
+    // counts all types of join node including outer/semi/anti join.
+    @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
+    private int cboReorderThresholdUseExhaustive = 6;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1528,6 +1540,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlDialect(String dialect) {
         this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableOuterJoinReorder() {
+        return enableOuterJoinReorder;
+    }
+
+    public void setEnableOuterJoinReorder(boolean enableOuterJoinReorder) {
+        this.enableOuterJoinReorder = enableOuterJoinReorder;
+    }
+
+    public int getCboReorderThresholdUseExhaustive() {
+        return cboReorderThresholdUseExhaustive;
+    }
+
+    public void setCboReorderThresholdUseExhaustive(int cboReorderThresholdUseExhaustive) {
+        this.cboReorderThresholdUseExhaustive = cboReorderThresholdUseExhaustive;
     }
 
     // Serialize to thrift object

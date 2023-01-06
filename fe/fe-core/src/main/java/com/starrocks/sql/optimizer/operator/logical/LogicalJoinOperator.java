@@ -16,13 +16,16 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -31,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -38,7 +42,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator onPredicate;
     private final String joinHint;
-    // For mark the node has been push  down join on clause, avoid dead-loop
+    // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
 
@@ -64,6 +68,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinType = builder.joinType;
         this.onPredicate = builder.onPredicate;
         this.joinHint = builder.joinHint;
+        this.rowOutputInfo = builder.rowOutputInfo;
 
         this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
         this.hasDeriveIsNotNullPredicate = builder.hasDeriveIsNotNullPredicate;
@@ -126,6 +131,19 @@ public class LogicalJoinOperator extends LogicalOperator {
         return result;
     }
 
+    public ColumnRefSet getRequiredCols() {
+        ColumnRefSet result = new ColumnRefSet();
+        if (onPredicate != null) {
+            result.union(onPredicate.getUsedColumns());
+        }
+        if (predicate != null) {
+            result.union(predicate.getUsedColumns());
+        }
+        result.union(rowOutputInfo.getUsedColumnRefSet());
+
+        return result;
+    }
+
     @Override
     public ColumnRefOperator getSmallestColumn(ColumnRefSet required, ColumnRefFactory columnRefFactory,
                                                OptExpression expr) {
@@ -155,6 +173,17 @@ public class LogicalJoinOperator extends LogicalOperator {
             }
             return columns;
         }
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (OptExpression input : inputs) {
+            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnEntries()) {
+                entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+            }
+        }
+        return new RowOutputInfo(entryList);
     }
 
     @Override
@@ -210,6 +239,8 @@ public class LogicalJoinOperator extends LogicalOperator {
         private boolean hasPushDownJoinOnClause = false;
         private boolean hasDeriveIsNotNullPredicate = false;
 
+        private RowOutputInfo rowOutputInfo;
+
         @Override
         public LogicalJoinOperator build() {
             return new LogicalJoinOperator(this);
@@ -243,6 +274,11 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setJoinHint(String joinHint) {
             this.joinHint = joinHint;
+            return this;
+        }
+
+        public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
+            this.rowOutputInfo = rowOutputInfo;
             return this;
         }
     }

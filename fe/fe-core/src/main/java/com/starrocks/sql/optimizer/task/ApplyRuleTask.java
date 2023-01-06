@@ -75,11 +75,13 @@ public class ApplyRuleTask extends OptimizerTask {
         Binder binder = new Binder(pattern, groupExpression);
         OptExpression extractExpr = binder.next();
         List<OptExpression> newExpressions = Lists.newArrayList();
+        List<OptExpression> extractExpressions = Lists.newArrayList();
         while (extractExpr != null) {
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
                 continue;
             }
+            extractExpressions.add(extractExpr);
             List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             newExpressions.addAll(targetExpressions);
 

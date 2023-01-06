@@ -335,6 +335,35 @@ public class Utils {
         return true;
     }
 
+    public static boolean capableOuterReorder(OptExpression root, int threshold) {
+        boolean[] hasOuterOrSemi = {false};
+        int totalJoinNodes = countJoinNode(root, hasOuterOrSemi);
+        return totalJoinNodes < threshold && hasOuterOrSemi[0];
+    }
+
+    private static int countJoinNode(OptExpression root, boolean[] hasOuterOrSemi) {
+        int count = 0;
+        Operator operator = root.getOp();
+        for (OptExpression child : root.getInputs()) {
+            if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+                count += countJoinNode(child, hasOuterOrSemi);
+            } else {
+                count = Math.max(count, countJoinNode(child, hasOuterOrSemi));
+            }
+        }
+
+        if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+            count += 1;
+            if (!hasOuterOrSemi[0]) {
+                LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+                if (joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isSemiAntiJoin()) {
+                    hasOuterOrSemi[0] = true;
+                }
+            }
+        }
+        return count;
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {

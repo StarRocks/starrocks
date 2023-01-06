@@ -98,7 +98,7 @@ public class Pattern {
             return false;
         }
 
-        if (expression.getInputs().size() < this.children().size()
+        if (expression.getInputs().size() < children.size()
                 && children.stream().noneMatch(p -> OperatorType.PATTERN_MULTI_LEAF.equals(p.getOpType()))) {
             return false;
         }
