@@ -33,27 +33,17 @@ public:
         }
         int64_t res = max_input_dop * limit_bytes;
         const int64_t MAX_MEM_LIMIT = 128 * 1024 * 1024 * 1024UL; // 128GB limit
-        _max_memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
+        _max_memory_bytes = (res > MAX_MEM_LIMIT || res <= 0) ? MAX_MEM_LIMIT : res;
     }
 
-    void update_memory_usage(int64_t memory_bytes) {
-        LOG(WARNING) << "local exchange " << (memory_bytes > 0 ? " + " : " - ") << std::to_string(memory_bytes)
-                     << " left " << std::to_string(_memory_bytes);
-        _memory_bytes += memory_bytes;
-    }
+    void update_memory_usage(int64_t memory_bytes) { _memory_bytes += memory_bytes; }
 
     int64_t get_memory_usage() const { return _memory_bytes; }
 
     bool is_full() const { return _memory_bytes >= _max_memory_bytes; }
 
     // consume the buffered data to avoid the buffer being full for a long time when the chunk's size is too large.
-    bool should_output() const {
-        if (_memory_bytes >= _max_memory_bytes * 0.8) {
-            LOG(WARNING) << _memory_bytes << " >= " << _max_memory_bytes * 0.8 << " in local exchange";
-            return true;
-        }
-        return false;
-    };
+    bool should_output() const { return _memory_bytes >= _max_memory_bytes * 0.8; };
 
 private:
     int64_t _max_memory_bytes;
