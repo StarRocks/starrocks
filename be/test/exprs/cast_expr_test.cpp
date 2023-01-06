@@ -2023,9 +2023,10 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
 }
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
-    // can't cast array<bool> to bool rather than crash
-    expr_node.child_type = gen_array_type_desc(to_thrift(LogicalType::TYPE_BOOLEAN));
-    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    // can't cast arry<array<int>> to array<bool> rather than crash
+    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
+    expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
+    expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
