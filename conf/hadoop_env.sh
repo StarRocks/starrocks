@@ -13,11 +13,14 @@
 # limitations under the License.
 
 export HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/*
-if [ -z "${USER}" ]
+if [ -z "${HADOOP_USER_NAME}" ]
 then
-    export HADOOP_USER_NAME=$(id -u -n)
-else
-    export HADOOP_USER_NAME=${USER}
+    if [ -z "${USER}" ]
+    then
+        export HADOOP_USER_NAME=$(id -u -n)
+    else
+        export HADOOP_USER_NAME=${USER}
+    fi
 fi
 
 # the purpose is to use local hadoop configuration first.
