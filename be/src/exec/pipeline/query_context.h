@@ -247,6 +247,5 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-}
-}
-
+} // namespace pipeline
+} // namespace starrocks
