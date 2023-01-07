@@ -47,7 +47,7 @@ public:
         _is_epoch_finished = true;
         return Status::OK();
     }
-    Status set_epoch_finished(RuntimeState* state) {
+    Status set_epoch_finished(RuntimeState* state) override {
         _exchanger->epoch_finish(state);
         return Status::OK();
     }

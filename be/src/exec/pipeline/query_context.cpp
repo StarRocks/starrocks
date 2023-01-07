@@ -25,6 +25,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/stream_epoch_manager.h"
 #include "util/thread.h"
 
 namespace starrocks::pipeline {
