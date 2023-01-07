@@ -31,14 +31,16 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+
+class StreamEpochManager;
+
+namespace pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
-
-class StreamEpochManager;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -245,4 +247,6 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace starrocks::pipeline
+}
+}
+
