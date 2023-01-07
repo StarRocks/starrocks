@@ -40,8 +40,8 @@
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
-#include "storage/array_type_info.h"
 #include "storage/types.h"
+#include "types/array_type_info.h"
 
 namespace starrocks {
 

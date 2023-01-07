@@ -27,7 +27,6 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_epoch_manager.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/time.h"
@@ -38,6 +37,8 @@ using std::chrono::seconds;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
+class StreamEpochManager;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
