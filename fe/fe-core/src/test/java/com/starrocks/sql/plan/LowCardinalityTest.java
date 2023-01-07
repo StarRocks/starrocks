@@ -1336,4 +1336,21 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
     }
+
+    @Test
+    public void testCompoundPredicate() throws Exception {
+        String sql = "select count(*) from supplier group by S_ADDRESS having " +
+                "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan,
+                "DictExpr(10: S_ADDRESS,[if((<place-holder> > 'a') " +
+                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+
+        sql = "select count(*) from supplier group by S_ADDRESS having " +
+                "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
+        plan = getVerboseExplain(sql);
+        assertContains(plan,
+                "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
+                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+    }
 }
