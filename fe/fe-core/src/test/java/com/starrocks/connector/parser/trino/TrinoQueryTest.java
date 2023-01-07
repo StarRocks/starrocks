@@ -133,8 +133,9 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  order by: 3: v3 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING");
 
-        sql = "select first_value(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded " +
-                "following) from t0";
+        sql =
+                "select first_value(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded " +
+                        "following) from t0";
         assertPlanContains(sql, "3:ANALYTIC\n" +
                 "  |  functions: [, first_value(1: v1), ]\n" +
                 "  |  partition by: 2: v2\n" +
@@ -169,12 +170,14 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  order by: 3: v3 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
-        sql = "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
-                "from t0";
+        sql =
+                "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
+                        "from t0";
         assertPlanContains(sql, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
-        sql = "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
-                "from t0";
+        sql =
+                "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
+                        "from t0";
         assertPlanContains(sql, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
         sql = "select min(v1) over(partition by v2 order by v3 rows current row) from t0";
@@ -185,6 +188,77 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select min(v1) over(partition by v2 order by v3 rows 10 PRECEDING) from t0";
         assertPlanContains(sql, "window: ROWS BETWEEN 10 PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testSelectArray() throws Exception {
+        String sql = "select c1[1] from test_array";
+        assertPlanContains(sql, "<slot 4> : 2: c1[1]");
+
+        sql = "select c0, sum(c2[1]) from test_array group by c0";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : 3: c2[1]");
+
+        sql = "select distinct c2 from test_array order by c2[1];";
+        assertPlanContains(sql, "2:Project\n" +
+                "  |  <slot 3> : 3: c2\n" +
+                "  |  <slot 4> : 3: c2[1]");
+        sql = "select array[array[1,2],array[3,4]][1][2]";
+        assertPlanContains(sql, "ARRAY<ARRAY<tinyint(4)>>[[1,2],[3,4]][1][2]");
+
+        sql = "select array[][1]";
+        assertPlanContains(sql, "ARRAY<unknown type: NULL_TYPE>[][1]");
+
+        sql = "select array[v1 = 1, v2 = 2, true] from t0";
+        assertPlanContains(sql, "<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]");
+
+        sql = "select array[v1,v2] from t0";
+        assertPlanContains(sql, "ARRAY<bigint(20)>[1: v1,2: v2]");
+
+
+        sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>" +
+                "[[1,2,3],[1,1,1]][2][2] AS SMALLINT)");
+
+        sql = "select c0, c2[1] + array[1,2,3][1] as v, sum(c2[1]) from test_array group by c0, v order by v";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : CAST(3: c2[1] AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
+                "  |  <slot 5> : 3: c2[1]");
+    }
+
+
+    @Test
+    public void testSelectArrayFunction() throws Exception {
+        String sql =  "select array_distinct(c1) from test_array";
+        assertPlanContains(sql, "array_distinct(2: c1)");
+
+        sql =  "select array_intersect(c1, array['star','rocks']) from test_array";
+        assertPlanContains(sql, "array_intersect(2: c1, ARRAY<varchar>['star','rocks'])");
+
+        sql = "select array_join(c1, '_') from test_array";
+        assertPlanContains(sql, "array_join(2: c1, '_')");
+
+        sql = "select array_max(c1) from test_array";
+        assertPlanContains(sql, "array_max(2: c1)");
+
+        sql = "select array_min(c1) from test_array";
+        assertPlanContains(sql, "array_min(2: c1)");
+
+        sql = "select array_position(array[1,2,3], 2) from test_array";
+        assertPlanContains(sql, "array_position(ARRAY<tinyint(4)>[1,2,3], 2)");
+
+        sql = "select array_remove(array[1,2,3], 2) from test_array";
+        assertPlanContains(sql, "array_remove(ARRAY<tinyint(4)>[1,2,3], 2)");
+
+        sql = "select array_sort(c1) from test_array";
+        assertPlanContains(sql, "array_sort(2: c1)");
+
+        sql =  "select arrays_overlap(c1, array['star','rocks']) from test_array";
+        assertPlanContains(sql, "arrays_overlap(2: c1, ARRAY<varchar>['star','rocks'])");
     }
 
     @Test
