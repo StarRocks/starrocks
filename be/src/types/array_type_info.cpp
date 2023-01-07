@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/array_type_info.h"
+#include "types/array_type_info.h"
 
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"

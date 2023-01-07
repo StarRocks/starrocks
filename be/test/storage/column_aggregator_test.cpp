@@ -20,8 +20,8 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "storage/aggregate_type.h"
-#include "storage/array_type_info.h"
 #include "storage/column_aggregate_func.h"
+#include "types/array_type_info.h"
 
 namespace starrocks {
 

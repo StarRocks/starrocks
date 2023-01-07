@@ -53,7 +53,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:
