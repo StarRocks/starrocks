@@ -186,7 +186,7 @@ public:
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
-            AggDataTypeTraits<PT>::append_value(column, this->data(state).result);
+            AggDataTypeTraits<PT>::assign_value(column, i, this->data(state).result);
         }
     }
 
