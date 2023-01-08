@@ -25,7 +25,7 @@
 #include "common/compiler_util.h"
 #include "http/http_client.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 class ScrollParser {

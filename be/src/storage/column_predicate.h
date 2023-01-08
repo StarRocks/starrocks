@@ -26,12 +26,12 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
-#include "runtime/primitive_type.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/logical_type.h"
 #include "util/json.h"
 #include "util/string_parser.hpp"
 

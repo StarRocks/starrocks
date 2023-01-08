@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

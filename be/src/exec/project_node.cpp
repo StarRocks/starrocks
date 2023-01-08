@@ -36,8 +36,8 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

@@ -15,8 +15,8 @@
 #include "exec/schema_scanner/schema_events_scanner.h"
 
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
