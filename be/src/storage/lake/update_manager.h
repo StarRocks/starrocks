@@ -45,16 +45,16 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
-    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata, Tablet* tablet,
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(Tablet* tablet, TabletMetadata* metadata,
+    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                    const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids);
 
     // get column data by rssid and rowids
-    Status get_column_values(Tablet* tablet, TabletMetadata* metadata, TabletSchema* tablet_schema,
+    Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TabletSchema& tablet_schema,
                              std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns);
@@ -75,7 +75,7 @@ public:
     // get del nums from rowset, for compaction policy
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
-    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata,
+    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
                                       Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
 
     // remove primary index entry from cache, called when publish version error happens.

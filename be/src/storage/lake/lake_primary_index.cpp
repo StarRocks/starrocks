@@ -21,7 +21,7 @@
 namespace starrocks {
 namespace lake {
 
-Status LakePrimaryIndex::lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version) {
+Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version) {
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
@@ -34,11 +34,11 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, TabletMetadata* metadata, int
     return _status;
 }
 
-Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version) {
+Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version) {
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;

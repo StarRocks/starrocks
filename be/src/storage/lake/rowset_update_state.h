@@ -37,9 +37,9 @@ public:
     RowsetUpdateState();
     ~RowsetUpdateState();
 
-    Status load(const TxnLogPB_OpWrite& op_write, int64_t base_version, TabletMetadata* metadata, Tablet* tablet);
+    Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet);
 
-    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata);
+    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -55,10 +55,10 @@ public:
                                    std::vector<uint32_t>* idxes);
 
 private:
-    Status _do_load(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata, Tablet* tablet);
+    Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
-    Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletSchema* tablet_schema,
-                                          TabletMetadata* metadata);
+    Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
+                                          Tablet* tablet, const TabletSchema& tablet_schema);
 
     std::once_flag _load_once_flag;
     Status _status;

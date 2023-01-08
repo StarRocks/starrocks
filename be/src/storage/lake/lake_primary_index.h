@@ -37,10 +37,10 @@ public:
     // to build a hash index.
     //
     // [thread-safe]
-    Status lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version);
+    Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version);
 
 private:
-    Status _do_lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version);
+    Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version);
 };
 
 } // namespace lake

@@ -40,7 +40,7 @@ RowsetUpdateState::~RowsetUpdateState() {
     }
 }
 
-Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, int64_t base_version, TabletMetadata* metadata,
+Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
                                Tablet* tablet) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
@@ -59,12 +59,12 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, int64_t base_ve
     return _status;
 }
 
-Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata, Tablet* tablet) {
+Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
 
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
 
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
@@ -141,7 +141,7 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
     if (!op_write.has_txn_meta() || rowset_ptr->num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    return _prepare_partial_update_states(op_write, tablet, tablet_schema.get(), metadata);
+    return _prepare_partial_update_states(op_write, metadata, tablet, *tablet_schema);
 }
 
 struct RowidSortEntry {
@@ -219,8 +219,9 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
     }
 }
 
-Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, Tablet* tablet,
-                                                         TabletSchema* tablet_schema, TabletMetadata* metadata) {
+Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write,
+                                                         const TabletMetadata& metadata, Tablet* tablet,
+                                                         const TabletSchema& tablet_schema) {
     int64_t t_start = MonotonicMillis();
     const auto& txn_meta = op_write.txn_meta();
 
@@ -229,13 +230,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     std::set<uint32_t> update_columns_set(update_column_ids.begin(), update_column_ids.end());
 
     std::vector<uint32_t> read_column_ids;
-    for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
+    for (uint32_t i = 0; i < tablet_schema.num_columns(); i++) {
         if (update_columns_set.find(i) == update_columns_set.end()) {
             read_column_ids.push_back(i);
         }
     }
 
-    auto read_column_schema = ChunkHelper::convert_schema(*tablet_schema, read_column_ids);
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, read_column_ids);
     std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
     size_t num_segments = op_write.rowset().segments_size();
     _partial_update_states.resize(num_segments);
@@ -290,14 +291,15 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     return Status::OK();
 }
 
-Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata) {
+Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
+                                          Tablet* tablet) {
     MonotonicStopWatch watch;
     watch.start();
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
     auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     // get rowset schema
     if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->segments_size() == 0 ||
         op_write.txn_meta().has_merge_condition()) {

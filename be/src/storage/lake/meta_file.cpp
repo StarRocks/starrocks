@@ -279,9 +279,8 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void rowset_rssid_to_path(TabletMetadata* metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path) {
-    CHECK(metadata != nullptr);
-    for (auto& rs : metadata->rowsets()) {
+void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path) {
+    for (auto& rs : metadata.rowsets()) {
         for (int i = 0; i < rs.segments_size(); i++) {
             rssid_to_path[rs.id() + i] = rs.segments(i);
         }

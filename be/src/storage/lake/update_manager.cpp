@@ -29,23 +29,23 @@ namespace starrocks {
 namespace lake {
 
 // |metadata| contain last tablet meta info with new version
-Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata,
+Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                                  Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
     // 1. load rowset update data to cache, get upsert and delete list
-    const uint32_t rowset_id = metadata->next_rowset_id();
+    const uint32_t rowset_id = metadata.next_rowset_id();
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), rowset_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, base_version, metadata, tablet));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet));
     cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
     watch.reset();
     // 2. rewrite segment file if it is partial update
-    RETURN_IF_ERROR(state.rewrite_segment(op_write, tablet, metadata));
+    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
     cost_str << " [UpdateStateCache rewrite segment] " << watch.elapsed_time();
     watch.reset();
     // 3. update primary index
@@ -93,7 +93,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             new_del_vecs[idx].first = rssid;
             new_del_vecs[idx].second = std::make_shared<DelVector>();
             auto& del_ids = new_delete.second;
-            new_del_vecs[idx].second->init(metadata->version(), del_ids.data(), del_ids.size());
+            new_del_vecs[idx].second->init(metadata.version(), del_ids.data(), del_ids.size());
             new_del += del_ids.size();
             total_del += del_ids.size();
         } else {
@@ -103,7 +103,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             DelVectorPtr old_del_vec;
             RETURN_IF_ERROR(get_latest_del_vec(tsid, base_version, builder, &old_del_vec));
             new_del_vecs[idx].first = rssid;
-            old_del_vec->add_dels_as_new_version(new_delete.second, metadata->version(), &(new_del_vecs[idx].second));
+            old_del_vec->add_dels_as_new_version(new_delete.second, metadata.version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
@@ -112,7 +112,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 LOG(FATAL) << strings::Substitute(
                         "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
                         "v:$6",
-                        tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata->version());
+                        tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
             }
             old_total_del += cur_old;
             new_del += cur_add;
@@ -136,7 +136,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             "lake publish_primary_key_tablet tablet:$0 rowsetid:$1 upserts:$2 deletes:$3 new_del:$4 total_del:$5 "
             "base_ver:$6 new_ver:$7 cost:$8",
             tablet->id(), rowset_id, upserts.size(), state.deletes().size(), new_del, total_del, base_version,
-            metadata->version(), cost_str.str());
+            metadata.version(), cost_str.str());
 
     return Status::OK();
 }
@@ -149,7 +149,7 @@ Status UpdateManager::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
     return Status::OK();
 }
 
-Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, TabletMetadata* metadata,
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                               const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
@@ -177,9 +177,9 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, TabletMetadata* me
     return Status::OK();
 }
 
-Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata, TabletSchema* tablet_schema,
-                                        std::vector<uint32_t>& column_ids, bool with_default,
-                                        std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
+                                        const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids,
+                                        bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
@@ -187,7 +187,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
 
     if (with_default) {
         for (auto i = 0; i < column_ids.size(); ++i) {
-            const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
+            const TabletColumn& tablet_column = tablet_schema.column(column_ids[i]);
             if (tablet_column.has_default_value()) {
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
@@ -217,7 +217,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
         }
         std::string path = tablet->segment_location(rssid_to_path[rssid]);
-        auto segment = Segment::open(fs, path, rssid, tablet_schema);
+        auto segment = Segment::open(fs, path, rssid, &tablet_schema);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << rssid << " path: " << path << " : " << segment.status();
             return segment.status();
@@ -397,8 +397,9 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
-Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata,
-                                                 Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
+Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction,
+                                                 const TabletMetadata& metadata, Tablet* tablet,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
@@ -419,7 +420,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     // 2. iterate output rowset, update primary index and generate delvec
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
             std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()), 0);
     auto compaction_state = std::make_unique<CompactionState>(output_rowset.get());
@@ -427,17 +428,17 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    const uint32_t rowset_id = metadata->next_rowset_id();
+    const uint32_t rowset_id = metadata.next_rowset_id();
     // get max rowset id in input rowsets
     uint32_t max_rowset_id =
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
     // then get the max src rssid, to solve conflict between write and compaction
-    auto input_rowset = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
+    auto input_rowset = std::find_if(metadata.rowsets().begin(), metadata.rowsets().end(),
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
 
     for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
-        RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), tablet_schema.get(), i));
+        RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), *tablet_schema, i));
         auto& pk_col = compaction_state->pk_cols[i];
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
@@ -446,9 +447,9 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
-            dv->init(metadata->version(), nullptr, 0);
+            dv->init(metadata.version(), nullptr, 0);
         } else {
-            dv->init(metadata->version(), tmp_deletes.data(), tmp_deletes.size());
+            dv->init(metadata.version(), tmp_deletes.data(), tmp_deletes.size());
             total_deletes += tmp_deletes.size();
         }
         delvecs.emplace_back(rssid, dv);
@@ -468,7 +469,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
             "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
             tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
-            metadata->version(), cost_str.str());
+            metadata.version(), cost_str.str());
 
     return Status::OK();
 }

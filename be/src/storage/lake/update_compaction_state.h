@@ -34,13 +34,13 @@ public:
     CompactionState(const CompactionState&) = delete;
     CompactionState& operator=(const CompactionState&) = delete;
 
-    Status load_segments(Rowset* rowset, TabletSchema* tablet_schema, uint32_t segment_id);
+    Status load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
     void release_segments(uint32_t segment_id);
 
     std::vector<ColumnUniquePtr> pk_cols;
 
 private:
-    Status _load_segments(Rowset* rowset, TabletSchema* tablet_schema, uint32_t segment_id);
+    Status _load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
 };
 
 } // namespace lake

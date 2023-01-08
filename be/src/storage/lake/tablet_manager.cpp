@@ -50,8 +50,8 @@ namespace starrocks::lake {
 
 static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
 static void* gc_checker(void* arg);
-static Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metadata, MetaFileBuilder* builder,
-                               int64_t base_version);
+static Status apply_pk_txn_log(const TxnLog& log, const TabletMetadata& metadata, Tablet* tablet,
+                               MetaFileBuilder* builder, int64_t base_version);
 static StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version,
                                 int64_t new_version, const int64_t* txns, int txns_size);
 
@@ -478,7 +478,7 @@ static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* 
     return Status::OK();
 }
 
-static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata,
+static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
                                  MetaFileBuilder* builder, int64_t base_version) {
     if (op_write.has_rowset() &&
         (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate() || op_write.dels_size() > 0)) {
@@ -493,8 +493,8 @@ static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* table
     return Status::OK();
 }
 
-static Status apply_pk_compaction_log(const TxnLogPB_OpCompaction& op_compaction, Tablet* tablet,
-                                      TabletMetadata* metadata, MetaFileBuilder* builder, int64_t base_version) {
+static Status apply_pk_compaction_log(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
+                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
     if (op_compaction.input_rowsets().empty()) {
         DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
         return Status::OK();
@@ -621,14 +621,14 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     return Status::OK();
 }
 
-Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metadata, MetaFileBuilder* builder,
+Status apply_pk_txn_log(const TxnLog& log, const TabletMetadata& metadata, Tablet* tablet, MetaFileBuilder* builder,
                         int64_t base_version) {
     if (log.has_op_write()) {
-        RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), tablet, metadata, builder, base_version));
+        RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), metadata, tablet, builder, base_version));
     }
 
     if (log.has_op_compaction()) {
-        RETURN_IF_ERROR(apply_pk_compaction_log(log.op_compaction(), tablet, metadata, builder, base_version));
+        RETURN_IF_ERROR(apply_pk_compaction_log(log.op_compaction(), metadata, tablet, builder, base_version));
     }
     return Status::OK();
 }
@@ -696,7 +696,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
         Status st = Status::OK();
         // TODO(yixin) : move apply txn log logic(both pk, dup, uniq table) to MetaBuilder
         if (is_primary_key(new_metadata.get())) {
-            st = apply_pk_txn_log(*txn_log, tablet, new_metadata.get(), builder.get(), base_version);
+            st = apply_pk_txn_log(*txn_log, *new_metadata, tablet, builder.get(), base_version);
         } else {
             st = apply_txn_log(*txn_log, new_metadata.get());
         }

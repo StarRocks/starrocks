@@ -307,7 +307,7 @@ TEST_F(PrimaryKeyTest, test_write_fail_retry) {
         new_metadata->set_version(version + 1);
         std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata, tablet.update_mgr());
         // update primary table state, such as primary index
-        ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), new_metadata.get(), &tablet,
+        ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), *new_metadata, &tablet,
                                                                   builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry
         builder->handle_failure();

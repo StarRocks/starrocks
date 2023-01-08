@@ -95,7 +95,7 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
-    StatusOr<std::vector<RowsetPtr>> get_rowsets(TabletMetadata* metadata);
+    StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
 
     StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
                                       bool fill_cache);
