@@ -64,6 +64,99 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testWindowPredicatePushDown() throws Exception {
+        // Can not push down
+        String sql = "select * from (\n" +
+                "    select *, " +
+                "        row_number() over (order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where rk <= 4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 4: row_number() <= 4");
+
+        sql = "select * from (\n" +
+                "    select *, " +
+                "        row_number() over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where v2 <= 2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 2: v2 <= 2");
+
+        sql = "select * from (\n" +
+                "    select *, " +
+                "        min(v1) over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where v1 <= 2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 1: v1 <= 2");
+
+        // Can push down
+        sql = "select * from (\n" +
+                "    select v3, " +
+                "        row_number() over (order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where v3 <= 2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 3: v3 <= 2");
+
+        sql = "select * from (\n" +
+                "    select v3, " +
+                "        row_number() over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where v3 <= 2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 3: v3 <= 2");
+
+        sql = "select * from (\n" +
+                "    select v1, " +
+                "        row_number() over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where v1 <= 2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 <= 2");
+
+        starRocksAssert.withView("create view t_window_view as select *, row_number() " +
+                "over(partition by v3 order by v2) as rk from t0;");
+        sql = "select * from t_window_view where v1 > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 > 10");
+
+        sql = "select * from t_window_view where v3 > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 3: v3 > 10");
+
+        sql = "select * from t_window_view where v2 < 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 2: v2 < 10");
+        starRocksAssert.dropView("t_window_view");
+    }
+
+    @Test
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);

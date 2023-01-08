@@ -19,10 +19,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -43,17 +46,23 @@ public class PushDownPredicateWindowRule extends TransformationRule {
         List<ScalarOperator> filters = Utils.extractConjuncts(filterOperator.getPredicate());
         LogicalWindowOperator windowOperator = (LogicalWindowOperator) input.inputAt(0).getOp();
 
-        /*
-         * Only push down column contained by partition columns
-         */
-        ColumnRefSet partitionColumns = new ColumnRefSet();
-        windowOperator.getPartitionExpressions().stream().map(ScalarOperator::getUsedColumns)
-                .forEach(partitionColumns::union);
+        // Do not push down predicate if there are multi window operators.
+        Operator grandChild = input.inputAt(0).inputAt(0).getOp();
+        if (grandChild instanceof LogicalWindowOperator) {
+            return Collections.emptyList();
+        }
+
+        // predicate which contains sort columns and window function columns can not push down
+        ColumnRefSet canNotPushDownColumns = new ColumnRefSet();
+        windowOperator.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(canNotPushDownColumns::union);
+        windowOperator.getWindowCall().keySet().forEach(canNotPushDownColumns::union);
+        windowOperator.getWindowCall().values().stream().map(CallOperator::getUsedColumns).
+                forEach(canNotPushDownColumns::union);
 
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator filter = iter.next();
-            if (partitionColumns.containsAll(filter.getUsedColumns())) {
+            if (!filter.getUsedColumns().containsAny(canNotPushDownColumns)) {
                 iter.remove();
                 pushDownPredicates.add(filter);
             }
