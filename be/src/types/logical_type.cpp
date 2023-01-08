@@ -246,45 +246,6 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val) {
     return type_desc;
 }
 
-TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
-    std::vector<TTypeNode> types_list;
-    TTypeDesc type_desc;
-
-    TTypeNode type_array;
-    type_array.type = TTypeNodeType::ARRAY;
-    types_list.push_back(type_array);
-
-    TTypeNode type_scalar;
-    TScalarType scalar_type;
-    scalar_type.__set_type(field_type);
-    scalar_type.__set_precision(0);
-    scalar_type.__set_scale(0);
-    scalar_type.__set_len(0);
-    type_scalar.__set_scalar_type(scalar_type);
-    types_list.push_back(type_scalar);
-
-    type_desc.__set_types(types_list);
-    return type_desc;
-}
-
-// for test only
-TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name) {
-    std::vector<TTypeNode> types_list;
-    TTypeNode type_node;
-    TTypeDesc type_desc;
-    TScalarType scalar_type;
-    scalar_type.__set_type(val);
-    std::vector<TStructField> fields;
-    TStructField field;
-    field.__set_name(name);
-    fields.push_back(field);
-    type_node.__set_struct_fields(fields);
-    type_node.__set_scalar_type(scalar_type);
-    types_list.push_back(type_node);
-    type_desc.__set_types(types_list);
-    return type_desc;
-}
-
 class ScalarFieldTypeToPrimitiveTypeMapping {
 public:
     ScalarFieldTypeToPrimitiveTypeMapping() {

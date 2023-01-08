@@ -249,8 +249,6 @@ TPrimitiveType::type to_thrift(LogicalType ptype);
 std::string type_to_string(LogicalType t);
 std::string type_to_string_v2(LogicalType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
-TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
-TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);
 
 LogicalType scalar_field_type_to_primitive_type(LogicalType field_type);
 
