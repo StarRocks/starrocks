@@ -16,8 +16,8 @@
 
 #include "common/object_pool.h"
 #include "exprs/in_const_predicate.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 

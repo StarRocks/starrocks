@@ -26,9 +26,9 @@
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
 

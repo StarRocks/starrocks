@@ -17,7 +17,7 @@
 #include "column/column_builder.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/binary_function.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 template <bool check_overflow, typename Op>

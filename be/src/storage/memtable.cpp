@@ -22,11 +22,11 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
+#include "types/logical_type_infra.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 

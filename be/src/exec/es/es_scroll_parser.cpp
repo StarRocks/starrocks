@@ -20,8 +20,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "types/timestamp_value.h"
 #include "util/timezone_utils.h"
 

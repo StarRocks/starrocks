@@ -18,8 +18,8 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
