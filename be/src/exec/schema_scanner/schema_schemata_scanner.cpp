@@ -15,8 +15,8 @@
 #include "exec/schema_scanner/schema_schemata_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

@@ -16,7 +16,7 @@
 
 #include "column/type_traits.h"
 #include "runtime/decimalv3.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/guard.h"
 
 namespace starrocks {

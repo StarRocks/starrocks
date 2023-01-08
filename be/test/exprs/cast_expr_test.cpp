@@ -25,7 +25,6 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "types/logical_type.h"
 #include "util/json.h"

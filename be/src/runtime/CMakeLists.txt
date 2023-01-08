@@ -33,7 +33,6 @@ set(RUNTIME_FILES
     jdbc_driver_manager.cpp
     mem_pool.cpp
     plan_fragment_executor.cpp
-    primitive_type.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
