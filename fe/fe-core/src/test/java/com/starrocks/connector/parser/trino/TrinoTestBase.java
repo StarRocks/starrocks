@@ -262,6 +262,12 @@ public class TrinoTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("create table test_array(c0 INT, " +
+                "c1 array<varchar(65533)>, " +
+                "c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+
         connectContext.getSessionVariable().setSqlDialect("trino");
     }
 
