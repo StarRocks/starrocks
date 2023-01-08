@@ -60,11 +60,11 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
-#include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
+#include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
 #include "util/logging.h"
 

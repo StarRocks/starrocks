@@ -16,7 +16,7 @@
 
 #include "column/column_hash.h"
 #include "runtime/global_dict/config.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/phmap/phmap_hash.h"
 #include "util/slice.h"

@@ -45,8 +45,8 @@
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fmt/core.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 #define __StarRocksMysql MYSQL
 #include <sstream>

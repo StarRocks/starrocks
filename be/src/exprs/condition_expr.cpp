@@ -24,9 +24,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
 #include "simd/selector.h"
+#include "types/logical_type.h"
 #include "util/dispatch.h"
 #include "util/percentile_value.h"
 

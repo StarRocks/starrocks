@@ -18,7 +18,6 @@
 
 #include "column/type_traits.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/primitive_type.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

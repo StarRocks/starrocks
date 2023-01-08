@@ -22,12 +22,12 @@
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
 #include "types/date_value.hpp"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 

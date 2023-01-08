@@ -37,7 +37,7 @@
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

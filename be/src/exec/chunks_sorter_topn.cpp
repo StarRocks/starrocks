@@ -21,8 +21,8 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type_infra.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type_infra.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
 

@@ -17,7 +17,7 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/percentile_cont.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exprs/table_function/table_function.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

@@ -25,9 +25,9 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 using namespace starrocks;
 

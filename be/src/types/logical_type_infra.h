@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/logging.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 // Infra to build the type system:
 // 1. Macro `APPLY_FOR*` to build generic codes

@@ -19,7 +19,7 @@
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

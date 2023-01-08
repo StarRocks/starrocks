@@ -27,7 +27,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/bit_util.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"

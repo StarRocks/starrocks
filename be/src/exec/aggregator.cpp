@@ -26,7 +26,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/utils.h"
 
 namespace starrocks {

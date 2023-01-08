@@ -17,7 +17,7 @@
 #include "column/column.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

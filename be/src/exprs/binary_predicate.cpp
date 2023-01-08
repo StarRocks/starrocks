@@ -19,9 +19,9 @@
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/column_predicate.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 

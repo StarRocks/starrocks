@@ -15,7 +15,7 @@
 #include "column/column_viewer.h"
 
 #include "column/column_helper.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 

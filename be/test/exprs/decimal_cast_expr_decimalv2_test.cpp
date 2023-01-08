@@ -15,7 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "exprs/decimal_cast_expr_test_helper.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 PARALLEL_TEST(VectorizedDecimalCastExprDecimalV2Test, testCastFromDecimalv2ToDecimal32p9s0Abnormal) {

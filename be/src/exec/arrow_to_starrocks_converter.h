@@ -25,8 +25,8 @@
 #include "exec/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
 #include "util/meta_macro.h"
 
 namespace starrocks {

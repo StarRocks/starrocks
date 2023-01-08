@@ -44,7 +44,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void

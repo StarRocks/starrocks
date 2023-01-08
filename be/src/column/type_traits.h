@@ -22,8 +22,8 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/primitive_type.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 #include "util/json.h"
 
 namespace starrocks {

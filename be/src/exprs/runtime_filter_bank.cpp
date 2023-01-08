@@ -24,10 +24,10 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "runtime/runtime_filter_cache.h"
 #include "simd/simd.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "util/time.h"
 
 namespace starrocks {

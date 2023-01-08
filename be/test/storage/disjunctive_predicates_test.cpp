@@ -21,9 +21,9 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
+#include "types/logical_type.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

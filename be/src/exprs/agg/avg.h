@@ -20,7 +20,7 @@
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

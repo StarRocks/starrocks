@@ -29,12 +29,12 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

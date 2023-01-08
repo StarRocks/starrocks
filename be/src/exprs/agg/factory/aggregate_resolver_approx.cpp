@@ -16,8 +16,8 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/primitive_type.h"
 #include "types/hll.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

@@ -19,7 +19,7 @@
 #include "column/column_viewer.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

@@ -26,7 +26,7 @@
 #include "exprs/runtime_filter.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 #include "util/defer_op.h"
 
 namespace starrocks {

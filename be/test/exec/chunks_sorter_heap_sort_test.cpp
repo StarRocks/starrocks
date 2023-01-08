@@ -29,10 +29,10 @@
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

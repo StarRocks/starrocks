@@ -43,8 +43,8 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
 #include "types/date_value.h"
+#include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
