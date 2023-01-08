@@ -1877,6 +1877,27 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
     return ptr->debug_item(0);
 }
 
+TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::ARRAY;
+    types_list.push_back(type_array);
+
+    TTypeNode type_scalar;
+    TScalarType scalar_type;
+    scalar_type.__set_type(field_type);
+    scalar_type.__set_precision(0);
+    scalar_type.__set_scale(0);
+    scalar_type.__set_len(0);
+    type_scalar.__set_scalar_type(scalar_type);
+    types_list.push_back(type_scalar);
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
 static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     auto type_desc = gen_array_type_desc(to_thrift(element_type));
     return cast_string_to_array(cast_expr, type_desc, str);
