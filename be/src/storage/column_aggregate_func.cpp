@@ -257,8 +257,8 @@ private:
 
 class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
-    AggFuncBasedValueAggregator(const vectorized::AggregateFunction* agg_func) : _agg_func(agg_func) {
-        _state = static_cast<vectorized::AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+    AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
+        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
         _agg_func->create(nullptr, _state);
     }
 
@@ -319,8 +319,8 @@ public:
     }
 
 private:
-    const vectorized::AggregateFunction* _agg_func;
-    vectorized::AggDataPtr _state{nullptr};
+    const AggregateFunction* _agg_func;
+    AggDataPtr _state{nullptr};
 };
 
 #define CASE_DEFAULT_WARNING(TYPE)                                             \
@@ -448,8 +448,8 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
             break;
         }
 
-        auto agg_func = vectorized::AggregateFuncResolver::instance()->get_aggregate_info(
-                func_name, normalized_tpe, normalized_tpe, false, field->is_nullable());
+        auto agg_func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, normalized_tpe, normalized_tpe,
+                                                                              false, field->is_nullable());
         CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
                                    << ", is_nullable=" << field->is_nullable();
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func);
