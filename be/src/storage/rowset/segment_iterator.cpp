@@ -317,7 +317,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSch
         tsid.segment_id = _opts.rowset_id + segment_id();
         if (_opts.is_lake_table) {
             // load delvec from meta file
-            _get_del_vec_st = _opts.update_mgr->get_del_vec(tsid, _opts.version, &_del_vec);
+            _get_del_vec_st = _opts.update_mgr->get_del_vec(tsid, _opts.version, _opts.pk_builder, &_del_vec);
         } else {
             _get_del_vec_st = StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version,
                                                                                        &_del_vec);

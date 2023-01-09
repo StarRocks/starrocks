@@ -41,12 +41,13 @@ RowsetUpdateState::~RowsetUpdateState() {
 }
 
 Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
-                               Tablet* tablet) {
+                               Tablet* tablet, const MetaFileBuilder* builder) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
     std::call_once(_load_once_flag, [&] {
         _base_version = base_version;
+        _builder = builder;
         _status = _do_load(op_write, metadata, tablet);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
@@ -94,7 +95,7 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const Table
     watch.reset();
 
     std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()), 0);
+            std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
     OlapReaderStatistics stats;
     auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats);
     if (!res.ok()) {
@@ -259,8 +260,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    RETURN_IF_ERROR(
-            tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, &rss_rowids));
+    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, _builder,
+                                                                  &rss_rowids));
 
     int64_t t_read_values = MonotonicMillis();
     size_t total_rows = 0;
@@ -342,7 +343,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         rowset_meta->set_segments(i, op_write.rewrite_segments(i));
     }
 
-    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "RowsetUpdateState rewrite_segment cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();

@@ -635,14 +635,6 @@ Status apply_pk_txn_log(const TxnLog& log, const TabletMetadata& metadata, Table
 
 StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version, int64_t new_version,
                          const int64_t* txns, int txns_size) {
-    auto compaction_score = [](const TabletMetadata& metadata) {
-        if (is_primary_key(metadata)) {
-            return primary_compaction_score(metadata);
-        } else {
-            return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
-        }
-    };
-
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {

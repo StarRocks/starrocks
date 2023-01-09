@@ -141,7 +141,7 @@ Status MetaFileBuilder::_finalize_delvec(LocationProvider* location_provider, in
         }
         RETURN_IF_ERROR((*writer_file)->append(Slice(_buf.data(), _buf.size())));
         RETURN_IF_ERROR((*writer_file)->close());
-        if (watch.elapsed_time() > 10 * 1000 * 1000) {
+        if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
             LOG(INFO) << "MetaFileBuilder sync delvec cost(ms): " << watch.elapsed_time() / 1000000;
         }
     }
@@ -166,13 +166,13 @@ Status MetaFileBuilder::finalize(LocationProvider* location_provider) {
     if (is_primary_key(_tablet_meta.get())) {
         _update_mgr->set_cached_del_vec(_cache_delvec_updates, version);
     }
-    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
 }
 
-StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) {
+StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const {
     auto iter = _delvecs.find(tsid.segment_id);
     if (iter != _delvecs.end()) {
         (*pdelvec).reset(new DelVector());
@@ -224,7 +224,7 @@ Status MetaFileReader::load() {
         return Status::Corruption(fmt::format("failed to parse tablet meta {}", _access_file->filename()));
     }
     _load = true;
-    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "MetaFileReader load cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
@@ -254,7 +254,7 @@ Status MetaFileReader::get_del_vec(LocationProvider* location_provider, uint32_t
             // parse delvec
             RETURN_IF_ERROR(delvec->load(each_delvec.page().version(), buf.data(), each_delvec.page().size()));
             *latest_version = each_delvec.page().version();
-            if (watch.elapsed_time() > 10 * 1000 * 1000) {
+            if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
                 LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
             }
             return Status::OK();

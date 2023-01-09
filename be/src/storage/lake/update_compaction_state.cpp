@@ -52,9 +52,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     VectorizedSchema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok());
 
     OlapReaderStatistics stats;
     auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
@@ -63,7 +61,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     }
 
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    CHECK_EQ(itrs.size(), rowset->num_segments());
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);

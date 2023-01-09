@@ -25,10 +25,8 @@
 
 namespace starrocks::lake {
 
-GeneralTabletWriter::GeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema>& tschema)
-        : _tablet(tablet) {
-    _schema = tschema;
-}
+GeneralTabletWriter::GeneralTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet)
+        : TabletWriter(std::move(tschema)), _tablet(tablet) {}
 
 GeneralTabletWriter::~GeneralTabletWriter() = default;
 

@@ -21,12 +21,13 @@
 namespace starrocks {
 namespace lake {
 
-Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version) {
+Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+                                   const MetaFileBuilder* builder) {
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
     }
-    _status = _do_lake_load(tablet, metadata, base_version);
+    _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
@@ -34,7 +35,8 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
     return _status;
 }
 
-Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version) {
+Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+                                       const MetaFileBuilder* builder) {
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
@@ -63,8 +65,10 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     if (!rowsets.ok()) {
         return rowsets.status();
     }
+    // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
+    // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     for (auto& rowset : *rowsets) {
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, &stats);
+        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -102,7 +106,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
         }
     }
     _tablet_id = tablet->id();
-    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();

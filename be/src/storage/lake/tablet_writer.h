@@ -32,6 +32,8 @@ class Tablet;
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
+    explicit TabletWriter(std::shared_ptr<const TabletSchema> tschema) : _schema(std::move(tschema)) {}
+
     virtual ~TabletWriter() = default;
 
     virtual int64_t tablet_id() const = 0;
@@ -79,7 +81,10 @@ public:
     virtual RowsetTxnMetaPB* rowset_txn_meta() = 0;
 
     // allow to set custom tablet schema for writer, used in partial update
-    virtual void set_tablet_schema(std::shared_ptr<const TabletSchema>& tschema) = 0;
+    void set_tablet_schema(std::shared_ptr<const TabletSchema> tschema) { _schema = std::move(tschema); }
+
+protected:
+    std::shared_ptr<const TabletSchema> _schema;
 };
 
 } // namespace lake

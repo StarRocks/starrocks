@@ -25,10 +25,8 @@
 
 namespace starrocks::lake {
 
-PkTabletWriter::PkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema>& tschema) : _tablet(tablet) {
-    _schema = tschema;
-    _rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
-}
+PkTabletWriter::PkTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet)
+        : TabletWriter(std::move(tschema)), _tablet(tablet), _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 PkTabletWriter::~PkTabletWriter() = default;
 
@@ -115,10 +113,6 @@ Status PkTabletWriter::flush_segment_writer() {
         _seg_writer.reset();
     }
     return Status::OK();
-}
-
-void PkTabletWriter::set_tablet_schema(std::shared_ptr<const TabletSchema>& tschema) {
-    _schema = tschema;
 }
 
 } // namespace starrocks::lake

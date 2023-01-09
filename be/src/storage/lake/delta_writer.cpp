@@ -24,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -153,7 +154,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
         ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
-        _tablet_writer->set_tablet_schema(_tablet_schema);
+        if (_partial_update_tablet_schema != nullptr) {
+            _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
+        }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     }
@@ -293,7 +296,7 @@ Status DeltaWriterImpl::finish() {
         }
         // generate rewrite segment names to avoid gc in rewrite operation
         for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-            op_write->add_rewrite_segments(fmt::format("{}.dat", generate_uuid_string()));
+            op_write->add_rewrite_segments(random_segment_filename());
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

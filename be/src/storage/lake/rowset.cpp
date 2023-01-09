@@ -32,6 +32,9 @@ namespace starrocks::lake {
 Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index)
         : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
 
+Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
+        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
+
 Rowset::~Rowset() = default;
 
 // TODO: support
@@ -146,6 +149,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const VectorizedSchema& schema,
                                                                                       int64_t version,
+                                                                                      const MetaFileBuilder* builder,
                                                                                       OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
@@ -158,6 +162,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.is_lake_table = true;
     seg_options.update_mgr = _tablet->update_mgr();
     seg_options.version = version;
+    // for publish
+    seg_options.pk_builder = builder;
     seg_options.tablet_id = _tablet->id();
     seg_options.rowset_id = _rowset_metadata->id();
     for (auto& seg_ptr : segments) {

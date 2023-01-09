@@ -17,6 +17,7 @@
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
@@ -45,18 +46,42 @@ struct RowsetStat {
     size_t bytes = 0;
 };
 
+class RowsetCandidate {
+public:
+    RowsetCandidate(RowsetMetadataPtr rp, const RowsetStat& rs) : rowset_meta_ptr(std::move(rp)), stat(rs) {}
+    double calc_del_bytes() const { return (double)stat.bytes * (double)stat.num_dels / (double)stat.num_rows; }
+    // The goal of lake primary table compaction:
+    // 1. clean up deleted bytes.
+    // 2. merge small rowsets to bigger rowset.
+    // so we pick rowset to compact by this logic:
+    // First, pick out rowset with more deleted bytes.
+    // Second, pick out rowset with less bytes.
+    bool operator<(const RowsetCandidate& other) const {
+        if (calc_del_bytes() < other.calc_del_bytes()) {
+            return true;
+        } else if (calc_del_bytes() > other.calc_del_bytes()) {
+            return false;
+        } else {
+            // may happen when deleted rows is zero
+            return stat.bytes > other.stat.bytes;
+        }
+    }
+    RowsetMetadataPtr rowset_meta_ptr;
+    RowsetStat stat;
+};
+
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    using RowsetCandidate = std::pair<RowsetMetadataPtr, RowsetStat>;
     explicit PrimaryCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
 
 private:
+    static const size_t kCompactionResultBytesThreashold = 1000000000;
+    static const size_t kCompactionResultRowsThreashold = 10000000;
+
     double calc_compaction_score(const RowsetStat& stats);
-    static const size_t compaction_result_bytes_threashold = 1000000000;
-    static const size_t compaction_result_rows_threashold = 10000000;
 
 private:
     TabletPtr _tablet;
@@ -66,55 +91,33 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t v
     ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
 
     std::vector<RowsetPtr> input_rowsets;
-    // The goal of lake primary table compaction:
-    // 1. clean up deleted bytes.
-    // 2. merge small rowsets to bigger rowset.
-    // so we pick rowset to compact by this logic:
-    // First, pick out rowset with more deleted bytes.
-    // Second, pick out rowset with less bytes.
-    struct RowsetCompare {
-        static double calc_del_bytes(const RowsetCandidate& rc) {
-            return (double)rc.second.bytes * (double)rc.second.num_dels / (double)rc.second.num_rows;
-        }
-        bool operator()(const RowsetCandidate& a, const RowsetCandidate& b) const {
-            double delete_bytes_a = calc_del_bytes(a);
-            double delete_bytes_b = calc_del_bytes(b);
-            if (delete_bytes_a < delete_bytes_b) {
-                return true;
-            } else if (delete_bytes_a > delete_bytes_b) {
-                return false;
-            } else {
-                // may happen when deleted rows is zero
-                return a.second.bytes > b.second.bytes;
-            }
-        }
-    };
     UpdateManager* mgr = _tablet->update_mgr();
-    std::priority_queue<RowsetCandidate, std::vector<RowsetCandidate>, RowsetCompare> rowset_queue;
+    std::priority_queue<RowsetCandidate> rowset_queue;
     for (const auto& rowset_pb : tablet_metadata->rowsets()) {
         RowsetStat stat;
         stat.num_rows = rowset_pb.num_rows();
         stat.bytes = rowset_pb.data_size();
         stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), version, rowset_pb);
-        rowset_queue.push(std::make_pair(std::make_shared<RowsetMetadata>(rowset_pb), stat));
+        rowset_queue.emplace(std::make_shared<const RowsetMetadata>(rowset_pb), stat);
     }
     size_t cur_compaction_result_bytes = 0;
     size_t cur_compaction_result_rows = 0;
-    int i = 0;
+
     std::stringstream input_infos;
     while (!rowset_queue.empty()) {
         const auto& rowset_candidate = rowset_queue.top();
-        cur_compaction_result_bytes += rowset_candidate.second.bytes;
-        cur_compaction_result_rows += rowset_candidate.second.num_rows;
-        if (input_rowsets.size() > 0 && ((cur_compaction_result_bytes > compaction_result_bytes_threashold * 3 / 2) ||
-                                         (cur_compaction_result_rows > compaction_result_rows_threashold * 3 / 2))) {
+        cur_compaction_result_bytes += rowset_candidate.stat.bytes;
+        cur_compaction_result_rows += rowset_candidate.stat.num_rows;
+        if (input_rowsets.size() > 0 && ((cur_compaction_result_bytes > kCompactionResultBytesThreashold * 3 / 2) ||
+                                         (cur_compaction_result_rows > kCompactionResultRowsThreashold * 3 / 2))) {
             break;
         }
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(rowset_candidate.first), i++));
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet.get(), std::move(rowset_candidate.rowset_meta_ptr)));
         input_infos << input_rowsets.back()->id() << "|";
 
-        if (cur_compaction_result_bytes > compaction_result_bytes_threashold ||
-            cur_compaction_result_rows > compaction_result_rows_threashold ||
+        if (cur_compaction_result_bytes > kCompactionResultBytesThreashold ||
+            cur_compaction_result_rows > kCompactionResultRowsThreashold ||
             input_rowsets.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }
@@ -154,7 +157,6 @@ double primary_compaction_score(const TabletMetadataPB& metadata) {
         const auto& rowset = metadata.rowsets(i);
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
     }
-    LOG(INFO) << fmt::format("tablet: {}, primary compaction score: {}", metadata.id(), segment_num_score);
     return segment_num_score;
 }
 
@@ -255,6 +257,14 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletP
         return std::make_shared<PrimaryCompactionPolicy>(std::move(tablet));
     }
     return std::make_shared<BaseAndCumulativeCompactionPolicy>(std::move(tablet));
+}
+
+double compaction_score(const TabletMetadataPB& metadata) {
+    if (is_primary_key(metadata)) {
+        return primary_compaction_score(metadata);
+    } else {
+        return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+    }
 }
 
 } // namespace starrocks::lake

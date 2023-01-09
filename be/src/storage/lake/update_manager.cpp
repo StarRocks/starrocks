@@ -41,7 +41,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder));
     cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
     watch.reset();
     // 2. rewrite segment file if it is partial update
@@ -52,7 +52,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    Status st = index.lake_load(tablet, metadata, base_version);
+    Status st = index.lake_load(tablet, metadata, base_version, builder);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
         std::string msg =
@@ -151,11 +151,12 @@ Status UpdateManager::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
 
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                               const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                              const MetaFileBuilder* builder,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    auto st = index.lake_load(tablet, metadata, base_version);
+    auto st = index.lake_load(tablet, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -241,8 +242,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     return Status::OK();
 }
 
-Status UpdateManager::get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, MetaFileBuilder* builder,
-                                         DelVectorPtr* pdelvec) {
+Status UpdateManager::get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version,
+                                         const MetaFileBuilder* builder, DelVectorPtr* pdelvec) {
     // 1. find in meta builder first
     auto found = builder->find_delvec(tsid, pdelvec);
     if (!found.ok()) {
@@ -270,8 +271,20 @@ Status UpdateManager::get_latest_del_vec(const TabletSegmentId& tsid, int64_t ba
     return Status::OK();
 }
 
-Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
+Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+                                  DelVectorPtr* pdelvec) {
+    if (builder != nullptr) {
+        // 1. find in meta builder first
+        auto found = builder->find_delvec(tsid, pdelvec);
+        if (!found.ok()) {
+            return found.status();
+        }
+        if (*found) {
+            return Status::OK();
+        }
+    }
     {
+        // 2. find in delvec cache
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
         if (version <= _del_vec_cache_ver) { // if delvec_cache is meet the requirements
             auto itr = _del_vec_cache.find(tsid);
@@ -289,6 +302,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
     }
     (*pdelvec).reset(new DelVector());
     int64_t latest_version = 0;
+    // 3. find in delvec file
     RETURN_IF_ERROR(get_del_vec_in_meta(tsid, version, pdelvec->get(), &latest_version));
     if ((*pdelvec)->version() == latest_version) {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
@@ -387,7 +401,7 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
         tsid.segment_id = rowset_meta.id() + i;
-        auto st = get_del_vec(tsid, version, &delvec);
+        auto st = get_del_vec(tsid, version, nullptr, &delvec);
         if (!st.ok()) {
             LOG(WARNING) << "get_rowset_num_deletes: error get del vector " << st;
             continue;
@@ -407,12 +421,10 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    Status st = index.lake_load(tablet, metadata, base_version);
+    Status st = index.lake_load(tablet, metadata, base_version, builder);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
-        std::string msg =
-                strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
-        LOG(ERROR) << msg;
+        LOG(ERROR) << strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
         return st;
     }
     cost_str << " [primary index load] " << watch.elapsed_time();
@@ -422,7 +434,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // 2. iterate output rowset, update primary index and generate delvec
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
-            std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()), 0);
+            std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()));
     auto compaction_state = std::make_unique<CompactionState>(output_rowset.get());
     size_t total_deletes = 0;
     size_t total_rows = 0;

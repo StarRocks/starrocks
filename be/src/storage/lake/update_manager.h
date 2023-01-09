@@ -51,7 +51,7 @@ public:
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                    const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
-                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TabletSchema& tablet_schema,
@@ -59,10 +59,11 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns);
     // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+                       DelVectorPtr* pdelvec);
 
     // get latest delvec
-    Status get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, MetaFileBuilder* builder,
+    Status get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, const MetaFileBuilder* builder,
                               DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file

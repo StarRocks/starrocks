@@ -30,7 +30,7 @@ namespace starrocks::lake {
 
 class PkTabletWriter : public TabletWriter {
 public:
-    explicit PkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema>& tschema);
+    explicit PkTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet);
 
     ~PkTabletWriter() override;
 
@@ -58,15 +58,11 @@ public:
 
     RowsetTxnMetaPB* rowset_txn_meta() { return _rowset_txn_meta.get(); }
 
-    // must be called when partial update, because partial update need special tablet schema
-    void set_tablet_schema(std::shared_ptr<const TabletSchema>& tschema);
-
 private:
     Status reset_segment_writer();
     Status flush_segment_writer();
 
     Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _schema;
     std::unique_ptr<SegmentWriter> _seg_writer;
     std::vector<std::string> _files;
     int64_t _num_rows = 0;

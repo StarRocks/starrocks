@@ -25,6 +25,8 @@ namespace starrocks {
 
 namespace lake {
 
+class MetaFileBuilder;
+
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
@@ -37,7 +39,8 @@ public:
     RowsetUpdateState();
     ~RowsetUpdateState();
 
-    Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet);
+    Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
+                const MetaFileBuilder* builder);
 
     Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
@@ -73,6 +76,7 @@ private:
     std::vector<PartialUpdateState> _partial_update_states;
 
     int64_t _base_version;
+    const MetaFileBuilder* _builder;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;

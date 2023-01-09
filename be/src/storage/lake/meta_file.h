@@ -40,7 +40,7 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     Status finalize(LocationProvider* location_provider);
-    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
+    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
 
