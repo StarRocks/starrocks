@@ -160,8 +160,10 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Object literalValue = convertBoolLiteralValue(getLiteralValue(operator.getChild(1)),
-                    context.getSchema().fieldType(columnName).typeId());
+            Object literalValue = getLiteralValue(operator.getChild(1));
+            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                literalValue = convertBoolLiteralValue(literalValue);
+            }
 
             if (literalValue == null) {
                 return null;
@@ -192,11 +194,13 @@ public class ScalarOperatorToIcebergExpr {
             }
 
             List<Object> literalValues = operator.getListChildren().stream()
-                    .map(childoperator ->
-                            convertBoolLiteralValue(
-                                    ScalarOperatorToIcebergExpr.getLiteralValue(childoperator.getChild(1)),
-                                    context.getSchema().fieldType(columnName).typeId()))
-                    .collect(Collectors.toList());
+                    .map(childoperator -> {
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator);
+                        if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                            literalValue = convertBoolLiteralValue(literalValue);
+                        }
+                        return literalValue;
+                    }).collect(Collectors.toList());
 
             if (operator.isNotIn()) {
                 return notIn(columnName, literalValues);
@@ -237,15 +241,12 @@ public class ScalarOperatorToIcebergExpr {
         return operator.accept(new ExtractLiteralValue(), null);
     }
 
-    private static Object convertBoolLiteralValue(Object literalValue, Type.TypeID type) {
+    private static Object convertBoolLiteralValue(Object literalValue) {
         try {
-            if (literalValue != null && type == Type.TypeID.BOOLEAN) {
-                literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
-            }
+            return new BoolLiteral(String.valueOf(literalValue)).getValue();
         } catch (Exception e) {
             throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalValue);
         }
-        return literalValue;
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
