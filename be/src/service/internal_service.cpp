@@ -719,13 +719,15 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
 
         auto& commit_epoch = t_request.commit_epoch;
         auto& version_info = commit_epoch.partition_version_infos;
-        std::stringstream version_str;
-        version_str << " version_info=[";
-        for (auto& part : version_info) {
-            version_str << part;
+        if (VLOG_ROW_IS_ON) {
+            std::stringstream version_str;
+            version_str << " version_info=[";
+            for (auto& part : version_info) {
+                version_str << part;
+            }
+            version_str << "]";
+            VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
         }
-        version_str << "]";
-        VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
 
         break;
     }
