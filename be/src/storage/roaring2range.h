@@ -17,7 +17,7 @@
 #include "storage/range.h"
 #include "storage/rowset/bitmap_range_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static inline SparseRange roaring2range(const Roaring& roaring) {
     SparseRange range;
@@ -39,4 +39,4 @@ static inline Roaring range2roaring(const SparseRange& range) {
     return roaring;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

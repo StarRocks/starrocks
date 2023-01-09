@@ -18,7 +18,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename FromType, typename ToType>
 static inline bool checked_cast(const FromType& from, ToType* to) {
@@ -183,4 +183,4 @@ template Status add_numeric_column<double>(Column* column, const TypeDescriptor&
 template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                           simdjson::ondemand::value* value);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

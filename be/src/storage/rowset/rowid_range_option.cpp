@@ -19,7 +19,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange rowid_range)
         : rowset_id(rowset_id), segment_id(segment_id), rowid_range(std::move(rowid_range)) {}
@@ -32,4 +32,4 @@ bool RowidRangeOption::match_segment(const Segment* segment) const {
     return segment->id() == segment_id;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

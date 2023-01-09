@@ -213,15 +213,15 @@ public class AnalyzeDecimalV3Test {
         String sql1 = "" +
                 "select\n" +
                 "   sum(col_decimal_p9s4) as decimal32_sum,\n" +
-                "   sum_distinct(col_decimal_p9s4) as decimal32_sum_distinct,\n" +
+                "   sum(distinct col_decimal_p9s4) as decimal32_sum_distinct,\n" +
                 "   multi_distinct_sum(col_decimal_p9s4) as decimal32_multi_distinct_sum,\n" +
 
                 "   sum(col_decimal_p15s10) as decimal64_sum,\n" +
-                "   sum_distinct(col_decimal_p15s10) as decimal64_sum_distinct,\n" +
+                "   sum(distinct col_decimal_p15s10) as decimal64_sum_distinct,\n" +
                 "   multi_distinct_sum(col_decimal_p15s10) as decimal64_multi_distinct_sum,\n" +
 
                 "   sum(col_decimal_p38s30) as decimal128_sum,\n" +
-                "   sum_distinct(col_decimal_p38s30) as decimal128_sum_distinct,\n" +
+                "   sum(distinct col_decimal_p38s30) as decimal128_sum_distinct,\n" +
                 "   multi_distinct_sum(col_decimal_p38s30) as decimal128_multi_distinct_sum\n" +
                 "from db1.decimal_table\n";
 
@@ -258,8 +258,7 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(type, expectReturnType);
             Assert.assertEquals(argType, expectArgType);
             System.out.printf("%s: %s\n", fn.functionName(), serdeType);
-            if (fn.functionName().equalsIgnoreCase(FunctionSet.SUM) ||
-                    fn.functionName().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)) {
+            if (fn.functionName().equalsIgnoreCase(FunctionSet.SUM)) {
                 Assert.assertEquals(serdeType, null);
             } else {
                 Assert.assertEquals(serdeType, Type.VARBINARY);

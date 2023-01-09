@@ -15,11 +15,11 @@
 #include "column/column_viewer.h"
 
 #include "column/column_helper.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static inline size_t not_const_mask(const ColumnPtr& column) {
     return !column->only_null() && !column->is_constant() ? -1 : 0;
@@ -62,4 +62,4 @@ template class ColumnViewer<TYPE_HLL>;
 template class ColumnViewer<TYPE_OBJECT>;
 template class ColumnViewer<TYPE_PERCENTILE>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

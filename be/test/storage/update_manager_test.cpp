@@ -49,7 +49,7 @@ public:
         _update_manager = std::make_unique<UpdateManager>(_root_mem_tracker.get());
     }
 
-    RowsetSharedPtr create_rowset(const vector<int64_t>& keys, vectorized::Column* one_delete = nullptr) {
+    RowsetSharedPtr create_rowset(const vector<int64_t>& keys, Column* one_delete = nullptr) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -64,13 +64,13 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (long key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr) {
             CHECK_OK(writer->flush_chunk(*chunk));

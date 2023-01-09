@@ -189,7 +189,7 @@ public class RoutineLoadManager implements Writable {
 
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt)
             throws UserException {
-        // check load auth
+        // check load auth, in new RBAC framework, create routine load will be checked in PrivilegeCheckerV2
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                                                                          createRoutineLoadStmt.getDBName(),
@@ -287,7 +287,7 @@ public class RoutineLoadManager implements Writable {
         if (routineLoadJob == null) {
             throw new DdlException("There is not operable routine load job with name " + jobName);
         }
-        // check auth
+
         String dbFullName;
         String tableName;
         try {
@@ -296,14 +296,17 @@ public class RoutineLoadManager implements Writable {
         } catch (MetaNotFoundException e) {
             throw new DdlException("The metadata of job has been changed. The job will be cancelled automatically", e);
         }
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                dbFullName,
-                tableName,
-                PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tableName);
+        // check auth, in new RBAC framework, routine load statement will be checked in PrivilegeCheckerV2
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    dbFullName,
+                    tableName,
+                    PrivPredicate.LOAD)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tableName);
+            }
         }
         return routineLoadJob;
     }

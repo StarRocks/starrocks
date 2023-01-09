@@ -21,9 +21,9 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
+#include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/binary_predicate.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
@@ -33,8 +33,8 @@
 
 namespace starrocks::parquet {
 
-static vectorized::HdfsScanStats g_hdfs_scan_stats;
-using starrocks::vectorized::HdfsScannerContext;
+static HdfsScanStats g_hdfs_scan_stats;
+using starrocks::HdfsScannerContext;
 
 // TODO: min/max conjunct
 class FileReaderTest : public testing::Test {
@@ -77,13 +77,13 @@ private:
     void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                       std::vector<ExprContext*>* conjunct_ctxs);
 
-    static vectorized::ChunkPtr _create_chunk();
-    static vectorized::ChunkPtr _create_multi_page_chunk();
-    static vectorized::ChunkPtr _create_struct_chunk();
-    static vectorized::ChunkPtr _create_required_array_chunk();
-    static vectorized::ChunkPtr _create_chunk_for_partition();
-    static vectorized::ChunkPtr _create_chunk_for_not_exist();
-    static void _append_column_for_chunk(LogicalType column_type, vectorized::ChunkPtr* chunk);
+    static ChunkPtr _create_chunk();
+    static ChunkPtr _create_multi_page_chunk();
+    static ChunkPtr _create_struct_chunk();
+    static ChunkPtr _create_required_array_chunk();
+    static ChunkPtr _create_chunk_for_partition();
+    static ChunkPtr _create_chunk_for_not_exist();
+    static void _append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk);
 
     THdfsScanRange* _create_scan_range(const std::string& file_path, size_t scan_length = 0);
 
@@ -291,7 +291,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_partition() {
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
-    auto column = vectorized::ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 1);
+    auto column = ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 1);
     ctx->partition_values.emplace_back(column);
 
     return ctx;
@@ -717,13 +717,13 @@ THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path,
     return scan_range;
 }
 
-void FileReaderTest::_append_column_for_chunk(LogicalType column_type, vectorized::ChunkPtr* chunk) {
-    auto c = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(column_type), true);
+void FileReaderTest::_append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk) {
+    auto c = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(column_type), true);
     (*chunk)->append_column(c, (*chunk)->num_columns());
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_chunk() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_BIGINT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_VARCHAR, &chunk);
@@ -731,8 +731,8 @@ vectorized::ChunkPtr FileReaderTest::_create_chunk() {
     return chunk;
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_multi_page_chunk() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_multi_page_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_BIGINT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_VARCHAR, &chunk);
@@ -741,33 +741,33 @@ vectorized::ChunkPtr FileReaderTest::_create_multi_page_chunk() {
     return chunk;
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_struct_chunk() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_struct_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(LogicalType::TYPE_VARCHAR, &chunk);
     return chunk;
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_required_array_chunk() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_required_array_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
 
     TypeDescriptor array_column(LogicalType::TYPE_ARRAY);
     array_column.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
-    auto c = vectorized::ColumnHelper::create_column(array_column, true);
+    auto c = ColumnHelper::create_column(array_column, true);
     chunk->append_column(c, chunk->num_columns());
     return chunk;
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_chunk_for_partition() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_chunk_for_partition() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     return chunk;
 }
 
-vectorized::ChunkPtr FileReaderTest::_create_chunk_for_not_exist() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileReaderTest::_create_chunk_for_not_exist() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
     return chunk;
 }
@@ -888,8 +888,11 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_chunk();
@@ -960,8 +963,11 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // c0 is conjunct filter column
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
@@ -1002,9 +1008,6 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
         if (!status.ok()) {
             break;
         }
-        for (int i = 0; i < chunk->num_rows(); ++i) {
-            std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-        }
     }
     ASSERT_TRUE(status.is_end_of_file());
 }
@@ -1021,17 +1024,17 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
     int i = int_col->get(0).get_int32();
@@ -1059,9 +1062,6 @@ TEST_F(FileReaderTest, TestReadWithUpperPred) {
     ASSERT_TRUE(status.ok());
     LOG(ERROR) << "status: " << status.get_error_msg();
     ASSERT_EQ(3, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
     int i = int_col->get(0).get_int32();
@@ -1095,9 +1095,9 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     TypeDescriptor type_outer(LogicalType::TYPE_ARRAY);
     type_outer.children.emplace_back(type_inner);
 
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
-    auto c = vectorized::ColumnHelper::create_column(type_outer, true);
+    auto c = ColumnHelper::create_column(type_outer, true);
     chunk->append_column(c, chunk->num_columns());
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
@@ -1105,11 +1105,11 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[1, [[1, 2]]]");
-    EXPECT_EQ(chunk->debug_row(1), "[2, [[1, 2], [3, 4]]]");
-    EXPECT_EQ(chunk->debug_row(2), "[3, [[1, 2, 3], [4]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, [[1, 2, 3], [4], [5]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, [[1,2]]]");
+    EXPECT_EQ(chunk->debug_row(1), "[2, [[1,2],[3,4]]]");
+    EXPECT_EQ(chunk->debug_row(2), "[3, [[1,2,3],[4]]]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, [[1,2,3],[4],[5]]]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, [[1,2,3],[4,5]]]");
 }
 
 TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
@@ -1165,11 +1165,11 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     type_map_varchar.selected_fields.emplace_back(true);
     type_map_varchar.selected_fields.emplace_back(true);
 
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
-    auto c = vectorized::ColumnHelper::create_column(type_map_char, true);
+    auto c = ColumnHelper::create_column(type_map_char, true);
     chunk->append_column(c, chunk->num_columns());
-    auto c_map1 = vectorized::ColumnHelper::create_column(type_map_varchar, true);
+    auto c_map1 = ColumnHelper::create_column(type_map_varchar, true);
     chunk->append_column(c_map1, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
@@ -1178,7 +1178,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[0, ['abc'->123], ['def'->456]]");
+    EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
 
 TEST_F(FileReaderTest, TestReadMapColumn) {
@@ -1220,32 +1220,27 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     type_map_array.selected_fields.emplace_back(true);
     type_map_array.selected_fields.emplace_back(true);
 
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
-    auto c = vectorized::ColumnHelper::create_column(type_map, true);
+    auto c = ColumnHelper::create_column(type_map, true);
     chunk->append_column(c, chunk->num_columns());
-    auto c_map_map = vectorized::ColumnHelper::create_column(type_map_map, true);
+    auto c_map_map = ColumnHelper::create_column(type_map_map, true);
     chunk->append_column(c_map_map, chunk->num_columns());
-    auto c_map_array = vectorized::ColumnHelper::create_column(type_map_array, true);
+    auto c_map_array = ColumnHelper::create_column(type_map_array, true);
     chunk->append_column(c_map_array, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(chunk->num_rows(), 8);
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
-    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->0, 'k2'->1], ['e1'->['f1'->1, 'f2'->2]], ['g1'->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':0,'k2':1}, {'e1':{'f1':1,'f2':2}}, {'g1':[1,2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], "
-              "'g3'->[2]]]");
-    EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->2, 'k3'->3, 'k5'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->3, 'k2'->4, 'k3'->5], ['e2'->['f2'->2]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->4], ['e2'->['f2'->2]], ['g1'->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], ['e2'->['f2'->NULL]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->1, 'k2'->2], ['e2'->['f2'->2]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g2'->[1], 'g3'->[2]]]");
+              "[2, {'k1':1,'k3':2,'k4':3}, {'e1':{'f1':1,'f2':2},'e2':{'f1':1,'f2':2}}, {'g1':[1],'g3':[2]}]");
+    EXPECT_EQ(chunk->debug_row(2), "[3, {'k2':2,'k3':3,'k5':4}, {'e1':{'f1':1,'f2':2,'f3':3}}, {'g1':[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':3,'k2':4,'k3':5}, {'e2':{'f2':2}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':4}, {'e2':{'f2':2}}, {'g1':[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {'e2':{'f2':NULL}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':1,'k2':2}, {'e2':{'f2':2}}, {'g1':[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':4}, {'e1':{'f1':1,'f2':2,'f3':3}}, {'g2':[1],'g3':[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadStruct) {
@@ -1307,37 +1302,27 @@ TEST_F(FileReaderTest, TestReadStruct) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c2, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c3, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c4, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(B1, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c3, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c4, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(B1, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f2: 'a', f1: 0, f3: [0, 1, 2]}, 'a', [{e1: 0, e2: 'a'}, {e1: 1, e2: 'a'}], 'A']",
-              chunk->debug_row(0));
-    EXPECT_EQ("[1, {f2: 'a', f1: 1, f3: [1, 2, 3]}, 'a', [{e1: 1, e2: 'a'}, {e1: 2, e2: 'a'}], 'A']",
-              chunk->debug_row(1));
-    EXPECT_EQ("[2, {f2: 'a', f1: 2, f3: [2, 3, 4]}, 'a', [{e1: 2, e2: 'a'}, {e1: 3, e2: 'a'}], 'A']",
-              chunk->debug_row(2));
-    EXPECT_EQ("[3, {f2: 'c', f1: 3, f3: [3, 4, 5]}, 'c', [{e1: 3, e2: 'c'}, {e1: 4, e2: 'c'}], 'C']",
-              chunk->debug_row(3));
-    EXPECT_EQ("[4, {f2: 'c', f1: 4, f3: [4, 5, 6]}, 'c', [{e1: 4, e2: 'c'}, {e1: 5, e2: 'c'}], 'C']",
-              chunk->debug_row(4));
-    EXPECT_EQ("[5, {f2: 'c', f1: 5, f3: [5, 6, 7]}, 'c', [{e1: 5, e2: 'c'}, {e1: 6, e2: 'c'}], 'C']",
-              chunk->debug_row(5));
-    EXPECT_EQ("[6, {f2: 'a', f1: 6, f3: [6, 7, 8]}, 'a', [{e1: 6, e2: 'a'}, {e1: 7, e2: 'a'}], 'A']",
-              chunk->debug_row(6));
-    EXPECT_EQ("[7, {f2: 'a', f1: 7, f3: [7, 8, 9]}, 'a', [{e1: 7, e2: 'a'}, {e1: 8, e2: 'a'}], 'A']",
-              chunk->debug_row(7));
-    EXPECT_EQ("[8, {f2: 'a', f1: 8, f3: [8, 9, 10]}, 'a', [{e1: 8, e2: 'a'}, {e1: 9, e2: 'a'}], 'A']",
-              chunk->debug_row(8));
-    EXPECT_EQ("[9, {f2: 'a', f1: 9, f3: [9, 10, 11]}, 'a', [{e1: 9, e2: 'a'}, {e1: 10, e2: 'a'}], 'A']",
-              chunk->debug_row(9));
+    EXPECT_EQ("[0, {f2:'a',f1:0,f3:[0,1,2]}, 'a', [{e1:0,e2:'a'},{e1:1,e2:'a'}], 'A']", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f2:'a',f1:1,f3:[1,2,3]}, 'a', [{e1:1,e2:'a'},{e1:2,e2:'a'}], 'A']", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f2:'a',f1:2,f3:[2,3,4]}, 'a', [{e1:2,e2:'a'},{e1:3,e2:'a'}], 'A']", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f2:'c',f1:3,f3:[3,4,5]}, 'c', [{e1:3,e2:'c'},{e1:4,e2:'c'}], 'C']", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f2:'c',f1:4,f3:[4,5,6]}, 'c', [{e1:4,e2:'c'},{e1:5,e2:'c'}], 'C']", chunk->debug_row(4));
+    EXPECT_EQ("[5, {f2:'c',f1:5,f3:[5,6,7]}, 'c', [{e1:5,e2:'c'},{e1:6,e2:'c'}], 'C']", chunk->debug_row(5));
+    EXPECT_EQ("[6, {f2:'a',f1:6,f3:[6,7,8]}, 'a', [{e1:6,e2:'a'},{e1:7,e2:'a'}], 'A']", chunk->debug_row(6));
+    EXPECT_EQ("[7, {f2:'a',f1:7,f3:[7,8,9]}, 'a', [{e1:7,e2:'a'},{e1:8,e2:'a'}], 'A']", chunk->debug_row(7));
+    EXPECT_EQ("[8, {f2:'a',f1:8,f3:[8,9,10]}, 'a', [{e1:8,e2:'a'},{e1:9,e2:'a'}], 'A']", chunk->debug_row(8));
+    EXPECT_EQ("[9, {f2:'a',f1:9,f3:[9,10,11]}, 'a', [{e1:9,e2:'a'},{e1:10,e2:'a'}], 'A']", chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1404,37 +1389,27 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c2, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c3, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c4, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(B1, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c3, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c4, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(B1, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1: 0, f2: NULL, f3: [0, 1, 2]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1: 1, f2: NULL, f3: [1, 2, 3]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1: 2, f2: NULL, f3: [2, 3, 4]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1: 3, f2: NULL, f3: [3, 4, 5]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
-              chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1: 4, f2: NULL, f3: [4, 5, 6]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
-              chunk->debug_row(4));
-    EXPECT_EQ("[5, {f1: 5, f2: NULL, f3: [5, 6, 7]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
-              chunk->debug_row(5));
-    EXPECT_EQ("[6, {f1: 6, f2: NULL, f3: [6, 7, 8]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(6));
-    EXPECT_EQ("[7, {f1: 7, f2: NULL, f3: [7, 8, 9]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(7));
-    EXPECT_EQ("[8, {f1: 8, f2: NULL, f3: [8, 9, 10]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(8));
-    EXPECT_EQ("[9, {f1: 9, f2: NULL, f3: [9, 10, 11]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
-              chunk->debug_row(9));
+    EXPECT_EQ("[0, {f1:0,f2:NULL,f3:[0,1,2]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1:1,f2:NULL,f3:[1,2,3]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1:2,f2:NULL,f3:[2,3,4]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1:3,f2:NULL,f3:[3,4,5]}, 'c', [{e1:NULL,e2:'c'},{e1:NULL,e2:'c'}], 'C']", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1:4,f2:NULL,f3:[4,5,6]}, 'c', [{e1:NULL,e2:'c'},{e1:NULL,e2:'c'}], 'C']", chunk->debug_row(4));
+    EXPECT_EQ("[5, {f1:5,f2:NULL,f3:[5,6,7]}, 'c', [{e1:NULL,e2:'c'},{e1:NULL,e2:'c'}], 'C']", chunk->debug_row(5));
+    EXPECT_EQ("[6, {f1:6,f2:NULL,f3:[6,7,8]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(6));
+    EXPECT_EQ("[7, {f1:7,f2:NULL,f3:[7,8,9]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(7));
+    EXPECT_EQ("[8, {f1:8,f2:NULL,f3:[8,9,10]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(8));
+    EXPECT_EQ("[9, {f1:9,f2:NULL,f3:[9,10,11]}, 'a', [{e1:NULL,e2:'a'},{e1:NULL,e2:'a'}], 'A']", chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1482,15 +1457,15 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c2, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {F1: 0, F2: 'a', F3: [0, 1, 2]}]", chunk->debug_row(0));
+    EXPECT_EQ("[0, {F1:0,F2:'a',F3:[0,1,2]}]", chunk->debug_row(0));
 
     //    for (int i = 0; i < 1; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1584,29 +1559,21 @@ TEST_F(FileReaderTest, TestReadStructNull) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(c0, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(c2, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c0, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(4, chunk->num_rows());
 
-    EXPECT_EQ("[1, {c1_0: 1, c1_1: [1, 2, 3]}, [{c2_0: 1, c2_1: 1}, {c2_0: 2, c2_1: 2}, {c2_0: 3, c2_1: 3}]]",
-              chunk->debug_row(0));
-    EXPECT_EQ("[2, {c1_0: NULL, c1_1: [2, 3, 4]}, [{c2_0: NULL, c2_1: 2}, {c2_0: NULL, c2_1: 3}]]",
-              chunk->debug_row(1));
-    EXPECT_EQ(
-            "[3, {c1_0: 3, c1_1: [NULL]}, [{c2_0: NULL, c2_1: NULL}, {c2_0: NULL, c2_1: NULL}, {c2_0: NULL, c2_1: "
-            "NULL}]]",
-            chunk->debug_row(2));
-    EXPECT_EQ("[4, {c1_0: 4, c1_1: [4, 5, 6]}, [{c2_0: 4, c2_1: NULL}, {c2_0: 5, c2_1: NULL}, {c2_0: 6, c2_1: 4}]]",
+    EXPECT_EQ("[1, {c1_0:1,c1_1:[1,2,3]}, [{c2_0:1,c2_1:1},{c2_0:2,c2_1:2},{c2_0:3,c2_1:3}]]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {c1_0:NULL,c1_1:[2,3,4]}, [{c2_0:NULL,c2_1:2},{c2_0:NULL,c2_1:3}]]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {c1_0:3,c1_1:[NULL]}, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]",
+              chunk->debug_row(2));
+    EXPECT_EQ("[4, {c1_0:4,c1_1:[4,5,6]}, [{c2_0:4,c2_1:NULL},{c2_0:5,c2_1:NULL},{c2_0:6,c2_1:4}]]",
               chunk->debug_row(3));
-
-    //    for (int i = 0; i < 4; ++i) {
-    //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    //    }
 }
 
 TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
@@ -1644,34 +1611,29 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
     type_map_array.children.emplace_back(type_array);
 
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _append_column_for_chunk(LogicalType::TYPE_INT, &chunk);
-    auto c = vectorized::ColumnHelper::create_column(type_map, true);
+    auto c = ColumnHelper::create_column(type_map, true);
     chunk->append_column(c, chunk->num_columns());
-    auto c_map_map = vectorized::ColumnHelper::create_column(type_map_map, true);
+    auto c_map_map = ColumnHelper::create_column(type_map_map, true);
     chunk->append_column(c_map_map, chunk->num_columns());
-    auto c_map_array = vectorized::ColumnHelper::create_column(type_map_array, true);
+    auto c_map_array = ColumnHelper::create_column(type_map_array, true);
     chunk->append_column(c_map_array, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(chunk->num_rows(), 8);
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
-    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->NULL, 'k2'->NULL], [NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':NULL,'k2':NULL}, {NULL:{'f1':NULL,'f2':NULL}}, {NULL:[1,2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->NULL, 'k3'->NULL, 'k4'->NULL], [NULL->['f1'->NULL, 'f2'->NULL], NULL->['f1'->NULL, "
-              "'f2'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[2, {'k1':NULL,'k3':NULL,'k4':NULL}, {NULL:{'f1':NULL,'f2':NULL},NULL:{'f1':NULL,'f2':NULL}}, "
+              "{NULL:[1],NULL:[2]}]");
     EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->NULL, 'k3'->NULL, 'k5'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1, 2, "
-              "3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->NULL, 'k2'->NULL, 'k3'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->NULL], [NULL->['f2'->NULL]], [NULL->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->NULL, 'k2'->NULL], [NULL->['f2'->NULL]], [NULL->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7),
-              "[8, ['k3'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[3, {'k2':NULL,'k3':NULL,'k5':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':NULL,'k2':NULL,'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':NULL,'k2':NULL}, {NULL:{'f2':NULL}}, {NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1],NULL:[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadNotNull) {
@@ -1716,22 +1678,18 @@ TEST_F(FileReaderTest, TestReadNotNull) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_map, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
 
-    EXPECT_EQ("[1, ['a'->1], {a: 'a', b: 1}]", chunk->debug_row(0));
-    EXPECT_EQ("[2, ['b'->2, 'c'->3], {a: 'b', b: 2}]", chunk->debug_row(1));
-    EXPECT_EQ("[3, ['c'->3], {a: 'c', b: 3}]", chunk->debug_row(2));
-
-    for (int i = 0; i < 3; ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
+    EXPECT_EQ("[1, {'a':1}, {a:'a',b:1}]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {'b':2,'c':3}, {a:'b',b:2}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {'c':3}, {a:'c',b:3}]", chunk->debug_row(2));
 }
 
 TEST_F(FileReaderTest, TestReadMapNull) {
@@ -1766,9 +1724,9 @@ TEST_F(FileReaderTest, TestReadMapNull) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
-    chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_map, true), chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
@@ -1777,10 +1735,6 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
     EXPECT_EQ("[2, NULL]", chunk->debug_row(1));
     EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
-
-    for (int i = 0; i < 3; ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
 }
 
 } // namespace starrocks::parquet

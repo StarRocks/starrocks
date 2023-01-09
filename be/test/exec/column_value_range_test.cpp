@@ -15,9 +15,9 @@
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 TEST(NormalizeRangeTest, RangeTest) {
     const constexpr LogicalType Type = TYPE_INT;
     using CppType = RunTimeCppType<Type>;
@@ -172,4 +172,4 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -27,7 +27,7 @@
 #include "testutil/assert.h"
 #include "util/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaChangeTest : public testing::Test {
     void SetUp() override { _sc_procedure = nullptr; }
@@ -72,7 +72,7 @@ protected:
         Status res = engine->create_tablet(create_tablet_req);
         ASSERT_TRUE(res.ok());
         TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-        vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        VectorizedSchema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         for (size_t i = 0; i < 4; ++i) {
             ColumnPtr& base_col = base_chunk->get_column_by_index(i);
@@ -125,13 +125,13 @@ protected:
                 SetTabletSchema("SrcColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
 
-        VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-        VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+        VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+        VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         src_datum.set<T>(val);
         Datum dst_datum;
-        auto converter = vectorized::get_type_converter(type, TYPE_VARCHAR);
+        auto converter = get_type_converter(type, TYPE_VARCHAR);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
@@ -145,8 +145,8 @@ protected:
         auto dst_tablet_schema =
                 SetTabletSchema("DstColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
 
-        VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-        VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+        VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+        VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         Slice slice;
@@ -154,7 +154,7 @@ protected:
         slice.size = val.size();
         src_datum.set_slice(slice);
         Datum dst_datum;
-        auto converter = vectorized::get_type_converter(TYPE_VARCHAR, type);
+        auto converter = get_type_converter(TYPE_VARCHAR, type);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
@@ -225,13 +225,13 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     auto src_tablet_schema = SetTabletSchema("SrcColumn", "FLOAT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "DOUBLE", "REPLACE", 8, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_float(1.2345);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(TYPE_FLOAT, TYPE_DOUBLE);
+    auto converter = get_type_converter(TYPE_FLOAT, TYPE_DOUBLE);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -243,8 +243,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     auto src_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -256,7 +256,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
                     time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
     src_datum.set_int64(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(TYPE_DATETIME_V1, TYPE_DATE_V1);
+    auto converter = get_type_converter(TYPE_DATETIME_V1, TYPE_DATE_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -269,8 +269,8 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     auto src_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -280,7 +280,7 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     src_datum.set_uint24(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(TYPE_DATE_V1, TYPE_DATETIME_V1);
+    auto converter = get_type_converter(TYPE_DATE_V1, TYPE_DATETIME_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -293,8 +293,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE V2", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -303,7 +303,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(TYPE_INT, TYPE_DATE);
+    auto converter = get_type_converter(TYPE_INT, TYPE_DATE);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -315,8 +315,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -325,7 +325,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(TYPE_INT, TYPE_DATE_V1);
+    auto converter = get_type_converter(TYPE_INT, TYPE_DATE_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -338,18 +338,18 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("BitmapColumn", "OBJECT", "BITMAP_UNION", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
+    auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -362,12 +362,12 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "VARCHAR", "REPLACE", 255, false, false);
     auto dst_tablet_schema = SetTabletSchema("HLLColumn", "HLL", "HLL_UNION", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string str = "test string";
@@ -375,7 +375,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     src_datum.set_slice(slice);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
+    auto converter = get_materialized_converter(TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -388,18 +388,18 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("CountColumn", "BIGINT", "SUM", 8, false, false);
 
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
+    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
+    auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -438,7 +438,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -511,7 +511,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -566,7 +566,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -635,7 +635,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -699,7 +699,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    vectorized::VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -734,7 +734,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
         JsonColumn::Ptr dst_column = JsonColumn::create();
         src_column->append(json_str);
 
-        auto converter = vectorized::get_type_converter(TYPE_VARCHAR, TYPE_JSON);
+        auto converter = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
         TypeInfoPtr type1 = get_type_info(TYPE_VARCHAR);
         TypeInfoPtr type2 = get_type_info(TYPE_JSON);
         Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
@@ -750,7 +750,7 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     BinaryColumn::Ptr dst_column = BinaryColumn::create();
     src_column->append(&json);
 
-    auto converter = vectorized::get_type_converter(TYPE_JSON, TYPE_VARCHAR);
+    auto converter = get_type_converter(TYPE_JSON, TYPE_VARCHAR);
     auto mem_pool = std::make_unique<MemPool>();
     TypeInfoPtr type1 = get_type_info(TYPE_JSON);
     TypeInfoPtr type2 = get_type_info(TYPE_VARCHAR);
@@ -759,4 +759,4 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     ASSERT_EQ(dst_column->get_slice(0), json_str);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

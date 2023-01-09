@@ -263,4 +263,28 @@ public class StatisticUtils {
         }
         return columns;
     }
+
+    public static double multiplyRowCount(double left, double right) {
+        left = left > StatsConstants.MAXIMUM_ROW_COUNT ? StatsConstants.MAXIMUM_ROW_COUNT : left;
+        right = right > StatsConstants.MAXIMUM_ROW_COUNT ? StatsConstants.MAXIMUM_ROW_COUNT : right;
+        double result;
+        if (left > StatsConstants.MAXIMUM_ROW_COUNT / right) {
+            result = StatsConstants.MAXIMUM_ROW_COUNT;
+        } else {
+            result = left * right;
+        }
+        return result;
+    }
+
+    public static double multiplyOutputSize(double left, double right) {
+        left = left > StatsConstants.MAXIMUM_OUTPUT_SIZE ? StatsConstants.MAXIMUM_OUTPUT_SIZE : left;
+        right = right > StatsConstants.MAXIMUM_OUTPUT_SIZE ? StatsConstants.MAXIMUM_OUTPUT_SIZE : right;
+        double result;
+        if (left > StatsConstants.MAXIMUM_OUTPUT_SIZE / right) {
+            result = StatsConstants.MAXIMUM_OUTPUT_SIZE;
+        } else {
+            result = left * right;
+        }
+        return result;
+    }
 }

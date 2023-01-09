@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -23,6 +22,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -32,6 +32,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -118,11 +120,17 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -218,6 +226,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
+                node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
+        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
+                node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
+        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
     }
 
@@ -531,7 +551,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 double max;
                 if (minLiteral instanceof DateLiteral) {
                     DateLiteral minDateLiteral = (DateLiteral) minLiteral;
-                    DateLiteral maxDateLiteral = (DateLiteral) maxLiteral;
+                    DateLiteral maxDateLiteral;
+                    try {
+                        maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                                (DateLiteral) maxLiteral;
+                    } catch (AnalysisException e) {
+                        LOG.warn("get max date literal failed, msg : " + e.getMessage());
+                        return null;
+                    }
                     min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
                     max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
                 } else {
@@ -552,7 +579,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
-            if (node.isLogical()) {
+            if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
+                    node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
+                return 1;
+            } else if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
@@ -562,10 +592,50 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         olapTable::getPartition).collect(Collectors.toList());
             }
             long rowCount = 0;
-            for (Partition partition : selectedPartitions) {
-                rowCount += partition.getBaseIndex().getRowCount();
-                optimizerContext.getDumpInfo()
-                        .addPartitionRowCount(table, partition.getName(), partition.getBaseIndex().getRowCount());
+
+            BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+
+                // The basicStatsMeta.getUpdateRows() interface can get the number of
+                // loaded rows in the table since the last statistics update. But this number is at the table level.
+                // So here we can count the number of partitions that have changed since the last statistics update,
+                // and then evenly distribute the number of updated rows at the table level to the partition boundaries
+                // The purpose of this is to make the statistics of the number of rows more accurate.
+                // For example, a large amount of data LOAD may cause the number of rows to change greatly.
+                // This leads to very inaccurate row counts.
+                int partitionCountModifiedAfterLastAnalyze = 0;
+                for (Partition partition : table.getPartitions()) {
+                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                        partitionCountModifiedAfterLastAnalyze++;
+                    }
+                }
+
+                for (Partition partition : selectedPartitions) {
+                    long partitionRowCount;
+                    TableStatistic tableStatistic =
+                            GlobalStateMgr.getCurrentStatisticStorage().getTableStatistic(table.getId(), partition.getId());
+                    if (tableStatistic.equals(TableStatistic.unknown())) {
+                        partitionRowCount = partition.getRowCount();
+                    } else {
+                        partitionRowCount = tableStatistic.getRowCount();
+                    }
+                    if (partitionCountModifiedAfterLastAnalyze > 0) {
+                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                        if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                            partitionRowCount += basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
+                        }
+                    }
+                    rowCount += partitionRowCount;
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partitionRowCount);
+                }
+            } else {
+                for (Partition partition : selectedPartitions) {
+                    rowCount += partition.getRowCount();
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
+                }
             }
             // Currently, after FE just start, the row count of table is always 0.
             // Explicitly set table row count to 1 to make our cost estimate work.
@@ -724,7 +794,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         crossBuilder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
-        double crossRowCount = leftRowCount * rightRowCount;
+        double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
         crossBuilder.setOutputRowCount(crossRowCount);
 
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),

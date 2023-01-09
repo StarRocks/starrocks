@@ -63,7 +63,7 @@ struct ColumnMapping {
     std::unique_ptr<PercentileValue> default_percentile;
     std::unique_ptr<JsonValue> default_json;
 
-    vectorized::Datum default_value_datum;
+    Datum default_value_datum;
 };
 
 typedef std::vector<ColumnMapping> SchemaMapping;

@@ -16,17 +16,36 @@
 package com.starrocks.service;
 
 
+import com.clearspring.analytics.util.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TCreatePartitionRequest;
+import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class FrontendServiceImplTest {
 
@@ -50,27 +69,25 @@ public class FrontendServiceImplTest {
     @Test
     public void testUpdateResourceUsage() throws TException {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
         long memLimitBytes = 3;
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
-        new Expectations(systemInfoService, queryQueueManager) {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long id) {
+                if (id == backendId) {
+                    return backend;
+                }
+                return null;
+            }
+        };
+        new Expectations(queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
                 times = 1;
-            }
-
-            {
-                systemInfoService.getBackend(backendId);
-                result = backend;
-            }
-
-            {
-                systemInfoService.getBackend(anyLong);
-                result = null;
             }
         };
 
@@ -88,4 +105,72 @@ public class FrontendServiceImplTest {
         request.setBackend_id(/* Not Exist */ 1);
         impl.updateResourceUsage(request);
     }
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.dynamic_partition_enable = true;
+        Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_strict_storage_medium_check = false;
+        Config.enable_expression_partition = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day DATE,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY day(event_day) (\n" +
+                        "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String dropSQL = "drop table site_access";
+        try {
+            DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        } catch (Exception ex) {
+
+        }
+    }
+
+    @Test
+    public void testCreatePartitionApi() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartitionValues(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Partition p19900424 = table.getPartition("p19900424");
+        Assert.assertNotNull(p19900424);
+    }
+
 }

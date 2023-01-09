@@ -26,8 +26,8 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_mapping.h"
@@ -35,8 +35,8 @@
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {

@@ -21,7 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/olap_file.pb.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO: move constructor and move assignment
 class VectorizedSchema {
@@ -127,4 +127,4 @@ inline std::ostream& operator<<(std::ostream& os, const VectorizedSchema& schema
     return os;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

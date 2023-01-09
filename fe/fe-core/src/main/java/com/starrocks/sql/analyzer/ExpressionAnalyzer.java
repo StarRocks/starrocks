@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -43,6 +42,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PlaceHolderExpr;
@@ -72,6 +72,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
@@ -211,6 +212,12 @@ public class ExpressionAnalyzer {
     }
 
     static class Visitor extends AstVisitor<Void, Scope> {
+        private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
+                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
+        private static final List<String> SUB_DATE_FUNCTIONS =
+                Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
+                        FunctionSet.DAYS_SUB);
+
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -246,6 +253,7 @@ public class ExpressionAnalyzer {
             node.setType(structField.getType());
             return null;
         }
+
         @Override
         public Void visitSlot(SlotRef node, Scope scope) {
             ResolvedField resolvedField = scope.resolveField(node);
@@ -406,7 +414,8 @@ public class ExpressionAnalyzer {
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
+                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
+                            type.toSql());
                 }
             }
 
@@ -480,37 +489,44 @@ public class ExpressionAnalyzer {
                     return null;
                 }
                 // Find result type of this operator
-                Type commonType;
+                Type lhsType;
+                Type rhsType;
                 switch (op) {
                     case MULTIPLY:
                     case ADD:
                     case SUBTRACT:
                         // numeric ops must be promoted to highest-resolution type
                         // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                        commonType = ArithmeticExpr.getBiggerType(ArithmeticExpr.getCommonType(t1, t2));
+                        lhsType = ArithmeticExpr.getBiggerType(ArithmeticExpr.getCommonType(t1, t2));
+                        rhsType = lhsType;
                         break;
                     case MOD:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        rhsType = lhsType;
                         break;
                     case DIVIDE:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
-                        if (commonType.isFixedPointType()) {
-                            commonType = Type.DOUBLE;
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (lhsType.isFixedPointType()) {
+                            lhsType = Type.DOUBLE;
                         }
+                        rhsType = lhsType;
                         break;
                     case INT_DIVIDE:
                     case BITAND:
                     case BITOR:
                     case BITXOR:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
-                        if (!commonType.isFixedPointType()) {
-                            commonType = Type.BIGINT;
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (!lhsType.isFixedPointType()) {
+                            lhsType = Type.BIGINT;
                         }
+                        rhsType = lhsType;
                         break;
                     case BIT_SHIFT_LEFT:
                     case BIT_SHIFT_RIGHT:
                     case BIT_SHIFT_RIGHT_LOGICAL:
-                        commonType = t1;
+                        lhsType = t1;
+                        // only support bigint function
+                        rhsType = Type.BIGINT;
                         break;
                     default:
                         // the programmer forgot to deal with a case
@@ -518,22 +534,23 @@ public class ExpressionAnalyzer {
                 }
 
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
-                    commonType = Type.NULL;
+                    lhsType = Type.NULL;
+                    rhsType = Type.NULL;
                 }
 
-                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
+                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, lhsType)) {
                     throw new SemanticException(
-                            "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
+                            "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
                                     + " is invalid.");
                 }
 
-                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
+                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, rhsType)) {
                     throw new SemanticException(
-                            "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
+                            "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -570,9 +587,9 @@ public class ExpressionAnalyzer {
 
             String funcOpName;
             if (node.getFuncName() != null) {
-                if (addDateFunctions.contains(node.getFuncName())) {
+                if (ADD_DATE_FUNCTIONS.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
-                } else if (subDateFunctions.contains(node.getFuncName())) {
+                } else if (SUB_DATE_FUNCTIONS.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
@@ -626,6 +643,35 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
+            predicateBaseAndCheck(node);
+            List<Type> leftTypes =
+                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType).collect(Collectors.toList());
+
+            Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
+            List<Type> rightTypes =
+                    inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
+                            collect(Collectors.toList());
+            if (leftTypes.size() != rightTypes.size()) {
+                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+            }
+
+            for (int i = 0; i < rightTypes.size(); ++i) {
+                if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
+                        rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
+                        rightTypes.get(i).isStructType()) {
+                    throw new SemanticException("InPredicate of JSON, Map, Struct types is not supported");
+                }
+                if (!Type.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
+                    throw new SemanticException(
+                            "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
+                                    + " is invalid.");
+                }
+            }
+            return null;
+        }
+
+        @Override
         public Void visitLiteral(LiteralExpr node, Scope scope) {
             if (node instanceof LargeIntLiteral) {
                 BigInteger value = ((LargeIntLiteral) node).getValue();
@@ -667,7 +713,8 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
+                    throw new SemanticException(
+                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
                 }
             }
 
@@ -682,7 +729,8 @@ public class ExpressionAnalyzer {
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
                         (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
-                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
+                    throw new SemanticException(
+                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
                 }
             }
         }
@@ -781,6 +829,10 @@ public class ExpressionAnalyzer {
                             " should be an array or a lambda function.");
                 }
                 // force the second array be of Type.ARRAY_BOOLEAN
+                if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                    throw new SemanticException("The second input of array_filter " +
+                            node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                }
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

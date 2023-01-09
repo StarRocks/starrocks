@@ -14,7 +14,7 @@
 
 #include "runtime/global_dict/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
@@ -36,4 +36,4 @@ std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map) {
     return stream;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

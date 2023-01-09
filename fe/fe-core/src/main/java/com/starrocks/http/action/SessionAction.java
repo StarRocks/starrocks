@@ -86,7 +86,10 @@ public class SessionAction extends WebBaseAction {
         List<List<String>> rowSet = Lists.newArrayList();
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, false));
+            List<String> row = info.toRow(nowMs, false);
+            if (row != null) {
+                rowSet.add(row);
+            }
         }
 
         buffer.append("<p>This page lists the session info, there are "

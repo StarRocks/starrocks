@@ -18,7 +18,7 @@
 #include <emmintrin.h>
 #include <immintrin.h>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class SIMDUtils {
 public:
     template <class T>
@@ -36,6 +36,6 @@ public:
         }
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 #endif

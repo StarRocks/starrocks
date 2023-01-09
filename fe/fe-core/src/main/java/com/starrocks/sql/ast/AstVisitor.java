@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -37,6 +36,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -44,6 +44,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.connector.parser.trino.PlaceholderExpr;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -931,6 +932,10 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    public R visitMultiInPredicate(MultiInPredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
     public R visitIsNullPredicate(IsNullPredicate node, C context) {
         return visitExpression(node, context);
     }
@@ -972,6 +977,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCloneExpr(CloneExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitPlaceholderExpr(PlaceholderExpr node, C context) {
         return visitExpression(node, context);
     }
 

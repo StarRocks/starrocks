@@ -58,13 +58,9 @@ class TExprNode;
 class Literal;
 class UserFunctionCacheEntry;
 
-namespace vectorized {
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
-} // namespace vectorized
-
-using vectorized::ColumnPtr;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -198,14 +194,14 @@ public:
     virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
     // TODO: check error in expression and return error status, instead of return null column
-    virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) = 0;
-    virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
+    virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) = 0;
+    virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter);
 
     // TODO:(murphy) remove this unchecked evaluate
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
     // get the first column ref in expr
-    vectorized::ColumnRef* get_column_ref();
+    ColumnRef* get_column_ref();
 
 protected:
     friend class MathFunctions;
@@ -214,7 +210,7 @@ protected:
     friend class JsonFunctions;
     friend class Literal;
     friend class ExprContext;
-    friend class vectorized::ColumnPredicateRewriter;
+    friend class ColumnPredicateRewriter;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);

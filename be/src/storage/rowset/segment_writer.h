@@ -52,11 +52,7 @@ class TabletColumn;
 class ShortKeyIndexBuilder;
 class MemTracker;
 class WritableFile;
-
-namespace vectorized {
 class Chunk;
-}
-
 class ColumnWriter;
 
 extern const char* const k_segment_magic;
@@ -64,7 +60,7 @@ extern const uint32_t k_segment_magic_length;
 
 struct SegmentWriterOptions {
     uint32_t num_rows_per_block = 1024;
-    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
 };
 
@@ -107,7 +103,7 @@ public:
     Status init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer = nullptr);
 
     // |chunk| contains partial or all columns data corresponding to _column_writers.
-    Status append_chunk(const vectorized::Chunk& chunk);
+    Status append_chunk(const Chunk& chunk);
 
     uint64_t estimate_segment_size();
 
@@ -125,7 +121,7 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
+    const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
     std::string segment_path() const;
 
@@ -152,7 +148,7 @@ private:
     // segment total num rows
     uint32_t _num_rows = 0;
 
-    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+    DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 } // namespace starrocks

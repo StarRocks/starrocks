@@ -17,7 +17,7 @@
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 inline DateValue::operator TimestampValue() const {
     return TimestampValue{date::to_timestamp(_julian)};
 }
@@ -29,4 +29,4 @@ inline TimestampValue::operator DateValue() const {
 inline void DateValue::to_date(int* year, int* month, int* day) const {
     date::to_date_with_cache(_julian, year, month, day);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

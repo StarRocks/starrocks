@@ -87,13 +87,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -103,13 +103,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(data_strs[j % slice_num]));
+                cols[0]->append_datum(Datum(data_strs[j % slice_num]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -120,27 +120,27 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    vectorized::VectorizedSchema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    VectorizedSchema vec_schema;
+    vec_schema.append(std::make_shared<VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
-    vectorized::SegmentReadOptions seg_opts;
+    SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
 
-    auto* con = pool.add(new vectorized::ConjunctivePredicates());
+    auto* con = pool.add(new ConjunctivePredicates());
     auto type_varchar = get_type_info(TYPE_VARCHAR);
-    con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
+    con->add(pool.add(new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
     seg_opts.delete_predicates.add(*con);
 
-    vectorized::ColumnIdToGlobalDictMap dict_map;
-    vectorized::GlobalDictMap g_dict;
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
     for (int i = 0; i < 8; ++i) {
         g_dict[Slice(values[i])] = i;
     }
@@ -207,13 +207,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -223,13 +223,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(data_strs[j % slice_num]));
+                cols[0]->append_datum(Datum(data_strs[j % slice_num]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -240,13 +240,11 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    ColumnIterator* scalar_iter = nullptr;
-    DeferOp defer([&]() { delete scalar_iter; });
     ColumnIteratorOptions iter_opts;
     ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
@@ -254,21 +252,21 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
-    ASSERT_OK(segment->new_column_iterator(1, &scalar_iter));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
-    vectorized::VectorizedSchema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    VectorizedSchema vec_schema;
+    vec_schema.append(std::make_shared<VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
-    vectorized::SegmentReadOptions seg_opts;
+    SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
 
-    vectorized::ColumnIdToGlobalDictMap dict_map;
-    vectorized::GlobalDictMap g_dict;
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
     for (int i = 0; i < slice_num; ++i) {
         g_dict[Slice(values[i])] = i;
     }

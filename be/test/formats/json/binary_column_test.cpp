@@ -19,7 +19,7 @@
 #include "column/binary_column.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AddBinaryColumnTest : public ::testing::Test {};
 
@@ -96,4 +96,4 @@ TEST_F(AddBinaryColumnTest, test_add_invalid) {
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

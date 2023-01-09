@@ -83,7 +83,7 @@ public:
 
     Status get_last_value(void* value) const override;
 
-    bool is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const override;
+    bool is_valid_global_dict(const GlobalDictMap* global_dict) const override;
 
     // Return true iff all pages so far are encoded by dictionary encoding.
     // this method normally should be called after all data pages finish
@@ -131,9 +131,9 @@ public:
 
     Status seek_to_position_in_page(uint32_t pos) override;
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -143,9 +143,9 @@ public:
 
     void set_dict_decoder(PageDecoder* dict_decoder);
 
-    Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_dict_codes(const SparseRange& range, Column* dst) override;
 
 private:
     Slice _data;
@@ -154,7 +154,7 @@ private:
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;
     EncodingTypePB _encoding_type;
-    std::shared_ptr<vectorized::Column> _vec_code_buf;
+    std::shared_ptr<Column> _vec_code_buf;
 
     uint32_t _max_value_legth = 0;
 };

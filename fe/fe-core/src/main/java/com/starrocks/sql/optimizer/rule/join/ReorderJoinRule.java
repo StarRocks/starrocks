@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
@@ -24,7 +23,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -35,11 +36,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -212,8 +216,7 @@ public class ReorderJoinRule extends Rule {
                     for (ColumnRefOperator ref : outputColumns) {
                         newOutputProjections.put(ref, projection.getColumnRefMap().get(ref));
                     }
-
-                    optExpression.getOp().setProjection(new Projection(newOutputProjections));
+                    optExpression = deriveNewOptExpression(optExpression, newOutputProjections);
                 }
 
                 for (ScalarOperator value : optExpression.getOp().getProjection().getColumnRefMap().values()) {
@@ -266,6 +269,34 @@ public class ReorderJoinRule extends Rule {
             statisticsCalculator.estimatorStats();
             joinOpt.setStatistics(expressionContext.getStatistics());
             return joinOpt;
+        }
+
+        private OptExpression deriveNewOptExpression(OptExpression optExpression,
+                                                     Map<ColumnRefOperator, ScalarOperator> newOutputProjections) {
+            Operator operator = optExpression.getOp();
+            ColumnRefSet newCols = new ColumnRefSet(newOutputProjections.keySet());
+            LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
+            newProperty.setOutputColumns(newCols);
+
+            Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
+            Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
+                    iterator = newStats.getColumnStatistics().entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<ColumnRefOperator, ColumnStatistic> columnStatistic = iterator.next();
+                if (!newCols.contains(columnStatistic.getKey())) {
+                    iterator.remove();
+                }
+            }
+
+            Operator.Builder builder = OperatorBuilderFactory.build(operator);
+            Operator newOp = builder.withOperator(operator)
+                    .setProjection(new Projection(newOutputProjections))
+                    .build();
+
+            OptExpression newOpt = OptExpression.create(newOp, optExpression.getInputs());
+            newOpt.setLogicalProperty(newProperty);
+            newOpt.setStatistics(newStats);
+            return newOpt;
         }
     }
 

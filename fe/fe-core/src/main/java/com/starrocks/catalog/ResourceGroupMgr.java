@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
@@ -25,6 +24,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -157,8 +157,17 @@ public class ResourceGroupMgr implements Writable {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming) will support RBAC later
-            return null;
+            try {
+                List<String> roleNameList = ctx.getGlobalStateMgr().getPrivilegeManager()
+                        .getRoleNamesByUser(ctx.getCurrentUserIdentity());
+                if (roleNameList.isEmpty()) {
+                    return null;
+                } else {
+                    return roleNameList.get(0);
+                }
+            } catch (PrivilegeException e) {
+                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            }
         }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
@@ -461,28 +470,54 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public ResourceGroup chooseResourceGroupByName(String wgName) {
+    public TWorkGroup chooseResourceGroupByName(String wgName) {
         readLock();
         try {
-            return resourceGroupMap.get(wgName);
+            ResourceGroup rg = resourceGroupMap.get(wgName);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
         } finally {
             readUnlock();
         }
     }
 
-    public ResourceGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
-                                             Set<Long> databases) {
-        String user = getUnqualifiedUser(ctx);
-        String role = getUnqualifiedRole(ctx);
-        String remoteIp = ctx.getRemoteIP();
-        List<ResourceGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
-                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
-                .collect(Collectors.toList());
-        if (classifierList.isEmpty()) {
-            return null;
-        } else {
-            return id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+    public TWorkGroup chooseResourceGroupByID(long wgID) {
+        readLock();
+        try {
+            ResourceGroup rg = id2ResourceGroupMap.get(wgID);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+        readLock();
+        try {
+            String user = getUnqualifiedUser(ctx);
+            String role = getUnqualifiedRole(ctx);
+            String remoteIp = ctx.getRemoteIP();
+            List<ResourceGroupClassifier> classifierList =
+                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                            .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                            .collect(Collectors.toList());
+            if (classifierList.isEmpty()) {
+                return null;
+            } else {
+                ResourceGroup rg =
+                        id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+                if (rg == null) {
+                    return null;
+                }
+                return rg.toThrift();
+            }
+        } finally {
+            readUnlock();
         }
     }
 

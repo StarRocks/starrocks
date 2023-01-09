@@ -2,7 +2,7 @@
 
 ## Description
 
-This function removes the leading spaces from the beginning of the str argument.
+Removes the leading spaces from the beginning of the `str` argument.
 
 ## Syntax
 

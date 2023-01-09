@@ -178,7 +178,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _rows_produced_counter = ADD_COUNTER(profile(), "RowsProduced", TUnit::UNIT);
 
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
-    _chunk = std::make_shared<vectorized::Chunk>();
+    _chunk = std::make_shared<Chunk>();
     _prepared = true;
     RETURN_IF_ERROR(_prepare_stream_load_pipe(request));
 
@@ -226,7 +226,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
     // If there is a sink, do all the work of driving it here, so that
     // when this returns the query has actually finished
-    vectorized::ChunkPtr chunk;
+    ChunkPtr chunk;
     while (true) {
         RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
@@ -318,7 +318,7 @@ void PlanFragmentExecutor::send_report(bool done) {
     _report_status_cb(status, profile(), done || !status.ok());
 }
 
-Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr* chunk) {
+Status PlanFragmentExecutor::_get_next_internal_vectorized(ChunkPtr* chunk) {
     // If there is a empty chunk, we continue to read next chunk
     // If we set chunk to nullptr, means this fragment read done
     while (!_done) {
@@ -390,6 +390,11 @@ void PlanFragmentExecutor::cancel() {
         }
         _stream_load_contexts.resize(0);
     }
+
+    if (_sink != nullptr) {
+        _sink->cancel();
+    }
+
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 

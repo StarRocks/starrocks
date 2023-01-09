@@ -523,14 +523,16 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         jobInfo.retainTables(allTbls);
     }
 
-    public void cancel(CancelBackupStmt stmt) throws DdlException {
-        String dbName = stmt.getDbName();
+    public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        return dbIdToBackupOrRestoreJob.get(db.getId());
+    }
 
-        AbstractJob job = dbIdToBackupOrRestoreJob.get(db.getId());
+    public void cancel(CancelBackupStmt stmt) throws DdlException {
+        AbstractJob job = getAbstractJobByDbName(stmt.getDbName());
         if (job == null || (job instanceof BackupJob && stmt.isRestore())
                 || (job instanceof RestoreJob && !stmt.isRestore())) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "No "

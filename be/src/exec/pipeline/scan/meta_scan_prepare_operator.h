@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/meta_scan_node.h"
 
 namespace starrocks::pipeline {
 class MetaScanPrepareOperator : public SourceOperator {
@@ -31,7 +31,7 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 protected:
     virtual Status _prepare_scan_context(RuntimeState* state) = 0;

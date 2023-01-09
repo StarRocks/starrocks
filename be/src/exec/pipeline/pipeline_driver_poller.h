@@ -48,6 +48,12 @@ public:
     void add_blocked_driver(const DriverRawPtr driver);
     // remove blocked driver from poller
     void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
+
+    // add driver into the parked driver list
+    void park_driver(const DriverRawPtr driver);
+    // activate parked driver from poller
+    size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
+
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {
         std::shared_lock guard(_local_mutex);
@@ -73,5 +79,10 @@ private:
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
+
+    // NOTE: The `driver` can be stored in the parked drivers when it will never not be called to run.
+    // The parked driver needs to be actived when it needs to be triggered again.
+    mutable std::mutex _global_parked_mutex;
+    DriverList _parked_drivers;
 };
 } // namespace starrocks::pipeline

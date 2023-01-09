@@ -34,13 +34,13 @@
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks::vectorized {
-struct CacheTest : public ::testing::Test {
+namespace starrocks {
+struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 };
 
-TEST_F(CacheTest, testLaneArbiter) {
+TEST_F(QueryCacheTest, testLaneArbiter) {
     size_t num_lanes = 4;
     auto lane_arbiter = std::make_shared<query_cache::LaneArbiter>(num_lanes);
     ASSERT_FALSE(lane_arbiter->preferred_lane().has_value());
@@ -92,7 +92,7 @@ TEST_F(CacheTest, testLaneArbiter) {
     ASSERT_FALSE(opt_lane.has_value());
 }
 
-TEST_F(CacheTest, testCacheManager) {
+TEST_F(QueryCacheTest, testCacheManager) {
     static constexpr size_t CACHE_CAPACITY = 10240;
     auto cache_mgr = std::make_shared<query_cache::CacheManager>(CACHE_CAPACITY);
 
@@ -267,7 +267,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     return tasks;
 }
 
-bool exec_test_pipeline(Task& task, RuntimeState* state, const vectorized::ChunkPtr& input_chunk, int max_step,
+bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_chunk, int max_step,
                         bool set_first_op_finished) {
     auto& first_op = task.upstream[0];
     auto& upstream = task.upstream;
@@ -551,7 +551,7 @@ void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr 
                                      post_passthrough_actions, std::move(validate_func));
 }
 
-TEST_F(CacheTest, testMultilane) {
+TEST_F(QueryCacheTest, testMultilane) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(2, 10, 11, 1, false, false),
@@ -575,7 +575,7 @@ TEST_F(CacheTest, testMultilane) {
                    eq_validator_gen(10000.0));
 }
 
-TEST_F(CacheTest, testOneLane) {
+TEST_F(QueryCacheTest, testOneLane) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_eof(1),
@@ -585,7 +585,7 @@ TEST_F(CacheTest, testOneLane) {
     test_framework(cache_mgr, 1, 1, state, mul2_func, plus1_func, 0.0, add_func, actions, {}, eq_validator_gen(100.0));
 }
 
-TEST_F(CacheTest, testOneLanePassthroughBeforeEOFSent) {
+TEST_F(QueryCacheTest, testOneLanePassthroughBeforeEOFSent) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
     };
@@ -597,7 +597,7 @@ TEST_F(CacheTest, testOneLanePassthroughBeforeEOFSent) {
                    post_passthrough_actions, eq_validator_gen(100.0));
 }
 
-TEST_F(CacheTest, testOneLanePassthroughAfterEOFSent) {
+TEST_F(QueryCacheTest, testOneLanePassthroughAfterEOFSent) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_eof(1),
@@ -611,7 +611,7 @@ TEST_F(CacheTest, testOneLanePassthroughAfterEOFSent) {
                    post_passthrough_actions, eq_validator_gen(100.0));
 }
 
-TEST_F(CacheTest, testOneLaneEmitManyChunks) {
+TEST_F(QueryCacheTest, testOneLaneEmitManyChunks) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_remain_chunk(1, 10, 17, 1, false, false),
@@ -634,7 +634,7 @@ TEST_F(CacheTest, testOneLaneEmitManyChunks) {
                    approx_validator_gen(3.1415926535));
 }
 
-TEST_F(CacheTest, testOneLaneEmitManyChunksPassthroughBeforeEOFSent) {
+TEST_F(QueryCacheTest, testOneLaneEmitManyChunksPassthroughBeforeEOFSent) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_remain_chunk(1, 10, 17, 1, false, false),
@@ -662,7 +662,7 @@ TEST_F(CacheTest, testOneLaneEmitManyChunksPassthroughBeforeEOFSent) {
                    approx_validator_gen(3.1415926535));
 }
 
-TEST_F(CacheTest, testOneLaneEmitManyChunksPassthroughAfterEOFSent) {
+TEST_F(QueryCacheTest, testOneLaneEmitManyChunksPassthroughAfterEOFSent) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_remain_chunk(1, 10, 17, 1, false, false),
@@ -694,7 +694,7 @@ TEST_F(CacheTest, testOneLaneEmitManyChunksPassthroughAfterEOFSent) {
                    approx_validator_gen(3.1415926535));
 }
 
-TEST_F(CacheTest, testMultiLaneEmitManyChunks) {
+TEST_F(QueryCacheTest, testMultiLaneEmitManyChunks) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 2, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(4, 15, 30, 1, false, false),
@@ -771,7 +771,7 @@ TEST_F(CacheTest, testMultiLaneEmitManyChunks) {
                    approx_validator_gen(3.1415926535));
 }
 
-TEST_F(CacheTest, testMultiLaneEmitManyChunksPassthrough1) {
+TEST_F(QueryCacheTest, testMultiLaneEmitManyChunksPassthrough1) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 2, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(4, 15, 30, 1, false, false),
@@ -821,7 +821,7 @@ TEST_F(CacheTest, testMultiLaneEmitManyChunksPassthrough1) {
                    approx_validator_gen(3.1415926535));
 }
 
-TEST_F(CacheTest, testMultiLaneEmitManyChunksPassthrough2) {
+TEST_F(QueryCacheTest, testMultiLaneEmitManyChunksPassthrough2) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 2, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(4, 15, 30, 1, false, false),
@@ -878,7 +878,7 @@ TEST_F(CacheTest, testMultiLaneEmitManyChunksPassthrough2) {
                    eq_validator_gen(10000.0));
 }
 
-TEST_F(CacheTest, testMultiLaneMissingEOF) {
+TEST_F(QueryCacheTest, testMultiLaneMissingEOF) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 2, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(4, 15, 30, 1, false, false),
@@ -908,7 +908,7 @@ TEST_F(CacheTest, testMultiLaneMissingEOF) {
                    eq_validator_gen(10000.0));
 }
 
-TEST_F(CacheTest, testMultiLaneFinishBeforeEOFHandled) {
+TEST_F(QueryCacheTest, testMultiLaneFinishBeforeEOFHandled) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 2, 10, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(4, 15, 30, 1, false, false),
@@ -942,7 +942,7 @@ TEST_F(CacheTest, testMultiLaneFinishBeforeEOFHandled) {
                    eq_validator_gen(10000.0));
 }
 
-TEST_F(CacheTest, testMultiLaneCacheMiss) {
+TEST_F(QueryCacheTest, testMultiLaneCacheMiss) {
     Actions pre_passthrough_actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 33, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(9, 33, 66, 1, false, false),
@@ -962,7 +962,7 @@ TEST_F(CacheTest, testMultiLaneCacheMiss) {
                    eq_validator_gen(4356.0));
 }
 
-TEST_F(CacheTest, testMultiLanePassthroughWithEmptyTabletNotCached) {
+TEST_F(QueryCacheTest, testMultiLanePassthroughWithEmptyTabletNotCached) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 0, 1, true, false),
             Action::cache_miss_and_emit_first_chunk(2, 0, 100, 1, false, false),
@@ -997,7 +997,7 @@ TEST_F(CacheTest, testMultiLanePassthroughWithEmptyTabletNotCached) {
                                                   probe_actions, {}, eq_validator_gen(9801));
 }
 
-TEST_F(CacheTest, testMultiLanePassthroughWithEmptyTabletCached) {
+TEST_F(QueryCacheTest, testMultiLanePassthroughWithEmptyTabletCached) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 0, 1, true, false),
             Action::cache_miss_and_emit_first_chunk(3, 0, 0, 1, true, false),
@@ -1032,7 +1032,7 @@ TEST_F(CacheTest, testMultiLanePassthroughWithEmptyTabletCached) {
                                                   probe_actions, {}, eq_validator_gen(9801));
 }
 
-TEST_F(CacheTest, testMultiLanePassthroughWithoutEmptyTablet) {
+TEST_F(QueryCacheTest, testMultiLanePassthroughWithoutEmptyTablet) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, true, false),
             Action::cache_miss_and_emit_first_chunk(2, 10, 30, 1, false, false),
@@ -1078,7 +1078,7 @@ TEST_F(CacheTest, testMultiLanePassthroughWithoutEmptyTablet) {
                                                   probe_actions, {}, eq_validator_gen(4000000));
 }
 
-TEST_F(CacheTest, testOneTabletPartialHit) {
+TEST_F(QueryCacheTest, testOneTabletPartialHit) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
             Action::emit_remain_chunk(1, 10, 1000, 1, true, false),
@@ -1132,7 +1132,7 @@ TEST_F(CacheTest, testOneTabletPartialHit) {
                    eq_validator_gen(9801.0));
 }
 
-TEST_F(CacheTest, testPartialHit) {
+TEST_F(QueryCacheTest, testPartialHit) {
     Actions actions = {
             Action::cache_miss_and_emit_first_chunk(4, 34, 35, 1, false, false),
             Action::cache_miss_and_emit_first_chunk(1, 0, 3, 1, false, false),
@@ -1178,7 +1178,7 @@ TEST_F(CacheTest, testPartialHit) {
                    eq_validator_gen(801.0 * 801.0));
 }
 
-TEST_F(CacheTest, testTicketChecker) {
+TEST_F(QueryCacheTest, testTicketChecker) {
     auto test_func1 = [](int64_t id, int n) {
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
         for (auto i = 0; i < n; ++i) {
@@ -1208,9 +1208,4 @@ TEST_F(CacheTest, testTicketChecker) {
     test_func2(1L, 100);
 }
 
-} // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
+} // namespace starrocks

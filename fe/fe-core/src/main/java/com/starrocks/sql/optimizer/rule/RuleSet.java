@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -64,7 +65,8 @@ import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
-import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithoutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFunction;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
@@ -128,6 +130,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -246,6 +249,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
+                PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -273,9 +277,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
-                // Commented out because of UTs in `ExternalTableTest.java`
-                // PushDownPredicateScanRule.MYSQL_SCAN,
-                // PushDownPredicateScanRule.JDBC_SCAN,
+                PushDownPredicateScanRule.BINLOG_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
@@ -325,7 +327,8 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
-                new RewriteDuplicateAggregateFnRule()
+                new RewriteDuplicateAggregateFnRule(),
+                new RewriteMinMaxAggToMetaScanRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
@@ -380,11 +383,16 @@ public class RuleSet {
 
     public void addJoinTransformationRules() {
         transformRules.add(JoinCommutativityRule.getInstance());
-        transformRules.add(JoinAssociativityRule.getInstance());
+        transformRules.add(JoinAssociativityRule.INNER_JOIN_ASSOCIATIVITY_RULE);
+    }
+
+    public void addOuterJoinTransformationRules() {
+        transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
+        transformRules.add(JoinLeftAsscomRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {
-        transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+        transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
     }
 
     public void addMultiTableMvRewriteRule() {
@@ -406,6 +414,7 @@ public class RuleSet {
     public void addRealtimeMVRules() {
         this.implementRules.add(StreamJoinImplementationRule.getInstance());
         this.implementRules.add(StreamAggregateImplementationRule.getInstance());
+        this.implementRules.add(StreamScanImplementationRule.getInstance());
     }
 
     public void addHashJoinImplementationRule() {

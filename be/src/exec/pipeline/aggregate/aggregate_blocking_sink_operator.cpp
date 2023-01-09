@@ -62,12 +62,12 @@ Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     bool agg_group_by_with_limit =
             (!_aggregator->is_none_group_by_exprs() &&     // has group by
@@ -86,19 +86,19 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->compute_single_agg_state(chunk_size);
+        RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
     } else {
         if (agg_group_by_with_limit) {
             // use `_aggregator->streaming_selection()` here to mark whether needs to filter key when compute agg states,
             // it's generated in `build_hash_map`
             size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk_size);
             if (zero_count == chunk_size) {
-                _aggregator->compute_batch_agg_states(chunk_size);
+                RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
             } else {
-                _aggregator->compute_batch_agg_states_with_selection(chunk_size);
+                RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(chunk.get(), chunk_size));
             }
         } else {
-            _aggregator->compute_batch_agg_states(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         }
     }
     _aggregator->update_num_input_rows(chunk_size);

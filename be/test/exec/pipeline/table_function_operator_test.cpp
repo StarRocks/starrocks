@@ -22,13 +22,13 @@ private:
 
 class Counter {
 public:
-    void process_push(const vectorized::ChunkPtr& chunk) {
+    void process_push(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_push_chunk_num;
         _push_chunk_row_num += chunk->num_rows();
     }
 
-    void process_pull(const vectorized::ChunkPtr& chunk) {
+    void process_pull(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_pull_chunk_num;
         _pull_chunk_row_num += chunk->num_rows();

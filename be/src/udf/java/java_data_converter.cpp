@@ -31,7 +31,7 @@
     M(TYPE_FLOAT)                  \
     M(TYPE_DOUBLE)
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType TYPE>
 jvalue cast_to_jvalue(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
@@ -306,4 +306,4 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::
     }
     return Status::OK();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

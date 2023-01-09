@@ -62,10 +62,8 @@ class WritableFile;
 
 enum class FlushChunkState { UNKNOWN, UPSERT, DELETE, MIXED };
 
-namespace vectorized {
 class Chunk;
 class Column;
-} // namespace vectorized
 
 // RowsetWriter is responsible for writing data into segment by row or chunk.
 // Usage Example:
@@ -109,20 +107,19 @@ public:
 
     virtual Status init();
 
-    virtual Status add_chunk(const vectorized::Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
+    virtual Status add_chunk(const Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
 
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
-    virtual Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                               bool is_key) {
+    virtual Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
         return Status::NotSupported("RowsetWriter::add_columns");
     }
 
-    virtual Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) {
+    virtual Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) {
         return Status::NotSupported("RowsetWriter::flush_chunk");
     }
 
-    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+    virtual Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                             SegmentPB* seg_info = nullptr) {
         return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
     }
@@ -159,7 +156,7 @@ public:
 
     virtual RowsetId rowset_id() { return _context.rowset_id; }
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
+    virtual const DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
 
@@ -167,7 +164,6 @@ protected:
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
-    std::unique_ptr<TabletSchema> _rowset_schema;
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
     SegmentWriterOptions _writer_options;
 
@@ -191,7 +187,7 @@ protected:
 
     FlushChunkState _flush_chunk_state = FlushChunkState::UNKNOWN;
 
-    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+    DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 class VerticalRowsetWriter;
@@ -202,11 +198,10 @@ public:
     explicit HorizontalRowsetWriter(const RowsetWriterContext& context);
     ~HorizontalRowsetWriter() override;
 
-    Status add_chunk(const vectorized::Chunk& chunk) override;
+    Status add_chunk(const Chunk& chunk) override;
 
-    Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override;
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
-                                    SegmentPB* seg_info) override;
+    Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) override;
+    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info) override;
 
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;
@@ -223,7 +218,7 @@ private:
 
     Status _final_merge();
 
-    Status _flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr);
+    Status _flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr);
 
     std::string _dump_mixed_segment_delfile_not_supported();
 
@@ -237,8 +232,7 @@ public:
     explicit VerticalRowsetWriter(const RowsetWriterContext& context);
     ~VerticalRowsetWriter() override;
 
-    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                       bool is_key) override;
+    Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override;
 
     Status flush_columns() override;
 

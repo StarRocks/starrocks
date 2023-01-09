@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// NOTE(XXX): DEPRECATED, just use to compatiple with old version.
+// NOTE(XXX): DEPRECATED, just use to compatible with old version.
 // Make system can grayscale upgrade
 syntax="proto2";
 

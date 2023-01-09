@@ -79,6 +79,7 @@ void PipelineTestBase::_prepare() {
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
     _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
@@ -93,6 +94,8 @@ void PipelineTestBase::_prepare() {
     _runtime_state->set_chunk_size(config::vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
+    _runtime_state->set_query_ctx(_query_ctx);
+    _runtime_state->set_fragment_ctx(_fragment_ctx);
 
     _obj_pool = _runtime_state->obj_pool();
 
@@ -102,41 +105,26 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
-    Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
-        const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-
-        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
-                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
-
-        if (pipeline->source_operator_factory()->with_morsels()) {
-            // TODO(hcf) missing branch of with_morsels()
-        } else {
-            for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i);
-                drivers.emplace_back(driver);
-            }
-        }
+        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
     }
-
-    _fragment_ctx->set_drivers(std::move(drivers));
 }
 
 void PipelineTestBase::_execute() {
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        ASSERT_TRUE(driver->prepare(_fragment_ctx->runtime_state()).ok());
-    }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        _exec_env->driver_executor()->submit(driver.get());
-    }
+    Status prepare_status = _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    ASSERT_TRUE(prepare_status.ok());
+
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        exec_env->driver_executor()->submit(driver.get());
+        return Status::OK();
+    });
 }
 
-vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots,
-                                                              size_t row_num) {
+ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {
     static std::default_random_engine e;
     static std::uniform_int_distribution<int8_t> u8;
     static std::uniform_int_distribution<int16_t> u16;
@@ -153,9 +141,9 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
         auto* slot = slots[i];
         auto& column = chunk->columns()[i];
 
-        vectorized::Column* data_column = column.get();
+        Column* data_column = column.get();
         if (data_column->is_nullable()) {
-            auto* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
+            auto* nullable_column = down_cast<NullableColumn*>(data_column);
             data_column = nullable_column->data_column().get();
         }
 
@@ -190,12 +178,12 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
                 data_column->append_datum(ud(e));
                 break;
             case TYPE_DATE: {
-                vectorized::DateValue value;
+                DateValue value;
                 data_column->append_datum(value);
                 break;
             }
             case TYPE_DATETIME: {
-                vectorized::TimestampValue value;
+                TimestampValue value;
                 data_column->append_datum(value);
                 break;
             }
@@ -222,7 +210,7 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
     return chunk;
 }
 
-vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
+ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     // the following content is TDescriptorTable serialized in json format
     // CREATE TABLE IF NOT EXISTS `test_aggregate` (
     //   `id_int` INT(11) NOT NULL,

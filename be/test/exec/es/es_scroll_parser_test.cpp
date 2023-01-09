@@ -25,9 +25,9 @@ DIAGNOSTIC_POP
 
 namespace starrocks {
 
-using ScrollParser = vectorized::ScrollParser;
-using ColumnHelper = vectorized::ColumnHelper;
-using ColumnPtr = vectorized::ColumnPtr;
+using ScrollParser = ScrollParser;
+using ColumnHelper = ColumnHelper;
+using ColumnPtr = ColumnPtr;
 
 TEST(ScrollParserTest, ArrayTest) {
     std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);

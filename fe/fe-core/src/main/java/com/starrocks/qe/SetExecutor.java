@@ -39,11 +39,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -80,13 +82,23 @@ public class SetExecutor {
         if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
-            ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
+                        getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
+                if (null == userAuthenticationInfo) {
+                    throw new DdlException("User Authentication Info not found");
+                }
+                userAuthenticationInfo.setPassword(setPassVar.getPassword());
+                GlobalStateMgr.getCurrentState().getAuthenticationManager().
+                        updateUserWithAuthenticationInfo(
+                                setPassVar.getUserIdent(), userAuthenticationInfo);
+            } else {
+                ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
+            }
         } else if (var instanceof SetNamesVar) {
             // do nothing
-            return;
         } else if (var instanceof SetTransaction) {
             // do nothing
-            return;
         } else {
             if (var.getType().equals(SetType.USER)) {
                 UserVariable userVariable = (UserVariable) var;

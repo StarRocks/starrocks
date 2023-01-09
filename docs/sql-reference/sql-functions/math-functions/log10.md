@@ -17,6 +17,7 @@ log10(arg)
 > **NOTE**
 >
 > StarRocks returns NULL if `arg` is specified as a negative or 0.
+
 ## Return value
 
 Returns a value of the DOUBLE data type.

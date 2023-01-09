@@ -19,12 +19,12 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
-#include "storage/vectorized_column_predicate.h"
 #include "storage/zone_map_detail.h"
 #include "util/string_parser.hpp"
 
@@ -39,7 +39,7 @@ class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType field_type>
 using GeEval = std::greater_equal<typename CppTypeTraits<field_type>::CppType>;
@@ -864,4 +864,4 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
 
     return os;
 }
-} //namespace starrocks::vectorized
+} //namespace starrocks

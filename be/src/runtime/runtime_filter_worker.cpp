@@ -17,7 +17,7 @@
 #include <random>
 
 #include "exec/pipeline/query_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -65,10 +65,10 @@ static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFi
     rpc_closure->seq++;
 }
 
-void RuntimeFilterPort::add_listener(vectorized::RuntimeFilterProbeDescriptor* rf_desc) {
+void RuntimeFilterPort::add_listener(RuntimeFilterProbeDescriptor* rf_desc) {
     int32_t rf_id = rf_desc->filter_id();
     if (_listeners.find(rf_id) == _listeners.end()) {
-        _listeners.insert({rf_id, std::list<vectorized::RuntimeFilterProbeDescriptor*>()});
+        _listeners.insert({rf_id, std::list<RuntimeFilterProbeDescriptor*>()});
     }
     auto& wait_list = _listeners.find(rf_id)->second;
     wait_list.emplace_back(rf_desc);
@@ -91,7 +91,7 @@ std::string RuntimeFilterPort::listeners(int32_t filter_id) {
     return ss.str();
 }
 
-void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFilterBuildDescriptor*>& rf_descs) {
+void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
     RuntimeState* state = _state;
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
@@ -144,10 +144,10 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
                   << ", is_pipeline = " << params.is_pipeline();
 
         std::string* rf_data = params.mutable_data();
-        size_t max_size = vectorized::RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
+        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
         rf_data->resize(max_size);
-        size_t actual_size = vectorized::RuntimeFilterHelper::serialize_runtime_filter(
-                filter, reinterpret_cast<uint8_t*>(rf_data->data()));
+        size_t actual_size =
+                RuntimeFilterHelper::serialize_runtime_filter(filter, reinterpret_cast<uint8_t*>(rf_data->data()));
         rf_data->resize(actual_size);
 
         auto passthrough_delivery = actual_size <= config::deliver_broadcast_rf_passthrough_bytes_limit;
@@ -166,7 +166,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
     }
 }
 
-void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const vectorized::JoinRuntimeFilter* rf) {
+void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf) {
     _state->exec_env()->add_rf_event({
             _state->query_id(),
             filter_id,
@@ -184,7 +184,7 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const vectoriz
 }
 
 void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
-                                                      const std::shared_ptr<const vectorized::JoinRuntimeFilter>& rf) {
+                                                      const std::shared_ptr<const JoinRuntimeFilter>& rf) {
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
@@ -254,9 +254,9 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 
     // to merge runtime filters
     ObjectPool* pool = &(status->pool);
-    vectorized::JoinRuntimeFilter* rf = nullptr;
-    vectorized::RuntimeFilterHelper::deserialize_runtime_filter(
-            pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size());
+    JoinRuntimeFilter* rf = nullptr;
+    RuntimeFilterHelper::deserialize_runtime_filter(pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()),
+                                                    params.data().size());
     if (rf == nullptr) {
         // something wrong with deserialization.
         return;
@@ -291,8 +291,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     DCHECK(target_it != _targets.end());
     std::vector<TRuntimeFilterProberParams>* target_nodes = &(target_it->second);
 
-    vectorized::JoinRuntimeFilter* out = nullptr;
-    vectorized::JoinRuntimeFilter* first = status->filters.begin()->second;
+    JoinRuntimeFilter* out = nullptr;
+    JoinRuntimeFilter* first = status->filters.begin()->second;
     ObjectPool* pool = &(status->pool);
     out = first->create_empty(pool);
     for (auto it : status->filters) {
@@ -312,11 +312,11 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     query_id->set_lo(_query_id.lo);
 
     std::string* send_data = request.mutable_data();
-    size_t max_size = vectorized::RuntimeFilterHelper::max_runtime_filter_serialized_size(out);
+    size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(out);
     send_data->resize(max_size);
 
-    size_t actual_size = vectorized::RuntimeFilterHelper::serialize_runtime_filter(
-            out, reinterpret_cast<uint8_t*>(send_data->data()));
+    size_t actual_size =
+            RuntimeFilterHelper::serialize_runtime_filter(out, reinterpret_cast<uint8_t*>(send_data->data()));
     send_data->resize(actual_size);
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
@@ -520,8 +520,8 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     _queue.put(std::move(ev));
 }
 // receive total runtime filter in pipeline engine.
-static inline Status receive_total_runtime_filter_pipeline(
-        PTransmitRuntimeFilterParams& params, const std::shared_ptr<vectorized::JoinRuntimeFilter>& shared_rf) {
+static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
+                                                           const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
     auto& pb_query_id = params.query_id();
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
@@ -585,14 +585,14 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     auto mem_tracker = get_mem_tracker(request.query_id(), request.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
-    vectorized::JoinRuntimeFilter* rf = nullptr;
+    JoinRuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
-    vectorized::RuntimeFilterHelper::deserialize_runtime_filter(
-            nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+    RuntimeFilterHelper::deserialize_runtime_filter(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()),
+                                                    data.size());
     if (rf == nullptr) {
         return;
     }
-    std::shared_ptr<vectorized::JoinRuntimeFilter> shared_rf(rf);
+    std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {
         receive_total_runtime_filter_pipeline(request, shared_rf);

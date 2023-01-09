@@ -113,6 +113,8 @@ public:
     ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) { _fragment_ctx = fragment_ctx; }
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
@@ -312,11 +314,11 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
-    const vectorized::GlobalDictMaps& get_query_global_dict_map() const;
+    const GlobalDictMaps& get_query_global_dict_map() const;
     // for query global dict
-    vectorized::GlobalDictMaps* mutable_query_global_dict_map();
+    GlobalDictMaps* mutable_query_global_dict_map();
 
-    const vectorized::GlobalDictMaps& get_load_global_dict_map() const;
+    const GlobalDictMaps& get_load_global_dict_map() const;
 
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
@@ -339,7 +341,7 @@ private:
 
     Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -442,10 +444,11 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 
-    vectorized::GlobalDictMaps _query_global_dicts;
-    vectorized::GlobalDictMaps _load_global_dicts;
+    GlobalDictMaps _query_global_dicts;
+    GlobalDictMaps _load_global_dicts;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
 };

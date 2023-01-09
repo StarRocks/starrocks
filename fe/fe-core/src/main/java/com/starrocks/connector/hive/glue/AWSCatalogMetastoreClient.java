@@ -190,7 +190,6 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
     }
 
     private boolean doesDefaultDBExist() throws MetaException {
-
         try {
             GetDatabaseRequest getDatabaseRequest =
                     new GetDatabaseRequest().withName(DEFAULT_DATABASE_NAME).withCatalogId(
@@ -201,7 +200,7 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
         } catch (AmazonServiceException e) {
             String msg = "Unable to verify existence of default database: ";
             LOGGER.error(msg, e);
-            throw new MetaException(msg + e);
+            throw new MetaException(msg + e.getErrorMessage());
         }
         return true;
     }

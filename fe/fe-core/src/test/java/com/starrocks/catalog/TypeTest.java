@@ -34,6 +34,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -192,5 +194,42 @@ public class TypeTest {
             String name = (String) tc[1];
             Assert.assertEquals(name, type.canonicalName());
         }
+    }
+
+    @Test
+    public void testMapSerialAndDeser() {
+        // map<int,struct<c1:int,cc1:string>>
+        StructType c1 = new StructType(Lists.newArrayList(
+                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+        ));
+        MapType mapType =
+                new MapType(ScalarType.createType(PrimitiveType.INT), c1);
+        String json = GsonUtils.GSON.toJson(mapType);
+        Type deType = GsonUtils.GSON.fromJson(json, Type.class);
+        Assert.assertTrue(deType.isMapType());
+        Assert.assertEquals("MAP<INT,STRUCT<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
+        // test initialed selectedField by ctor in deserializer.
+        deType.setSelectedField(0, false);
+    }
+
+    @Test
+    public void testStructSerialAndDeser() {
+        // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
+        StructType c1 = new StructType(Lists.newArrayList(
+                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+        ));
+        StructType root = new StructType(Lists.newArrayList(
+                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),
+                new StructField("c1", c1)
+        ));
+        String json = GsonUtils.GSON.toJson(root);
+        Type deType = GsonUtils.GSON.fromJson(json, Type.class);
+        Assert.assertTrue(deType.isStructType());
+        Assert.assertEquals("STRUCT<struct_test int(11) COMMENT 'comment test', c1 STRUCT<c1 int(11), cc1 varchar(1048576)>>",
+                deType.toString());
+        // test initialed fieldMap by ctor in deserializer.
+        Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
     }
 }

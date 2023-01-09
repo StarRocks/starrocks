@@ -53,8 +53,8 @@ public:
     Status set_finished(RuntimeState* state) override;
 
     // Data flow
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     enum JoinStage {
@@ -65,7 +65,7 @@ private:
     };
 
     int _num_build_chunks() const;
-    vectorized::Chunk* _move_build_chunk_index(int index);
+    Chunk* _move_build_chunk_index(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, ChunkPtr chunk);
     void _advance_join_stage(JoinStage stage) const;
@@ -102,14 +102,14 @@ private:
     mutable ChunkAccumulator _output_accumulator;
 
     // Build states
-    vectorized::Chunk* _curr_build_chunk = nullptr;
+    Chunk* _curr_build_chunk = nullptr;
     size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     mutable std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
-    vectorized::ChunkPtr _probe_chunk = nullptr;
+    ChunkPtr _probe_chunk = nullptr;
     bool _probe_row_matched = false;  // For multi build-chunk, whether this probe row matched any join conjuncts
     bool _probe_row_finished = false; // For multi build-chunk, whether this probe row is the last
     size_t _probe_row_start = 0;      // Start index of current chunk
@@ -150,7 +150,7 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
-    vectorized::Buffer<SlotDescriptor*> _col_types;
+    Buffer<SlotDescriptor*> _col_types;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

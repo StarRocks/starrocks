@@ -43,7 +43,7 @@ Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
     return kOnlyPipelinedEngine;
 }
 
-Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status MultiCastDataStreamSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return kOnlyPipelinedEngine;
 }
 } // namespace starrocks

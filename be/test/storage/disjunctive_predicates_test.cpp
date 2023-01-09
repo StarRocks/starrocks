@@ -21,12 +21,12 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
+#include "types/logical_type.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct SegDataGenerator {
     inline static int sequence = 0;
     static int next_value() { return sequence++; }
@@ -82,4 +82,4 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     ASSERT_EQ(sz, 3096);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

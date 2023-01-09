@@ -19,12 +19,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/runtime_filter.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks {
 
-using JoinRuntimeFilterPtr = std::shared_ptr<const vectorized::JoinRuntimeFilter>;
+using JoinRuntimeFilterPtr = std::shared_ptr<const JoinRuntimeFilter>;
 class RfCacheValue;
 using RfCacheValueRawPtr = RfCacheValue*;
 using RfCacheValuePtr = std::shared_ptr<RfCacheValue>;

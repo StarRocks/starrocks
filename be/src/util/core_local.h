@@ -26,6 +26,7 @@
 
 #include "common/compiler_util.h"
 #include "gutil/macros.h"
+#include "util/cpu_info.h"
 
 namespace starrocks {
 

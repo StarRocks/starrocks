@@ -41,7 +41,7 @@ void OlapTableSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> OlapTableSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> OlapTableSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::NotSupported("Shouldn't pull chunk from olap table sink operator");
 }
 
@@ -109,7 +109,7 @@ bool OlapTableSinkOperator::need_input() const {
     return !_sink->is_full();
 }
 
-Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (!_is_open_done) {
         _is_open_done = true;
         // we can be here cause _sink->is_open_done() return true

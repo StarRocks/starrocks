@@ -16,9 +16,9 @@
 
 #include <utility>
 
+#include "exec/olap_meta_scanner.h"
 #include "exec/pipeline/scan/olap_meta_chunk_source.h"
 #include "exec/pipeline/scan/olap_meta_scan_context.h"
-#include "exec/vectorized/olap_meta_scanner.h"
 
 namespace starrocks::pipeline {
 

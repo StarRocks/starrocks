@@ -37,14 +37,14 @@ public:
     bool all_empty() const;
     size_t size(int buffer_index) const;
     bool empty(int buffer_index) const;
-    bool try_get(int buffer_index, vectorized::ChunkPtr* output_chunk);
-    bool put(int buffer_index, vectorized::ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
+    bool try_get(int buffer_index, ChunkPtr* output_chunk);
+    bool put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
     void close();
     // Mark that it needn't produce any chunk anymore.
     void set_finished(int buffer_index);
 
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
-    void update_limiter(vectorized::Chunk* chunk);
+    void update_limiter(Chunk* chunk);
 
 private:
     struct LimiterContext {
@@ -56,7 +56,7 @@ private:
         size_t local_max_chunk_rows = 0;
     };
 
-    using ChunkWithToken = std::pair<vectorized::ChunkPtr, ChunkBufferTokenPtr>;
+    using ChunkWithToken = std::pair<ChunkPtr, ChunkBufferTokenPtr>;
     using QueueT = UnboundedBlockingQueue<ChunkWithToken>;
     using SubBuffer = std::unique_ptr<QueueT>;
 

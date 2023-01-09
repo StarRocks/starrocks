@@ -33,7 +33,6 @@ set(RUNTIME_FILES
     jdbc_driver_manager.cpp
     mem_pool.cpp
     plan_fragment_executor.cpp
-    primitive_type.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
@@ -52,6 +51,7 @@ set(RUNTIME_FILES
     snapshot_loader.cpp
     query_statistics.cpp 
     message_body_sink.cpp
+    stream_epoch_manager.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp

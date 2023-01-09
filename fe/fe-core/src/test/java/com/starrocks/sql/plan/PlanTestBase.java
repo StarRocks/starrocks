@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -49,6 +51,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -79,7 +82,7 @@ public class PlanTestBase {
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
+
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -1040,7 +1043,7 @@ public class PlanTestBase {
         starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
-                "  `v2` int NOT NULL\n" +
+                "  `v2` int NOT NULL DEFAULT \"100\"\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
@@ -1076,6 +1079,8 @@ public class PlanTestBase {
                 ");");
 
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @AfterClass
@@ -1148,6 +1153,21 @@ public class PlanTestBase {
         return planCount;
     }
 
+
+    public String getSQLFile(String filename) {
+        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File file = new File(path + "/" + filename + ".sql");
+
+        String sql;
+        try (BufferedReader re = new BufferedReader(new FileReader(file))) {
+            sql = re.lines().collect(Collectors.joining());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return sql;
+    }
+
     public void runFileUnitTest(String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
@@ -1161,6 +1181,7 @@ public class PlanTestBase {
         StringBuilder fragmentStatistics = new StringBuilder();
         StringBuilder dumpInfoString = new StringBuilder();
         StringBuilder planEnumerate = new StringBuilder();
+        StringBuilder exceptString = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -1182,6 +1203,7 @@ public class PlanTestBase {
                 e.printStackTrace();
             }
             System.out.println("DEBUG MODE!");
+            System.out.println("DEBUG FILE: " + debugFile.getPath());
         }
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
@@ -1249,9 +1271,21 @@ public class PlanTestBase {
                         mode = "dump";
                         isDump = true;
                         continue;
+                    case "[except]":
+                        exceptString = new StringBuilder();
+                        mode = "except";
+                        continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        Pair<String, ExecPlan> pair = null;
+                        try {
+                            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        } catch (Exception ex) {
+                            if (!exceptString.toString().isEmpty()) {
+                                Assert.assertEquals(ex.getMessage(), exceptString.toString());
+                                continue;
+                            }
+                            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+                        }
 
                         try {
                             String fra = null;
@@ -1323,6 +1357,9 @@ public class PlanTestBase {
                         break;
                     case "enum":
                         planEnumerate.append(tempStr).append("\n");
+                        break;
+                    case "except":
+                        exceptString.append(tempStr);
                         break;
                 }
             }
@@ -1454,5 +1491,14 @@ public class PlanTestBase {
 
     public OlapTable getOlapTable(String t) {
         return (OlapTable) getTable(t);
+    }
+
+    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+        Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
+        List<Pair<String, String>> zips = Lists.newArrayList();
+        for (int i = 0; i < sqls.size(); i++) {
+            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+        }
+        return zips;
     }
 }

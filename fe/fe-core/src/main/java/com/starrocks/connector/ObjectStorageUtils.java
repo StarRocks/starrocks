@@ -20,17 +20,17 @@ public class ObjectStorageUtils {
     private static final String SCHEME_S3A = "s3a://";
     private static final String SCHEME_S3 = "s3://";
     private static final String SCHEME_S3N = "s3n://";
-    private static final String SCHEME_KS3 = "ks3://";
     private static final String SCHEME_COS = "cos://";
     private static final String SCHEME_COSN = "cosn://";
-    private static final String SCHEME_S3_PREFIX = "s3";
-    private static final String SCHEME_OSS_PREFIX = "oss";
-    private static final String SCHEME_KS3_PREFIX = "ks3";
 
-    public static boolean isObjectStorage(String path) {
-        return path.startsWith(SCHEME_S3_PREFIX) || path.startsWith(SCHEME_OSS_PREFIX) || path.startsWith(SCHEME_KS3_PREFIX);
-    }
-
+    /**
+     * Replace the scheme of object storage path to use S3 filesystem interface in FE and native S3 client in BE.
+     * Note:
+     * Not all object storage paths require this type of conversion.
+     * This is kept for backward compatibility and will be removed in the future.
+     * In fact, almost all paths do not require this conversion
+     * and developers need to evaluate this conversion carefully before using.
+     */
     public static String formatObjectStoragePath(String path) {
         if (path.startsWith(SCHEME_S3)) {
             return SCHEME_S3A + path.substring(SCHEME_S3.length());
@@ -43,9 +43,6 @@ public class ObjectStorageUtils {
         }
         if (path.startsWith(SCHEME_COS)) {
             return SCHEME_S3A + path.substring(SCHEME_COS.length());
-        }
-        if (path.startsWith(SCHEME_KS3)) {
-            return SCHEME_KS3 + path.substring(SCHEME_KS3.length());
         }
         return path;
     }

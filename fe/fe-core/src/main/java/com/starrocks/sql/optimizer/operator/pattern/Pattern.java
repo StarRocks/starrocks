@@ -40,6 +40,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_ES_SCAN)
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
+            .add(OperatorType.LOGICAL_BINLOG_SCAN)
             .build();
 
     protected Pattern(OperatorType opType) {
@@ -97,7 +98,7 @@ public class Pattern {
             return false;
         }
 
-        if (expression.getInputs().size() < this.children().size()
+        if (expression.getInputs().size() < children.size()
                 && children.stream().noneMatch(p -> OperatorType.PATTERN_MULTI_LEAF.equals(p.getOpType()))) {
             return false;
         }

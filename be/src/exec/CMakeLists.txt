@@ -40,88 +40,88 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     plain_text_builder.cpp
-    vectorized/aggregator.cpp
-    vectorized/sorted_streaming_aggregator.cpp
-    vectorized/aggregate/agg_hash_variant.cpp
-    vectorized/aggregate/aggregate_base_node.cpp
-    vectorized/aggregate/aggregate_blocking_node.cpp
-    vectorized/aggregate/distinct_blocking_node.cpp
-    vectorized/aggregate/aggregate_streaming_node.cpp
-    vectorized/aggregate/distinct_streaming_node.cpp
-    vectorized/partition/chunks_partitioner.cpp
-    vectorized/analytic_node.cpp
-    vectorized/analytor.cpp
-    vectorized/csv_scanner.cpp
-    vectorized/tablet_scanner.cpp
-    vectorized/olap_scan_node.cpp
-    vectorized/olap_scan_prepare.cpp
-    vectorized/meta_scan_node.cpp
-    vectorized/olap_meta_scanner.cpp
-    vectorized/olap_meta_scan_node.cpp
-    vectorized/lake_meta_scanner.cpp
-    vectorized/lake_meta_scan_node.cpp
-    vectorized/hash_joiner.cpp
-    vectorized/hash_join_node.cpp
-    vectorized/join_hash_map.cpp
-    vectorized/topn_node.cpp
-    vectorized/chunks_sorter.cpp
-    vectorized/chunks_sorter_heap_sort.cpp
-    vectorized/chunks_sorter_topn.cpp
-    vectorized/chunks_sorter_full_sort.cpp
-    vectorized/cross_join_node.cpp
-    vectorized/union_node.cpp
-    vectorized/tablet_info.cpp
-    vectorized/except_hash_set.cpp
-    vectorized/except_node.cpp
-    vectorized/file_scanner.cpp
-    vectorized/orc_scanner.cpp
-    vectorized/jni_scanner.cpp
-    vectorized/arrow_to_starrocks_converter.cpp
-    vectorized/arrow_to_json_converter.cpp
-    vectorized/parquet_scanner.cpp
-    vectorized/parquet_reader.cpp
-    vectorized/file_scan_node.cpp
-    vectorized/assert_num_rows_node.cpp
-    vectorized/intersect_hash_set.cpp
-    vectorized/intersect_node.cpp
-    vectorized/hdfs_scanner.cpp
-    vectorized/hdfs_scanner_orc.cpp
-    vectorized/hdfs_scanner_parquet.cpp
-    vectorized/hdfs_scanner_text.cpp
-    vectorized/json_scanner.cpp
-    vectorized/json_parser.cpp
-    vectorized/project_node.cpp
-    vectorized/dict_decode_node.cpp
-    vectorized/repeat_node.cpp
-    vectorized/table_function_node.cpp
-    vectorized/schema_scanner.cpp
-    vectorized/schema_scan_node.cpp
-    vectorized/schema_scanner/schema_tables_scanner.cpp
-    vectorized/schema_scanner/schema_dummy_scanner.cpp
-    vectorized/schema_scanner/schema_schemata_scanner.cpp
-    vectorized/schema_scanner/schema_variables_scanner.cpp
-    vectorized/schema_scanner/schema_columns_scanner.cpp
-    vectorized/schema_scanner/schema_charsets_scanner.cpp
-    vectorized/schema_scanner/schema_collations_scanner.cpp
-    vectorized/schema_scanner/schema_statistics_scanner.cpp
-    vectorized/schema_scanner/schema_triggers_scanner.cpp
-    vectorized/schema_scanner/schema_events_scanner.cpp
-    vectorized/schema_scanner/schema_views_scanner.cpp
-    vectorized/schema_scanner/schema_materialized_views_scanner.cpp
-    vectorized/schema_scanner/schema_tasks_scanner.cpp
-    vectorized/schema_scanner/schema_task_runs_scanner.cpp
-    vectorized/schema_scanner/schema_user_privileges_scanner.cpp
-    vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
-    vectorized/schema_scanner/schema_table_privileges_scanner.cpp
-    vectorized/schema_scanner/schema_tables_config_scanner.cpp
-    vectorized/schema_scanner/schema_helper.cpp
-    vectorized/jdbc_scanner.cpp
-    vectorized/sorting/compare_column.cpp
-    vectorized/sorting/merge_column.cpp
-    vectorized/sorting/merge_cascade.cpp
-    vectorized/sorting/sort_column.cpp
-    vectorized/sorting/sort_permute.cpp
-    vectorized/connector_scan_node.cpp
+    aggregator.cpp
+    sorted_streaming_aggregator.cpp
+    aggregate/agg_hash_variant.cpp
+    aggregate/aggregate_base_node.cpp
+    aggregate/aggregate_blocking_node.cpp
+    aggregate/distinct_blocking_node.cpp
+    aggregate/aggregate_streaming_node.cpp
+    aggregate/distinct_streaming_node.cpp
+    partition/chunks_partitioner.cpp
+    analytic_node.cpp
+    analytor.cpp
+    csv_scanner.cpp
+    tablet_scanner.cpp
+    olap_scan_node.cpp
+    olap_scan_prepare.cpp
+    meta_scan_node.cpp
+    olap_meta_scanner.cpp
+    olap_meta_scan_node.cpp
+    lake_meta_scanner.cpp
+    lake_meta_scan_node.cpp
+    hash_joiner.cpp
+    hash_join_node.cpp
+    join_hash_map.cpp
+    topn_node.cpp
+    chunks_sorter.cpp
+    chunks_sorter_heap_sort.cpp
+    chunks_sorter_topn.cpp
+    chunks_sorter_full_sort.cpp
+    cross_join_node.cpp
+    union_node.cpp
+    except_hash_set.cpp
+    except_node.cpp
+    file_scanner.cpp
+    orc_scanner.cpp
+    jni_scanner.cpp
+    arrow_to_starrocks_converter.cpp
+    arrow_to_json_converter.cpp
+    parquet_scanner.cpp
+    parquet_reader.cpp
+    file_scan_node.cpp
+    assert_num_rows_node.cpp
+    intersect_hash_set.cpp
+    intersect_node.cpp
+    hdfs_scanner.cpp
+    hdfs_scanner_orc.cpp
+    hdfs_scanner_parquet.cpp
+    hdfs_scanner_text.cpp
+    json_scanner.cpp
+    json_parser.cpp
+    project_node.cpp
+    dict_decode_node.cpp
+    repeat_node.cpp
+    table_function_node.cpp
+    schema_scanner.cpp
+    schema_scan_node.cpp
+    iceberg/iceberg_delete_builder.cpp
+    schema_scanner/schema_tables_scanner.cpp
+    schema_scanner/schema_dummy_scanner.cpp
+    schema_scanner/schema_schemata_scanner.cpp
+    schema_scanner/schema_variables_scanner.cpp
+    schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collations_scanner.cpp
+    schema_scanner/schema_statistics_scanner.cpp
+    schema_scanner/schema_triggers_scanner.cpp
+    schema_scanner/schema_events_scanner.cpp
+    schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_views_scanner.cpp
+    schema_scanner/schema_tasks_scanner.cpp
+    schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_user_privileges_scanner.cpp
+    schema_scanner/schema_schema_privileges_scanner.cpp
+    schema_scanner/schema_table_privileges_scanner.cpp
+    schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_helper.cpp
+    jdbc_scanner.cpp
+    sorting/compare_column.cpp
+    sorting/merge_column.cpp
+    sorting/merge_cascade.cpp
+    sorting/sort_column.cpp
+    sorting/sort_permute.cpp
+    connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
@@ -147,6 +147,7 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    stream/scan/stream_scan_operator.cpp
     pipeline/scan/meta_chunk_source.cpp
     pipeline/scan/meta_scan_operator.cpp
     pipeline/scan/meta_scan_prepare_operator.cpp
@@ -179,6 +180,7 @@ set(EXEC_FILES
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
+    pipeline/stream_pipeline_driver.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp
     pipeline/aggregate/aggregate_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_streaming_sink_operator.cpp
@@ -208,6 +210,7 @@ set(EXEC_FILES
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
     pipeline/chunk_accumulate_operator.cpp
+    pipeline/pipeline.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -216,13 +219,18 @@ set(EXEC_FILES
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    query_cache/ticket_checker.cpp)
+    query_cache/ticket_checker.cpp
+    stream/state/mem_state_table.cpp
+    stream/aggregate/agg_state_data.cpp
+    stream/aggregate/stream_aggregator.cpp
+    stream/aggregate/stream_aggregate_operator.cpp
+    stream/stream_aggregate_node.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set_source_files_properties(vectorized/json_scanner.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
-    set_source_files_properties(vectorized/json_parser.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
+    set_source_files_properties(json_scanner.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
+    set_source_files_properties(json_parser.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
 endif()
 
 add_library(Exec STATIC

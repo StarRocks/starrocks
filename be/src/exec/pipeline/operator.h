@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
@@ -28,7 +28,7 @@ class Expr;
 class ExprContext;
 class RuntimeProfile;
 class RuntimeState;
-using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
+using RuntimeFilterProbeCollector = starrocks::RuntimeFilterProbeCollector;
 
 namespace pipeline {
 class Operator;
@@ -39,6 +39,7 @@ using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
+    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
@@ -107,10 +108,10 @@ public:
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),
     // the chunk need to be shared
-    virtual StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) = 0;
+    virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) = 0;
 
     // Push chunk to this operator
-    virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
+    virtual Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
 
     // reset_state is used by MultilaneOperator in cache mechanism, because lanes in MultilaneOperator are
     // re-used by tablets, before the lane serves for the current tablet, it must invoke reset_state to re-prepare
@@ -155,15 +156,14 @@ public:
     const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
-    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
+    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
+                                         FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
-    Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                          vectorized::FilterPtr* filter = nullptr);
+    Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
-    void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
+    void eval_runtime_bloom_filters(Chunk* chunk);
 
     // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
@@ -190,6 +190,33 @@ public:
 
     void set_prepare_time(int64_t cost_ns);
 
+    // INCREMENTAL MV Methods
+    //
+    // The operator will run periodically which is triggered by FE from PREPARED to EPOCH_FINISHED in one Epoch,
+    // and then reentered into PREPARED state by `reset_epoch` at the next new Epoch.
+    //
+    //                          `reset_epoch`
+    //    ┌───────────────────────────────────────────────────────┐
+    //    │                                                       │
+    //    │                                                       │
+    //    │                                                       │
+    //    ▼                                                       │
+    //  PREPARED ────► PROCESSING ───► EPOCH_FINISHING ──► EPOCH_FINISHED ───► FINISHING ──► FINISHED ────►[CANCELED] ────► CLOSED
+
+    // Mark whether the operator is finishing in one Epoch, `epoch_finishing` is the
+    // state that one operator starts finishing like `is_finishing`.
+    virtual bool is_epoch_finishing() const { return false; }
+    // Mark whether the operator is finished in one Epoch, `epoch_finished` is the
+    // state that one operator finished and not be scheduled again like `is_finished`.
+    virtual bool is_epoch_finished() const { return false; }
+    // Called when the operator's input has been finished, and the operator(self) starts
+    // epoch finishing.
+    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
+    // Called when the operator(self) has been finished.
+    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
+    // Called when the new Epoch starts at first to reset operator's internal state.
+    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -214,7 +241,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
@@ -312,6 +339,9 @@ public:
     // Whether it has any runtime in-filter or bloom-filter.
     // MUST be invoked after init_runtime_filter.
     bool has_runtime_filters() const;
+
+    // Whether it has any runtime filter built by TopN node.
+    bool has_topn_filter() const;
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);

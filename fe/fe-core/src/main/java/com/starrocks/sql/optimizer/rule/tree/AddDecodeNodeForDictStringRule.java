@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -398,7 +399,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
-                    Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());
+                    Column newColumn = new Column(oldColumn);
+                    newColumn.setType(ID_TYPE);
 
                     newColRefToColumnMetaMap.remove(stringColumn);
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
@@ -444,6 +446,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
+                    newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
 
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -715,9 +718,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                    aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
-                    aggOperator.getPredicate(), aggOperator.getProjection());
+            final PhysicalHashAggregateOperator newHashAggregator =
+                    new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
+                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            aggOperator.getPredicate(), aggOperator.getProjection());
+            newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
+            return newHashAggregator;
         }
 
         @Override
@@ -1094,6 +1100,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         @Override
         public Void visitLikePredicateOperator(LikePredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             predicate.getChild(0).accept(this, context);
+            context.worthApplied |= context.canDictOptBeApplied;
+            return null;
+        }
+
+        @Override
+        public Void visitCompoundPredicate(CompoundPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
+            if (predicate.isNot()) {
+                context.canDictOptBeApplied = false;
+                context.stopOptPropagateUpward = true;
+                return null;
+            }
+            couldApply(predicate, context);
             context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }

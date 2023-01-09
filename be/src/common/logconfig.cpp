@@ -125,13 +125,6 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         google::InstallFailureSignalHandler();
     }
 
-    // dump trace info may access some runtime stats
-    // if runtime stats broken we won't dump stack
-    if (config::dump_trace_info) {
-        google::InstallFailureWriter(failure_writer);
-        google::InstallFailureFunction(failure_function);
-    }
-
     // Don't log to stderr.
     FLAGS_stderrthreshold = 5;
     // Set glog log dir.
@@ -211,6 +204,15 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     }
 
     google::InitGoogleLogging(basename);
+
+    // dump trace info may access some runtime stats
+    // if runtime stats broken we won't dump stack
+    // These function should be called after InitGoogleLogging.
+
+    if (config::dump_trace_info) {
+        google::InstallFailureWriter(failure_writer);
+        google::InstallFailureFunction(failure_function);
+    }
 
     logging_initialized = true;
 

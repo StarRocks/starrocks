@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #ifdef BE_TEST
 
@@ -250,4 +250,4 @@ void VectorizedSchema::convert_to(VectorizedSchema* new_schema, const std::vecto
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -294,7 +294,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
         RETURN_IF_ERROR(iter->next_batch(&num_read, column.get()));
         DCHECK(num_to_read == num_read);
 
-        vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+        ColumnViewer<TYPE_VARCHAR> viewer(column);
         auto value = viewer.value(0);
         if (!_page_zone_maps[i].ParseFromArray(value.data, value.size)) {
             return Status::Corruption("Failed to parse zone map");

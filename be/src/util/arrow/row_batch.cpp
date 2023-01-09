@@ -49,7 +49,7 @@
 #include <memory>
 
 #include "common/logging.h"
-#include "exprs/vectorized/column_ref.h"
+#include "exprs/column_ref.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -127,7 +127,7 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
         Expr* expr = expr_context->root();
         std::shared_ptr<arrow::Field> field;
         string col_name;
-        vectorized::ColumnRef* col_ref = expr->get_column_ref();
+        ColumnRef* col_ref = expr->get_column_ref();
         DCHECK(col_ref != nullptr);
         int64_t slot_id = col_ref->slot_id();
         int64_t tuple_id = col_ref->tuple_id();

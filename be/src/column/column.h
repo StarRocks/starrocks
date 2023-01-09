@@ -31,8 +31,7 @@ namespace starrocks {
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
-
-namespace vectorized {
+class TypeDescriptor;
 
 // Forward declaration
 class Datum;
@@ -390,6 +389,13 @@ public:
 
     virtual void check_or_die() const = 0;
 
+    // NOTE(alvin): make sure that field can not be ConstColumn, it will cause a lot of problems.
+    // Because ConstColumn is not handled well in every Column's append functions.
+    // To handle it, ConstColumns must be converted into normal columns.
+    // But if complex types contains ConstColumns internally, current unpack functions can not handle it.
+    // So to get a right answer, we need to make sure that there are no const columns in Complex Columns(Struct/Map)
+    virtual Status unfold_const_children(const TypeDescriptor& type) { return Status::OK(); }
+
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
     static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
@@ -452,5 +458,4 @@ public:
     }
 };
 
-} // namespace vectorized
 } // namespace starrocks

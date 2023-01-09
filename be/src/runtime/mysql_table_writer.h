@@ -44,7 +44,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 
 #ifndef __StarRocksMysql
 #define __StarRocksMysql void
@@ -67,10 +67,10 @@ class ExprContext;
 class MysqlTableWriter {
 public:
     using VariantViewer = std::variant<
-#define M(NAME) vectorized::ColumnViewer<NAME>,
+#define M(NAME) ColumnViewer<NAME>,
             APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
-                    vectorized::ColumnViewer<TYPE_NULL>>;
+                    ColumnViewer<TYPE_NULL>>;
 
     MysqlTableWriter(const std::vector<ExprContext*>& output_exprs, int chunk_size);
     ~MysqlTableWriter();
@@ -80,14 +80,14 @@ public:
 
     Status begin_trans() { return Status::OK(); }
 
-    Status append(vectorized::Chunk* chunk);
+    Status append(Chunk* chunk);
 
     Status abort_tarns() { return Status::OK(); }
 
     Status finish_tarns() { return Status::OK(); }
 
 private:
-    Status _build_viewers(vectorized::Columns& columns);
+    Status _build_viewers(Columns& columns);
     Status _build_insert_sql(int from, int to, std::string_view* sql);
 
     const std::vector<ExprContext*>& _output_expr_ctxs;

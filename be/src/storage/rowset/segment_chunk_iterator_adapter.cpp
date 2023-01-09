@@ -16,7 +16,7 @@
 
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema,
                                                          const std::vector<LogicalType>& new_types,
@@ -86,4 +86,4 @@ void SegmentChunkIteratorAdapter::close() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

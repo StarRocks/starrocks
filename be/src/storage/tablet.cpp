@@ -97,9 +97,9 @@ Status Tablet::_init_once_action() {
 
     _compaction_context = std::make_unique<CompactionContext>();
     if (config::enable_size_tiered_compaction_strategy) {
-        _compaction_context->policy = std::make_unique<vectorized::SizeTieredCompactionPolicy>(this);
+        _compaction_context->policy = std::make_unique<SizeTieredCompactionPolicy>(this);
     } else {
-        _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+        _compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(this);
     }
 
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
@@ -434,9 +434,8 @@ void Tablet::delete_expired_inc_rowsets() {
 }
 
 void Tablet::delete_expired_stale_rowset() {
-    int64_t now = UnixSeconds();
     // Compute the end time to delete rowsets, when an expired rowset createtime older then this time, it will be deleted.
-    int64_t expired_stale_sweep_endtime = now - config::tablet_rowset_stale_sweep_time_sec;
+    int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
 
     if (_updates) {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
@@ -1070,6 +1069,9 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_path_hash(_data_dir->path_hash());
     tablet_info->__set_is_in_memory(_tablet_meta->tablet_schema().is_in_memory());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+    if (_tablet_meta->get_binlog_config() != nullptr) {
+        tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+    }
     if (_updates) {
         _updates->get_tablet_info_extra(tablet_info);
     } else {
@@ -1184,7 +1186,11 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
     }
-    return _compaction_task;
+    if (_compaction_task && _compaction_task.use_count() == 1) {
+        return _compaction_task;
+    } else {
+        return nullptr;
+    }
 }
 
 bool Tablet::has_compaction_task() {
@@ -1195,10 +1201,23 @@ bool Tablet::has_compaction_task() {
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context != nullptr &&
             _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
             // else, return true
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Tablet::force_base_compaction() {
+    std::lock_guard lock(_compaction_task_lock);
+    if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = BASE_COMPACTION;
+        if (_compaction_context != nullptr &&
+            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
         }
     }
@@ -1219,14 +1238,14 @@ void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task) {
         _compaction_task->stop();
-        _compaction_task.reset();
+        _compaction_task = nullptr;
     }
     _enable_compaction = false;
 }
 
 void Tablet::reset_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    _compaction_task.reset();
+    _compaction_task = nullptr;
 }
 
 bool Tablet::enable_compaction() {

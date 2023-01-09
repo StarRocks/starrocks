@@ -20,10 +20,10 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "storage/aggregate_type.h"
-#include "storage/array_type_info.h"
 #include "storage/column_aggregate_func.h"
+#include "types/array_type_info.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(ColumnAggregator, testIntSum) {
     VectorizedFieldPtr field = std::make_shared<VectorizedField>(1, "test", LogicalType::TYPE_INT, false);
@@ -382,8 +382,9 @@ TEST(ColumnAggregator, testNullBooleanMin) {
     ASSERT_EQ("0", agg->debug_item(2));
 
     // check agg data and null column
-    ASSERT_EQ("[1, 1, 0]", agg->data_column()->debug_string());
     ASSERT_EQ("[1, 0, 0]", agg->null_column()->debug_string());
+    ASSERT_TRUE(agg->data_column()->get(1).get_uint8());
+    ASSERT_FALSE(agg->data_column()->get(2).get_uint8());
 }
 
 TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {
@@ -639,7 +640,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     aggregator->aggregate_values(0, 2, loops.data(), false);
 
     ASSERT_EQ(1, agg->size());
-    EXPECT_EQ("['2', '3', '4']", agg->debug_item(0));
+    EXPECT_EQ("['2','3','4']", agg->debug_item(0));
 
     // second chunk column
     src->reset_column();
@@ -661,8 +662,8 @@ TEST(ColumnAggregator, testArrayReplace) {
     aggregator->aggregate_values(0, 3, loops.data(), false);
 
     EXPECT_EQ(3, agg->size());
-    EXPECT_EQ("['10', '11']", agg->debug_item(1));
-    EXPECT_EQ("['17', '18']", agg->debug_item(2));
+    EXPECT_EQ("['10','11']", agg->debug_item(1));
+    EXPECT_EQ("['17','18']", agg->debug_item(2));
 
     // third chunk column
     src->reset_column();
@@ -682,7 +683,7 @@ TEST(ColumnAggregator, testArrayReplace) {
 
     EXPECT_EQ(5, agg->size());
     EXPECT_EQ("['19']", agg->debug_item(3));
-    EXPECT_EQ("['20', '21', '22', '23', '24', '25', '26', '27', '28', '29']", agg->debug_item(4));
+    EXPECT_EQ("['20','21','22','23','24','25','26','27','28','29']", agg->debug_item(4));
 }
 
 // NOLINTNEXTLINE
@@ -799,4 +800,4 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
     ASSERT_EQ("NULL", agg->debug_item(0));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

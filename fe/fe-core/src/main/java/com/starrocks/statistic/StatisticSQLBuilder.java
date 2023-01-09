@@ -30,8 +30,15 @@ import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
 public class StatisticSQLBuilder {
+    private static final String QUERY_TABLE_STATISTIC_TEMPLATE =
+            "select cast(" + STATISTIC_TABLE_VERSION + " as INT), partition_id, any_value(row_count)"
+                    + " FROM " + FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY partition_id";
+
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
@@ -61,6 +68,18 @@ public class StatisticSQLBuilder {
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
                 "org.apache.velocity.runtime.log.Log4JLogChute");
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
+    }
+
+    public static String buildQueryTableStatisticsSQL(Long tableId) {
+        VelocityContext context = new VelocityContext();
+        context.put("predicate", "table_id = " + tableId);
+        return build(context, QUERY_TABLE_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildQueryTableStatisticsSQL(Long tableId, Long partitionId) {
+        VelocityContext context = new VelocityContext();
+        context.put("predicate", "table_id = " + tableId + " and partition_id = " + partitionId);
+        return build(context, QUERY_TABLE_STATISTIC_TEMPLATE);
     }
 
     public static String buildQuerySampleStatisticsSQL(Long dbId, Long tableId, List<String> columnNames) {

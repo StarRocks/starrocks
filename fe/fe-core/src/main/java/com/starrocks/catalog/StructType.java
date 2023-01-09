@@ -12,26 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/StructType.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -40,6 +20,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -50,7 +38,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -60,6 +48,7 @@ public class StructType extends Type {
     private static final Logger LOG = LogManager.getLogger(StructType.class);
 
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
+    @SerializedName(value = "fields")
     private final ArrayList<StructField> fields;
 
     public StructType(ArrayList<StructField> structFields) {
@@ -77,6 +66,18 @@ public class StructType extends Type {
                 fieldMap.put(lowerFieldName, field);
             }
         }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
+    }
+
+    // Used to construct an unnamed struct type, for example, to create a struct type
+    // row(1, 'b') to create an unnamed struct type struct<int, string>
+    public StructType(List<Type> fieldTypes) {
+        ArrayList<StructField> newFields = new ArrayList<>();
+        for (Type fieldType : fieldTypes) {
+            newFields.add(new StructField(fieldType));
+        }
+        this.fields = newFields;
         selectedFields = new Boolean[fields.size()];
         Arrays.fill(selectedFields, false);
     }
@@ -105,20 +106,15 @@ public class StructType extends Type {
             return false;
         }
 
-        if (((StructType) t).getFields().size() != fields.size()) {
+        StructType rhsType = (StructType) t;
+        if (fields.size() != rhsType.fields.size()) {
             return false;
         }
-
-        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
-            StructField tField = ((StructType) t).getField(field.getValue().getName());
-            if (tField == null) {
-                return false;
-            }
-            if (!tField.getType().matchesType(field.getValue().getType())) {
+        for (int i = 0; i < fields.size(); ++i) {
+            if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -212,7 +208,6 @@ public class StructType extends Type {
         container.types.add(node);
         Preconditions.checkNotNull(fields);
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
-        Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
         Preconditions.checkArgument(selectedFields.length == fields.size());
@@ -229,6 +224,21 @@ public class StructType extends Type {
             structFields.add(field.clone());
         }
         return new StructType(structFields);
+    }
+
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields);
+        }
     }
 }
 

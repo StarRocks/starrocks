@@ -62,9 +62,8 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
                                               config::vertical_compaction_max_columns_per_group, &column_groups);
     _task_info.column_group_size = column_groups.size();
 
-    auto mask_buffer =
-            std::make_unique<vectorized::RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
-    auto source_masks = std::make_unique<std::vector<vectorized::RowSourceMask>>();
+    auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
+    auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
     TRACE("[Compaction] compaction prepare finished, max_rows_per_segment:$0, column groups "
           "size:$1",
           max_rows_per_segment, column_groups.size());
@@ -112,16 +111,13 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
 
 Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_group_index,
                                                      const std::vector<uint32_t>& column_group,
-                                                     RowsetWriter* output_rs_writer,
-                                                     vectorized::RowSourceMaskBuffer* mask_buffer,
-                                                     std::vector<vectorized::RowSourceMask>* source_masks,
-                                                     Statistics* statistics) {
-    vectorized::VectorizedSchema schema =
-            ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
-    vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
-                                    output_rs_writer->version(), schema, is_key, mask_buffer);
+                                                     RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
+                                                     std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
+    TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
+                        schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
-    vectorized::TabletReaderParams reader_params;
+    TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
@@ -181,10 +177,9 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
                                                        const std::vector<uint32_t>& column_group,
-                                                       const vectorized::VectorizedSchema& schema,
-                                                       vectorized::TabletReader* reader, RowsetWriter* output_rs_writer,
-                                                       vectorized::RowSourceMaskBuffer* mask_buffer,
-                                                       std::vector<vectorized::RowSourceMask>* source_masks) {
+                                                       const VectorizedSchema& schema, TabletReader* reader,
+                                                       RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
+                                                       std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);

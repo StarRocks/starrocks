@@ -19,7 +19,6 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -46,7 +45,9 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
@@ -166,6 +167,12 @@ public class AggregationAnalyzer {
             return node.getChildren().stream().allMatch(this::visit);
         }
 
+        // only check lambda body here.
+        @Override
+        public Boolean visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
+            return visit(node.getChild(0));
+        }
+
         @Override
         public Boolean visitCollectionElementExpr(CollectionElementExpr node, Void context) {
             return visit(node.getChild(0));
@@ -278,6 +285,9 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitSlot(SlotRef node, Void context) {
+            if (node.isFromLambda()) {
+                return true;
+            }
             return isGroupingKey(node);
         }
 

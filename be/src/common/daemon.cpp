@@ -90,7 +90,7 @@ private:
 };
 
 void gc_memory(void* arg_this) {
-    using namespace starrocks::vectorized;
+    using namespace starrocks;
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
@@ -299,7 +299,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     UserFunctionCache::instance()->init(config::user_function_dir);
 
-    vectorized::date::init_date_cache();
+    date::init_date_cache();
 
     TimezoneUtils::init_time_zones();
 

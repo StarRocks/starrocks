@@ -69,29 +69,28 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const vectorized::ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* row_ranges) override;
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
     int dict_lookup(const Slice& word) override { return -1; }
 
-    Status next_dict_codes(size_t* n, vectorized::Column* dst) override {
+    Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
     bool _has_default_value;

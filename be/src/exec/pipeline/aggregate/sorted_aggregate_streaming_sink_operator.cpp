@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 
-#include "exec/vectorized/sorted_streaming_aggregator.h"
+#include "exec/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -48,16 +48,17 @@ Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) 
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get()));
     _aggregator->streaming_compute_agg_state(chunk_size);
     return Status::OK();
 }

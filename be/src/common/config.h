@@ -306,7 +306,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
-CONF_Int32(update_compaction_num_threads_per_disk, "1");
+CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
@@ -324,7 +324,7 @@ CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
 //      C = (cumulative_compaction_num_threads_per_disk + base_compaction_num_threads_per_disk) * dir_num
 // set it to larger than C will be set to equal to C.
 // This config can be set to 0, which means to forbid any compaction, for some special cases.
-CONF_Int32(max_compaction_concurrency, "-1");
+CONF_mInt32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
 CONF_mInt32(compaction_trace_threshold, "60");
@@ -592,7 +592,7 @@ CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "1073741824"); // 1GB
 // Number of thread for flushing memtable per store.
-CONF_Int32(flush_thread_num_per_store, "2");
+CONF_mInt32(flush_thread_num_per_store, "2");
 
 // Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");
@@ -698,7 +698,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-CONF_Int64(pipeline_hdfs_scan_thread_pool_thread_num, "48");
+CONF_Int64(pipeline_connector_scan_thread_num_per_cpu, "8");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -900,6 +900,8 @@ CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(max_tmp_l1_num, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

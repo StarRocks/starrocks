@@ -52,6 +52,8 @@ public:
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
+    virtual size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) = 0;
+
 protected:
     std::string _name;
 };
@@ -69,12 +71,16 @@ public:
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
+    size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) override;
+
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
     void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
+
+    void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
     LimitSetter _num_threads_setter;

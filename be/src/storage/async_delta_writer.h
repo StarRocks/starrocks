@@ -33,9 +33,6 @@ class Closure;
 namespace starrocks {
 class SegmentFlushExecutor;
 class SegmentFlushToken;
-} // namespace starrocks
-
-namespace starrocks::vectorized {
 
 class AsyncDeltaWriterRequest;
 class CommittedRowsetInfo;
@@ -83,11 +80,15 @@ public:
     // [thread-safe and wait-free]
     void abort(bool with_log = true);
 
+    void cancel(const Status& st);
+
     int64_t partition_id() const { return _writer->partition_id(); }
 
     ReplicaState replica_state() const { return _writer->replica_state(); }
 
     State get_state() const { return _writer->get_state(); }
+
+    const std::vector<PNetworkAddress>& replicas() const { return _writer->replicas(); }
 
 private:
     struct private_type {
@@ -96,7 +97,7 @@ private:
 
     struct Task {
         // If chunk == nullptr, this is a commit task
-        vectorized::Chunk* chunk = nullptr;
+        Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
         AsyncDeltaWriterCallback* write_cb = nullptr;
         uint32_t indexes_size = 0;
@@ -133,7 +134,7 @@ public:
 class AsyncDeltaWriterRequest {
 public:
     // nullptr means no record to write
-    vectorized::Chunk* chunk = nullptr;
+    Chunk* chunk = nullptr;
     const uint32_t* indexes = nullptr;
     uint32_t indexes_size = 0;
     bool commit_after_write = false;
@@ -157,4 +158,4 @@ public:
     virtual void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

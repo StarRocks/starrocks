@@ -16,11 +16,11 @@
 
 namespace starrocks::pipeline {
 
-StatusOr<vectorized::ChunkPtr> IntersectBuildSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> IntersectBuildSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
 
-Status IntersectBuildSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status IntersectBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _intersect_ctx->append_chunk_to_ht(state, chunk, _dst_exprs);
 }
 

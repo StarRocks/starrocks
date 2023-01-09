@@ -85,8 +85,7 @@ void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
     }
 }
 
-int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
-                                                const std::shared_ptr<EncodeContext>& context) {
+int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
 
     if (context == nullptr) {
@@ -101,8 +100,7 @@ int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
     return serialized_size;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
-                                                const std::shared_ptr<EncodeContext>& context) {
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
     StatusOr<ChunkPB> res = serialize_without_meta(chunk, std::move(context));
     if (!res.ok()) return res.status();
 
@@ -135,9 +133,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
     DCHECK_EQ(columns.size(), tuple_id_to_index.size() + slot_id_to_index.size());
 
     // serialize extra meta
-    auto* chunk_extra_data = chunk.get_extra_data()
-                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
-                                     : nullptr;
+    auto* chunk_extra_data =
+            chunk.get_extra_data() ? dynamic_cast<ChunkExtraColumnsData*>(chunk.get_extra_data().get()) : nullptr;
     if (chunk_extra_data) {
         auto extra_data_metas = chunk_extra_data->chunk_data_metas();
         res->mutable_extra_data_metas()->Reserve(extra_data_metas.size());
@@ -151,16 +148,15 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
     return res;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk,
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
                                                              const std::shared_ptr<EncodeContext>& context) {
     ChunkPB chunk_pb;
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
     std::string* serialized_data = chunk_pb.mutable_data();
     auto max_serialized_size = ProtobufChunkSerde::max_serialized_size(chunk, context);
-    auto* chunk_extra_data = chunk.get_extra_data()
-                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
-                                     : nullptr;
+    auto* chunk_extra_data =
+            chunk.get_extra_data() ? dynamic_cast<ChunkExtraColumnsData*>(chunk.get_extra_data().get()) : nullptr;
     if (chunk_extra_data) {
         max_serialized_size += chunk_extra_data->max_serialized_size(0);
     }
@@ -204,8 +200,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     return std::move(chunk_pb);
 }
 
-StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
-                                                            const int encode_level) {
+StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+                                                const int encode_level) {
     auto res = build_protobuf_chunk_meta(row_desc, chunk_pb);
     if (!res.ok()) {
         return res.status();
@@ -215,7 +211,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     }
     int64_t deserialized_size = 0;
     ProtobufChunkDeserializer deserializer(*res, &chunk_pb, encode_level);
-    StatusOr<vectorized::Chunk> chunk = Status::OK();
+    StatusOr<Chunk> chunk = Status::OK();
     TRY_CATCH_BAD_ALLOC(chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size));
     if (!chunk.ok()) return chunk;
 
@@ -242,9 +238,9 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     return chunk;
 }
 
-StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
-    using ColumnHelper = vectorized::ColumnHelper;
-    using Chunk = vectorized::Chunk;
+StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
+    using ColumnHelper = ColumnHelper;
+    using Chunk = Chunk;
 
     auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
 
@@ -257,7 +253,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
-    std::vector<vectorized::ColumnPtr> columns;
+    std::vector<ColumnPtr> columns;
     columns.resize(_meta.slot_id_to_index.size() + _meta.tuple_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
@@ -281,9 +277,9 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     }
 
     // deserialize extra data
-    vectorized::ChunkExtraDataPtr chunk_extra_data;
+    ChunkExtraDataPtr chunk_extra_data;
     if (!_meta.extra_data_metas.empty()) {
-        std::vector<vectorized::ColumnPtr> extra_columns;
+        std::vector<ColumnPtr> extra_columns;
         extra_columns.resize(_meta.extra_data_metas.size());
         for (size_t i = 0, sz = _meta.extra_data_metas.size(); i < sz; ++i) {
             auto extra_meta = _meta.extra_data_metas[i];
@@ -298,8 +294,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
                 return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
             }
         }
-        chunk_extra_data =
-                std::make_shared<vectorized::ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
+        chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
     }
 
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());

@@ -50,10 +50,10 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    Status get_next_merging(RuntimeState* state, vectorized::ChunkPtr* chunk);
+    Status get_next_merging(RuntimeState* state, ChunkPtr* chunk);
 
     int32_t _num_sender;
     const RowDescriptor& _row_desc;

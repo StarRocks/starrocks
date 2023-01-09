@@ -17,12 +17,12 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
-#include "runtime/primitive_type.h"
 #include "simd/selector.h"
 #include "testutil/parallel_test.h"
+#include "types/logical_type.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType TYPE, template <typename T> class Gen1, template <typename T> class Gen2,
           template <typename T> class Gen3, int TEST_SIZE>
@@ -161,4 +161,4 @@ PARALLEL_TEST(SIMDSelectorTest, SelectorTest) {
                             TYPE_DOUBLE>();
     // clang-format on
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

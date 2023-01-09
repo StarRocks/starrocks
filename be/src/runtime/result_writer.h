@@ -59,13 +59,13 @@ public:
 
     // convert one chunk to mysql result and
     // append this chunk to the result sink
-    virtual Status append_chunk(vectorized::Chunk* chunk) = 0;
+    virtual Status append_chunk(Chunk* chunk) = 0;
 
     // decompose append_chunk into two functions: process_chunk and try_add_batch,
     // this two function will be used in pipeline engine,
     // the former transform input chunk into multiple TFetchDataResult, the latter add TFetchDataResult
     // to queue whose consumers are rpc threads that invoke fetch_data rpc.
-    virtual StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) {
+    virtual StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) {
         return Status::NotSupported("Not Implemented");
     }
 

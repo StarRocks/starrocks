@@ -173,7 +173,7 @@ vectorized_functions = [
 
     [10312, "hex", "VARCHAR", ['BIGINT'], "StringFunctions::hex_int"],
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
-    [10313, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
+    [10323, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
 
@@ -262,9 +262,20 @@ vectorized_functions = [
     [30151, 'ucase', 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
 
     [30160, 'reverse', 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
-    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim'],
-    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim'],
-    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim'],
+    
+    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim', 
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30171, 'trim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30181, 'ltrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30191, 'rtrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    
     [30200, 'ascii', 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -531,6 +542,7 @@ vectorized_functions = [
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
+    [100019, 'assert_true', 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
 
     # json string function
@@ -548,7 +560,7 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110015, "get_json_object", "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
-    [110016, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
+    [110020, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
@@ -567,7 +579,7 @@ vectorized_functions = [
     [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
-    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
+    [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
@@ -827,4 +839,7 @@ vectorized_functions = [
     [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
+    [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
+    # struct functions
+    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

@@ -52,6 +52,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelExportStmt;
@@ -131,13 +132,10 @@ public class ExportMgr {
         return job;
     }
 
-    public void cancelExportJob(CancelExportStmt stmt) throws UserException {
-        String dbName = stmt.getDbName();
+    public ExportJob getExportJob(String dbName, UUID queryId) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
-
-        UUID queryId = stmt.getQueryId();
         ExportJob matchedJob = null;
         readLock();
         try {
@@ -151,18 +149,23 @@ public class ExportMgr {
         } finally {
             readUnlock();
         }
+        return matchedJob;
+    }
+    public void cancelExportJob(CancelExportStmt stmt) throws UserException {
+        ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
+        UUID queryId = stmt.getQueryId();
         if (matchedJob == null) {
             throw new AnalysisException("Export job [" + queryId.toString() + "] is not found");
         }
-
-        // check auth
-        TableName tableName = matchedJob.getTableName();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                tableName.getDb(), tableName.getTbl(),
-                PrivPredicate.SELECT)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, Privilege.SELECT_PRIV);
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // check auth
+            TableName tableName = matchedJob.getTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                                                         tableName.getDb(), tableName.getTbl(),
+                                                                         PrivPredicate.SELECT)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, Privilege.SELECT_PRIV);
+            }
         }
-
         matchedJob.cancel(ExportFailMsg.CancelType.USER_CANCEL, "user cancel");
     }
 
@@ -226,15 +229,28 @@ public class ExportMgr {
                     if (db == null) {
                         continue;
                     }
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
-                            db.getFullName(), PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnDb(ConnectContext.get(), db.getFullName())) {
+                            continue;
+                        }
+                    } else {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
+                                db.getFullName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
                 } else {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            tableName.getDb(), tableName.getTbl(),
-                            PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                                tableName.getDb(),
+                                tableName.getTbl())) {
+                            continue;
+                        }
+                    } else {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
                 }
 

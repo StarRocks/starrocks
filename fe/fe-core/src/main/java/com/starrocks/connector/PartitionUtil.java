@@ -23,21 +23,25 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.common.DmlException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 
@@ -74,6 +78,9 @@ public class PartitionUtil {
             case ICEBERG:
                 partitionKey = new IcebergPartitionKey();
                 break;
+            case DELTALAKE:
+                partitionKey = new DeltaLakePartitionKey();
+                break;
             default:
                 Preconditions.checkState(false, "Do not support create partition key for " +
                         "table type %s", tableType);
@@ -84,6 +91,10 @@ public class PartitionUtil {
             String rawValue = values.get(i);
             Type type = columns.get(i).getType();
             LiteralExpr exprValue;
+            // rawValue could be null for delta table
+            if (rawValue == null) {
+                rawValue = "null";
+            }
             if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
             } else {
@@ -184,12 +195,24 @@ public class PartitionUtil {
         return Pair.create(partitionNames, partitionColumns);
     }
 
+    public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
+            throws UserException {
+        if (table.isLocalTable()) {
+            return ((OlapTable) table).getRangePartitionMap();
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+            return PartitionUtil.getPartitionRangeFromPartitionList(table, partitionColumn);
+        } else {
+            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+        }
+    }
+
     // Map partition values to partition ranges, eg
     // [NULL,1992-01-01,1992-01-02,1992-01-03]
     //               ||
     //               \/
     // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
-    public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
+    public static Map<String, Range<PartitionKey>> getPartitionRangeFromPartitionList(Table table,
+                                                                                      Column partitionColumn)
             throws AnalysisException {
         Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
         Pair<List<String>, List<Column>> partitionPair = getPartitionNamesAndColumns(table);

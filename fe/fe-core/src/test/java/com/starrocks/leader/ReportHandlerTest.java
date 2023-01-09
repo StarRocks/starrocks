@@ -17,6 +17,7 @@ package com.starrocks.leader;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -57,7 +58,10 @@ public class ReportHandlerTest {
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
+                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
+                        "duplicate key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');");
     }
 
     @Test
@@ -82,6 +86,44 @@ public class ReportHandlerTest {
 
         ReportHandler handler = new ReportHandler();
         handler.testHandleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
+    @Test
+    public void testHandleSetTabletBinlogConfig() {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
+        long backendId = 10001L;
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        Assert.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
+        List<TTabletInfo> tabletInfos = Lists.newArrayList();
+        TTablet tablet = new TTablet(tabletInfos);
+        for (Long tabletId : tabletIds) {
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setTablet_id(tabletId);
+            tabletInfo.setSchema_hash(60000);
+            tabletInfo.setBinlog_config_version(-1);
+            tablet.tablet_infos.add(tabletInfo);
+        }
+        backendTablets.put(backendId, tablet);
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletBinlogConfig(backendId, backendTablets);
+
+        for (Long tabletId : tabletIds) {
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setTablet_id(tabletId);
+            tabletInfo.setSchema_hash(60000);
+            tabletInfo.setBinlog_config_version(0);
+            tablet.tablet_infos.add(tabletInfo);
+        }
+        backendTablets.put(backendId, tablet);
+
+        handler.testHandleSetTabletBinlogConfig(backendId, backendTablets);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getBinlogManager().isBinlogAvailable(dbId, olapTable.getId()));
+
     }
 
     private TResourceUsage genResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,

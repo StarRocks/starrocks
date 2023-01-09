@@ -25,7 +25,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Tablet;
 // Params for MetaReader
 // mainly include tablet
@@ -69,4 +69,4 @@ private:
                          std::vector<SegmentSharedPtr>* segments);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

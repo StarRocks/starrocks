@@ -19,7 +19,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MapColumn final : public ColumnFactory<Column, MapColumn> {
     friend class ColumnFactory<Column, MapColumn>;
@@ -181,6 +181,8 @@ public:
 
     size_t get_map_size(size_t idx) const;
 
+    Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
+
 private:
     // keys must be NullableColumn
     ColumnPtr _keys;
@@ -194,4 +196,4 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -51,7 +51,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
-import com.starrocks.clone.TabletScheduler.TabletBalancerStrategy;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -689,13 +688,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             Preconditions.checkState(srcPathHash != -1);
             PathSlot slot = tabletScheduler.getBackendsWorkingSlots().get(srcReplica.getBackendId());
             if (slot != null) {
-                if (type == Type.REPAIR) {
+                if (type == Type.REPAIR || isSrcPathResourceHold()) {
                     slot.freeSlot(srcPathHash);
-                } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
-                            || isSrcPathResourceHold()) {
-                        slot.freeBalanceSlot(srcPathHash);
-                    }
                 }
             }
         }
@@ -703,13 +697,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (destPathHash != -1) {
             PathSlot slot = tabletScheduler.getBackendsWorkingSlots().get(destBackendId);
             if (slot != null) {
-                if (type == Type.REPAIR) {
+                if (type == Type.REPAIR || isDestPathResourceHold()) {
                     slot.freeSlot(destPathHash);
-                } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
-                            || isDestPathResourceHold()) {
-                        slot.freeBalanceSlot(destPathHash);
-                    }
                 }
             }
         }
@@ -750,9 +739,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          * 2. repair task or balance task that dose not adopt strategy of TABLET_BALANCER_STRATEGY_DISK_AND_TABLET
          */
         if (state == State.PENDING
-                && (type == Type.REPAIR
-                || (type == Type.BALANCE &&
-                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)))) {
+                && (type == Type.REPAIR)) {
             if (!reserveTablet) {
                 this.tablet = null;
             }

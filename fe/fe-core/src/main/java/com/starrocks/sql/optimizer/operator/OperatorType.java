@@ -32,6 +32,7 @@ public enum OperatorType {
     LOGICAL_ES_SCAN,
     LOGICAL_META_SCAN,
     LOGICAL_JDBC_SCAN,
+    LOGICAL_BINLOG_SCAN,
     LOGICAL_JOIN,
     LOGICAL_AGGR,
     LOGICAL_FILTER,
@@ -116,6 +117,7 @@ public enum OperatorType {
     LAMBDA_ARGUMENT,
     SUBQUERY,
     SUBFIELD,
+    MULTI_IN,
 
     /**
      * PATTERN

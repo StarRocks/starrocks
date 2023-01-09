@@ -36,10 +36,13 @@ public:
                             LocalExchangeSourceOperatorFactory* source)
             : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
-    virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
+    virtual Status prepare(RuntimeState* state) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
+
+    virtual Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
     virtual void finish(RuntimeState* state) {
-        if (decrement_sink_number() == 1) {
+        if (decr_sinker() == 1) {
             for (auto* source : _source->get_sources()) {
                 source->set_finishing(state);
             }
@@ -56,21 +59,35 @@ public:
         return true;
     }
 
+    void epoch_finish(RuntimeState* state) {
+        if (incr_epoch_finished_sinker() == _sink_number) {
+            for (auto* source : _source->get_sources()) {
+                source->set_epoch_finishing(state);
+            }
+            // reset the number to be reused in the next epoch.
+            _epoch_finished_sinker = 0;
+        }
+    }
+
     const std::string& name() const { return _name; }
 
     bool need_input() const;
 
-    void increment_sink_number() { _sink_number++; }
-
-    int32_t decrement_sink_number() { return _sink_number--; }
+    virtual void incr_sinker() { _sink_number++; }
+    int32_t decr_sinker() { return _sink_number--; }
 
     int32_t source_dop() const { return _source->get_sources().size(); }
+
+    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
 protected:
     const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
     std::atomic<int32_t> _sink_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
+
+    // Stream MV
+    std::atomic<int32_t> _epoch_finished_sinker = 0;
 };
 
 // Exchange the local data for shuffle
@@ -89,7 +106,7 @@ class PartitionExchanger final : public LocalExchanger {
         // Sender will arrange the row indexes according to partitions.
         // For example, if there are 3 channels, it will put partition 0's row first,
         // then partition 1's row indexes, then put partition 2's row indexes in the last.
-        Status partition_chunk(const vectorized::ChunkPtr& chunk, std::vector<uint32_t>& partition_row_indexes);
+        Status partition_chunk(const ChunkPtr& chunk, std::vector<uint32_t>& partition_row_indexes);
 
         size_t partition_begin_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id]; }
 
@@ -101,9 +118,9 @@ class PartitionExchanger final : public LocalExchanger {
         LocalExchangeSourceOperatorFactory* _source;
         const TPartitionType::type _part_type;
         // Compute per-row partition values.
-        const std::vector<ExprContext*> _partition_expr_ctxs;
+        const std::vector<ExprContext*>& _partition_expr_ctxs;
 
-        vectorized::Columns _partitions_columns;
+        Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
         std::vector<uint32_t> _shuffle_channel_id;
         // This array record the channel start point in _row_indexes
@@ -117,14 +134,22 @@ class PartitionExchanger final : public LocalExchanger {
 public:
     PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
+                       const std::vector<ExprContext*>& _partition_expr_ctxs);
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+    void incr_sinker() override;
 
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
     // TODO(lzh): limit the size of _partitioners, because it will cost too much memory when dop is high.
+    TPartitionType::type _part_type;
+    std::vector<ExprContext*> _partition_exprs;
+
     std::vector<Partitioner> _partitioners;
 };
 
@@ -135,7 +160,7 @@ public:
                        LocalExchangeSourceOperatorFactory* source)
             : LocalExchanger("Broadcast", memory_manager, source) {}
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 };
 
 // Exchange the local data for one local source operation
@@ -145,7 +170,7 @@ public:
                          LocalExchangeSourceOperatorFactory* source)
             : LocalExchanger("Passthrough", memory_manager, source) {}
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     std::atomic<size_t> _next_accept_source = 0;

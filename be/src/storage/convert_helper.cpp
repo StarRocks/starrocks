@@ -38,7 +38,7 @@
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using strings::Substitute;
 
@@ -1776,4 +1776,4 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
     return dest;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

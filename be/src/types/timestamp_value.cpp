@@ -17,7 +17,7 @@
 #include "runtime/time_types.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};
 TimestampValue TimestampValue::MIN_TIMESTAMP_VALUE{timestamp::MIN_TIMESTAMP};
 
@@ -121,10 +121,10 @@ bool TimestampValue::from_date_format_str(const char* value, int value_len, cons
     uint8_t month2;
     uint8_t day1;
     uint8_t day2;
-    if (vectorized::date::char_to_digit(value, 0, &year1) || vectorized::date::char_to_digit(value, 1, &year2) ||
-        vectorized::date::char_to_digit(value, 2, &year3) || vectorized::date::char_to_digit(value, 3, &year4) ||
-        vectorized::date::char_to_digit(value, 5, &month1) || vectorized::date::char_to_digit(value, 6, &month2) ||
-        vectorized::date::char_to_digit(value, 8, &day1) || vectorized::date::char_to_digit(value, 9, &day2)) {
+    if (date::char_to_digit(value, 0, &year1) || date::char_to_digit(value, 1, &year2) ||
+        date::char_to_digit(value, 2, &year3) || date::char_to_digit(value, 3, &year4) ||
+        date::char_to_digit(value, 5, &month1) || date::char_to_digit(value, 6, &month2) ||
+        date::char_to_digit(value, 8, &day1) || date::char_to_digit(value, 9, &day2)) {
         return false;
     }
 
@@ -132,7 +132,7 @@ bool TimestampValue::from_date_format_str(const char* value, int value_len, cons
     uint8_t month = month1 * 10 + month2;
     uint8_t day = day1 * 10 + day2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !vectorized::date::is_leap(year)))) {
+    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year)))) {
         return false;
     }
 
@@ -163,13 +163,13 @@ bool TimestampValue::from_datetime_format_str(const char* value, int value_len, 
     uint8_t minute2;
     uint8_t second1;
     uint8_t second2;
-    if (vectorized::date::char_to_digit(value, 0, &year1) || vectorized::date::char_to_digit(value, 1, &year2) ||
-        vectorized::date::char_to_digit(value, 2, &year3) || vectorized::date::char_to_digit(value, 3, &year4) ||
-        vectorized::date::char_to_digit(value, 5, &month1) || vectorized::date::char_to_digit(value, 6, &month2) ||
-        vectorized::date::char_to_digit(value, 8, &day1) || vectorized::date::char_to_digit(value, 9, &day2) ||
-        vectorized::date::char_to_digit(value, 11, &hour1) || vectorized::date::char_to_digit(value, 12, &hour2) ||
-        vectorized::date::char_to_digit(value, 14, &minute1) || vectorized::date::char_to_digit(value, 15, &minute2) ||
-        vectorized::date::char_to_digit(value, 17, &second1) || vectorized::date::char_to_digit(value, 18, &second2)) {
+    if (date::char_to_digit(value, 0, &year1) || date::char_to_digit(value, 1, &year2) ||
+        date::char_to_digit(value, 2, &year3) || date::char_to_digit(value, 3, &year4) ||
+        date::char_to_digit(value, 5, &month1) || date::char_to_digit(value, 6, &month2) ||
+        date::char_to_digit(value, 8, &day1) || date::char_to_digit(value, 9, &day2) ||
+        date::char_to_digit(value, 11, &hour1) || date::char_to_digit(value, 12, &hour2) ||
+        date::char_to_digit(value, 14, &minute1) || date::char_to_digit(value, 15, &minute2) ||
+        date::char_to_digit(value, 17, &second1) || date::char_to_digit(value, 18, &second2)) {
         return false;
     }
 
@@ -180,7 +180,7 @@ bool TimestampValue::from_datetime_format_str(const char* value, int value_len, 
     uint8_t minute = minute1 * 10 + minute2;
     uint8_t second = second1 * 10 + second2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !vectorized::date::is_leap(year))) ||
+    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year))) ||
         hour > 23 || minute > 59 || second > 59) {
         return false;
     }
@@ -341,7 +341,7 @@ bool TimestampValue::get_date_from_daynr(uint64_t daynr, DatetimeContent* conten
     }
     uint32_t days_of_year = daynr - days_befor_year + 1;
     int leap_day = 0;
-    if (vectorized::date::is_leap(content->_year)) {
+    if (date::is_leap(content->_year)) {
         if (days_of_year > 31 + 28) {
             days_of_year--;
             if (days_of_year == 31 + 28) {
@@ -372,7 +372,7 @@ bool TimestampValue::check_date(const DatetimeContent* content) const {
     }
     if (content->_day > s_days_in_month[content->_month]) {
         // Feb 29 in leap year is valid.
-        if (content->_month == 2 && content->_day == 29 && vectorized::date::is_leap(content->_year)) {
+        if (content->_month == 2 && content->_day == 29 && date::is_leap(content->_year)) {
             return false;
         }
         return true;
@@ -852,4 +852,4 @@ int TimestampValue::to_string(char* s, size_t n) const {
     return timestamp::to_string(_timestamp, s, n);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

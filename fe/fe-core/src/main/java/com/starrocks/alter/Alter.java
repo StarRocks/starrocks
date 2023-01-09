@@ -192,7 +192,12 @@ public class Alter {
                 if (t instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) t;
                     for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
+                        String indexName = olapTable.getIndexNameById(mvIdx.getId());
+                        if (indexName == null) {
+                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvIdx.getId());
+                            continue;
+                        }
+                        if (indexName.equals(stmt.getMvName())) {
                             table = olapTable;
                             hasfindTable = true;
                             break;
@@ -622,7 +627,10 @@ public class Alter {
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
@@ -641,9 +649,17 @@ public class Alter {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+                    boolean isSuccess = ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
+                            properties, TTabletMetaType.BINLOG_CONFIG);
+                    if (!isSuccess) {
+                        throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                    }
+                } else {
+                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }
-            } else {
-                throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
             }
         }
     }

@@ -30,7 +30,7 @@ class RuntimeState;
 
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Tablet;
 class SegmentMetaCollecter;
@@ -100,29 +100,28 @@ public:
     ~SegmentMetaCollecter();
     Status init(const SegmentMetaCollecterParams* params);
     Status open();
-    Status collect(std::vector<vectorized::Column*>* dsts);
+    Status collect(std::vector<Column*>* dsts);
 
 public:
     static std::vector<std::string> support_collect_fields;
     static Status parse_field_and_colname(const std::string& item, std::string* field, std::string* col_name);
 
-    using CollectFunc = std::function<Status(ColumnId, vectorized::Column*, LogicalType)>;
+    using CollectFunc = std::function<Status(ColumnId, Column*, LogicalType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;
 
 private:
     Status _init_return_column_iterators();
-    Status _collect(const std::string& name, ColumnId cid, vectorized::Column* column, LogicalType type);
-    Status _collect_dict(ColumnId cid, vectorized::Column* column, LogicalType type);
-    Status _collect_max(ColumnId cid, vectorized::Column* column, LogicalType type);
-    Status _collect_min(ColumnId cid, vectorized::Column* column, LogicalType type);
+    Status _collect(const std::string& name, ColumnId cid, Column* column, LogicalType type);
+    Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_max(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_min(ColumnId cid, Column* column, LogicalType type);
     template <bool is_max>
-    Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, LogicalType type);
+    Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;
-    std::vector<ColumnIterator*> _column_iterators;
+    std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
-    ObjectPool _obj_pool;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

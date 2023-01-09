@@ -14,28 +14,27 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include "exec/olap_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/vectorized/olap_scan_node.h"
-#include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "types/logical_type.h"
 
 namespace starrocks::pipeline {
-using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                 vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
+                                 OlapScanNode* scan_node, OlapScanContext* scan_ctx)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
@@ -134,7 +133,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
-    ASSIGN_OR_RETURN(_tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+    ASSIGN_OR_RETURN(_tablet, OlapScanNode::get_tablet(scan_range));
 
     return Status::OK();
 }
@@ -179,8 +178,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     }
 
     {
-        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                                  *_params.global_dictmaps);
+        ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                      *_params.global_dictmaps);
         not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
@@ -270,16 +269,14 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    starrocks::vectorized::VectorizedSchema child_schema =
-            ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
+    starrocks::VectorizedSchema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::vectorized::VectorizedSchema output_schema =
-                ChunkHelper::convert_schema_to_format_v2(tablet_schema, scanner_columns);
+        starrocks::VectorizedSchema output_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -308,7 +305,7 @@ const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(c
 }
 
 // mapping a slot-column-id to schema-columnid
-Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
+Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
@@ -331,7 +328,7 @@ Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* param
     return Status::OK();
 }
 
-Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
+Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chunk) {
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
@@ -371,7 +368,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
-void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
+void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
     auto& stats = _reader->stats();
     size_t num_rows = chunk->num_rows();
     _num_rows_read += num_rows;

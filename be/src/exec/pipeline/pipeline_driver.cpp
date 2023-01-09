@@ -97,7 +97,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         const auto* global_rf_collector = op->runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
-                _global_rf_descriptors.emplace_back(desc);
+                if (!desc->skip_wait()) {
+                    _global_rf_descriptors.emplace_back(desc);
+                }
             }
 
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
@@ -230,7 +232,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // pull chunk from current operator and push the chunk onto next
                 // operator
-                StatusOr<vectorized::ChunkPtr> maybe_chunk;
+                StatusOr<ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
@@ -407,37 +409,11 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     _update_overhead_timer();
 
-    // last finished driver notify FE the fragment's completion again and
-    // unregister the FragmentContext.
-    if (_fragment_ctx->count_down_drivers()) {
-        if (config::pipeline_print_profile) {
-            std::stringstream ss;
-            // Print profile for this fragment
-            _fragment_ctx->runtime_state()->runtime_profile()->compute_time_in_profile();
-            _fragment_ctx->runtime_state()->runtime_profile()->pretty_print(&ss);
-            LOG(INFO) << ss.str();
-        }
-        _fragment_ctx->finish();
-        auto status = _fragment_ctx->final_status();
-        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_query_ctx, _fragment_ctx,
-                                                                                         status, true);
-        _fragment_ctx->destroy_pass_through_chunk_buffer();
-        auto fragment_id = _fragment_ctx->fragment_instance_id();
-        if (_query_ctx->count_down_fragments()) {
-            auto query_id = _query_ctx->query_id();
-            DCHECK(!this->is_still_pending_finish());
-            // Acquire the pointer to avoid be released when removing query
-            auto query_trace = _query_ctx->shared_query_trace();
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
-            QUERY_TRACE_END("finalize", _driver_name);
-            // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
-            // considering that this feature is generally used for debugging,
-            // I think it should not have a big impact now
-            query_trace->dump();
-            return;
-        }
-    }
-    QUERY_TRACE_END("finalize", _driver_name);
+    // Acquire the pointer to avoid be released when removing query
+    auto query_trace = _query_ctx->shared_query_trace();
+    const std::string driver_name = _driver_name;
+    _pipeline->count_down_driver(runtime_state);
+    QUERY_TRACE_END("finalize", driver_name);
 }
 
 void PipelineDriver::_update_overhead_timer() {
@@ -484,8 +460,11 @@ const workgroup::WorkGroup* PipelineDriver::workgroup() const {
 }
 
 void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
-    this->_workgroup = std::move(wg);
-    this->_workgroup->incr_num_running_drivers();
+    _workgroup = std::move(wg);
+    if (_workgroup == nullptr) {
+        return;
+    }
+    _workgroup->incr_num_running_drivers();
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

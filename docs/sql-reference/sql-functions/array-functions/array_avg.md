@@ -10,6 +10,8 @@ Calculates the average value of all data in an ARRAY and return this result.
 array_avg(array(type))
 ```
 
+`array(type)` supports the following types of elements: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMALV2.
+
 ## Examples
 
 ```plain text

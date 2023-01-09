@@ -66,9 +66,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -79,12 +76,16 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.time.LocalDateTime;
@@ -699,7 +700,7 @@ public class Explain {
         public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
             PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
 
-            StringBuilder sb = new StringBuilder("- SCAN [")
+            StringBuilder sb = new StringBuilder("- StreamScan [")
                     .append(((OlapTable) scan.getTable()).getName())
                     .append("]")
                     .append(buildOutputColumns(scan,
@@ -868,6 +869,7 @@ public class Explain {
             }
         }
 
+        @Override
         public String visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
             if (LikePredicateOperator.LikeType.LIKE.equals(predicate.getLikeType())) {
                 return print(predicate.getChild(0)) + " LIKE " + print(predicate.getChild(1));
@@ -876,10 +878,12 @@ public class Explain {
             return print(predicate.getChild(0)) + " REGEXP " + print(predicate.getChild(1));
         }
 
+        @Override
         public String visitCastOperator(CastOperator operator, Void context) {
             return "cast(" + print(operator.getChild(0)) + " as " + operator.getType().toSql() + ")";
         }
 
+        @Override
         public String visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("CASE ");
@@ -901,6 +905,11 @@ public class Explain {
 
             stringBuilder.append("END");
             return stringBuilder.toString();
+        }
+
+        @Override
+        public String visitDictMappingOperator(DictMappingOperator operator, Void context) {
+            return operator.toString();
         }
     }
 

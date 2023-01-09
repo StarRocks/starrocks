@@ -34,7 +34,7 @@
 #include "storage/tablet_meta.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CumulativeCompactionTest : public testing::Test {
 public:
@@ -174,16 +174,16 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*_tablet_schema);
         for (size_t j = 0; j < 8; ++j) {
             auto chunk = ChunkHelper::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
                 auto& cols = chunk->columns();
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
                 Slice field_1(test_data[i]);
-                cols[1]->append_datum(vectorized::Datum(field_1));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+                cols[1]->append_datum(Datum(field_1));
+                cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
             }
             CHECK_OK(writer->add_chunk(*chunk));
         }
@@ -218,6 +218,7 @@ public:
         config::enable_event_based_compaction_framework = false;
         Compaction::init(config::max_compaction_concurrency);
 
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -248,6 +249,7 @@ public:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
+        config::storage_root_path = _default_storage_root_path;
     }
 
 protected:
@@ -257,6 +259,7 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
+    std::string _default_storage_root_path;
 
     int64_t _rowset_id;
     int64_t _version;
@@ -893,4 +896,4 @@ TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
     ASSERT_EQ(0, versions[0].second);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -45,15 +45,18 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+#include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/map_column_writer.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
@@ -216,23 +219,13 @@ public:
 
     Status init() override { return _scalar_column_writer->init(); };
 
-    Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
-        // if column is Array<String>, encoding maybe not set
-        // check _is_speculated again to avoid _page_builder is not initialized
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        return _scalar_column_writer->append(data, null_flags, count, has_null);
-    };
+    Status append(const Column& column) override;
 
     // Speculate char/varchar encoding and reset encoding
-    void speculate_column_and_set_encoding(const vectorized::Column& column);
+    void speculate_column_and_set_encoding(const Column& column);
 
     // Speculate char/varchar encoding
-    EncodingTypePB speculate_string_encoding(const vectorized::BinaryColumn& bin_col);
+    EncodingTypePB speculate_string_encoding(const BinaryColumn& bin_col);
 
     Status finish_current_page() override { return _scalar_column_writer->finish_current_page(); };
 
@@ -253,12 +246,12 @@ public:
 
     uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
 
-    Status check_string_lengths(const vectorized::Column& column);
+    Status check_string_lengths(const Column& column);
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    vectorized::ColumnPtr _buf_column = nullptr;
+    ColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -274,59 +267,12 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
-        case LogicalType::TYPE_ARRAY: {
-            DCHECK(column->subcolumn_count() == 1);
-            const TabletColumn& element_column = column->subcolumn(0);
-            ColumnWriterOptions element_options;
-            element_options.meta = opts.meta->mutable_children_columns(0);
-            element_options.need_zone_map = false;
-            element_options.need_bloom_filter = element_column.is_bf_column();
-            element_options.need_bitmap_index = element_column.has_bitmap_index();
-            if (element_column.type() == LogicalType::TYPE_ARRAY) {
-                if (element_options.need_bloom_filter) {
-                    return Status::NotSupported("Do not support bloom filter for array type");
-                }
-                if (element_options.need_bitmap_index) {
-                    return Status::NotSupported("Do not support bitmap index for array type");
-                }
-            }
-
-            ASSIGN_OR_RETURN(auto element_writer, ColumnWriter::create(element_options, &element_column, wfile));
-
-            std::unique_ptr<ScalarColumnWriter> null_writer = nullptr;
-            if (opts.meta->is_nullable()) {
-                ColumnWriterOptions null_options;
-                null_options.meta = opts.meta->add_children_columns();
-                null_options.meta->set_column_id(opts.meta->column_id());
-                null_options.meta->set_unique_id(opts.meta->unique_id());
-                null_options.meta->set_type(TYPE_BOOLEAN);
-                null_options.meta->set_length(1);
-                null_options.meta->set_encoding(DEFAULT_ENCODING);
-                null_options.meta->set_compression(opts.meta->compression());
-                null_options.meta->set_is_nullable(false);
-
-                TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
-            }
-
-            ColumnWriterOptions array_size_options;
-            array_size_options.meta = opts.meta->add_children_columns();
-            array_size_options.meta->set_column_id(opts.meta->column_id());
-            array_size_options.meta->set_unique_id(opts.meta->unique_id());
-            array_size_options.meta->set_type(TYPE_INT);
-            array_size_options.meta->set_length(4);
-            array_size_options.meta->set_encoding(DEFAULT_ENCODING);
-            array_size_options.meta->set_compression(opts.meta->compression());
-            array_size_options.meta->set_is_nullable(false);
-            array_size_options.need_zone_map = false;
-            array_size_options.need_bloom_filter = false;
-            array_size_options.need_bitmap_index = false;
-            TypeInfoPtr int_type_info = get_type_info(TYPE_INT);
-            std::unique_ptr<ScalarColumnWriter> offset_writer =
-                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(int_type_info), wfile);
-            return std::make_unique<ArrayColumnWriter>(opts, type_info, std::move(null_writer),
-                                                       std::move(offset_writer), std::move(element_writer));
-        }
+        case LogicalType::TYPE_ARRAY:
+            return create_array_column_writer(opts, std::move(type_info), column, wfile);
+        case LogicalType::TYPE_MAP:
+            return create_map_column_writer(opts, std::move(type_info), column, wfile);
+        case LogicalType::TYPE_STRUCT:
+            return create_struct_column_writer(opts, std::move(type_info), column, wfile);
         default:
             return Status::NotSupported("unsupported type for ColumnWriter: " + std::to_string(type_info->type()));
         }
@@ -617,23 +563,23 @@ Status ScalarColumnWriter::finish_current_page() {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const vectorized::Column& column) {
+Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
 
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
-            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
     return append(ptr, null, column.size(), column.has_null());
 }
 
-Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column) {
+Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     _total_mem_footprint += column.byte_size();
 
     // Write offset column, it's only used in ArrayColumn
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed by actual offset(0, 3, 6)
     // In disk, offset is stored as length array(3, 3)
-    auto& offsets = down_cast<const vectorized::UInt32Column&>(column);
+    auto& offsets = down_cast<const UInt32Column&>(column);
     auto& data = offsets.get_data();
 
     std::vector<uint32_t> array_size;
@@ -661,32 +607,6 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
             RETURN_IF_ERROR(finish_current_page());
             _element_ordinal = _previous_ordinal;
         }
-        remaining -= num_written;
-    }
-    return Status::OK();
-}
-
-Status ScalarColumnWriter::append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count,
-                                                bool has_null) {
-    const size_t field_size = type_info()->size();
-    size_t remaining = count;
-    size_t offset_ordinal = 0;
-    while (remaining > 0) {
-        bool page_full = false;
-        size_t num_written = 0;
-        num_written = _page_builder->add(data, remaining);
-        page_full = num_written < remaining;
-        _next_rowid += num_written;
-        if (page_full) {
-            RETURN_IF_ERROR(finish_current_page());
-            _element_ordinal = _previous_ordinal;
-        }
-        const uint32_t* array_size = reinterpret_cast<const uint32_t*>(data) + offset_ordinal;
-        for (size_t i = 0; i < num_written; ++i) {
-            _previous_ordinal += *(array_size + i);
-        }
-        offset_ordinal += num_written;
-        data += field_size * num_written;
         remaining -= num_written;
     }
     return Status::OK();
@@ -770,145 +690,12 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                                     std::unique_ptr<ScalarColumnWriter> null_writer,
-                                     std::unique_ptr<ScalarColumnWriter> offset_writer,
-                                     std::unique_ptr<ColumnWriter> element_writer)
-        : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
-          _opts(opts),
-          _null_writer(std::move(null_writer)),
-          _array_size_writer(std::move(offset_writer)),
-          _element_writer(std::move(element_writer)) {}
-
-Status ArrayColumnWriter::init() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->init());
-    }
-    RETURN_IF_ERROR(_array_size_writer->init());
-    RETURN_IF_ERROR(_element_writer->init());
-
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::ArrayColumn* array_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
-    if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        array_column = down_cast<vectorized::ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
-    } else {
-        array_column = down_cast<const vectorized::ArrayColumn*>(&column);
-    }
-
-    // 1. Write null column when necessary
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->append(*null_column));
-    }
-
-    // 2. Write offset column
-    RETURN_IF_ERROR(_array_size_writer->append_array_offsets(array_column->offsets()));
-
-    // 3. writer elements column recursively
-    RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
-
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) {
-    const auto* collection = reinterpret_cast<const Collection*>(data);
-    // 1. Write null column when necessary
-    if (is_nullable()) {
-        _null_writer->append(null_map, nullptr, count, false);
-    }
-
-    // 2. Write offset column
-    uint32_t array_size = collection->length;
-    RETURN_IF_ERROR(_array_size_writer->append_array_offsets(reinterpret_cast<const uint8_t*>(&array_size), nullptr,
-                                                             count, false));
-
-    // 3. writer elements column one by one
-    const auto* element_data = reinterpret_cast<const uint8_t*>(collection->data);
-    if (collection->has_null) {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(
-                    _element_writer->append(element_data, &(collection->null_signs[i]), 1, collection->has_null));
-            element_data += _element_writer->type_info()->size();
-        }
-    } else {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(_element_writer->append(element_data, nullptr, 1, false));
-            element_data = element_data + _element_writer->type_info()->size();
-        }
-    }
-    return Status::OK();
-}
-
-uint64_t ArrayColumnWriter::estimate_buffer_size() {
-    size_t estimate_size = _array_size_writer->estimate_buffer_size() + _element_writer->estimate_buffer_size();
-    if (is_nullable()) {
-        estimate_size += _null_writer->estimate_buffer_size();
-    }
-    return estimate_size;
-}
-
-Status ArrayColumnWriter::finish() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->finish());
-    }
-    RETURN_IF_ERROR(_array_size_writer->finish());
-    RETURN_IF_ERROR(_element_writer->finish());
-
-    _opts.meta->set_num_rows(get_next_rowid());
-    _opts.meta->set_total_mem_footprint(total_mem_footprint());
-    return Status::OK();
-}
-
-uint64_t ArrayColumnWriter::total_mem_footprint() const {
-    uint64_t total_mem_footprint = 0;
-    if (is_nullable()) {
-        total_mem_footprint += _null_writer->total_mem_footprint();
-    }
-    total_mem_footprint += _array_size_writer->total_mem_footprint();
-    total_mem_footprint += _element_writer->total_mem_footprint();
-    return total_mem_footprint;
-}
-
-Status ArrayColumnWriter::write_data() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->write_data());
-    }
-    RETURN_IF_ERROR(_array_size_writer->write_data());
-    RETURN_IF_ERROR(_element_writer->write_data());
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::write_ordinal_index() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->write_ordinal_index());
-    }
-    RETURN_IF_ERROR(_array_size_writer->write_ordinal_index());
-    RETURN_IF_ERROR(_element_writer->write_ordinal_index());
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::finish_current_page() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->finish_current_page());
-    }
-    RETURN_IF_ERROR(_array_size_writer->finish_current_page());
-    RETURN_IF_ERROR(_element_writer->finish_current_page());
-    return Status::OK();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                                        std::unique_ptr<ScalarColumnWriter> column_writer)
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _scalar_column_writer(std::move(column_writer)) {}
 
-Status StringColumnWriter::append(const vectorized::Column& column) {
+Status StringColumnWriter::append(const Column& column) {
     if (config::enable_check_string_lengths) {
         RETURN_IF_ERROR(check_string_lengths(column));
     }
@@ -940,20 +727,20 @@ Status StringColumnWriter::append(const vectorized::Column& column) {
     }
 }
 
-inline void StringColumnWriter::speculate_column_and_set_encoding(const vectorized::Column& column) {
+inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& column) {
     if (column.is_nullable()) {
-        const auto& data_col = down_cast<const vectorized::NullableColumn&>(column).data_column();
-        const auto& bin_col = down_cast<vectorized::BinaryColumn&>(*data_col);
+        const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
+        const auto& bin_col = down_cast<BinaryColumn&>(*data_col);
         const auto detect_encoding = speculate_string_encoding(bin_col);
         _scalar_column_writer->set_encoding(detect_encoding);
     } else if (column.is_binary()) {
-        const auto& bin_col = down_cast<const vectorized::BinaryColumn&>(column);
+        const auto& bin_col = down_cast<const BinaryColumn&>(column);
         auto detect_encoding = speculate_string_encoding(bin_col);
         _scalar_column_writer->set_encoding(detect_encoding);
     }
 }
 
-inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vectorized::BinaryColumn& bin_col) {
+inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
     const size_t dictionary_min_rowcount = 256;
 
     auto row_count = bin_col.size();
@@ -963,7 +750,7 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vector
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            size_t hash = vectorized::SliceHash()(bin_col.get_slice(i));
+            size_t hash = SliceHash()(bin_col.get_slice(i));
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
                 return PLAIN_ENCODING;
@@ -992,22 +779,22 @@ Status StringColumnWriter::finish() {
     return _scalar_column_writer->finish();
 }
 
-Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
+Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    const vectorized::BinaryColumn* bin_col;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+    const BinaryColumn* bin_col;
 
     if (is_nullable()) {
-        const auto& data_col = down_cast<const vectorized::NullableColumn*>(&column)->data_column();
-        bin_col = down_cast<const vectorized::BinaryColumn*>(data_col.get());
+        const auto& data_col = down_cast<const NullableColumn*>(&column)->data_column();
+        bin_col = down_cast<const BinaryColumn*>(data_col.get());
     } else {
-        bin_col = down_cast<const vectorized::BinaryColumn*>(&column);
+        bin_col = down_cast<const BinaryColumn*>(&column);
     }
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
-        if (null != nullptr && null[i] == starrocks::vectorized::DATUM_NULL) {
+        if (null != nullptr && null[i] == starrocks::DATUM_NULL) {
             continue;
         }
         // here we shouldn't use raw_data() api of column to get a vector of slices in advance,

@@ -17,21 +17,55 @@ package com.starrocks.sql.parser;
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
+import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import io.trino.sql.parser.ParsingException;
+import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
 import java.util.List;
+import java.util.Objects;
 
 public class SqlParser {
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        StarRocksParser parser = parserBuilder(sql, sessionVariable);
+        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+            return parseWithTrinoDialect(sql, sessionVariable);
+        } else {
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        }
+    }
+
+    private static List<StatementBase> parseWithTrinoDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
-        List<StarRocksParser.SingleStatementContext> singleStatementContexts = parser.sqlStatements().singleStatement();
+        try {
+            StatementSplitter splitter = new StatementSplitter(sql);
+            for (StatementSplitter.Statement statement : splitter.getCompleteStatements()) {
+                statements.add(TrinoParserUtils.toStatement(statement.statement(), sessionVariable.getSqlMode()));
+            }
+            if (!splitter.getPartialStatement().isEmpty()) {
+                statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
+                        sessionVariable.getSqlMode()));
+            }
+        } catch (ParsingException e) {
+            // we only support trino partial syntax, use StarRocks parser to parse now
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        }
+        if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        }
+        return statements;
+    }
+
+    private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
+        List<StatementBase> statements = Lists.newArrayList();
+        StarRocksParser parser = parserBuilder(sql, sessionVariable);
+        List<StarRocksParser.SingleStatementContext> singleStatementContexts =
+                parser.sqlStatements().singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
             StatementBase statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
                     .visitSingleStatement(singleStatementContexts.get(idx));

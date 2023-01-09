@@ -31,7 +31,11 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+
+class StreamEpochManager;
+
+namespace pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
@@ -53,11 +57,7 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
-    bool count_down_fragments() {
-        size_t old = _num_active_fragments.fetch_sub(1);
-        DCHECK_GE(old, 1);
-        return old == 1;
-    }
+    void count_down_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -156,6 +156,9 @@ public:
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
+    // STREAM MV
+    StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -194,6 +197,9 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
+
+    // STREAM MV
+    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 };
 
 class QueryContextManager {
@@ -241,4 +247,5 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

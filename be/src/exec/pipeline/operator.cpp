@@ -131,8 +131,8 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
     return _factory->get_filter_null_value_columns();
 }
 
-Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                               vectorized::FilterPtr* filter, bool apply_filter) {
+Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
+                                               FilterPtr* filter, bool apply_filter) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -161,8 +161,7 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
     return Status::OK();
 }
 
-Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                vectorized::FilterPtr* filter) {
+Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter) {
     if (conjuncts.empty()) {
         return Status::OK();
     }
@@ -182,7 +181,7 @@ Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vect
     return Status::OK();
 }
 
-void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
+void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return;
     }
@@ -296,6 +295,14 @@ bool OperatorFactory::has_runtime_filters() const {
     }
     auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
     return global_rf_collector != nullptr && !global_rf_collector->descriptors().empty();
+}
+
+bool OperatorFactory::has_topn_filter() const {
+    if (_runtime_filter_collector == nullptr) {
+        return false;
+    }
+    auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
+    return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
 }
 
 } // namespace starrocks::pipeline

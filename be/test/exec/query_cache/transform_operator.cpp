@@ -15,7 +15,7 @@
 #include "exec/query_cache/transform_operator.h"
 
 #include <utility>
-namespace starrocks::vectorized {
+namespace starrocks {
 MapOperator::MapOperator(pipeline::OperatorFactory* factory, int driver_sequence, MapFunc map_func)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
           _map_func(std::move(map_func)) {}
@@ -48,12 +48,12 @@ Status MapOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MapOperator::pull_chunk(starrocks::RuntimeState* state) {
+StatusOr<ChunkPtr> MapOperator::pull_chunk(starrocks::RuntimeState* state) {
     DCHECK(_cur_chunk != nullptr);
     return std::move(_cur_chunk);
 }
 
-Status MapOperator::push_chunk(starrocks::RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(_cur_chunk == nullptr);
     DCHECK(chunk != nullptr && !chunk->is_empty());
     DCHECK(chunk->num_columns() == 1);
@@ -99,7 +99,7 @@ ReducerPtr ReducerFactory::create(int32_t degree_of_parallelism, int32_t driver_
 }
 
 ReduceSinkOperator::ReduceSinkOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
-                                       starrocks::vectorized::ReducerRawPtr reducer)
+                                       starrocks::ReducerRawPtr reducer)
         : pipeline::Operator(factory, factory->id(), "reduce_sink", factory->id(), driver_sequence),
           _result(reducer->init_value()),
           _reducer(reducer) {}
@@ -110,7 +110,7 @@ bool ReduceSinkOperator::need_input() const {
     return !is_finished();
 }
 
-Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr && !chunk->is_empty());
     auto column = chunk->get_column_by_slot_id(SlotId(1));
     const auto* col = dynamic_cast<const DoubleColumn*>(column.get());
@@ -153,7 +153,7 @@ pipeline::OperatorPtr ReduceSinkOperatorFactory::create(int32_t degree_of_parall
 }
 
 ReduceSourceOperator::ReduceSourceOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
-                                           starrocks::vectorized::ReducerPtr reducer)
+                                           starrocks::ReducerPtr reducer)
         : pipeline::SourceOperator(factory, factory->id(), factory->get_raw_name(), factory->id(), driver_sequence),
           _reducer(std::move(reducer)) {}
 
@@ -181,7 +181,7 @@ Status ReduceSourceOperator::reset_state(RuntimeState* state, const std::vector<
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::RuntimeState* state) {
+StatusOr<ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::RuntimeState* state) {
     const auto output_num_rows_total = _reducer->output_num_rows();
     static constexpr auto CHUNK_SIZE = 4;
     const auto num_rows = std::min<size_t>(CHUNK_SIZE, (output_num_rows_total - _current_output_num_rows));
@@ -198,8 +198,7 @@ StatusOr<vectorized::ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::Runti
     return chunk;
 }
 
-ReduceSourceOperatorFactory::ReduceSourceOperatorFactory(int32_t id,
-                                                         starrocks::vectorized::ReducerFactoryPtr reducer_factory)
+ReduceSourceOperatorFactory::ReduceSourceOperatorFactory(int32_t id, starrocks::ReducerFactoryPtr reducer_factory)
         : pipeline::SourceOperatorFactory(id, "reduce_source", id), _reducer_factory(std::move(reducer_factory)) {}
 
 pipeline::OperatorPtr ReduceSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
@@ -207,4 +206,4 @@ pipeline::OperatorPtr ReduceSourceOperatorFactory::create(int32_t degree_of_para
     return std::make_shared<ReduceSourceOperator>(this, driver_sequence, reducer);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

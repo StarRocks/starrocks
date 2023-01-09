@@ -946,15 +946,42 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
-        Assert.assertEquals("CREATE TABLE hive_catalog.hive_db.test_table (\n" +
-                "`id` INT,\n" +
-                "`name` VARCHAR,\n" +
-                "`year` INT,\n" +
-                "`dt` INT\n" +
+        Assert.assertEquals("CREATE TABLE `test_table` (\n" +
+                "  `id` int(11) DEFAULT NULL,\n" +
+                "  `name` varchar(1048576) DEFAULT NULL,\n" +
+                "  `year` int(11) DEFAULT NULL,\n" +
+                "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +
                 "WITH (\n" +
                 " partitioned_by = ARRAY [ year, dt ]\n" +
                 ")\n" +
                 "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
+    }
+
+
+    @Test
+    public void testShowTablesFromExternalCatalog() throws AnalysisException, DdlException {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+
+            @Mock
+            public List<String> listTableNames(String catalogName, String dbName) {
+                List<String> tableNames = Lists.newArrayList();
+                tableNames.add("hive_test");
+                return tableNames;
+            }
+        };
+
+        ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("hive_test", resultSet.getString(0));
+        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
+        Assert.assertFalse(resultSet.next());
     }
 }

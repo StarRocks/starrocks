@@ -17,16 +17,14 @@
 #include <queue>
 
 #include "column/column_helper.h"
-#include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/merge.h"
+#include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class SortExecExprs;
-
-namespace vectorized {
 
 // Merge a group of sorted Chunks to one Chunk in order.
 class SortedChunksMerger {
@@ -118,7 +116,5 @@ private:
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

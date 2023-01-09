@@ -18,20 +18,20 @@
 #include <utility>
 
 #include "common/statusor.h"
-#include "exec/vectorized/hash_join_node.h"
+#include "exec/hash_join_node.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 
 namespace starrocks::pipeline {
 class RuntimeFilterHolder;
 using RuntimeFilterHolderPtr = std::unique_ptr<RuntimeFilterHolder>;
 // TODO: rename RuntimeInFilter
 using RuntimeInFilter = starrocks::ExprContext;
-using RuntimeBloomFilter = starrocks::vectorized::RuntimeFilterBuildDescriptor;
-using RuntimeBloomFilterProbeDescriptor = starrocks::vectorized::RuntimeFilterProbeDescriptor;
+using RuntimeBloomFilter = starrocks::RuntimeFilterBuildDescriptor;
+using RuntimeBloomFilterProbeDescriptor = starrocks::RuntimeFilterProbeDescriptor;
 using RuntimeBloomFilterProbeDescriptorPtr = RuntimeBloomFilterProbeDescriptor*;
-using RuntimeBloomFilterRunningContext = starrocks::vectorized::JoinRuntimeFilter::RunningContext;
+using RuntimeBloomFilterRunningContext = starrocks::JoinRuntimeFilter::RunningContext;
 using RuntimeInFilterPtr = RuntimeInFilter*;
 using RuntimeBloomFilterPtr = RuntimeBloomFilter*;
 using RuntimeInFilters = std::vector<RuntimeInFilterPtr>;
@@ -40,7 +40,7 @@ using RuntimeBloomFilters = std::vector<RuntimeBloomFilterPtr>;
 using RuntimeBloomFilterList = std::list<RuntimeBloomFilterPtr>;
 struct RuntimeFilterCollector;
 using RuntimeFilterCollectorPtr = std::unique_ptr<RuntimeFilterCollector>;
-using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
+using RuntimeFilterProbeCollector = starrocks::RuntimeFilterProbeCollector;
 using Predicate = starrocks::Predicate;
 struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
@@ -73,8 +73,8 @@ struct RuntimeFilterCollector {
                     continue;
                 }
 
-                DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(in_filter->root()->get_child(0)));
-                auto column = ((vectorized::ColumnRef*)in_filter->root()->get_child(0));
+                DCHECK(nullptr != dynamic_cast<ColumnRef*>(in_filter->root()->get_child(0)));
+                auto column = ((ColumnRef*)in_filter->root()->get_child(0));
 
                 if (column->slot_id() == mapping.to_slot_id) {
                     column->set_slot_id(mapping.from_slot_id);
@@ -124,10 +124,6 @@ public:
     void add_holder(TPlanNodeId id) { _holders.emplace(std::make_pair(id, std::make_unique<RuntimeFilterHolder>())); }
     void set_collector(TPlanNodeId id, RuntimeFilterCollectorPtr&& collector) {
         get_holder(id)->set_collector(std::move(collector));
-    }
-
-    RuntimeBloomFilterList& get_bloom_filters(TPlanNodeId id) {
-        return get_holder(id)->get_collector()->get_bloom_filters();
     }
 
     void close_all_in_filters(RuntimeState* state) {
@@ -323,8 +319,7 @@ public:
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _limit) continue;
             LogicalType build_type = desc->build_expr_type();
-            vectorized::JoinRuntimeFilter* filter =
-                    vectorized::RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
             filter->init(row_count);
             filter->set_join_mode(desc->join_mode());
@@ -373,9 +368,9 @@ public:
                 if (param.column == nullptr || param.column->empty()) {
                     continue;
                 }
-                auto status = vectorized::RuntimeFilterHelper::fill_runtime_bloom_filter(
-                        param.column, desc->build_expr_type(), desc->runtime_filter(),
-                        vectorized::kHashJoinKeyColumnOffset, param.eq_null);
+                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(param.column, desc->build_expr_type(),
+                                                                             desc->runtime_filter(),
+                                                                             kHashJoinKeyColumnOffset, param.eq_null);
                 if (!status.ok()) {
                     desc->set_runtime_filter(nullptr);
                     break;

@@ -105,15 +105,9 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         out.type = TYPE_NULL;
         break;
     case TYPE_ARRAY:
-        // NOTE: Since `TYPE_ARRAY` only supported in vectorized engine now, reaching here
-        // means we are executing a vectorized built-in function and the return type is unused, so
-        // here we can return any value.
-        out.type = TYPE_NULL;
-        break;
     case TYPE_MAP:
-        // reaching here means we are executing a vectorized built-in function and the return type is unused,
-        // so here we can return any value.
-        out.type = TYPE_NULL;
+    case TYPE_STRUCT:
+        out.type = type.type;
         break;
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;

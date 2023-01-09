@@ -48,7 +48,6 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -120,10 +119,10 @@ public:
     // if is_full() return false, add_chunk() will not block
     bool is_full();
 
-    Status add_chunk(vectorized::Chunk* input, const std::vector<int64_t>& tablet_ids,
-                     const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
+    Status add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids, const std::vector<uint32_t>& indexes,
+                     uint32_t from, uint32_t size, bool eos);
 
-    Status add_chunks(vectorized::Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
+    Status add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
                       const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
 
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
@@ -154,7 +153,7 @@ private:
     Status _wait_one_prev_request();
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
-    Status _serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst);
+    Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
     void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure);
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
     Status _send_request(bool eos);
@@ -199,10 +198,10 @@ private:
 
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
-    std::unique_ptr<vectorized::Chunk> _cur_chunk;
+    std::unique_ptr<Chunk> _cur_chunk;
 
     PTabletWriterAddChunksRequest _rpc_request;
-    using AddMultiChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunksRequest>;
+    using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
     std::deque<AddMultiChunkReq> _request_queue;
 
     size_t _current_request_index = 0;
@@ -268,6 +267,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    void cancel() override;
+
     // sync open interface
     Status open(RuntimeState* state) override;
 
@@ -282,7 +283,7 @@ public:
 
     // async add chunk interface
     // if is_full() return false, add_chunk() will not block
-    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+    Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
     bool is_full();
 
@@ -305,26 +306,26 @@ public:
 
 private:
     template <LogicalType PT>
-    void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
+    void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
-    void _validate_data(RuntimeState* state, vectorized::Chunk* chunk);
+    void _validate_data(RuntimeState* state, Chunk* chunk);
 
     Status _init_node_channels(RuntimeState* state);
 
     // When compute buckect hash, we should use real string for char column.
     // So we need to pad char column after compute buckect hash.
-    void _padding_char_column(vectorized::Chunk* chunk);
+    void _padding_char_column(Chunk* chunk);
 
     void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
 
     static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
 
-    Status _send_chunk(vectorized::Chunk* chunk);
+    Status _send_chunk(Chunk* chunk);
 
-    Status _send_chunk_with_colocate_index(vectorized::Chunk* chunk);
+    Status _send_chunk_with_colocate_index(Chunk* chunk);
 
-    Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
+    Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
@@ -393,7 +394,7 @@ private:
     std::vector<DecimalV2Value> _max_decimalv2_val;
     std::vector<DecimalV2Value> _min_decimalv2_val;
 
-    std::vector<vectorized::OlapTablePartition*> _partitions;
+    std::vector<OlapTablePartition*> _partitions;
     std::vector<uint32_t> _tablet_indexes;
     // one chunk selection index for partition validation and data validation
     std::vector<uint16_t> _validate_select_idx;
@@ -402,10 +403,10 @@ private:
     // one chunk selection for BE node
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
-    vectorized::OlapTablePartitionParam* _vectorized_partition = nullptr;
+    OlapTablePartitionParam* _vectorized_partition = nullptr;
     std::vector<std::vector<int64_t>> _index_tablet_ids;
     // Store the output expr comput result column
-    std::unique_ptr<vectorized::Chunk> _output_chunk;
+    std::unique_ptr<Chunk> _output_chunk;
 
     // Stats for this
     int64_t _convert_batch_ns = 0;

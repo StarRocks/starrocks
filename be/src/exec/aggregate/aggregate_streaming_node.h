@@ -1,0 +1,37 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "exec/aggregate/aggregate_base_node.h"
+
+// Aggregate means this node handle query with aggregate functions.
+// Streaming means this node will handle input in get_next phase, and maybe directly
+// ouput child chunk.
+namespace starrocks {
+class AggregateStreamingNode final : public AggregateBaseNode {
+public:
+    AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+            : AggregateBaseNode(pool, tnode, descs) {}
+
+    Status prepare(RuntimeState* state) override;
+    Status open(RuntimeState* state) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+
+private:
+    Status _output_chunk_from_hash_map(ChunkPtr* chunk);
+};
+} // namespace starrocks

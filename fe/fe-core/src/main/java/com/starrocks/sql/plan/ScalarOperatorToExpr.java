@@ -16,8 +16,8 @@ package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -53,6 +53,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -81,6 +82,7 @@ import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -481,6 +483,7 @@ public class ScalarOperatorToExpr {
                     }
                     Preconditions.checkNotNull(call.getFunction());
                     callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }
             callExpr.setType(call.getType());
@@ -530,12 +533,23 @@ public class ScalarOperatorToExpr {
                 context.colRefToExpr.put(ref, slot);
                 arguments.add(slot);
             }
+            // construct common sub operator map
+            Map<SlotRef, Expr> commonSubOperatorMap = Maps.newTreeMap(Comparator.comparing(ref -> ref.getSlotId().asInt()));
+
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operator.getColumnRefMap().entrySet()) {
+                ColumnRefOperator ref = kv.getKey();
+                SlotRef slot = new SlotRef(new SlotDescriptor(
+                        new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
+                commonSubOperatorMap.put(slot, buildExpr.build(kv.getValue(), context));
+                context.colRefToExpr.put(ref, slot);
+            }
             // lambda expression and put it at the first
             final ScalarOperator lambdaOp = operator.getLambdaExpr();
             final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
-            Expr result = new LambdaFunctionExpr(newArguments);
+
+            Expr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
             result.setType(Type.FUNCTION);
             return result;
         }

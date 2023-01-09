@@ -14,25 +14,30 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <utility>
 
 #include "exec/olap_common.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/runtime_state.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
-#include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
     template <LogicalType ptype>
-    StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(PredicateParser* parser,
+    StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                                                       PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
         // keep consistent with ColumnRangeBuilder
         if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
                       pt_is_binary<ptype>) {
-            CHECK(false) << "unreachable path";
+            DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {
             std::vector<std::unique_ptr<ColumnPredicate>> preds;
@@ -58,16 +63,18 @@ struct RuntimeColumnPredicateBuilder {
 
             const JoinRuntimeFilter* rf = desc->runtime_filter();
 
-            const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
-
-            using ValueType = typename vectorized::RunTimeTypeTraits<mapping_type>::CppType;
-            SQLFilterOp min_op = to_olap_filter_type(TExprOpcode::GE, false);
-            ValueType min_value = filter->min_value();
-            range.add_range(min_op, static_cast<value_type>(min_value));
-
-            SQLFilterOp max_op = to_olap_filter_type(TExprOpcode::LE, false);
-            ValueType max_value = filter->max_value();
-            range.add_range(max_op, static_cast<value_type>(max_value));
+            // applied global-dict optimized column
+            if constexpr (ptype == TYPE_VARCHAR) {
+                auto cid = parser->column_id(*slot);
+                if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+                    _build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                                                                                                       iter->second);
+                } else {
+                    _build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                }
+            } else {
+                _build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+            }
 
             std::vector<TCondition> filters;
             range.to_olap_filter(filters);
@@ -79,6 +86,7 @@ struct RuntimeColumnPredicateBuilder {
 
             for (auto& f : filters) {
                 std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+                VLOG(1) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(std::move(p));
             }
@@ -86,41 +94,116 @@ struct RuntimeColumnPredicateBuilder {
             return preds;
         }
     }
+
+private:
+    template <class InputType>
+    struct DummyDecoder {
+        DummyDecoder(std::nullptr_t) {}
+        auto decode(InputType input) const { return input; }
+    };
+    template <class InputType>
+    struct GlobalDictCodeDecoder {
+        GlobalDictCodeDecoder(const GlobalDictMap* dict_map) : _dict_map(dict_map) {}
+        Slice decode(DictId input) const {
+            for (const auto& [k, v] : *_dict_map) {
+                if (v == input) {
+                    return k;
+                }
+            }
+            if (input < 0) {
+                return Slice::min_value();
+            } else {
+                return Slice::max_value();
+            }
+        }
+
+    private:
+        const GlobalDictMap* _dict_map;
+    };
+
+    template <class RuntimeFilter, class Decoder>
+    struct MinMaxParser {
+        MinMaxParser(const RuntimeFilter* runtime_filter_, Decoder* decoder)
+                : runtime_filter(runtime_filter_), decoder(decoder) {}
+        auto min_value() {
+            auto code = runtime_filter->min_value();
+            return decoder->decode(code);
+        }
+        auto max_value() {
+            auto code = runtime_filter->max_value();
+            return decoder->decode(code);
+        }
+
+    private:
+        const RuntimeFilter* runtime_filter;
+        const Decoder* decoder;
+    };
+
+    template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
+    void _build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+        const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
+        using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
+        DecoderType decoder(std::forward<Args>(args)...);
+        MinMaxParser<RuntimeBloomFilter<mapping_type>, DecoderType> parser(filter, &decoder);
+        SQLFilterOp min_op;
+        if (filter->left_open_interval()) {
+            min_op = to_olap_filter_type(TExprOpcode::GE, false);
+        } else {
+            min_op = to_olap_filter_type(TExprOpcode::GT, false);
+        }
+        auto min_value = parser.min_value();
+        range.add_range(min_op, static_cast<value_type>(min_value));
+
+        SQLFilterOp max_op;
+        if (filter->right_open_interval()) {
+            max_op = to_olap_filter_type(TExprOpcode::LE, false);
+        } else {
+            max_op = to_olap_filter_type(TExprOpcode::LT, false);
+        }
+
+        auto max_value = parser.max_value();
+        range.add_range(max_op, static_cast<value_type>(max_value));
+    }
 };
 } // namespace detail
 
-inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&& updater) {
+inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                                  RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
-    size_t cnt = 0;
     for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
-        if (_arrived_runtime_filters_masks[i] == 0 && _unarrived_runtime_filters[i]->runtime_filter()) {
-            ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
-            auto raw_predicates = _as_raw_predicates(predicates);
-            if (!raw_predicates.empty()) {
-                RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
+        // 1. runtime filter arrived
+        // 2. runtime filter updated and read rows greater than rf_update_threhold
+        // we will filter by index
+        if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
+            size_t rf_version = rf->rf_version();
+            if (_arrived_runtime_filters_masks[i] == 0 ||
+                (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
+                ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i));
+                auto raw_predicates = _as_raw_predicates(predicates);
+                if (!raw_predicates.empty()) {
+                    RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
+                }
+                _arrived_runtime_filters_masks[i] = true;
+                _rf_versions[i] = rf_version;
+                _raw_read_rows = raw_read_rows;
             }
-            _arrived_runtime_filters_masks[i] = true;
         }
-        cnt += _arrived_runtime_filters_masks[i];
     }
 
-    // all filters arrived
-    if (cnt == _arrived_runtime_filters_masks.size()) {
-        _arrived_runtime_filters_masks.clear();
-    }
     return Status::OK();
 }
 
-inline auto OlapRuntimeScanRangePruner::_get_predicates(size_t idx) -> StatusOr<PredicatesPtrs> {
+inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx)
+        -> StatusOr<PredicatesPtrs> {
     auto rf = _unarrived_runtime_filters[idx]->runtime_filter();
     if (rf->has_null()) return PredicatesPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesPtrs>>(slot_desc->type().type, false,
-                                                             detail::RuntimeColumnPredicateBuilder(), _parser,
-                                                             _unarrived_runtime_filters[idx], slot_desc);
+                                                             detail::RuntimeColumnPredicateBuilder(), global_dictmaps,
+                                                             _parser, _unarrived_runtime_filters[idx], slot_desc);
 }
 
 inline auto OlapRuntimeScanRangePruner::_as_raw_predicates(
@@ -138,8 +221,9 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
             _unarrived_runtime_filters.emplace_back(params.unarrived_runtime_filters[i]);
             _slot_descs.emplace_back(params.slot_descs[i]);
             _arrived_runtime_filters_masks.emplace_back();
+            _rf_versions.emplace_back();
         }
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

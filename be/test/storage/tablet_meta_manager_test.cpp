@@ -68,8 +68,11 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
 
     auto meta = std::make_shared<TabletMeta>();
     meta->init_from_pb(&meta_pb);
+    // generate necessary field
+    TabletMetaPB new_meta_pb;
+    meta->to_meta_pb(&new_meta_pb);
 
-    ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), meta).ok());
+    ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), new_meta_pb).ok());
     auto load_meta = std::make_shared<TabletMeta>();
     ASSERT_TRUE(
             TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta.get())
@@ -364,8 +367,8 @@ protected:
         };
 
         auto t0 = std::chrono::steady_clock::now();
-        std::vector<std::thread> threads(std::thread::hardware_concurrency());
-        for (int i = 0; i < std::thread::hardware_concurrency(); i++) {
+        std::vector<std::thread> threads(CpuInfo::num_cores());
+        for (int i = 0; i < CpuInfo::num_cores(); i++) {
             threads[i] = std::thread(rowset_commit_thread);
         }
         for (auto& t : threads) {

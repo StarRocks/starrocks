@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 19:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 150000
 column statistics:
 * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
@@ -74,6 +75,8 @@ OutPut Exchange Id: 19
 |  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 |
 16:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [32: substring, VARCHAR, true]
 cardinality: 150000
 
 PLAN FRAGMENT 2(F07)
@@ -116,9 +119,13 @@ OutPut Exchange Id: 16
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
 |----12:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [1: C_CUSTKEY, INT, false]
 |       cardinality: 3750000
 |
 1:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [22: O_CUSTKEY, INT, false]
 cardinality: 150000000
 
 PLAN FRAGMENT 3(F02)
@@ -151,6 +158,7 @@ OutPut Exchange Id: 12
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----9:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 2:OlapScanNode
@@ -186,6 +194,7 @@ OutPut Exchange Id: 09
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
 6:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 5(F03)

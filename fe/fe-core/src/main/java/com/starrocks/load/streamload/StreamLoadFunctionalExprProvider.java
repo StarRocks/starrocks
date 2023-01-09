@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionalExprProvider;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -157,7 +159,15 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
     @Override
     protected boolean delegatePostRowFilter(ConnectContext cxt, StreamLoadTask task) {
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
-        return GlobalStateMgr.getCurrentState().getAuth()
-                .checkTblPriv(cxt, task.getDBName(), task.getTableName(), PrivPredicate.LOAD);
+        if (cxt.getGlobalStateMgr().isUsingNewPrivilege()) {
+            return PrivilegeManager.checkTableAction(
+                    cxt,
+                    task.getDBName(),
+                    task.getTableName(),
+                    PrivilegeType.TableAction.INSERT);
+        } else {
+            return GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(cxt, task.getDBName(), task.getTableName(), PrivPredicate.LOAD);
+        }
     }
 }

@@ -12,24 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -39,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 /**
  * EpochCoordinator based on transaction:
@@ -65,26 +62,36 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
      * TODO(murphy) make it event-driven instead of blocking here
      */
     public void runEpoch(MVEpoch epoch) {
-        beginEpoch(epoch);
-        boolean success = waitEpochFinish(epoch);
-        if (success) {
-            commitEpoch(epoch);
-        } else {
-            epoch.onFailed();
-            abortEpoch(epoch);
+        LOG.info("runEpoch: {}", epoch);
+        try {
+            beginEpoch(epoch);
+            boolean success = waitEpochFinish(epoch);
+            if (success) {
+                commitEpoch(epoch);
+            } else {
+                epoch.onFailed();
+                abortEpoch(epoch);
+            }
+        } catch (Exception e) {
+            LOG.warn("runEpoch failed: {}", e);
+            throw e;
+        } finally {
+            // TODO: When to reset epoch?
+            epoch.reset();
         }
     }
 
     private void beginEpoch(MVEpoch epoch) {
+        LOG.info("beginEpoch: {}", epoch);
+
         MaterializedView view = mvMaintenanceJob.getView();
-        MvId mvId = view.getMvId();
         long dbId = view.getDbId();
-        List<Long> tableIdList = new ArrayList<>(view.getBaseTableIds());
-        String label = "mv_refresh_" + mvId;
-        TUniqueId requestId = new TUniqueId();
+        List<Long> tableIdList =
+                view.getBaseTableInfos().stream().map(t -> t.getTableId()).collect(Collectors.toList());
+        long currentTs = System.currentTimeMillis();
+        String label = String.format("MV_REFRESH_%d-%d-%d", dbId, view.getId(), currentTs);
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
-
         try {
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
@@ -103,11 +110,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     }
 
     private void commitEpoch(MVEpoch epoch) {
+        LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Coordinator queryCoordinator = mvMaintenanceJob.getQueryCoordinator();
-        List<TabletCommitInfo> commitInfo = TabletCommitInfo.fromThrift(queryCoordinator.getCommitInfos());
-        List<TabletFailInfo> failedInfo = TabletFailInfo.fromThrift(queryCoordinator.getFailInfos());
+        List<TabletCommitInfo> commitInfo = null;
+        List<TabletFailInfo> failedInfo = null;
 
         try {
             epoch.onCommitting();
@@ -130,6 +137,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     }
 
     private void abortEpoch(MVEpoch epoch) {
+        LOG.info("abortEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
         long txnId = epoch.getTxnId();
         String failReason = "";
@@ -144,28 +152,29 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     // TODO(murphy) notify all executors, and wait for finishing
     private void execute(MVEpoch epoch) throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
-        String dbName = GlobalStateMgr.getCurrentState().getDb(mvMaintenanceJob.getView().getDbId()).getFullName();
 
         for (MVMaintenanceTask task : mvMaintenanceJob.getTasks().values()) {
-            long beId = task.getBeId();
             long taskId = task.getTaskId();
-            Backend backend = Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId));
-            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+            TNetworkAddress address = SystemInfoService.toBrpcHost(task.getBeHost());
 
             // Request information
             MaterializedView view = mvMaintenanceJob.getView();
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(mvMaintenanceJob.getQueryId());
             request.setTask_type(MVTaskType.START_EPOCH);
             request.setTask_id(taskId);
             request.setJob_id(mvMaintenanceJob.getJobId());
             request.setMv_name(mvMaintenanceJob.getView().getName());
             TMVStartEpochTask taskMsg = new TMVStartEpochTask();
             taskMsg.setEpoch(epoch.toThrift());
+            // set binlog offset here
+            taskMsg.setPer_node_scan_ranges(task.getBinlogConsumeState());
+
             taskMsg.setMax_exec_millis(MAX_EXEC_MILLIS);
             taskMsg.setMax_scan_rows(MAX_SCAN_ROWS);
-            // TODO(murphy) set binlog offset here
+
             request.start_epoch = taskMsg;
             try {
                 results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));

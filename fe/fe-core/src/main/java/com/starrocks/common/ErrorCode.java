@@ -77,6 +77,8 @@ public enum ErrorCode {
             "There is no such grant defined for user '%s' on host '%s'"),
     ERR_TABLEACCESS_DENIED_ERROR(1142, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for table '%s'"),
+    ERR_MV_ACCESS_DENIED_ERROR(1143, new byte[] {'4', '2', '0', '0', '0'},
+            "%s command denied to user '%s'@'%s' for materialized view '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
@@ -295,6 +297,14 @@ public enum ErrorCode {
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
             "Routine load job [%s] not found when checking privilege"),
 
+    ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
+            "Export job [%s] not found when checking privilege"),
+    
+    ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
+            "Backup job not found when checking privilege"),
+
+    ERR_PRIVILEGE_FUNC_NOT_FOUND(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Func not found when checking privilege"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");

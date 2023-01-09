@@ -22,11 +22,11 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/primitive_type.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <bool B, typename T>
 struct cond {
@@ -240,6 +240,9 @@ using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 template <LogicalType Type>
 using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
 
+template <LogicalType Type>
+using RunTimeCppValueType = std::remove_pointer_t<RunTimeCppType<Type>>;
+
 // Value type instead of pointer type
 
 template <typename T>
@@ -388,4 +391,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

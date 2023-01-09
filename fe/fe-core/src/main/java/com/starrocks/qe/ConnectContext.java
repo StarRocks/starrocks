@@ -38,7 +38,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
@@ -59,6 +58,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -72,8 +72,8 @@ import java.util.Set;
 import java.util.UUID;
 import javax.net.ssl.SSLContext;
 
-// When one client connect in, we create a connect context for it.
-// We store session information here. Meanwhile ConnectScheduler all
+// When one client connect in, we create a connection context for it.
+// We store session information here. Meanwhile, ConnectScheduler all
 // connect with its connection id.
 public class ConnectContext {
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
@@ -181,7 +181,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected ResourceGroup resourceGroup;
+    protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
 
@@ -224,7 +224,6 @@ public class ConnectContext {
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
-        plannerProfile.init(this);
 
         mysqlChannel = new MysqlChannel(channel);
         if (channel != null) {
@@ -553,11 +552,11 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public ResourceGroup getResourceGroup() {
+    public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
 
-    public void setResourceGroup(ResourceGroup resourceGroup) {
+    public void setResourceGroup(TWorkGroup resourceGroup) {
         this.resourceGroup = resourceGroup;
     }
 
@@ -717,7 +716,7 @@ public class ConnectContext {
                 stmt = executor.getOriginStmtInString();
                 // refers to https://mariadb.com/kb/en/show-processlist/
                 // `show full processlist` will output full SQL
-                // and `show processlist will` output at most 100 chars.
+                // and `show processlist` will output at most 100 chars.
                 if (!full && stmt.length() > 100) {
                     stmt = stmt.substring(0, 100);
                 }

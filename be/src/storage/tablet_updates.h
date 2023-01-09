@@ -41,7 +41,6 @@ class SnapshotMeta;
 class Tablet;
 class TTabletInfo;
 
-namespace vectorized {
 class ChunkIterator;
 class CompactionState;
 class VectorizedSchema;
@@ -49,7 +48,6 @@ class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
 class ChunkAllocator;
-} // namespace vectorized
 
 struct CompactionInfo {
     EditVersion start_version;
@@ -60,7 +58,7 @@ struct CompactionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
@@ -73,7 +71,7 @@ public:
 
     std::string get_error_msg() const { return _error_msg; }
 
-    using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
+    using IteratorList = std::vector<std::shared_ptr<ChunkIterator>>;
 
     // get latest version's number of rows
     size_t num_rows() const;
@@ -158,6 +156,9 @@ public:
     // get info's version, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
 
+    // get average row size
+    int64_t get_average_row_size();
+
     std::string debug_string() const;
 
     // Return nullptr if the delta rowset does not exist.
@@ -174,7 +175,7 @@ public:
     Status link_from(Tablet* base_tablet, int64_t request_version);
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        vectorized::ChunkChanger* chunk_changer);
+                        ChunkChanger* chunk_changer);
 
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
 
@@ -235,11 +236,18 @@ public:
     // ]
     Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<vectorized::Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns);
 
+    /*
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
+    */
+    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
+                                         std::vector<uint64_t>* rss_rowids);
+
+    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
+                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -248,6 +256,8 @@ public:
 
     void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
+
+    Status check_and_remove_rowset();
 
 private:
     friend class Tablet;
@@ -310,14 +320,6 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    // Find all but the latest already-applied versions whose creation time is less than or
-    // equal to |expire_time|, then append them into |expire_list| and erase them from the
-    // in-memory version list.
-    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
-                                 int64_t* min_readable_version);
-
-    std::set<uint32_t> _active_rowsets();
-
     void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
@@ -345,7 +347,7 @@ private:
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
     // thread-safe
-    void _remove_unused_rowsets();
+    void _remove_unused_rowsets(bool drop_tablet = false);
 
     // REQUIRE: |_lock| is held.
     void _to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const;
@@ -355,8 +357,7 @@ private:
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                     const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
-                                     vectorized::ChunkChanger* chunk_changer,
+                                     const std::vector<ChunkIteratorPtr>& seg_iterators, ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
@@ -415,7 +416,7 @@ private:
     size_t _cur_total_dels = 0;
 
     // state used in compaction process
-    std::unique_ptr<vectorized::CompactionState> _compaction_state;
+    std::unique_ptr<CompactionState> _compaction_state;
 
     // if tablet is in error state, it means some fatal error occurred and we want to
     // keep the scene(internal state) unchanged for further investigation, and don't crash
@@ -423,7 +424,7 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
 
-    vectorized::ChunkAllocator* _chunk_allocator = nullptr;
+    ChunkAllocator* _chunk_allocator = nullptr;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

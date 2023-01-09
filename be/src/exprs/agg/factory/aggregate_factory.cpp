@@ -22,11 +22,11 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
@@ -39,6 +39,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_utility();
     register_approx();
     register_others();
+    register_retract_functions();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
@@ -142,4 +143,4 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
     return nullptr;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

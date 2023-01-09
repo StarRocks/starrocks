@@ -19,14 +19,15 @@
 #include "column/column_viewer.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/thrift_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const int STATISTIC_DATA_VERSION1 = 1;
 const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
+const int STATISTIC_TABLE_VERSION = 3;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -49,7 +50,7 @@ void StatisticResultWriter::_init_profile() {
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
-Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
+Status StatisticResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
@@ -69,7 +70,7 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
-StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
@@ -102,7 +103,7 @@ StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& result
     return status;
 }
 
-StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
     }
@@ -110,7 +111,7 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::
     // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
 
-    vectorized::Columns result_columns;
+    Columns result_columns;
     result_columns.reserve(num_columns);
 
     for (int i = 0; i < num_columns; ++i) {
@@ -140,12 +141,15 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::
     } else if (version == STATISTIC_HISTOGRAM_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram(version, result_columns, chunk, result.get()),
                                   "Fill histogram statistic data failed");
+    } else if (version == STATISTIC_TABLE_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_table_statistic_data(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
     }
     return result;
 }
 
-Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
-                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_dict_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                                        TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
     auto versioncolumn = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1]);
@@ -173,8 +177,8 @@ Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vecto
     return Status::OK();
 }
 
-Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorized::Columns& columns,
-                                                      const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns& columns, const Chunk* chunk,
+                                                      TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
@@ -219,8 +223,8 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
     return Status::OK();
 }
 
-Status StatisticResultWriter::_fill_statistic_histogram(int version, const vectorized::Columns& columns,
-                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_statistic_histogram(int version, const Columns& columns, const Chunk* chunk,
+                                                        TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
@@ -250,9 +254,36 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const vecto
     return Status::OK();
 }
 
+Status StatisticResultWriter::_fill_table_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                                         TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+    DCHECK(columns.size() == 3);
+
+    auto* partitionId = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionId(partitionId->get(i).get_int64());
+        data_list[i].__set_rowCount(rowCounts->get(i).get_int64());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
 Status StatisticResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

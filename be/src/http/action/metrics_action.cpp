@@ -36,6 +36,11 @@
 
 namespace starrocks {
 
+#if defined(USE_STAROS) && defined(BE_TEST)
+// Allow disable staros metrics output in UT
+bool sDisableStarOSMetrics = false;
+#endif
+
 class PrometheusMetricsVisitor : public MetricsVisitor {
 public:
     ~PrometheusMetricsVisitor() override = default;
@@ -210,7 +215,13 @@ void MetricsAction::handle(HttpRequest* req) {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
 #ifdef USE_STAROS
-        staros::starlet::metrics::MetricsSystem::instance()->text_serializer(visitor.output_stream());
+#ifdef BE_TEST
+        if (!sDisableStarOSMetrics) {
+#endif
+            staros::starlet::metrics::MetricsSystem::instance()->text_serializer(visitor.output_stream());
+#ifdef BE_TEST
+        }
+#endif
 #endif
         str.assign(visitor.to_string());
     }

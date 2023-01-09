@@ -14,7 +14,7 @@
 
 #include "segment_options.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types,
                                       ObjectPool* obj_pool) const {
@@ -80,4 +80,4 @@ std::string SegmentReadOptions::debug_string() const {
     return ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

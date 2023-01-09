@@ -15,6 +15,7 @@
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -57,7 +58,7 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     return _status;
 }
 
-Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, vectorized::Column* pk_column) {
+Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk_column) {
     DCHECK(_deletes.size() >= idx);
     // always one file for now.
     if (_deletes.size() == 0) {
@@ -83,7 +84,7 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, vectorized
     return Status::OK();
 }
 
-Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, vectorized::Column* pk_column) {
+Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk_column) {
     RowsetReleaseGuard guard(rowset->shared_from_this());
     DCHECK(_upserts.size() >= idx);
     if (_upserts.size() == 0) {
@@ -99,7 +100,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, vectorized
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
@@ -151,8 +152,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-    std::unique_ptr<vectorized::Column> pk_column;
+    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
@@ -175,7 +176,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
-    return _prepare_partial_update_states(tablet, rowset);
+
+    return _prepare_partial_update_states(tablet, rowset, 0, true);
 }
 
 Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
@@ -184,8 +186,8 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-    std::unique_ptr<vectorized::Column> pk_column;
+    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
@@ -198,8 +200,8 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-    std::unique_ptr<vectorized::Column> pk_column;
+    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
@@ -301,7 +303,17 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
     }
 }
 
-Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset) {
+// Assume segment idx has been loaded and _upserts[idx] is not null
+// The caller should make sure `load_upserts` has been called success before call this function
+Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock) {
+    if (_partial_update_states.size() == 0) {
+        _partial_update_states.resize(rowset->num_segments());
+    }
+
+    if (_partial_update_states[idx].inited == true) {
+        return Status::OK();
+    }
+
     int64_t t_start = MonotonicMillis();
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     const auto& tablet_schema = tablet->tablet_schema();
@@ -317,57 +329,52 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         }
     }
 
-    auto read_column_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, read_column_ids);
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
-    size_t num_segments = rowset->num_segments();
-    _partial_update_states.resize(num_segments);
-    for (size_t i = 0; i < num_segments; i++) {
-        _partial_update_states[i].write_columns.resize(read_columns.size());
-        _partial_update_states[i].src_rss_rowids.resize(_upserts[i]->size());
-        for (uint32_t j = 0; j < read_columns.size(); ++j) {
-            auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
-            read_columns[j] = column->clone_empty();
-            _partial_update_states[i].write_columns[j] = column->clone_empty();
-        }
+    DCHECK(_upserts[idx] != nullptr);
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, read_column_ids);
+    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
+
+    _partial_update_states[idx].write_columns.resize(read_columns.size());
+    _partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
+    for (uint32_t i = 0; i < read_columns.size(); ++i) {
+        auto column = ChunkHelper::column_from_field(*read_column_schema.field(i).get());
+        read_columns[i] = column->clone_empty();
+        _partial_update_states[idx].write_columns[i] = column->clone_empty();
     }
 
     int64_t t_read_index = MonotonicMillis();
-    std::vector<std::vector<uint64_t>*> rss_rowids;
-    rss_rowids.resize(num_segments);
-    for (size_t i = 0; i < num_segments; ++i) {
-        rss_rowids[i] = &(_partial_update_states[i].src_rss_rowids);
+    if (need_lock) {
+        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(
+                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
+                &(_partial_update_states[idx].src_rss_rowids)));
+    } else {
+        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states_unlock(
+                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
+                &(_partial_update_states[idx].src_rss_rowids)));
     }
-    DCHECK_EQ(_upserts.size(), num_segments);
-    RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(tablet, _upserts, &_read_version, &_next_rowset_id,
-                                                                     &rss_rowids));
 
     int64_t t_read_values = MonotonicMillis();
     size_t total_rows = 0;
     // rows actually needed to be read, excluding rows with default values
-    size_t total_nondefault_rows = 0;
-    for (size_t i = 0; i < num_segments; i++) {
-        size_t num_default = 0;
-        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
-        vector<uint32_t> idxes;
-        plan_read_by_rssid(_partial_update_states[i].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
-        total_rows += _partial_update_states[i].src_rss_rowids.size();
-        total_nondefault_rows += _partial_update_states[i].src_rss_rowids.size() - num_default;
-        // get column values by rowid, also get default values if needed
-        RETURN_IF_ERROR(
-                tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
-        for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-            _partial_update_states[i].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
-                                                                               idxes.size());
-            _memory_usage += _partial_update_states[i].write_columns[col_idx]->memory_usage();
-        }
+    size_t num_default = 0;
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    vector<uint32_t> idxes;
+    plan_read_by_rssid(_partial_update_states[idx].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
+    total_rows += _partial_update_states[idx].src_rss_rowids.size();
+    RETURN_IF_ERROR(
+            tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
+    for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+        _partial_update_states[idx].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
+                                                                             idxes.size());
+        _memory_usage += _partial_update_states[idx].write_columns[col_idx]->memory_usage();
     }
     int64_t t_end = MonotonicMillis();
+    _partial_update_states[idx].inited = true;
 
     LOG(INFO) << strings::Substitute(
-            "prepare PartialUpdateState tablet:$0 read_version:$1 #segment:$2 #row:$3(#non-default:$4) #column:$5 "
-            "time:$6ms(index:$7/value:$8)",
-            _tablet_id, _read_version.to_string(), num_segments, total_rows, total_nondefault_rows, read_columns.size(),
-            t_end - t_start, t_read_values - t_read_index, t_end - t_read_values);
+            "prepare PartialUpdateState tablet:$0 segment:$1 #row:$2(#non-default:$3) #column:$4 "
+            "time:$5ms(index:$6/value:$7)",
+            _tablet_id, idx, total_rows, total_rows - num_default, read_columns.size(), t_end - t_start,
+            t_read_values - t_read_index, t_end - t_read_values);
     return Status::OK();
 }
 
@@ -381,87 +388,86 @@ bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
 }
 
 Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
-                                                      EditVersion latest_applied_version,
+                                                      uint32_t segment_id, EditVersion latest_applied_version,
                                                       std::vector<uint32_t>& read_column_ids,
                                                       const PrimaryIndex& index) {
-    // _partial_update_states is empty which means write column is empty
-    if (_partial_update_states.empty()) {
-        return Status::InternalError("write column is empty");
+    if (_partial_update_states.size() <= segment_id || !_partial_update_states[segment_id].inited) {
+        std::string msg = strings::Substitute(
+                "_check_and_reslove_conflict tablet:$0 rowset:$1 segment:$2 failed, partial_update_states size:$3",
+                tablet->tablet_id(), rowset_id, segment_id, _partial_update_states.size());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
     }
 
     // _read_version is equal to latest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
-    if (latest_applied_version == _read_version) {
+    LOG(INFO) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+              << _partial_update_states[segment_id].read_version.to_string();
+    if (latest_applied_version == _partial_update_states[segment_id].read_version) {
         return Status::OK();
     }
 
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
-    uint32_t num_segments = _upserts.size();
-    std::vector<std::vector<uint64_t>> new_rss_rowids;
-    new_rss_rowids.resize(num_segments);
-    for (uint32_t i = 0; i < num_segments; ++i) {
-        auto& pks = *_upserts[i];
-        new_rss_rowids[i].resize(pks.size());
-        index.get(pks, &new_rss_rowids[i]);
-    }
+    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->size());
+    index.get(*_upserts[segment_id], &new_rss_rowids);
     int64_t t_read_index = MonotonicMillis();
 
     size_t total_conflicts = 0;
-    for (uint32_t i = 0; i < num_segments; ++i) {
-        uint32_t num_rows = new_rss_rowids[i].size();
-        std::vector<uint32_t> conflict_idxes;
-        std::vector<uint64_t> conflict_rowids;
-        DCHECK_EQ(num_rows, _partial_update_states[i].src_rss_rowids.size());
-        for (size_t j = 0; j < new_rss_rowids[i].size(); ++j) {
-            uint64_t new_rss_rowid = new_rss_rowids[i][j];
-            uint32_t new_rssid = new_rss_rowid >> 32;
-            uint64_t rss_rowid = _partial_update_states[i].src_rss_rowids[j];
-            uint32_t rssid = rss_rowid >> 32;
+    uint32_t num_rows = new_rss_rowids.size();
+    std::vector<uint32_t> conflict_idxes;
+    std::vector<uint64_t> conflict_rowids;
+    DCHECK_EQ(num_rows, _partial_update_states[segment_id].src_rss_rowids.size());
+    for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        uint64_t new_rss_rowid = new_rss_rowids[i];
+        uint32_t new_rssid = new_rss_rowid >> 32;
+        uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
+        uint32_t rssid = rss_rowid >> 32;
 
-            if (rssid != new_rssid) {
-                conflict_idxes.emplace_back(j);
-                conflict_rowids.emplace_back(new_rss_rowid);
-            }
+        if (rssid != new_rssid) {
+            conflict_idxes.emplace_back(i);
+            conflict_rowids.emplace_back(new_rss_rowid);
         }
-        if (!conflict_idxes.empty()) {
-            total_conflicts += conflict_idxes.size();
-            std::vector<std::unique_ptr<vectorized::Column>> read_columns;
-            read_columns.resize(_partial_update_states[i].write_columns.size());
-            for (uint32_t j = 0; j < read_columns.size(); ++j) {
-                read_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
-            }
-            size_t num_default = 0;
-            std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
-            std::vector<uint32_t> read_idxes;
-            plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
-            DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-            RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                 &read_columns));
+    }
+    if (!conflict_idxes.empty()) {
+        total_conflicts += conflict_idxes.size();
+        std::vector<std::unique_ptr<Column>> read_columns;
+        read_columns.resize(_partial_update_states[segment_id].write_columns.size());
+        for (uint32_t i = 0; i < read_columns.size(); ++i) {
+            read_columns[i] = _partial_update_states[segment_id].write_columns[i]->clone_empty();
+        }
+        size_t num_default = 0;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        std::vector<uint32_t> read_idxes;
+        plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
+        DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
+        RETURN_IF_ERROR(
+                tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
 
-            for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-                std::unique_ptr<vectorized::Column> new_write_column =
-                        _partial_update_states[i].write_columns[col_idx]->clone_empty();
-                new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
-                RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(*new_write_column,
-                                                                                              conflict_idxes.data()));
-            }
+        for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+            std::unique_ptr<Column> new_write_column =
+                    _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
+            new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+                    *new_write_column, conflict_idxes.data()));
         }
     }
     int64_t t_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
-            "_check_and_resolve_conflict tablet:$0 rowset:$1 version:($2 $3) #conflict-row:$4 #column:$5 "
-            "time:$6ms(index:$7/value:$8)",
-            tablet->tablet_id(), rowset_id, _read_version.to_string(), latest_applied_version.to_string(),
-            total_conflicts, read_column_ids.size(), t_end - t_start, t_read_index - t_start, t_end - t_read_index);
+            "_check_and_resolve_conflict tablet:$0 rowset:$1 segmet:$2 version:($3 $4) #conflict-row:$5 #column:$6 "
+            "time:$7ms(index:$8/value:$9)",
+            tablet->tablet_id(), rowset_id, segment_id, _partial_update_states[segment_id].read_version.to_string(),
+            latest_applied_version.to_string(), total_conflicts, read_column_ids.size(), t_end - t_start,
+            t_read_index - t_start, t_end - t_read_index);
 
     return Status::OK();
 }
 
-Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
-                                const PrimaryIndex& index) {
+Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+                                EditVersion latest_applied_version, const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!_check_partial_update(rowset)) {
+    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
+        rowset_meta_pb.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
     // currently assume it's a partial update
@@ -479,57 +485,40 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         }
     }
 
-    size_t num_segments = rowset->num_segments();
-    DCHECK(num_segments == _upserts.size());
-    vector<std::pair<string, string>> rewrite_files;
-    DeferOp clean_temp_files([&] {
-        for (auto& e : rewrite_files) {
-            FileSystem::Default()->delete_file(e.second);
-        }
-    });
-    bool is_rewrite = config::rewrite_partial_segment;
-    RETURN_IF_ERROR(
-            _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index));
+    DCHECK(_upserts[segment_id] != nullptr);
+    if (_partial_update_states.size() == 0 || !_partial_update_states[segment_id].inited) {
+        RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset, segment_id, false));
+    } else {
+        // reslove conflict of segment
+        RETURN_IF_ERROR(_check_and_resolve_conflict(tablet, rowset, rowset_id, segment_id, latest_applied_version,
+                                                    read_column_ids, index));
+    }
 
-    for (size_t i = 0; i < num_segments; i++) {
-        auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-        auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-        rewrite_files.emplace_back(src_path, dest_path);
+    auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
+    auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
+    DeferOp clean_temp_files([&] { FileSystem::Default()->delete_file(dest_path); });
+    int64_t t_rewrite_start = MonotonicMillis();
+    FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
+    RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+                                             _partial_update_states[segment_id].write_columns, segment_id,
+                                             partial_rowset_footer));
+    int64_t t_rewrite_end = MonotonicMillis();
+    LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
+                                     tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(),
+                                     t_rewrite_end - t_rewrite_start);
 
-        int64_t t_rewrite_start = MonotonicMillis();
-        FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
-        // if is_rewrite is true, rewrite partial segment file into dest_path first, then append write_columns
-        // if is_rewrite is false, append write_columns into src_path and rebuild segment footer
-        if (is_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
-                                                     _partial_update_states[i].write_columns, i,
-                                                     partial_rowset_footer));
-        } else {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, tablet->tablet_schema(), read_column_ids,
-                                                     _partial_update_states[i].write_columns, i,
-                                                     partial_rowset_footer));
-        }
-        int64_t t_rewrite_end = MonotonicMillis();
-        LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
-                                         tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
-                                         t_rewrite_end - t_rewrite_start);
-    }
-    if (is_rewrite) {
-        for (size_t i = 0; i < num_segments; i++) {
-            RETURN_IF_ERROR(FileSystem::Default()->rename_file(rewrite_files[i].second, rewrite_files[i].first));
+    // we should reload segment after rewrite segment file because we may read data from the segment during
+    // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
+    // segment[segment_id] of partial rowset
+    FileSystem::Default()->rename_file(dest_path, src_path);
+    RETURN_IF_ERROR(rowset->reload_segment(segment_id));
+
+    for (size_t col_idx = 0; col_idx < _partial_update_states[segment_id].write_columns.size(); col_idx++) {
+        if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
+            _memory_usage -= _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
         }
     }
-    // clean this to prevent DeferOp clean files
-    rewrite_files.clear();
-    RETURN_IF_ERROR(rowset->reload());
-    for (size_t i = 0; i < _partial_update_states.size(); i++) {
-        for (size_t col_idx = 0; col_idx < _partial_update_states[i].write_columns.size(); col_idx++) {
-            if (_partial_update_states[i].write_columns[col_idx] != nullptr) {
-                _memory_usage -= _partial_update_states[i].write_columns[col_idx]->memory_usage();
-                _partial_update_states[i].write_columns[col_idx].reset();
-            }
-        }
-    }
+    _partial_update_states[segment_id].release();
     return Status::OK();
 }
 

@@ -15,7 +15,7 @@
 #include "exprs/table_function/table_function.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Name: json_each
 // Usage: expands the outermost JSON object into a set of key/value pairs.
@@ -44,4 +44,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

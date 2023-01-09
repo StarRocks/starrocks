@@ -23,7 +23,7 @@
 #include "gutil/strings/fastmem.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void ArrayColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _elements->size());
@@ -382,6 +382,16 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
+void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
+    CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
+
+    size_t rows = size();
+    output->resize(rows);
+    for (size_t i = 0; i < rows; i++) {
+        (*output)[i] = compare_at(i, i, rhs_column, 1);
+    }
+}
+
 void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
@@ -513,7 +523,7 @@ std::string ArrayColumn::debug_item(uint32_t idx) const {
     ss << "[";
     for (size_t i = 0; i < array_size; ++i) {
         if (i > 0) {
-            ss << ", ";
+            ss << ",";
         }
         ss << _elements->debug_item(offset + i);
     }
@@ -587,4 +597,10 @@ bool ArrayColumn::empty_null_array(const NullColumnPtr& null_map) {
     return need_empty;
 }
 
-} // namespace starrocks::vectorized
+Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == 1) << "Array schema does not match data's";
+    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    return Status::OK();
+}
+
+} // namespace starrocks

@@ -75,12 +75,14 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -162,14 +164,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
-        num_prepare_threads = std::thread::hardware_concurrency();
+        num_prepare_threads = CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
-        num_sink_io_threads = std::thread::hardware_concurrency();
+        num_sink_io_threads = CpuInfo::num_cores();
     }
     if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
         return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
@@ -179,12 +181,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int query_rpc_threads = config::internal_service_query_rpc_thread_num;
     if (query_rpc_threads <= 0) {
-        query_rpc_threads = std::thread::hardware_concurrency();
+        query_rpc_threads = CpuInfo::num_cores();
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    _max_executor_threads = std::thread::hardware_concurrency();
+    _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
@@ -213,8 +215,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-    CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+    int connector_num_io_threads =
+            config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
@@ -266,7 +269,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     if (!store_paths.empty()) {
         int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                     ? std::thread::hardware_concurrency()
+                                     ? CpuInfo::num_cores()
                                      : config::pipeline_scan_thread_pool_thread_num;
 
         std::unique_ptr<ThreadPool> scan_worker_thread_pool_without_workgroup;
@@ -301,10 +304,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         }
 #if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_location_provider = new lake::StarletLocationProvider();
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+        _lake_update_manager = new lake::UpdateManager(_lake_location_provider);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
+                                                       config::lake_metadata_cache_limit);
 #elif defined(BE_TEST)
         _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+        _lake_update_manager = new lake::UpdateManager(_lake_location_provider);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
+                                                       config::lake_metadata_cache_limit);
 #endif
 
         // agent_server is not needed for cn
@@ -410,7 +417,7 @@ Status ExecEnv::init_mem_tracker() {
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(column_pool_mem_tracker());
-    vectorized::ForEach<vectorized::ColumnPoolList>(op);
+    ForEach<ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
 }
@@ -496,6 +503,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
+    SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 

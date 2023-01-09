@@ -207,6 +207,8 @@ public:
 
     void do_manual_compact(bool force_compact);
 
+    void increase_update_compaction_thread(const int num_threads_per_disk);
+
 protected:
     static StorageEngine* _s_instance;
 

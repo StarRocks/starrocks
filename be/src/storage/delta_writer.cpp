@@ -30,7 +30,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -58,10 +58,10 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     if (_flush_token != nullptr) {
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
-        _replicate_token->cancel();
+        _replicate_token->shutdown();
     }
     switch (get_state()) {
     case kUninitialized:
@@ -197,6 +197,17 @@ Status DeltaWriter::_init() {
             }
             writer_context.referenced_column_ids.push_back(index);
         }
+        int64_t average_row_size = _tablet->updates()->get_average_row_size();
+        if (average_row_size != 0) {
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        } else {
+            // If tablet is a new created tablet and has no historical data, average_row_size is 0
+            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+            // we will consider it as 16 bytes.
+            average_row_size = _tablet->tablet_schema().estimate_row_size(16);
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        }
+
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
@@ -323,6 +334,8 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  segment_pb.segment_id(), _opt.tablet_id,
                                                  _replica_state_name(_replica_state)));
     }
+    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment " << segment_pb.DebugString();
+
     return _rowset_writer->flush_segment(segment_pb, data);
 }
 
@@ -400,6 +413,7 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    _mem_table->set_write_buffer_row(_memtable_buffer_row);
 }
 
 Status DeltaWriter::commit() {
@@ -441,7 +455,7 @@ Status DeltaWriter::commit() {
     if (auto res = _rowset_writer->build(); res.ok()) {
         _cur_rowset = std::move(res).value();
     } else {
-        LOG(WARNING) << res.status();
+        LOG(WARNING) << "Failed to build rowset. tablet_id: " << _opt.tablet_id << " err: " << res.status();
         _set_state(kAborted, res.status());
         return res.status();
     }
@@ -487,18 +501,30 @@ Status DeltaWriter::commit() {
     return Status::OK();
 }
 
+void DeltaWriter::cancel(const Status& st) {
+    _set_state(kAborted, st);
+    if (_flush_token != nullptr) {
+        _flush_token->cancel(st);
+    }
+    if (_replicate_token != nullptr) {
+        _replicate_token->cancel(st);
+    }
+}
+
 void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted, Status::Cancelled("aborted by others"));
     _with_rollback_log = with_log;
     if (_flush_token != nullptr) {
         // Wait until all background tasks finished/cancelled.
         // https://github.com/StarRocks/starrocks/issues/8906
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
-        _replicate_token->cancel();
+        _replicate_token->shutdown();
     }
-    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id();
+
+    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
+            << " load_id: " << print_id(_opt.load_id);
 }
 
 int64_t DeltaWriter::partition_id() const {
@@ -533,4 +559,4 @@ const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
     return "";
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

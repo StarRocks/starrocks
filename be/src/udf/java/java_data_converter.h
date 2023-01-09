@@ -6,10 +6,10 @@
 #include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct JavaUDAFState {
     JavaUDAFState(int handle_) : handle(std::move(handle_)) {}
     ~JavaUDAFState() = default;
@@ -28,7 +28,7 @@ public:
     Status do_visit(const BinaryColumn& column);
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumn<T>& column) {
+    Status do_visit(const FixedLengthColumn<T>& column) {
         get_buffer_data(column, &_buffers);
         return Status::OK();
     }
@@ -63,4 +63,4 @@ template <bool handle_null>
 jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
-} // namespace starrocks::vectorized
+} // namespace starrocks

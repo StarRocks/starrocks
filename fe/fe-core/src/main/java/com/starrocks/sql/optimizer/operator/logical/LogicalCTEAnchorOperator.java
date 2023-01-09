@@ -18,11 +18,13 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /*
@@ -51,6 +53,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         } else {
             return expressionContext.getChildLogicalProperty(1).getOutputColumns();
         }
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(1).getRowOutputInfo());
     }
 
     public int getCteId() {

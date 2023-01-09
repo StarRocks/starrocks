@@ -46,15 +46,15 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/in_const_predicate.hpp"
 #include "runtime/large_int_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "service/backend_options.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -74,18 +74,18 @@ static constexpr bool is_type_in() {
     return (std::is_same_v<T, Ts> || ...);
 }
 
-VExtLiteral::VExtLiteral(LogicalType type, vectorized::ColumnPtr column, const std::string& timezone) {
+VExtLiteral::VExtLiteral(LogicalType type, ColumnPtr column, const std::string& timezone) {
     DCHECK(!column->empty());
     // We need to convert the predicate column into the corresponding string.
     // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
     if (type == TYPE_DATE) {
-        vectorized::ColumnViewer<TYPE_DATE> viewer(column);
+        ColumnViewer<TYPE_DATE> viewer(column);
         DCHECK(!viewer.is_null(0));
         _value = viewer.value(0).to_string();
     } else if (type == TYPE_DATETIME) {
-        vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
+        ColumnViewer<TYPE_DATETIME> viewer(column);
         DCHECK(!viewer.is_null(0));
-        vectorized::TimestampValue datetime_value = viewer.value(0);
+        TimestampValue datetime_value = viewer.value(0);
         // Use timezone variable from FE
         cctz::time_zone timezone_obj;
         if (!TimezoneUtils::find_cctz_time_zone(timezone, timezone_obj)) {
@@ -95,7 +95,7 @@ VExtLiteral::VExtLiteral(LogicalType type, vectorized::ColumnPtr column, const s
         int64_t offsets = TimezoneUtils::to_utc_offset(timezone_obj);
         _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
     } else if (type == TYPE_BOOLEAN) {
-        vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
+        ColumnViewer<TYPE_BOOLEAN> viewer(column);
         if (viewer.value(0)) {
             _value = "true";
         } else {
@@ -113,9 +113,8 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
         std::visit(
                 [&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
-                    if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value,
-                                             vectorized::DatumArray, vectorized::DatumMap, HyperLogLog*, BitmapValue*,
-                                             PercentileValue*, JsonValue*>()) {
+                    if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value, DatumArray,
+                                             DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>()) {
                         // ignore these types
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);
@@ -194,7 +193,7 @@ Status EsPredicate::_vec_build_disjuncts_list(const Expr* conjunct) {
 }
 
 Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled) {
-    using ColumnRef = vectorized::ColumnRef;
+    using ColumnRef = ColumnRef;
     if (TExprNodeType::BINARY_PRED == conjunct->node_type()) {
         DCHECK_EQ(conjunct->children().size(), 2);
         *handled = true;
@@ -260,7 +259,7 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
 }
 
 Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* handled) {
-    using ColumnRef = vectorized::ColumnRef;
+    using ColumnRef = ColumnRef;
 
     if (TExprNodeType::FUNCTION_CALL == conjunct->node_type()) {
         *handled = true;
@@ -356,7 +355,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
 
 template <LogicalType type, typename Func>
 Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) {
-    const auto* vpred = down_cast<const vectorized::VectorizedInConstPredicate<type>*>(pred);
+    const auto* vpred = down_cast<const VectorizedInConstPredicate<type>*>(pred);
     const auto& hash_set = vpred->hash_set();
     bool has_null = vpred->null_in_set();
     is_not_in = vpred->is_not_in();
@@ -372,14 +371,14 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
 #define BUILD_INPRED_VALUES(TYPE)                                                                                   \
     case TYPE: {                                                                                                    \
         RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
-            in_pred_values.emplace_back(new VExtLiteral(                                                            \
-                    slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
+            in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                     \
+                                                        ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
         }));                                                                                                        \
         break;                                                                                                      \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
-    using ColumnRef = vectorized::ColumnRef;
+    using ColumnRef = ColumnRef;
 
     if (TExprNodeType::IN_PRED == conjunct->node_type()) {
         *handled = true;
@@ -444,7 +443,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
 }
 
 Status EsPredicate::_build_compound_predicate(const Expr* conjunct, bool* handled) {
-    using ColumnRef = vectorized::ColumnRef;
+    using ColumnRef = ColumnRef;
 
     if (TExprNodeType::COMPOUND_PRED == conjunct->node_type()) {
         *handled = true;

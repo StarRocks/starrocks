@@ -21,7 +21,7 @@
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename T = RunTimeCppType<PT>>
 class BitmapUnionIntAggregateFunction final
@@ -68,4 +68,4 @@ public:
     std::string get_name() const override { return "bitmap_union_int"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

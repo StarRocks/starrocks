@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(VersionGraphTest, capture) {
@@ -374,4 +374,4 @@ TEST(VersionGraphTest, max_continuous_version) {
     EXPECT_EQ(graph.max_continuous_version(), 10);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

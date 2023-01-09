@@ -22,8 +22,7 @@
 namespace starrocks::pipeline {
 
 OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                                         int32_t driver_sequence,
-                                                         vectorized::OlapMetaScanNode* const scan_node,
+                                                         int32_t driver_sequence, OlapMetaScanNode* const scan_node,
                                                          MetaScanContextPtr scan_ctx)
         : MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("olap_meta_scan_prepare"),
                                   scan_ctx),
@@ -32,9 +31,9 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
 Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {
-        vectorized::MetaScannerParams params;
+        MetaScannerParams params;
         params.scan_range = scan_range;
-        auto scanner = std::make_shared<vectorized::OlapMetaScanner>(_scan_node);
+        auto scanner = std::make_shared<OlapMetaScanner>(_scan_node);
         RETURN_IF_ERROR(scanner->init(state, params));
         TTabletId tablet_id = scan_range->tablet_id;
         _scan_ctx->add_scanner(tablet_id, scanner);
@@ -43,7 +42,7 @@ Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
 }
 
 OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
-        int32_t id, int32_t plan_node_id, vectorized::OlapMetaScanNode* const scan_node,
+        int32_t id, int32_t plan_node_id, OlapMetaScanNode* const scan_node,
         std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
         : MetaScanPrepareOperatorFactory(id, plan_node_id, "olap_meta_scan_prepare", scan_ctx_factory),
           _scan_node(scan_node) {}

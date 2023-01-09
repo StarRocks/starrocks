@@ -115,6 +115,13 @@ TEST(TabletMetaTest, test_create) {
     col_ordinal_to_unique_id[2] = 10002;
     col_ordinal_to_unique_id[3] = 10003;
 
+    request.__set_binlog_config(TBinlogConfig());
+    TBinlogConfig& binlog_config = request.binlog_config;
+    binlog_config.__set_version(5);
+    binlog_config.__set_binlog_enable(true);
+    binlog_config.__set_binlog_ttl_second(12323);
+    binlog_config.__set_binlog_max_size(23724);
+
     TabletMetaSharedPtr tablet_meta;
     Status st = TabletMeta::create(request, TabletUid(321, 456), 987 /*shared_id*/, 20000 /*next_unique_id*/,
                                    col_ordinal_to_unique_id, &tablet_meta);
@@ -167,7 +174,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(STORAGE_AGGREGATE_NONE, c1.aggregation());
     ASSERT_EQ(1, c1.subcolumn_count());
 
-    ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
+    ASSERT_EQ("element", c1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c1.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_DECIMALV2, c1.subcolumn(0).type());
     ASSERT_FALSE(c1.subcolumn(0).is_key());
@@ -192,7 +199,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(STORAGE_AGGREGATE_NONE, c2.aggregation());
     ASSERT_EQ(1, c2.subcolumn_count());
 
-    ASSERT_EQ("_c2_1", c2.subcolumn(0).name());
+    ASSERT_EQ("element", c2.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_ARRAY, c2.subcolumn(0).type());
     ASSERT_FALSE(c2.subcolumn(0).is_key());
@@ -205,7 +212,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(1, c2.subcolumn(0).subcolumn_count());
 
     const TabletColumn& c2_1 = c2.subcolumn(0);
-    ASSERT_EQ("_c2_2", c2_1.subcolumn(0).name());
+    ASSERT_EQ("element", c2_1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2_1.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_VARCHAR, c2_1.subcolumn(0).type());
     ASSERT_FALSE(c2_1.subcolumn(0).is_key());
@@ -214,8 +221,63 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
     ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
     ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
-    ASSERT_EQ(10, c2_1.subcolumn(0).index_length());
+    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).index_length());
     ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
+
+    std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();
+    ASSERT_EQ(5, binlog_config_ptr->version);
+    ASSERT_TRUE(binlog_config_ptr->binlog_enable);
+    ASSERT_EQ(12323, binlog_config_ptr->binlog_ttl_second);
+    ASSERT_EQ(23724, binlog_config_ptr->binlog_max_size);
+}
+
+TEST(TabletMetaTest, test_config_binlog) {
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();
+    ASSERT_TRUE(binlog_config_ptr == nullptr);
+
+    // test configuration with pb
+    BinlogConfig binlog_config;
+    binlog_config.update(3, true, 823, 984);
+    tablet_meta->set_binlog_config(binlog_config);
+    binlog_config_ptr = tablet_meta->get_binlog_config();
+    ASSERT_EQ(3, binlog_config_ptr->version);
+    ASSERT_TRUE(binlog_config_ptr->binlog_enable);
+    ASSERT_EQ(823, binlog_config_ptr->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config_ptr->binlog_max_size);
+
+    // test lower version would not override the configuration
+    BinlogConfig binlog_config1;
+    binlog_config1.update(2, true, 323, 475);
+    tablet_meta->set_binlog_config(binlog_config1);
+    binlog_config_ptr = tablet_meta->get_binlog_config();
+    ASSERT_EQ(3, binlog_config_ptr->version);
+    ASSERT_TRUE(binlog_config_ptr->binlog_enable);
+    ASSERT_EQ(823, binlog_config_ptr->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config_ptr->binlog_max_size);
+}
+
+TEST(TabletMetaTest, test_init_from_pb) {
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();
+    ASSERT_TRUE(binlog_config_ptr == nullptr);
+
+    BinlogConfig binlog_config;
+    binlog_config.update(3, true, 823, 984);
+    tablet_meta->set_binlog_config(binlog_config);
+    TabletMetaPB tablet_meta_pb;
+    tablet_meta->to_meta_pb(&tablet_meta_pb);
+
+    TabletMetaSharedPtr tablet_meta1 = TabletMeta::create();
+    binlog_config_ptr = tablet_meta1->get_binlog_config();
+    ASSERT_TRUE(binlog_config_ptr == nullptr);
+
+    tablet_meta1->init_from_pb(&tablet_meta_pb);
+    binlog_config_ptr = tablet_meta1->get_binlog_config();
+    ASSERT_EQ(3, binlog_config_ptr->version);
+    ASSERT_TRUE(binlog_config_ptr->binlog_enable);
+    ASSERT_EQ(823, binlog_config_ptr->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config_ptr->binlog_max_size);
 }
 
 } // namespace starrocks

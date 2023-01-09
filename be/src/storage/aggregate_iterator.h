@@ -17,7 +17,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/row_source_mask.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // new_aggregate_iterator create an aggregate iterator based on chunk aggregator.
 // the rows from child iterator is sorted by heap merge.
@@ -31,4 +31,4 @@ ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor = 0);
 // |is_key| chunk schema is key columns or value columns.
 ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

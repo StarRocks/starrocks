@@ -58,8 +58,8 @@ import java.util.concurrent.TimeoutException;
 
 public class ResultReceiver {
     private static final Logger LOG = LogManager.getLogger(ResultReceiver.class);
-    private boolean isDone = false;
-    private boolean isCancel = false;
+    private volatile boolean isDone = false;
+    private volatile boolean isCancel = false;
     private long packetIdx = 0;
     private final long timeoutTs;
     private final TNetworkAddress address;

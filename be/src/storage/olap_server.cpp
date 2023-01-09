@@ -45,6 +45,7 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -109,7 +110,7 @@ Status StorageEngine::start_bg_threads() {
             max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
             max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
         }
-        vectorized::Compaction::init(max_compaction_concurrency);
+        Compaction::init(max_compaction_concurrency);
 
         _base_compaction_threads.reserve(base_compaction_num_threads);
         // The config::tablet_map_shard_size is preferably a multiple of `base_compaction_num_threads_per_disk`,
@@ -169,7 +170,7 @@ Status StorageEngine::start_bg_threads() {
             max_task_num = config::max_compaction_concurrency;
         }
 
-        vectorized::Compaction::init(max_task_num);
+        Compaction::init(max_task_num);
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
@@ -627,9 +628,15 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
             expire_sec = 360;
         }
         _update_manager->set_cache_expire_ms(expire_sec * 1000);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
+#endif
         int32_t sleep_sec = std::max(1, expire_sec / 2);
         SLEEP_IN_BG_WORKER(sleep_sec);
         _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->expire_cache();
+#endif
     }
 
     return nullptr;

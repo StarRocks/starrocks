@@ -305,6 +305,8 @@ struct RowsetId {
         }
     }
 
+    int64_t id() { return hi & LOW_56_BITS; }
+
     // std::unordered_map need this api
     bool operator==(const RowsetId& rhs) const { return hi == rhs.hi && mi == rhs.mi && lo == rhs.lo; }
 

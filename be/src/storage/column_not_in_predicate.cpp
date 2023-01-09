@@ -17,12 +17,12 @@
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType field_type>
 class ColumnNotInPredicate : public ColumnPredicate {
@@ -355,4 +355,4 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     return nullptr;
 }
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

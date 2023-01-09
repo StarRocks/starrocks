@@ -39,28 +39,27 @@
 
 namespace starrocks {
 
-Status ColumnIterator::decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
+Status ColumnIterator::decode_dict_codes(const Column& codes, Column* words) {
     if (codes.is_nullable()) {
-        const vectorized::ColumnPtr& data_column = down_cast<const vectorized::NullableColumn&>(codes).data_column();
-        const vectorized::Buffer<int32_t>& v =
-                std::static_pointer_cast<vectorized::Int32Column>(data_column)->get_data();
+        const ColumnPtr& data_column = down_cast<const NullableColumn&>(codes).data_column();
+        const Buffer<int32_t>& v = std::static_pointer_cast<Int32Column>(data_column)->get_data();
         return this->decode_dict_codes(v.data(), v.size(), words);
     } else {
-        const vectorized::Buffer<int32_t>& v = down_cast<const vectorized::Int32Column&>(codes).get_data();
+        const Buffer<int32_t>& v = down_cast<const Int32Column&>(codes).get_data();
         return this->decode_dict_codes(v.data(), v.size(), words);
     }
 }
 
-Status ColumnIterator::fetch_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+Status ColumnIterator::fetch_values_by_rowid(const Column& rowids, Column* values) {
     static_assert(std::is_same_v<uint32_t, rowid_t>);
-    const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
+    const auto& numeric_col = down_cast<const FixedLengthColumn<rowid_t>&>(rowids);
     const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
     return fetch_values_by_rowid(p, rowids.size(), values);
 }
 
-Status ColumnIterator::fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+Status ColumnIterator::fetch_dict_codes_by_rowid(const Column& rowids, Column* values) {
     static_assert(std::is_same_v<uint32_t, rowid_t>);
-    const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
+    const auto& numeric_col = down_cast<const FixedLengthColumn<rowid_t>&>(rowids);
     const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
     return fetch_dict_codes_by_rowid(p, rowids.size(), values);
 }

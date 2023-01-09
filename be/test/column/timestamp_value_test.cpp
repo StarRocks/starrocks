@@ -22,7 +22,7 @@
 #include "runtime/time_types.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(TimestampValueTest, normal) {
     LOG(INFO) << "MAX: " << timestamp::from_julian_and_time(date::MAX_DATE, 86400 * USECS_PER_SEC - 1);
@@ -114,4 +114,4 @@ TEST(TimestampValueTest, cast) {
     ASSERT_EQ("2004-02-29", ((DateValue)v).to_string());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

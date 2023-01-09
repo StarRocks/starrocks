@@ -31,8 +31,6 @@ class ExprContext;
 class Expr;
 class SlotDescriptor;
 
-namespace vectorized {
-
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
     SlotId slot_id;
@@ -87,5 +85,4 @@ private:
     std::vector<ExprContext*> _expr_close_list;
 };
 
-} // namespace vectorized
 } // namespace starrocks

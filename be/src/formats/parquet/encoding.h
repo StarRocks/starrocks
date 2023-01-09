@@ -26,9 +26,7 @@
 namespace starrocks {
 
 class Slice;
-namespace vectorized {
 class Column;
-}
 
 } // namespace starrocks
 
@@ -58,11 +56,9 @@ public:
         return Status::NotSupported("set_dict is not supported");
     }
 
-    virtual Status get_dict_values(vectorized::Column* column) {
-        return Status::NotSupported("get_dict_values is not supported");
-    }
+    virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 
@@ -79,7 +75,7 @@ public:
     // For history reason, decoder don't known how many elements encoded in one page.
     // Caller must assure that no out-of-bounds access.
     // It will return ERROR if caller wants to read out-of-bound data.
-    virtual Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) = 0;
+    virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst) = 0;
 
     // Currently, this function is only used to read dictionary values.
     virtual Status next_batch(size_t count, uint8_t* dst) {

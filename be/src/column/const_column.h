@@ -18,7 +18,7 @@
 #include "column/datum.h"
 #include "common/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
     friend class ColumnFactory<Column, ConstColumn>;
@@ -252,4 +252,4 @@ private:
     uint64_t _size;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

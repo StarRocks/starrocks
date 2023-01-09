@@ -120,7 +120,7 @@ public:
         ASSERT_EQ(slices.size(), page_decoder->count());
 
         //check values
-        auto column = vectorized::BinaryColumn::create();
+        auto column = BinaryColumn::create();
         size_t size = slices.size();
         ret = page_decoder->next_batch(&size, column.get());
         ASSERT_TRUE(ret.ok());
@@ -131,7 +131,7 @@ public:
 
         ret = page_decoder->seek_to_position_in_page(15);
         ASSERT_TRUE(ret.ok());
-        auto column2 = vectorized::BinaryColumn::create();
+        auto column2 = BinaryColumn::create();
         ret = page_decoder->next_batch(&size, column2.get());
         ASSERT_TRUE(ret.ok());
         ASSERT_EQ(23, size);
@@ -141,11 +141,11 @@ public:
 
         ret = page_decoder->seek_to_position_in_page(0);
         ASSERT_TRUE(ret.ok());
-        auto column3 = vectorized::BinaryColumn::create();
-        vectorized::SparseRange read_range;
-        read_range.add(vectorized::Range(0, 10));
-        read_range.add(vectorized::Range(15, 25));
-        read_range.add(vectorized::Range(28, 38));
+        auto column3 = BinaryColumn::create();
+        SparseRange read_range;
+        read_range.add(Range(0, 10));
+        read_range.add(Range(15, 25));
+        read_range.add(Range(28, 38));
         ret = page_decoder->next_batch(read_range, column3.get());
         ASSERT_TRUE(ret.ok());
         ASSERT_EQ(30, column3->size());

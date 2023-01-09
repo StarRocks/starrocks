@@ -18,15 +18,15 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/statusor.h"
-#include "exec/vectorized/file_scanner.h"
-#include "exec/vectorized/parquet_scanner.h"
+#include "exec/file_scanner.h"
+#include "exec/parquet_scanner.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class PushBrokerReader {
 public:
@@ -63,4 +63,4 @@ private:
     std::unique_ptr<ScannerCounter> _counter;
     std::unique_ptr<FileScanner> _scanner;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

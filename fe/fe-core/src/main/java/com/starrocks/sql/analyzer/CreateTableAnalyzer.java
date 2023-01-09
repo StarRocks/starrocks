@@ -39,6 +39,7 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
@@ -208,10 +209,6 @@ public class CreateTableAnalyzer {
                 }
             }
             statement.setKeysDesc(keysDesc);
-
-            if (keysDesc.getKeysType() == KeysType.PRIMARY_KEYS && statement.isLakeEngine()) {
-                throw new SemanticException("Lake table does not support primary key type");
-            }
         } else {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
@@ -280,7 +277,13 @@ public class CreateTableAnalyzer {
                     try {
                         partitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
-
+                        throw new SemanticException(e.getMessage());
+                    }
+                } else if (partitionDesc instanceof ExpressionPartitionDesc && Config.enable_expression_partition) {
+                    ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                    try {
+                        expressionPartitionDesc.analyze(columnDefs, properties);
+                    } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
                 } else {
@@ -296,8 +299,7 @@ public class CreateTableAnalyzer {
                         properties = Maps.newHashMap();
                         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
                     }
-                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
-                            Lists.newArrayList(columnDefs.get(0).getName()));
+                    distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
                 } else {
                     throw new SemanticException("Create olap table should contain distribution desc");
                 }

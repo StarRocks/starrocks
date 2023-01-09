@@ -127,9 +127,9 @@ public:
 
     Status seek_at_or_after_value(const void* value, bool* exact_match) override;
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);

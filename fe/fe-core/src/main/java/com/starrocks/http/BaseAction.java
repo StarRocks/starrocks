@@ -40,6 +40,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -80,6 +84,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public abstract class BaseAction implements IAction {
     private static final Logger LOG = LogManager.getLogger(BaseAction.class);
@@ -290,6 +295,37 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+    // For new RBAC privilege framework
+    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType.SystemAction... systemActions)
+            throws UnauthorizedException {
+        ConnectContext tmpContext = new ConnectContext();
+        tmpContext.setGlobalStateMgr(globalStateMgr);
+        tmpContext.setCurrentUserIdentity(currentUser);
+        for (PrivilegeType.SystemAction systemAction : systemActions) {
+            if (!PrivilegeManager.checkSystemAction(tmpContext, systemAction)) {
+                throw new UnauthorizedException("Access denied; you need (at least one of) the "
+                        + systemAction.name() + " privilege(s) for this operation");
+            }
+        }
+    }
+
+    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
+    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
+    protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws UnauthorizedException {
+        try {
+            Set<Long> userOwnedRoles = PrivilegeManager.getOwnedRolesByUser(currentUser);
+            if (!userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) ||
+                    !userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)) {
+                throw new UnauthorizedException(
+                        "Access denied; you need own db_admin and user_admin roles for this operation");
+            }
+        } catch (PrivilegeException e) {
+            UnauthorizedException newException = new UnauthorizedException(
+                    "Access denied; you need own db_admin and user_admin roles for this operation");
+            newException.initCause(e);
+        }
+    }
+
     protected void checkDbAuth(UserIdentity currentUser, String db, PrivPredicate predicate)
             throws UnauthorizedException {
         if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, db, predicate)) {
@@ -306,9 +342,28 @@ public abstract class BaseAction implements IAction {
         }
     }
 
+    protected void checkTableAction(ConnectContext context, String db, String tbl,
+                                    PrivilegeType.TableAction action) throws UnauthorizedException {
+        if (!PrivilegeManager.checkTableAction(context, db, tbl, action)) {
+            throw new UnauthorizedException("Access denied; you need (at least one of) the "
+                    + action.name() + " privilege(s) for this operation");
+        }
+    }
+
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws UnauthorizedException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isUsingNewPrivilege()) {
+            UserIdentity currentUser =
+                    globalStateMgr.getAuthenticationManager().checkPlainPassword(
+                            authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
+            if (currentUser == null) {
+                throw new UnauthorizedException("Access denied for "
+                        + authInfo.fullUserName + "@" + authInfo.remoteIp);
+            }
+            return currentUser;
+        }
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPlainPassword(authInfo.fullUserName,
                 authInfo.remoteIp, authInfo.password, currentUser)) {

@@ -44,41 +44,55 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class SetPasswordTest {
 
     private Auth auth;
     @Mocked
-    public GlobalStateMgr globalStateMgr;
-    @Mocked
     private Analyzer analyzer;
     @Mocked
     private EditLog editLog;
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+    }
+
     @Before
     public void setUp() throws NoSuchMethodException, SecurityException, AnalysisException {
         auth = new Auth();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Auth getAuth() {
+                return auth;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
 
                 editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;
@@ -154,6 +168,16 @@ public class SetPasswordTest {
             Assert.fail();
         }
 
+    }
+
+    @Test
+    public void testAuditSetPassword() {
+        String sql = "SET PASSWORD = PASSWORD('testPass'), pipeline_dop = 2";
+        SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
+        String setSql = AstToStringBuilder.toString(setStmt);
+        Assert.assertTrue(setSql.contains("PASSWORD('***')"));
+        Assert.assertTrue(setSql.contains("`pipeline_dop` = 2"));
+        System.out.println(setSql);
     }
 
 }

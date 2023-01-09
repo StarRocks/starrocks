@@ -15,8 +15,8 @@
 #include "connector/lake_connector.h"
 
 #include "common/constexpr.h"
-#include "exec/vectorized/connector_scan_node.h"
-#include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/connector_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
@@ -28,7 +28,6 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
@@ -42,7 +41,7 @@ public:
 
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
@@ -51,7 +50,7 @@ public:
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
-    Status init_global_dicts(vectorized::TabletReaderParams* params);
+    Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     void decide_chunk_size();
@@ -60,7 +59,7 @@ private:
     Status init_tablet_reader(RuntimeState* state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
-    void update_realtime_counter(vectorized::Chunk* chunk);
+    void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
 private:
@@ -70,7 +69,7 @@ private:
     Status _status = Status::OK();
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
-    vectorized::ConjunctivePredicates _not_push_down_predicates;
+    ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
@@ -79,19 +78,19 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    vectorized::OlapScanConjunctsManager _conjuncts_manager;
-    vectorized::DictOptimizeParser _dict_optimize_parser;
+    OlapScanConjunctsManager _conjuncts_manager;
+    DictOptimizeParser _dict_optimize_parser;
 
     std::shared_ptr<const TabletSchema> _tablet_schema;
     int64_t _version = 0;
-    vectorized::TabletReaderParams _params{};
+    TabletReaderParams _params{};
     std::shared_ptr<lake::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
-    std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
+    std::shared_ptr<ChunkIterator> _prj_iter;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
-    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
+    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
 
     // slot descriptors for each one of |output_columns|.
@@ -142,13 +141,13 @@ private:
 class LakeDataSourceProvider final : public DataSourceProvider {
 public:
     friend class LakeDataSource;
-    LakeDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     ~LakeDataSourceProvider() override = default;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
 };
 
@@ -225,7 +224,7 @@ void LakeDataSource::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 }
 
-Status LakeDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
     auto* chunk_ptr = chunk->get();
 
@@ -267,7 +266,7 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
 }
 
 // mapping a slot-column-id to schema-columnid
-Status LakeDataSource::init_global_dicts(vectorized::TabletReaderParams* params) {
+Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
@@ -363,8 +362,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
 
     {
-        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                                  *_params.global_dictmaps);
+        ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                      *_params.global_dictmaps);
         not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
@@ -414,16 +413,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
-    starrocks::vectorized::VectorizedSchema child_schema =
-            ChunkHelper::convert_schema_to_format_v2(*_tablet_schema, reader_columns);
+    starrocks::VectorizedSchema child_schema = ChunkHelper::convert_schema(*_tablet_schema, reader_columns);
 
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_scan_range.tablet_id));
     ASSIGN_OR_RETURN(_reader, tablet.new_reader(_version, std::move(child_schema)));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::vectorized::VectorizedSchema output_schema =
-                ChunkHelper::convert_schema_to_format_v2(*_tablet_schema, scanner_columns);
+        starrocks::VectorizedSchema output_schema = ChunkHelper::convert_schema(*_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -505,7 +502,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
 }
 
-void LakeDataSource::update_realtime_counter(vectorized::Chunk* chunk) {
+void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _num_rows_read += chunk->num_rows();
     auto& stats = _reader->stats();
     _raw_rows_read = stats.raw_rows_read;
@@ -582,7 +579,7 @@ void LakeDataSource::update_counter() {
 
 // ================================
 
-LakeDataSourceProvider::LakeDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -591,7 +588,7 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 
 // ================================
 
-DataSourceProviderPtr LakeConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
 }

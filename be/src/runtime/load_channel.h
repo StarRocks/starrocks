@@ -90,7 +90,9 @@ public:
 
     void cancel();
 
-    void cancel(int64_t index_id, int64_t tablet_id);
+    void abort();
+
+    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -107,10 +109,9 @@ public:
     Span get_span() { return _span; }
 
 private:
-    void _add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                    PTabletWriterAddBatchResult* response);
+    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;

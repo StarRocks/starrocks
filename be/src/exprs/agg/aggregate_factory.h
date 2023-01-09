@@ -15,9 +15,9 @@
 #pragma once
 
 #include "exprs/agg/aggregate.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                                 bool is_null,
@@ -29,4 +29,4 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
                                              TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
                                              int func_version = 1);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

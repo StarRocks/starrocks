@@ -40,7 +40,7 @@
 #include "storage/rowset/page_pointer.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Column;
 }
 
@@ -94,11 +94,11 @@ public:
         return step;
     }
 
-    virtual Status next_batch(size_t* n, vectorized::Column* column) {
+    virtual Status next_batch(size_t* n, Column* column) {
         return Status::NotSupported("vectorized not supported yet");
     }
 
-    virtual Status next_batch(const vectorized::SparseRange& range, vectorized::Column* column) {
+    virtual Status next_batch(const SparseRange& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
     }
 
@@ -115,11 +115,11 @@ public:
     // the codec algorithm then switched to plain encoding when the dictionary page is full.
     virtual EncodingTypePB encoding_type() const = 0;
 
-    virtual Status next_dict_codes(size_t* n, vectorized::Column* dst) {
+    virtual Status next_dict_codes(size_t* n, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
-    virtual Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
+    virtual Status next_dict_codes(const SparseRange& range, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 

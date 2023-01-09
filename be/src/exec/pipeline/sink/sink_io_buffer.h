@@ -55,7 +55,7 @@ public:
 
     virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
 
-    virtual Status append_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         if (Status status = get_io_status(); !status.ok()) {
             return status;
         }
@@ -107,7 +107,7 @@ public:
         return _io_status;
     }
 
-    static int execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+    static int execute_io_task(void* meta, bthread::TaskIterator<const ChunkPtr>& iter) {
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         for (; iter; ++iter) {
             sink_io_buffer->_process_chunk(iter);
@@ -116,9 +116,9 @@ public:
     }
 
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) = 0;
+    virtual void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) = 0;
 
-    std::unique_ptr<bthread::ExecutionQueueId<const vectorized::ChunkPtr>> _exec_queue_id;
+    std::unique_ptr<bthread::ExecutionQueueId<const ChunkPtr>> _exec_queue_id;
 
     std::atomic_int32_t _num_result_sinkers = 0;
     std::atomic_int64_t _num_pending_chunks = 0;

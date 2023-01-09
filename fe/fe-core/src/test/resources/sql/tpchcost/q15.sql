@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 24:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 1
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
@@ -101,6 +102,8 @@ OutPut Exchange Id: 24
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----20:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [11: L_SUPPKEY, INT, false]
 |       cardinality: 1
 |
 0:OlapScanNode
@@ -145,6 +148,7 @@ OutPut Exchange Id: 20
 |  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----17:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 5:AGGREGATE (merge finalize)
@@ -159,6 +163,8 @@ OutPut Exchange Id: 20
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 4:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [11: L_SUPPKEY, INT, false]
 cardinality: 1000000
 
 PLAN FRAGMENT 3(F05)
@@ -186,6 +192,7 @@ OutPut Exchange Id: 17
 |  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
 13:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 4(F04)
@@ -216,6 +223,8 @@ OutPut Exchange Id: 13
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
 |
 9:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [30: L_SUPPKEY, INT, false]
 cardinality: 1000000
 
 PLAN FRAGMENT 5(F03)

@@ -267,10 +267,7 @@ public class Group {
                 .entrySet()) {
             GroupExpression bestGroupExpression = entry.getValue().second;
             // change the enforcer itself group and child group to dst group if enforcer's group is other.
-            if (bestGroupExpression.getGroup() == other) {
-                bestGroupExpression.setGroup(this);
-                bestGroupExpression.getInputs().set(0, this);
-            }
+            updateEnforcerGroup(bestGroupExpression, other);
             setBestExpressionWithStatistics(bestGroupExpression, entry.getValue().first, entry.getKey(),
                     other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
                             other.statistics);
@@ -280,6 +277,18 @@ public class Group {
             statistics = other.statistics;
         }
         other.satisfyOutputPropertyGroupExpressions.forEach(this::addSatisfyOutputPropertyGroupExpressions);
+    }
+
+    private void updateEnforcerGroup(GroupExpression groupExpression, Group checkGroup) {
+        if (groupExpression.getGroup() == checkGroup) {
+            groupExpression.setGroup(this);
+        }
+
+        for (int i = 0; i < groupExpression.getInputs().size(); i++) {
+            if (groupExpression.inputAt(i) == checkGroup) {
+                groupExpression.getInputs().set(i, this);
+            }
+        }
     }
 
     public void removeGroupExpression(GroupExpression groupExpression) {

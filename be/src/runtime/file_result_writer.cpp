@@ -143,7 +143,7 @@ std::string FileResultWriter::_file_format_to_name() {
     }
 }
 
-Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
+Status FileResultWriter::append_chunk(Chunk* chunk) {
     assert(_file_builder != nullptr);
     {
         SCOPED_TIMER(_append_chunk_timer);

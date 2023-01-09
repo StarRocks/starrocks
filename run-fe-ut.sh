@@ -37,6 +37,7 @@ Usage: $0 <options>
     $0                      build and run ut
     $0 --coverage           build and run coverage statistic
     $0 --run xxx            build and run the specified class
+    $0 --dumpcase path      run dump case
   "
   exit 1
 }
@@ -46,6 +47,7 @@ OPTS=$(getopt \
   -o '' \
   -l 'coverage' \
   -l 'run' \
+  -l 'dumpcase' \
   -l 'help' \
   -- "$@")
 
@@ -58,10 +60,12 @@ eval set -- "$OPTS"
 HELP=0
 RUN=0
 COVERAGE=0
+DUMPCASE=0
 while true; do 
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
         --run) RUN=1 ; shift ;;
+        --dumpcase) DUMPCASE=1; shift ;;
         --help) HELP=1 ; shift ;; 
         --) shift ;  break ;;
         *) ehco "Internal error" ; exit 1 ;;
@@ -101,6 +105,8 @@ mkdir ut_ports
 if [ ${COVERAGE} -eq 1 ]; then
     echo "Run coverage statistic"
     ant cover-test
+elif [ ${DUMPCASE} -eq 1 ]; then
+    ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=com.starrocks.sql.dump.QueryDumpRegressionTest -D dumpJsonConfig=$1
 else
     if [ ${RUN} -eq 1 ]; then
         echo "Run the specified class: $1"

@@ -87,7 +87,7 @@ Status MysqlTableSink::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MysqlTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status MysqlTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return _writer->append(chunk);
 }
 

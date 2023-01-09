@@ -15,10 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Subquery;
+import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -166,5 +170,62 @@ public class AnalyzeSetVariableTest {
         setPassVar = (SetPassVar) setStmt.getSetVars().get(0);
         password = new String(setPassVar.getPassword());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
+    }
+
+    @Test
+    public void testSetResourceGroupName() {
+        String rg1Name = "rg1";
+        TWorkGroup rg1 = new TWorkGroup();
+        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        new Expectations(mgr) {
+            {
+                mgr.chooseResourceGroupByName(rg1Name);
+                result = rg1;
+            }
+            {
+                mgr.chooseResourceGroupByName(anyString);
+                result = null;
+            }
+        };
+
+        String sql;
+
+        sql = String.format("SET resource_group = %s", rg1Name);
+        analyzeSuccess(sql);
+
+        sql = "SET resource_group = not_exist_rg";
+        analyzeFail(sql, "resource group not exists");
+
+        sql = "SET resource_group = ''";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testSetResourceGroupID() {
+        long rg1ID = 1;
+        TWorkGroup rg1 = new TWorkGroup();
+        rg1.setId(rg1ID);
+        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        new Expectations(mgr) {
+            {
+                mgr.chooseResourceGroupByID(rg1ID);
+                result = rg1;
+            }
+            {
+                mgr.chooseResourceGroupByID(anyLong);
+                result = null;
+            }
+        };
+
+        String sql;
+
+        sql = String.format("SET resource_group_id = %s", rg1ID);
+        analyzeSuccess(sql);
+
+        sql = "SET resource_group_id = 2";
+        analyzeFail(sql, "resource group not exists");
+
+        sql = "SET resource_group_id = 0";
+        analyzeSuccess(sql);
     }
 }

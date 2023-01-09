@@ -22,10 +22,10 @@
 #include "runtime/types.h"
 #include "simdjson.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                           simdjson::ondemand::value* value);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

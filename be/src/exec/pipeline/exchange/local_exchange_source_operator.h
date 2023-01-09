@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
-        PartitionChunk(vectorized::ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, const uint32_t from,
+        PartitionChunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, const uint32_t from,
                        const uint32_t size)
                 : chunk(std::move(chunk)), indexes(std::move(indexes)), from(from), size(size) {}
 
@@ -33,7 +33,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
 
         PartitionChunk(PartitionChunk&&) = default;
 
-        vectorized::ChunkPtr chunk;
+        ChunkPtr chunk;
         std::shared_ptr<std::vector<uint32_t>> indexes;
         const uint32_t from;
         const uint32_t size;
@@ -45,10 +45,9 @@ public:
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, driver_sequence),
               _memory_manager(memory_manager) {}
 
-    Status add_chunk(vectorized::ChunkPtr chunk);
+    Status add_chunk(ChunkPtr chunk);
 
-    Status add_chunk(vectorized::ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from,
-                     uint32_t size);
+    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size);
 
     bool has_output() const override;
 
@@ -61,21 +60,38 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    bool is_epoch_finished() const override {
+        std::lock_guard<std::mutex> l(_chunk_lock);
+        return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
+    }
+    Status set_epoch_finishing(RuntimeState* state) override {
+        std::lock_guard<std::mutex> l(_chunk_lock);
+        _is_epoch_finished = true;
+        return Status::OK();
+    }
+    Status reset_epoch(RuntimeState* state) override {
+        _is_epoch_finished = false;
+        return Status::OK();
+    }
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    vectorized::ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
+    ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
 
-    vectorized::ChunkPtr _pull_shuffle_chunk(RuntimeState* state);
+    ChunkPtr _pull_shuffle_chunk(RuntimeState* state);
 
     bool _is_finished = false;
-    std::queue<vectorized::ChunkPtr> _full_chunk_queue;
+    std::queue<ChunkPtr> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
     int64_t _partition_rows_num = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
+
+    // STREAM MV
+    bool _is_epoch_finished = false;
 };
 
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {

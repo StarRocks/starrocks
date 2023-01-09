@@ -20,7 +20,7 @@
 #include "storage/types.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace in_pred_utils_detail {
 template <typename T>
@@ -161,4 +161,4 @@ inline ItemHashSet<typename CppTypeTraits<field_type>::CppType> strings_to_hashs
 
 } // namespace predicate_internal
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

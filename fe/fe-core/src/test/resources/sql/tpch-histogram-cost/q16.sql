@@ -36,6 +36,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 15:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 7119
 column statistics:
 * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
@@ -79,6 +80,8 @@ OutPut Exchange Id: 15
 |  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
 11:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [10: P_BRAND, VARCHAR, false], [11: P_TYPE, VARCHAR, false], [12: P_SIZE, INT, false]
 cardinality: 6914952
 
 PLAN FRAGMENT 2(F00)
@@ -123,6 +126,7 @@ OutPut Exchange Id: 11
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 |
 |----7:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 250000
 |
 4:Project
@@ -154,6 +158,8 @@ OutPut Exchange Id: 11
 |  * P_SIZE-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
 |----2:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [7: P_PARTKEY, INT, false]
 |       cardinality: 2304984
 |
 0:OlapScanNode

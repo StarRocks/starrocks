@@ -23,11 +23,11 @@
 #include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction {
@@ -76,4 +76,4 @@ public:
         env->DeleteLocalRef(val.l);
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

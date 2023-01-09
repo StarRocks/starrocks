@@ -18,7 +18,7 @@
 
 #include "storage/aggregate_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(VectorizedFieldTest, test_construct0) {
     VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", TYPE_INT, false);
@@ -169,4 +169,4 @@ TEST(VectorizedFieldTest, test_with_nullable) {
     ASSERT_EQ(10, field2->short_key_length());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -27,7 +27,7 @@ class MemTracker;
 class SlotDescriptor;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Chunk;
 }
 
@@ -38,7 +38,7 @@ class AsyncDeltaWriterImpl;
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
 class AsyncDeltaWriter {
-    using Chunk = starrocks::vectorized::Chunk;
+    using Chunk = starrocks::Chunk;
 
 public:
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;

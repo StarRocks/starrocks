@@ -49,9 +49,9 @@
 
 namespace starrocks {
 
-using VSchema = starrocks::vectorized::VectorizedSchema;
-using VChunk = starrocks::vectorized::Chunk;
-using Int32Column = starrocks::vectorized::Int32Column;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
+using Int32Column = starrocks::Int32Column;
 
 // 2 senders, 1 index, each index has 2 partitions, each partition has 2 tablets, each tablet has 2 columns
 // partition id: 10, 11
@@ -231,7 +231,7 @@ protected:
         ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
 
         OlapReaderStatistics statistics;
-        vectorized::SegmentReadOptions opts;
+        SegmentReadOptions opts;
         opts.fs = fs;
         opts.tablet_id = tablet_id;
         opts.stats = &statistics;

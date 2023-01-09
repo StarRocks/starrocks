@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -133,7 +132,7 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByAsAnalyze() throws Exception {
         String sql = "select BITOR(825279661, 1960775729) as a from test_all_type group by a";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 11: bitor");
+        assertContains(plan, "group by: 11: expr");
     }
 
     @Test
@@ -720,9 +719,12 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testVarianceStddevAnalyze() throws Exception {
         String sql = "select stddev_pop(1222) from (select 1) t;";
-        assertPlanContains(sql, "1:AGGREGATE (update finalize)\n" +
+        assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
                 "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 5> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -1061,11 +1063,12 @@ public class AggregateTest extends PlanTestBase {
         System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(8: case)\n" +
+                "  |  output: sum(if(1: v4 = 4: v1, 1: v4, NULL))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  6:Project\n" +
-                "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 4> : 4: v1\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -1073,8 +1076,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t1"));
+                "  0:OlapScanNode"));
 
         Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
@@ -1450,13 +1452,12 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "15:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "16:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_sum(1)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  14:Project\n" +
-                "  |  <slot 17> : 2: t1b\n" +
-                "  |  ");
+                "  15:Project\n" +
+                "  |  <slot 19> : 15: auto_fill_col");
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1), " +
                 "count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
@@ -1532,15 +1533,14 @@ public class AggregateTest extends PlanTestBase {
         sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
                 "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "25:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: sum(26: t1b)\n" +
-                "  |  group by: 27: t1c, 28: expr\n" +
+                "  |  group by: 23: t1b, 24: t1c, 25: expr\n" +
                 "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 26> : 2: t1b\n" +
-                "  |  <slot 27> : 3: t1c\n" +
-                "  |  <slot 28> : 11: expr");
+                "  24:Project\n" +
+                "  |  <slot 23> : 2: t1b\n" +
+                "  |  <slot 24> : 3: t1c\n" +
+                "  |  <slot 25> : 11: expr\n");
     }
 
     @Test
@@ -1639,12 +1639,12 @@ public class AggregateTest extends PlanTestBase {
                 "sum(arrays_overlap(v3, [1])) as q1, " +
                 "sum(arrays_overlap(v3, [1])) as q2, " +
                 "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
-        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(4: arrays_overlap)\n" +
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>)))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : arrays_overlap(3: v3, CAST(ARRAY<tinyint(4)>[1] AS ARRAY<BIGINT>))\n" +
+                "  |  <slot 3> : 3: v3\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -1696,6 +1696,19 @@ public class AggregateTest extends PlanTestBase {
                     "  |  group by: [1: v1, BIGINT, true]\n" +
                     "  |  sorted streaming: true");
         }
+        {
+            try {
+                FeConstants.USE_MOCK_DICT_MANAGER = true;
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+                sql = "select sum(t1b), t1a from test_all_type group by t1a";
+                plan = getCostExplain(sql);
+                assertContains(plan, "sorted streaming: true");
+                assertContains(plan, "Decode");
+            } finally {
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+                FeConstants.USE_MOCK_DICT_MANAGER = false;
+            }
+        }
         connectContext.getSessionVariable().setEnableSortAggregate(false);
     }
 
@@ -1711,5 +1724,162 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("ANALYTIC"));
         Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
+    }
+
+    @Test
+    public void testExtractProject() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select sum(t1c), sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c");
+
+        sql = "select sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(15: cast + 1), sum(15: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : 15: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 15> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c), sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(16: cast + 1), sum(16: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 16> : 16: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 16> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c + 1), sum(t1c + 1 + 2), sum(t1d + 1 + 3) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(11: expr), sum(18: add + 2), sum(4: t1d + 1 + 3)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 11> : 18: add\n" +
+                "  |  <slot 18> : 18: add\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
+                "  |  <slot 18> : 17: cast + 1");
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct t1c, upper(id_datetime)) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  5:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(3: t1c IS NULL, NULL, 11: upper))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: t1c, 11: upper");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+    }
+
+    @Test
+    public void testSimpleMinMaxAggRewrite() throws Exception {
+        // normal case
+        String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 16> : min_id_datetime\n" +
+                "     <id 14> : min_t1b\n" +
+                "     <id 15> : max_t1b");
+
+        // The following cases will not use MetaScan because some conditions are not met
+        // with group by key
+        sql = "select t1b,max(id_datetime) from test_all_type_not_null group by t1b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(8: id_datetime)\n" +
+                "  |  group by: 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null");
+        // with expr in agg function
+        sql = "select min(t1b+1),max(t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(CAST(2: t1b AS INT) + 1), max(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with unsupported type in agg function
+        sql = "select min(t1b),max(t1a) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b), max(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with filter
+        sql = "select min(t1b) from test_all_type_not_null where t1c > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select min(t1b) from test_all_type_not_null having abs(1) = 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  having: abs(1) = 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with nullable column
+        sql = "select min(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testGroupByLiteral() throws Exception {
+        String sql = "select -9223372036854775808 group by TRUE;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 3> : -9223372036854775808");
     }
 }

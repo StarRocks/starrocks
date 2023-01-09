@@ -93,6 +93,15 @@ string DelVector::save() const {
     return ret;
 }
 
+void DelVector::save_to(std::string* str) {
+    auto roaring_size = _roaring ? _roaring->getSizeInBytes() : 0;
+    str->resize(roaring_size + 1);
+    str->at(0) = 0x01; // one byte flag.
+    if (roaring_size > 0) {
+        _roaring->write(str->data() + 1);
+    }
+}
+
 string DelVector::to_string() const {
     return strings::Substitute("version:$0 $1", _version, _roaring ? _roaring->toString() : string("null"));
 }

@@ -21,11 +21,11 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // 1. name
 // 2. arg primitive type
@@ -55,6 +55,7 @@ public:
     void register_utility();
     void register_approx();
     void register_others();
+    void register_retract_functions();
 
     const std::vector<LogicalType>& aggregate_types() const {
         const static std::vector<LogicalType> kTypes{
@@ -204,4 +205,4 @@ private:
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -43,19 +43,21 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/struct_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
@@ -198,6 +200,63 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->emplace_back(std::move(res).value());
         }
         return Status::OK();
+    } else if (_column_type == LogicalType::TYPE_MAP) {
+        _sub_readers = std::make_unique<SubReaderList>();
+        if (meta->is_nullable()) {
+            if (meta->children_columns_size() != 4) {
+                return Status::InvalidArgument("nullable array should have 3 children columns");
+            }
+            _sub_readers->reserve(4);
+
+            // keys
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // values
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // null flags
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // offsets
+            res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+        } else {
+            if (meta->children_columns_size() != 3) {
+                return Status::InvalidArgument("non-nullable array should have 2 children columns");
+            }
+            _sub_readers->reserve(3);
+
+            // keys
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // values
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // offsets
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+        }
+        return Status::OK();
+    } else if (_column_type == LogicalType::TYPE_STRUCT) {
+        _sub_readers = std::make_unique<SubReaderList>();
+        for (int i = 0; i < meta->children_columns_size(); ++i) {
+            auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+        }
+        return Status::OK();
     } else {
         return Status::NotSupported(fmt::format("unsupported field type {}", (int)_column_type));
     }
@@ -225,8 +284,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
 
-Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes,
-                                           vectorized::SparseRange* row_ranges) {
+Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange* row_ranges) {
     for (auto i : page_indexes) {
         ordinal_t page_first_id = _ordinal_index->get_first_ordinal(i);
         ordinal_t page_last_id = _ordinal_index->get_last_ordinal(i);
@@ -235,32 +293,31 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
-Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const {
+Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
     TypeInfoPtr type_info = get_type_info(delegate_type(_column_type));
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
-        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
-        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
+        RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
+        RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
     detail->set_num_rows(static_cast<size_t>(num_rows()));
     return Status::OK();
 }
 
 // prerequisite: at least one predicate in |predicates| support bloom filter.
-Status ColumnReader::bloom_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                  vectorized::SparseRange* row_ranges) {
+Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange* row_ranges) {
     RETURN_IF_ERROR(_load_bloom_filter_index());
-    vectorized::SparseRange bf_row_ranges;
+    SparseRange bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
     RETURN_IF_ERROR(_bloom_filter_index->new_iterator(&bf_iter));
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
     for (int i = 0; i < range_size; ++i) {
-        vectorized::Range r = (*row_ranges)[i];
+        Range r = (*row_ranges)[i];
         int64_t idx = r.begin();
         auto iter = _ordinal_index->seek_at_or_before(r.begin());
         while (idx < r.end()) {
@@ -274,8 +331,8 @@ Status ColumnReader::bloom_filter(const std::vector<const vectorized::ColumnPred
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
         for (const auto* pred : predicates) {
             if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
-                bf_row_ranges.add(vectorized::Range(_ordinal_index->get_first_ordinal(pid),
-                                                    _ordinal_index->get_last_ordinal(pid) + 1));
+                bf_row_ranges.add(
+                        Range(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }
         }
     }
@@ -369,10 +426,10 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
     return Status::OK();
 }
 
-Status ColumnReader::zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                     const vectorized::ColumnPredicate* del_predicate,
+Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                     const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                     vectorized::SparseRange* row_ranges) {
+                                     SparseRange* row_ranges) {
     RETURN_IF_ERROR(_load_zonemap_index());
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
@@ -380,15 +437,15 @@ Status ColumnReader::zone_map_filter(const std::vector<const vectorized::ColumnP
     return Status::OK();
 }
 
-Status ColumnReader::_zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const vectorized::ColumnPredicate* del_predicate,
+Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                       std::vector<uint32_t>* pages) {
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
     int32_t page_size = _zonemap_index->num_pages();
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
-        vectorized::ZoneMapDetail detail;
+        ZoneMapDetail detail;
         _parse_zone_map(zm, &detail);
         bool matched = true;
         for (const auto* predicate : predicates) {
@@ -409,35 +466,56 @@ Status ColumnReader::_zone_map_filter(const std::vector<const vectorized::Column
     return Status::OK();
 }
 
-bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates) const {
+bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates) const {
     if (_segment_zone_map == nullptr) {
         return true;
     }
-    vectorized::ZoneMapDetail detail;
+    ZoneMapDetail detail;
     _parse_zone_map(*_segment_zone_map, &detail);
-    auto filter = [&](const vectorized::ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
+    auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-Status ColumnReader::new_iterator(ColumnIterator** iterator) {
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
     if (is_scalar_field_type(delegate_type(_column_type))) {
-        *iterator = new ScalarColumnIterator(this);
-        return Status::OK();
+        return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-        ColumnIterator* element_iterator;
-        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        ColumnIterator* null_iterator = nullptr;
+        std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
-            RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&null_iterator));
+            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[col++]->new_iterator());
         }
+        ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        ColumnIterator* array_size_iterator;
-        RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
+        return std::make_unique<ArrayColumnIterator>(std::move(null_iterator), std::move(array_size_iterator),
+                                                     std::move(element_iterator));
+    } else if (_column_type == LogicalType::TYPE_MAP) {
+        size_t col = 0;
+        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator());
+        std::unique_ptr<ColumnIterator> nulls;
+        if (is_nullable()) {
+            ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
+        }
+        ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
+        return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
+                                                   std::move(values));
+    } else if (_column_type == LogicalType::TYPE_STRUCT) {
+        auto num_fields = _sub_readers->size();
 
-        *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
-        return Status::OK();
+        std::unique_ptr<ColumnIterator> null_iter;
+        if (is_nullable()) {
+            num_fields -= 1;
+            ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[num_fields]->new_iterator());
+        }
+        std::vector<std::unique_ptr<ColumnIterator>> field_iters;
+        for (int i = 0; i < num_fields; ++i) {
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator());
+            field_iters.emplace_back(std::move(iter));
+        }
+        return create_struct_iter(std::move(null_iter), std::move(field_iters));
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }

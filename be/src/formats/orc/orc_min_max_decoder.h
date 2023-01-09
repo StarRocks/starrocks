@@ -21,7 +21,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -172,6 +173,11 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
+            case EPOCH_FINISH: {
+                _finalize_epoch(driver, runtime_state, driver_state);
+                _blocked_driver_poller->park_driver(driver);
+                break;
+            }
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
@@ -196,8 +202,13 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 
         // Try to add the driver to poller first.
         if (!driver->source_operator()->is_finished() && !driver->source_operator()->has_output()) {
-            driver->set_driver_state(DriverState::INPUT_EMPTY);
-            this->_blocked_driver_poller->add_blocked_driver(driver);
+            if (typeid(*driver) == typeid(StreamPipelineDriver)) {
+                driver->set_driver_state(DriverState::EPOCH_FINISH);
+                this->_blocked_driver_poller->park_driver(driver);
+            } else {
+                driver->set_driver_state(DriverState::INPUT_EMPTY);
+                this->_blocked_driver_poller->add_blocked_driver(driver);
+            }
         } else {
             this->_driver_queue->put_back(driver);
         }
@@ -238,6 +249,16 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
+size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+    return _blocked_driver_poller->activate_parked_driver(predicate_func);
+}
+
+void GlobalDriverExecutor::_finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
+    DCHECK(driver);
+    DCHECK(down_cast<StreamPipelineDriver*>(driver));
+    StreamPipelineDriver* stream_driver = down_cast<StreamPipelineDriver*>(driver);
+    stream_driver->epoch_finalize(runtime_state, state);
+}
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
     _blocked_driver_poller->iterate_immutable_driver(call);
 }

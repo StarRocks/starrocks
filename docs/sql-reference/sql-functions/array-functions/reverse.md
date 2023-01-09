@@ -2,7 +2,7 @@
 
 ## Description
 
-Reverses the order in which the elements of a string or array are arranged.
+Reverses a string or array. Returns a string or array with the characters in the string or array elements in reverse order.
 
 ## Syntax
 
@@ -12,43 +12,35 @@ reverse(param)
 
 ## Parameters
 
-`param`: the string or array that you want to reverse. The supported data types are VARCHAR, CHAR, and ARRAY. If you specify an array, the array must be a one-dimensional array whose elements are not of the DECIMAL data type.
+`param`: the string or array to reverse. It can be of the VARCHAR, CHAR, or ARRAY type.
+
+Currently, this function supports only one-dimensional arrays and the array elements cannot be of the DECIMAL type. This function supports the following types of array elements: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, and JSON. **JSON is supported from 2.5.**
 
 ## Return value
 
-Returns a value of the same data type as the object that you specify in the `param` parameter.
+The return type is the same as `param`.
 
 ## Examples
 
 Example 1: Reverse a string.
 
-```Plain%20Text
-MySQL > SELECT reverse('hello');
-
+```Plain Text
+MySQL > SELECT REVERSE('hello');
 +------------------+
-
 | REVERSE('hello') |
-
 +------------------+
-
 | olleh            |
-
 +------------------+
-
+1 row in set (0.00 sec)
 ```
 
 Example 2: Reverse an array.
 
-```Plain%20Text
+```Plain Text
 MYSQL> SELECT REVERSE([4,1,5,8]);
-
 +--------------------+
-
 | REVERSE([4,1,5,8]) |
-
 +--------------------+
-
 | [8,5,1,4]          |
-
 +--------------------+
 ```

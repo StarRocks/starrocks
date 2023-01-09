@@ -42,12 +42,17 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
-fi
 
-PARALLEL=$[$(nproc)/4+1]
+if [[ $OSTYPE == darwin* ]] ; then
+    PARALLEL=$(sysctl -n hw.ncpu)
+    # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
+else
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
+        echo "Thirdparty libraries need to be build ..."
+        ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+    fi
+    PARALLEL=$[$(nproc)/4+1]
+fi
 
 # Check args
 usage() {
@@ -111,13 +116,16 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
-# detect cpuinfo
-if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
-    USE_AVX2=OFF
-fi
 
-if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
-    USE_SSE4_2=OFF
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+        USE_AVX2=OFF
+    fi
+
+    if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+        USE_SSE4_2=OFF
+    fi
 fi
 
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
@@ -206,6 +214,27 @@ echo "Get params:
     USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
+check_tool()
+{
+    local toolname=$1
+    if [ -e $STARROCKS_THIRDPARTY/installed/bin/$toolname ] ; then
+        return 0
+    fi
+    if which $toolname &>/dev/null ; then
+        return 0
+    fi
+    return 1
+}
+
+# check protoc and thrift
+for tool in protoc thrift
+do
+    if ! check_tool $tool ; then
+        echo "Can't find command tool '$tool'!"
+        exit 1
+    fi
+done
+
 # Clean and build generated code
 echo "Build generated code"
 cd ${STARROCKS_HOME}/gensrc
@@ -226,6 +255,11 @@ fi
 
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
+    if ! ${CMAKE_CMD} --version; then
+        echo "Error: cmake is not found"
+        exit 1
+    fi
+
     CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
@@ -308,7 +342,7 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -334,7 +368,8 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
 
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -355,6 +390,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/be_test.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j.properties ${STARROCKS_OUTPUT}/be/conf/
@@ -388,7 +424,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     else
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
 fi
 
 

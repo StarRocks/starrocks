@@ -110,6 +110,7 @@ public class HudiMetadata implements ConnectorMetadata {
         return table;
     }
 
+    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
@@ -133,6 +134,7 @@ public class HudiMetadata implements ConnectorMetadata {
         return fileOps.getRemoteFiles(partitions.build(), Optional.of(hmsTbl.getTableLocation()));
     }
 
+    @Override
     public Statistics getTableStatistics(OptimizerContext session,
                                          Table table,
                                          List<ColumnRefOperator> columns,
@@ -165,6 +167,7 @@ public class HudiMetadata implements ConnectorMetadata {
         return statistics;
     }
 
+    @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
         if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
@@ -173,6 +176,7 @@ public class HudiMetadata implements ConnectorMetadata {
         }
     }
 
+    @Override
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
@@ -183,6 +187,7 @@ public class HudiMetadata implements ConnectorMetadata {
         }
     }
 
+    @Override
     public void clear() {
         hmsOps.invalidateAll();
         fileOps.invalidateAll();

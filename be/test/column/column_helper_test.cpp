@@ -17,7 +17,7 @@
 #include "column/column_builder.h"
 #include "gtest/gtest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnHelperTest : public testing::Test {
 public:
@@ -57,4 +57,4 @@ TEST_F(ColumnHelperTest, align_return_type) {
     ASSERT_FALSE(nullable_column->is_constant());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

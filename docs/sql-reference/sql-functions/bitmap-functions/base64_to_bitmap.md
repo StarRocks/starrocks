@@ -56,7 +56,12 @@ Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load t
     Use base64_to_bitmap to convert  `userid` into a bitmap value.
 
     ```Plain
-    curl --location-trusted -u root: -H "columns: c1,c2,c3,tagname=c1,tagvalue=c2,userid=base64_to_bitmap(c3)" -H "label:bitmap123" -H "format: json" -H "jsonpaths: [\"$.tagname\",\"$.tagvalue\",\"$.userid\"]" -T simpleData http://host:port/api/bitmapdb/bitmap_table/_stream_load
+    curl --location-trusted -u root:\
+        -H "columns: c1,c2,c3,tagname=c1,tagvalue=c2,userid=base64_to_bitmap(c3)"\
+        -H "label:bitmap123"\
+        -H "format: json"\
+        -H "jsonpaths: [\"$.tagname\",\"$.tagvalue\",\"$.userid\"]"\
+        -T simpleData http://host:port/api/bitmapdb/bitmap_table/_stream_load
     ```
 
 3. Query data from `bitmap_table`.

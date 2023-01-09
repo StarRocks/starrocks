@@ -51,10 +51,12 @@ public:
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
                                       std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
-    virtual void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+    virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response) = 0;
 
     virtual void cancel() = 0;
+
+    virtual void abort() = 0;
 };
 
 struct TabletsChannelKey {

@@ -25,7 +25,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using Datums = std::vector<Datum>;
 
@@ -223,4 +223,4 @@ private:
     std::vector<Datums> _columns;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -135,7 +135,8 @@ public class ClusterLoadStatistic {
         for (BackendLoadStatistic beStat : beLoadStatistics) {
             totalLoadScore += beStat.getLoadScore(medium);
         }
-        double avgLoadScore = totalLoadScore / backendNumMap.get(medium);
+        int numBe = backendNumMap.get(medium);
+        double avgLoadScore = totalLoadScore / (numBe == 0 ? 1 : numBe);
         avgLoadScoreMap.put(medium, avgLoadScore);
 
         int lowCounter = 0;
@@ -146,7 +147,7 @@ public class ClusterLoadStatistic {
                 continue;
             }
 
-            if (Math.abs(beStat.getLoadScore(medium) - avgLoadScore) / avgLoadScore >
+            if (Math.abs(beStat.getLoadScore(medium) - avgLoadScore) / (avgLoadScore == 0.0 ? 1.0 : avgLoadScore) >
                     Config.tablet_sched_balance_load_score_threshold) {
                 if (beStat.getLoadScore(medium) > avgLoadScore) {
                     beStat.setClazz(medium, Classification.HIGH);

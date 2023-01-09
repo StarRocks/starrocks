@@ -61,11 +61,9 @@ class RowsetReadOptions;
 class TabletSchema;
 class KVStore;
 
-namespace vectorized {
 class VectorizedSchema;
 class ChunkIterator;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
-} // namespace vectorized
 
 // the rowset state transfer graph:
 //    ROWSET_UNLOADED    <--|
@@ -153,18 +151,18 @@ public:
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
+    Status reload_segment(int32_t segment_id);
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
 
-    StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::VectorizedSchema& schema,
-                                                        const RowsetReadOptions& options);
+    StatusOr<ChunkIteratorPtr> new_iterator(const VectorizedSchema& schema, const RowsetReadOptions& options);
 
     // For each segment in this rowset, create a `ChunkIterator` for it and *APPEND* it into
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
-    Status get_segment_iterators(const vectorized::VectorizedSchema& schema, const RowsetReadOptions& options,
-                                 std::vector<vectorized::ChunkIteratorPtr>* seg_iterators);
+    Status get_segment_iterators(const VectorizedSchema& schema, const RowsetReadOptions& options,
+                                 std::vector<ChunkIteratorPtr>* seg_iterators);
 
     // estimate the number of compaction segment iterator
     StatusOr<int64_t> estimate_compaction_segment_iterator_num();
@@ -182,8 +180,8 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
-    StatusOr<std::vector<vectorized::ChunkIteratorPtr>> get_segment_iterators2(
-            const vectorized::VectorizedSchema& schema, KVStore* meta, int64_t version, OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const VectorizedSchema& schema, KVStore* meta,
+                                                                   int64_t version, OlapReaderStatistics* stats);
 
     // publish rowset to make it visible to read
     void make_visible(Version version);
@@ -291,6 +289,8 @@ public:
             }
         }
     }
+
+    uint64_t refs_by_reader() { return _refs_by_reader; }
 
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;

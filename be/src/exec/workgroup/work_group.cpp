@@ -20,6 +20,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
+#include "util/cpu_info.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -485,14 +486,21 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (version_it == _workgroup_versions.end()) {
         return;
     }
-    auto version_id = version_it->second;
-    DCHECK(version_id < wg->version());
-    auto unique_id = WorkGroup::create_unique_id(id, version_id);
+
+    auto curr_version = version_it->second;
+    if (wg->version() <= curr_version) {
+        LOG(WARNING) << "try to delete workgroup with fresher version: "
+                     << "[delete_version=" << wg->version() << "] "
+                     << "[curr_version=" << curr_version << "]";
+        return;
+    }
+
+    auto unique_id = WorkGroup::create_unique_id(id, curr_version);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
         _workgroup_expired_versions.push_back(unique_id);
-        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
     LOG(INFO) << "delete workgroup " << wg->name();
 }
@@ -525,7 +533,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
 }
 
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
-    static int num_hardware_cores = std::thread::hardware_concurrency();
+    static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
 }
 

@@ -51,6 +51,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -67,6 +69,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -102,6 +105,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -142,7 +146,7 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
@@ -203,6 +207,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVActiveChecker;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -421,6 +426,7 @@ public class GlobalStateMgr {
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
     private MVJobExecutor mvMVJobExecutor;
+    private MVActiveChecker mvActiveChecker;
 
     private SmallFileMgr smallFileMgr;
 
@@ -446,6 +452,8 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
+    private ShardDeleter shardDeleter;
+
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
@@ -454,15 +462,21 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
+    private GlobalFunctionMgr globalFunctionMgr;
 
+    @Deprecated
     private ShardManager shardManager;
 
     private StateChangeExecution execution;
 
     private TaskRunStateSynchronizer taskRunStateSynchronizer;
 
+    private BinlogManager binlogManager;
+
     // For LakeTable
     private CompactionManager compactionManager;
+
+    private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -526,6 +540,10 @@ public class GlobalStateMgr {
         return compactionManager;
     }
 
+    public ConfigRefreshDaemon getConfigRefreshDaemon() {
+        return configRefreshDaemon;
+    }
+
     private static class SingletonHolder {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
@@ -585,6 +603,7 @@ public class GlobalStateMgr {
 
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
@@ -604,6 +623,7 @@ public class GlobalStateMgr {
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         this.mvMVJobExecutor = new MVJobExecutor();
+        this.mvActiveChecker = new MVActiveChecker();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -628,6 +648,10 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
+        this.shardDeleter = new ShardDeleter();
+
+        this.binlogManager = new BinlogManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -679,6 +703,10 @@ public class GlobalStateMgr {
 
     public ResourceMgr getResourceMgr() {
         return resourceMgr;
+    }
+
+    public GlobalFunctionMgr getGlobalFunctionMgr() {
+        return globalFunctionMgr;
     }
 
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
@@ -810,10 +838,6 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public ShardManager getShardManager() {
-        return shardManager;
-    }
-
     @VisibleForTesting
     public void setMetadataMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
@@ -826,6 +850,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public BinlogManager getBinlogManager() {
+        return binlogManager;
     }
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
@@ -1094,8 +1122,8 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExpr.create("true", Type.BOOLEAN)),
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
         } catch (UserException e) {
@@ -1177,7 +1205,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (Config.use_staros) {
-            shardManager.getShardDeleter().start();
+            shardDeleter.start();
         }
     }
 
@@ -1189,6 +1217,8 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
+        // materialized view active checker
+        mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1198,6 +1228,7 @@ public class GlobalStateMgr {
         if (Config.use_staros) {
             compactionManager.start();
         }
+        configRefreshDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1302,14 +1333,19 @@ public class GlobalStateMgr {
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
             remoteChecksum = dis.readLong();
+            // ShardManager DEPRECATED, keep it for backward compatible
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
+
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
-            loadRBACPrivilege(dis);
             checksum = MVManager.getInstance().reload(dis, checksum);
+            remoteChecksum = dis.readLong();
+            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+            // TODO put this at the end of the image before 3.0 release
+            loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1397,7 +1433,6 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    // TODO put this at the end of the image before 3.0 release
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (isUsingNewPrivilege()) {
             this.authenticationManager = AuthenticationManager.load(dis);
@@ -1481,6 +1516,10 @@ public class GlobalStateMgr {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
+
+        LOG.info("start to replay resource mapping catalog");
+        catalogMgr.loadResourceMappingCatalog();
+        LOG.info("finished replaying resource mapping catalogs from resources");
         return checksum;
     }
 
@@ -1568,14 +1607,19 @@ public class GlobalStateMgr {
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
             dos.writeLong(checksum);
+            // ShardManager Deprecated, keep it for backward compatible
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
-            saveRBACPrivilege(dos);
             checksum = MVManager.getInstance().store(dos, checksum);
+            dos.writeLong(checksum);
+            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+            // TODO put this at the end of the image before 3.0 release
+            saveRBACPrivilege(dos);
+
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1614,7 +1658,6 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    // TODO put this at the end of the image before 3.0 release
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (isUsingNewPrivilege()) {
             this.authenticationManager.save(dos);
@@ -1821,6 +1864,7 @@ public class GlobalStateMgr {
         }
 
         streamLoadManager.cancelUnDurableTaskAfterRestart();
+
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -2197,14 +2241,9 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // in memory
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
-                    .append("\" = \"");
-            sb.append(olapTable.isInMemory()).append("\"");
-
             // enable storage cache && cache ttl
             if (table.isLakeTable()) {
-                Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
+                Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
@@ -2219,32 +2258,46 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
-            }
+            } else {
+                // in memory
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+                        .append("\" = \"");
+                sb.append(olapTable.isInMemory()).append("\"");
 
-            // storage type
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
-                    .append("\" = \"");
-            sb.append(olapTable.getStorageFormat()).append("\"");
+                // storage type
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
+                        .append("\" = \"");
+                sb.append(olapTable.getStorageFormat()).append("\"");
 
-            // enable_persistent_index
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                    .append("\" = \"");
-            sb.append(olapTable.enablePersistentIndex()).append("\"");
-
-            // replicated_storage
-            if (olapTable.enableReplicatedStorage()) {
+                // enable_persistent_index
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                         .append("\" = \"");
-                sb.append(olapTable.enableReplicatedStorage()).append("\"");
-            }
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
 
-            // write quorum
-            if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
-                        .append("\" = \"");
-                sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                // replicated_storage
+                if (olapTable.enableReplicatedStorage()) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                            .append("\" = \"");
+                    sb.append(olapTable.enableReplicatedStorage()).append("\"");
+                }
+
+                // write quorum
+                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                            .append("\" = \"");
+                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // storage media
+                Map<String, String> properties = olapTable.getTableProperty().getProperties();
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
             }
 
             // compression type
@@ -2256,15 +2309,6 @@ public class GlobalStateMgr {
                 sb.append("LZ4").append("\"");
             } else {
                 sb.append(olapTable.getCompressionType()).append("\"");
-            }
-
-            // storage media
-            Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                        .append("\" = \"");
-                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
             }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
@@ -2991,6 +3035,9 @@ public class GlobalStateMgr {
                                 TTabletMetaType metaType) {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        localMetastore.modifyBinlogMeta(db, table, binlogConfig);
+    }
 
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
@@ -3059,7 +3106,7 @@ public class GlobalStateMgr {
         // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3430,8 +3477,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public Set<Long> onErasePartition(Partition partition) {
-        return localMetastore.onErasePartition(partition);
+    public void onErasePartition(Partition partition) {
+        localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {

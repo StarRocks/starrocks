@@ -27,6 +27,8 @@
 #include "util/raw_container.h"
 #include "util/string_parser.hpp"
 
+typedef unsigned __int128 uint128_t;
+
 namespace starrocks {
 TYPE_GUARD(Decimal32Guard, is_decimal32, int32_t)
 TYPE_GUARD(Decimal64Guard, is_decimal64, int64_t)

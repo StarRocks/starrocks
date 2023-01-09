@@ -17,9 +17,9 @@
 #include <utility>
 
 #include "exec/olap_common.h"
+#include "exec/olap_scan_prepare.h"
 #include "exec/olap_utils.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -41,7 +41,7 @@ class OlapScanContext;
 class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                    vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx);
+                    OlapScanNode* scan_node, OlapScanContext* scan_ctx);
 
     ~OlapChunkSource() override;
 
@@ -60,21 +60,21 @@ private:
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
-    Status _init_global_dicts(vectorized::TabletReaderParams* params);
-    Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
+    Status _init_global_dicts(TabletReaderParams* params);
+    Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
-    void _update_realtime_counter(vectorized::Chunk* chunk);
+    void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size();
 
 private:
-    vectorized::TabletReaderParams _params{};
-    vectorized::OlapScanNode* _scan_node;
+    TabletReaderParams _params{};
+    OlapScanNode* _scan_node;
     OlapScanContext* _scan_ctx;
 
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
-    vectorized::ConjunctivePredicates _not_push_down_predicates;
+    ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
@@ -85,13 +85,13 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
 
     // For release memory.
-    using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
+    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
 
     // NOTE: _reader may reference the _predicate_free_pool, it should be released before the _predicate_free_pool
-    std::shared_ptr<vectorized::TabletReader> _reader;
+    std::shared_ptr<TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
-    std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
+    std::shared_ptr<ChunkIterator> _prj_iter;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
 

@@ -50,7 +50,7 @@ public:
     bool has_output() const;
     bool has_shared_output() const;
 
-    StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer();
+    StatusOr<ChunkPtr> get_next_chunk_from_buffer();
     Status buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
                                              const workgroup::WorkGroup* running_wg);
 
@@ -68,7 +68,7 @@ public:
 
 protected:
     // MUST be implemented by different ChunkSource
-    virtual Status _read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
+    virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;
     // The schedule entity of this workgroup for resource group.
     virtual const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const = 0;
 

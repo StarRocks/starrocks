@@ -437,7 +437,6 @@ public class Database extends MetaObject implements Writable {
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
                 }
-
                 table.onCreate();
             }
             return true;
@@ -813,6 +812,22 @@ public class Database extends MetaObject implements Writable {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
         db.replayDropFunction(functionSearchDesc);
+    }
+
+    public Function getFunction(FunctionSearchDesc function) {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            return null;
+        }
+        Function func = null;
+        for (Function existFunc : existFuncs) {
+            if (function.isIdentical(existFunc)) {
+                func = existFunc;
+                break;
+            }
+        }
+        return func;
     }
 
     private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {

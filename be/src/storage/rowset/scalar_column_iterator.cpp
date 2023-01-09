@@ -34,10 +34,10 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/encoding_info.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/bitmap.h"
 
 namespace starrocks {
@@ -147,7 +147,7 @@ void ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offs
     page->seek(offset_in_page);
 }
 
-Status ScalarColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     size_t remaining = *n;
     size_t prev_bytes = dst->byte_size();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
@@ -173,12 +173,12 @@ Status ScalarColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     size_t prev_bytes = dst->byte_size();
-    vectorized::SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
-    vectorized::SparseRange read_range;
+    SparseRange read_range;
     // range is empty should only occur when array column is nullable
     DCHECK(range.empty() || (range.begin() == _current_ordinal));
 
@@ -208,8 +208,8 @@ Status ScalarColumnIterator::next_batch(const vectorized::SparseRange& range, ve
         if (end_ord > _current_ordinal) {
             // the data of current_range is in current page
             // add current_range into read_range
-            vectorized::Range r = iter.next(end_ord - _current_ordinal);
-            read_range.add(vectorized::Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+            Range r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
             _current_ordinal += r.span_size();
         }
 
@@ -297,9 +297,8 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
     return Status::OK();
 }
 
-Status ScalarColumnIterator::get_row_ranges_by_zone_map(
-        const std::vector<const vectorized::ColumnPredicate*>& predicates,
-        const vectorized::ColumnPredicate* del_predicate, vectorized::SparseRange* row_ranges) {
+Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                        const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         RETURN_IF_ERROR(
@@ -310,8 +309,8 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(
     return Status::OK();
 }
 
-Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(
-        const std::vector<const vectorized::ColumnPredicate*>& predicates, vectorized::SparseRange* row_ranges) {
+Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                            SparseRange* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
     bool support = false;
     for (const auto* pred : predicates) {
@@ -327,17 +326,17 @@ int ScalarColumnIterator::dict_lookup(const Slice& word) {
     return (this->*_dict_lookup_func)(word);
 }
 
-Status ScalarColumnIterator::next_dict_codes(size_t* n, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
     DCHECK(all_page_dict_encoded());
     return (this->*_next_dict_codes_func)(n, dst);
 }
 
-Status ScalarColumnIterator::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::next_dict_codes(const SparseRange& range, Column* dst) {
     DCHECK(all_page_dict_encoded());
     return (this->*_next_batch_dict_codes_func)(range, dst);
 }
 
-Status ScalarColumnIterator::decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) {
+Status ScalarColumnIterator::decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
     DCHECK(all_page_dict_encoded());
     return (this->*_decode_dict_codes_func)(codes, size, words);
 }
@@ -371,7 +370,7 @@ int ScalarColumnIterator::_do_dict_lookup(const Slice& word) {
 }
 
 template <LogicalType Type>
-Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* dst) {
+Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, Column* dst) {
     size_t remaining = *n;
     bool contain_delted_row = false;
     while (remaining > 0) {
@@ -398,11 +397,11 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* 
 }
 
 template <LogicalType Type>
-Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
+Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range, Column* dst) {
     bool contain_deleted_row = false;
-    vectorized::SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
-    vectorized::SparseRange read_range;
+    SparseRange read_range;
 
     DCHECK_EQ(range.begin(), _current_ordinal);
     // similar to ScalarColumnIterator::next_batch
@@ -423,8 +422,8 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
 
         _current_ordinal = iter.begin();
         if (end_ord > _current_ordinal) {
-            vectorized::Range r = iter.next(end_ord - _current_ordinal);
-            read_range.add(vectorized::Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+            Range r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
             _current_ordinal += r.span_size();
         }
 
@@ -446,7 +445,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
 }
 
 template <LogicalType Type>
-Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) {
+Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     std::vector<Slice> slices;
     slices.reserve(size);
@@ -470,7 +469,7 @@ Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t 
 }
 
 template <typename PageParseFunc>
-Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values,
+Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values,
                                              PageParseFunc&& page_parse) {
     DCHECK(std::is_sorted(rowids, rowids + size));
     RETURN_IF(size == 0, Status::OK());
@@ -504,13 +503,13 @@ Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size,
     return Status::OK();
 }
 
-Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
-    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read(column, count); };
+Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    auto page_parse = [&](Column* column, size_t* count) { return _page->read(column, count); };
     return _fetch_by_rowid(rowids, size, values, page_parse);
 }
 
-Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
-    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read_dict_codes(column, count); };
+Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    auto page_parse = [&](Column* column, size_t* count) { return _page->read_dict_codes(column, count); };
     return _fetch_by_rowid(rowids, size, values, page_parse);
 }
 

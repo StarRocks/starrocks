@@ -41,6 +41,7 @@ include "Opcodes.thrift"
 include "Descriptors.thrift"
 include "Partitions.thrift"
 include "RuntimeFilter.thrift"
+include "CloudConfiguration.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
@@ -191,6 +192,7 @@ struct THdfsProperties {
   9: optional i32 max_connection
   10: optional string region
   11: optional string hdfs_username
+  12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TBrokerScanRangeParams {
@@ -241,6 +243,14 @@ struct TBrokerScanRangeParams {
     21: optional string table_name
     22: optional string label
     23: optional i64 txn_id
+    // number of lines at the start of the file to skip
+    24: optional i64 skip_header
+    // specifies whether to remove white space from fields 
+    25: optional bool trim_space
+    // enclose character
+    26: optional i8 enclose
+    // escape character
+    27: optional i8 escape
 }
 
 // Broker scan range
@@ -309,6 +319,9 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // number of lines at the start of the file to skip
+    12: optional i64 skip_header
 }
 
 struct TBinlogScanRange {
@@ -418,6 +431,8 @@ struct TOlapScanNode {
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
   25: optional bool sorted_by_keys_per_tablet = false
+
+  26: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TJDBCScanNode {
@@ -693,6 +708,7 @@ struct TSortNode {
   23: optional list<Exprs.TExpr> partition_exprs
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
+  26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
 }
 
 enum TAnalyticWindowType {
@@ -919,6 +935,8 @@ struct THdfsScanNode {
 
     // Flag to indicate wheather the column names are case sensitive
     12: optional bool case_sensitive;
+
+    13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 }
 
 struct TProjectNode {
@@ -954,6 +972,12 @@ struct TConnectorScanNode {
   // // Scan node for hdfs
   // 2: optional THdfsScanNode hdfs_scan_node
 }
+
+// binlog meta column names
+const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
+const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
+const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
+const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
@@ -996,8 +1020,9 @@ struct TStreamAggregationNode {
   2: optional list<Exprs.TExpr> aggregate_functions
 
   // IMT info
-  // 10: optional Descriptors.TIMTDescriptor detail_imt
-  // 11: optional Descriptors.TIMTDescriptor agg_result_imt
+  10: optional Descriptors.TIMTDescriptor agg_result_imt
+  11: optional Descriptors.TIMTDescriptor agg_intermediate_imt
+  12: optional Descriptors.TIMTDescriptor agg_detail_imt
   
   // For profile attributes' printing: `Grouping Keys` `Aggregate Functions`
   22: optional string sql_grouping_keys

@@ -23,7 +23,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class RuntimeFilterBuildDescriptor;
 }
 
@@ -37,7 +37,7 @@ struct NLJoinContextParams {
     int32_t plan_node_id;
     std::vector<ExprContext*> filters;
     RuntimeFilterHub* rf_hub;
-    std::vector<vectorized::RuntimeFilterBuildDescriptor*> rf_descs;
+    std::vector<RuntimeFilterBuildDescriptor*> rf_descs;
 };
 
 class NLJoinContext final : public ContextWithDependency {
@@ -59,11 +59,11 @@ public:
     int32_t num_build_chunks() const { return _build_chunks.size(); }
     size_t num_build_rows() const { return _num_build_rows; }
 
-    vectorized::Chunk* get_build_chunk(int32_t index) const { return _build_chunks[index].get(); }
+    Chunk* get_build_chunk(int32_t index) const { return _build_chunks[index].get(); }
 
     int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
-    void append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& build_chunk);
+    void append_build_chunk(int32_t sinker_id, const ChunkPtr& build_chunk);
 
     Status finish_one_right_sinker(RuntimeState* state);
 
@@ -86,9 +86,9 @@ private:
     std::atomic_int64_t _num_build_rows = 0;
 
     // Join states
-    mutable std::mutex _join_stage_mutex;                         // Protects join states
-    std::vector<std::vector<vectorized::ChunkPtr>> _input_chunks; // Input chunks from each sink
-    std::vector<vectorized::ChunkPtr> _build_chunks;              // Normalized chunks of _input_chunks
+    mutable std::mutex _join_stage_mutex;             // Protects join states
+    std::vector<std::vector<ChunkPtr>> _input_chunks; // Input chunks from each sink
+    std::vector<ChunkPtr> _build_chunks;              // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
     std::vector<uint8_t> _shared_build_match_flag;
@@ -96,7 +96,7 @@ private:
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _rf_conjuncts_ctx;
     RuntimeFilterHub* _rf_hub;
-    std::vector<vectorized::RuntimeFilterBuildDescriptor*> _rf_descs;
+    std::vector<RuntimeFilterBuildDescriptor*> _rf_descs;
 };
 
 } // namespace starrocks::pipeline

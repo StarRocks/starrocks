@@ -23,7 +23,7 @@
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * Pre-Aggregate Iterator
@@ -175,4 +175,4 @@ ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key) {
     return std::make_shared<AggregateIterator>(std::move(child), 0, true, is_key);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

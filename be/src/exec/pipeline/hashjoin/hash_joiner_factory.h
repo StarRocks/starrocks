@@ -17,11 +17,11 @@
 #include <memory>
 #include <vector>
 
-#include "exec/vectorized/hash_joiner.h"
+#include "exec/hash_joiner.h"
 
 namespace starrocks::pipeline {
 
-using HashJoiner = starrocks::vectorized::HashJoiner;
+using HashJoiner = starrocks::HashJoiner;
 using HashJoinerPtr = std::shared_ptr<HashJoiner>;
 using HashJoiners = std::vector<HashJoinerPtr>;
 class HashJoinerFactory;
@@ -29,7 +29,7 @@ using HashJoinerFactoryPtr = std::shared_ptr<HashJoinerFactory>;
 
 class HashJoinerFactory {
 public:
-    HashJoinerFactory(starrocks::vectorized::HashJoinerParam& param, int dop) : _param(param), _hash_joiners(dop) {}
+    HashJoinerFactory(starrocks::HashJoinerParam& param, int dop) : _param(param), _hash_joiners(dop) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
@@ -71,7 +71,7 @@ private:
     // use the same hash table with their own different probe states.
     static constexpr int BROADCAST_BUILD_DRIVER_SEQUENCE = 0;
 
-    starrocks::vectorized::HashJoinerParam _param;
+    starrocks::HashJoinerParam _param;
     HashJoiners _hash_joiners;
     HashJoiners _read_only_probers;
 };

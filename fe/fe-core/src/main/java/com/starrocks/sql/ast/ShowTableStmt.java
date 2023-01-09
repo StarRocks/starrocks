@@ -36,6 +36,7 @@ public class ShowTableStmt extends ShowStmt {
     private final boolean isVerbose;
     private final String pattern;
     private Expr where;
+    private String catalogName;
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern) {
         this.db = db;
@@ -51,6 +52,22 @@ public class ShowTableStmt extends ShowStmt {
         this.where = where;
     }
 
+    public ShowTableStmt(String db, boolean isVerbose, String pattern, String catalogName) {
+        this.db = db;
+        this.isVerbose = isVerbose;
+        this.pattern = pattern;
+        this.where = null;
+        this.catalogName = catalogName;
+    }
+
+    public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where, String catalogName) {
+        this.db = db;
+        this.isVerbose = isVerbose;
+        this.pattern = pattern;
+        this.where = where;
+        this.catalogName = catalogName;
+    }
+
     public String getDb() {
         return db;
     }
@@ -61,6 +78,10 @@ public class ShowTableStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override

@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -76,7 +77,12 @@ public class GetDdlStmtAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException {
-        checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkUserOwnsAdminRole(currentUser);
+        } else {
+            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+        }
 
         String dbName = request.getSingleParameter(DB_PARAM);
         String tableName = request.getSingleParameter(TABLE_PARAM);

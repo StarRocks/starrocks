@@ -17,9 +17,9 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SumDispatcher {
     template <LogicalType pt>
@@ -97,4 +97,4 @@ void AggregateFuncResolver::register_distinct() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

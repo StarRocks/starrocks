@@ -20,7 +20,7 @@
 #include "fs/fs_util.h"
 #include "storage/olap_define.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class RowSourceMaskTest : public testing::Test {
 protected:
@@ -229,4 +229,4 @@ TEST_F(RowSourceMaskTest, memory_masks_with_persistence) {
     ASSERT_FALSE(buffer.has_same_source(mask.get_source_num(), 4));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

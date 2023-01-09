@@ -79,7 +79,7 @@ public:
     // test cases can change this value to control flush timing
     uint32_t max_rows_per_segment = INT32_MAX;
 
-    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    GlobalDictByNameMaps* global_dicts = nullptr;
 
     RowsetWriterType writer_type = kHorizontal;
 

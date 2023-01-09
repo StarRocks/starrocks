@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 public class ReorderIntersectRule extends TransformationRule {
     public ReorderIntersectRule() {
@@ -39,9 +41,10 @@ public class ReorderIntersectRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression intersectOpt, OptimizerContext context) {
         LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) intersectOpt.getOp();
         calculateStatistics(intersectOpt, context);
-        OptExpression o = intersectOpt.getInputs().stream().min(
-                Comparator.comparingDouble(c -> c.getStatistics().getOutputRowCount())).get();
-
+        Optional<OptExpression> optO = intersectOpt.getInputs().stream().min(
+                Comparator.comparingDouble(c -> c.getStatistics().getOutputRowCount()));
+        Preconditions.checkState(optO.isPresent());
+        OptExpression o = optO.get();
         int index = intersectOpt.getInputs().indexOf(o);
 
         List<OptExpression> newChildList = new ArrayList<>();

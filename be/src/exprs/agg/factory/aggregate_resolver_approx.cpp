@@ -16,10 +16,10 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/primitive_type.h"
 #include "types/hll.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct HLLUnionBuilder {
     template <LogicalType pt>
@@ -53,4 +53,4 @@ void AggregateFuncResolver::register_approx() {
                                                               AggregateFactory::MakeHllUnionCountAggregateFunction());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

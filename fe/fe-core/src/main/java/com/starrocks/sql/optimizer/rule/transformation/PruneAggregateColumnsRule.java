@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class PruneAggregateColumnsRule extends TransformationRule {
     public PruneAggregateColumnsRule() {
@@ -72,7 +73,9 @@ public class PruneAggregateColumnsRule extends TransformationRule {
         // 2. we should at least have one aggregate function
         if (requiredInputColumns.isEmpty()) {
             Preconditions.checkState(!aggregations.isEmpty());
-            Map.Entry<ColumnRefOperator, CallOperator> kv = aggregations.entrySet().stream().findFirst().get();
+            Optional<Map.Entry<ColumnRefOperator, CallOperator>> optKv = aggregations.entrySet().stream().findFirst();
+            Preconditions.checkState(optKv.isPresent());
+            Map.Entry<ColumnRefOperator, CallOperator> kv = optKv.get();
             fillRequiredInputColumnsAndNewAggregations(kv, requiredInputColumns, newAggregations);
         }
 

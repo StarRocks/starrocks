@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "fmt/core.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
@@ -58,7 +58,7 @@
         return _env->Call##CallType##Method(obj, _val_##prim_clazz);                             \
     }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
 constexpr const char* CLASS_NATIVE_METHOD_HELPER_NAME = "com.starrocks.utils.NativeMethodHelper";
@@ -927,4 +927,4 @@ Status detect_java_runtime() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

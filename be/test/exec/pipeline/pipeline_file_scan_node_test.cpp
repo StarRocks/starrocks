@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #include "exec/vectorized/file_scan_node.h"
+// #include "exec/file_scan_node.h"
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -30,7 +31,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/vectorized/connector_scan_node.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"
@@ -70,6 +70,7 @@ public:
         _query_ctx->extend_delivery_lifetime();
         _query_ctx->extend_query_lifetime();
         _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+        _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
         _fragment_ctx->set_query_id(query_id);
@@ -84,6 +85,8 @@ public:
         _runtime_state->set_chunk_size(config::vector_chunk_size);
         _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
         _runtime_state->set_be_number(_request.backend_num);
+        _runtime_state->set_query_ctx(_query_ctx);
+        _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
 
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));
@@ -101,13 +104,13 @@ private:
                                                           const string& multi_row_delimiter = "\n",
                                                           const string& multi_column_separator = "|");
 
-    static vectorized::ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
+    static ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
 
     void prepare_pipeline();
 
     void execute_pipeline();
 
-    void generate_morse_queue(const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
+    void generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
                               const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
@@ -128,10 +131,10 @@ private:
     Pipelines _pipelines;
 };
 
-vectorized::ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     for (int i = 0; i < types.size(); i++) {
-        chunk->append_column(vectorized::ColumnHelper::create_column(types[i], true), i);
+        chunk->append_column(ColumnHelper::create_column(types[i], true), i);
     }
     return chunk;
 }
@@ -226,63 +229,36 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
     MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
-
-    Drivers drivers;
-    size_t driver_id = 0;
     const auto& pipelines = _fragment_ctx->pipelines();
-    const size_t num_pipelines = pipelines.size();
-    for (auto n = 0; n < num_pipelines; ++n) {
-        const auto& pipeline = pipelines[n];
-        const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
 
+    for (const auto& pipeline : pipelines) {
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
-            ASSERT_TRUE(morsel_queues.count(source_id));
+            DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
-            for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
-                driver->set_morsel_queue(morsel_queue_factory->create(i));
-                if (auto* scan_operator = driver->source_scan_operator()) {
-                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
-                    if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        scan_operator->set_scan_executor(_exec_env->connector_scan_executor_without_workgroup());
-                    } else {
-                        scan_operator->set_scan_executor(_exec_env->scan_executor_without_workgroup());
-                    }
-                }
-
-                drivers.emplace_back(std::move(driver));
-            }
-
-        } else {
-            for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
-                drivers.emplace_back(driver);
-            }
         }
     }
 
-    _fragment_ctx->set_drivers(std::move(drivers));
+    for (const auto& pipeline : pipelines) {
+        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
+    }
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        ASSERT_TRUE(driver->prepare(_fragment_ctx->runtime_state()).ok());
-    }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        _exec_env->driver_executor()->submit(driver.get());
-    }
+    Status prepare_status = _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    ASSERT_TRUE(prepare_status.ok());
+
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        exec_env->driver_executor()->submit(driver.get());
+        return Status::OK();
+    });
 }
 
-void PipeLineFileScanNodeTest::generate_morse_queue(
-        const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
-        const std::vector<TScanRangeParams>& scan_ranges) {
+void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
+                                                    const std::vector<TScanRangeParams>& scan_ranges) {
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
@@ -311,13 +287,13 @@ void PipeLineFileScanNodeTest::generate_morse_queue(
 
 class FileScanCounter {
 public:
-    void process_push(const vectorized::ChunkPtr& chunk) {
+    void process_push(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_push_chunk_num;
         _push_chunk_row_num += chunk->num_rows();
     }
 
-    void process_pull(const vectorized::ChunkPtr& chunk) {
+    void process_pull(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_pull_chunk_num;
         _pull_chunk_row_num += chunk->num_rows();
@@ -378,9 +354,9 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     CounterPtr _counter;
@@ -388,12 +364,12 @@ private:
     bool _is_finished = false;
 };
 
-Status TestFileScanSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TestFileScanSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk to sink operator");
 }
 
@@ -422,7 +398,7 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     auto tnode = _create_tplan_node();
     auto* descs = _create_table_desc(types);
-    auto file_scan_node = std::make_shared<starrocks::vectorized::ConnectorScanNode>(_pool, *tnode, *descs);
+    auto file_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_pool, *tnode, *descs);
 
     Status status = file_scan_node->init(*tnode, _runtime_state);
     ASSERT_TRUE(status.ok());

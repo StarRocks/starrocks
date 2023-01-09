@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import org.apache.commons.lang3.tuple.Triple;
 
@@ -422,6 +423,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
         }
 
+        boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
@@ -439,7 +441,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
-            } else {
+            } else if (!isMVPlanner) {
                 scanOperator = new LogicalOlapScanOperator(node.getTable(),
                         colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap,
@@ -451,6 +453,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         node.getPartitionNames(),
                         Lists.newArrayList(),
                         node.getTabletIds());
+            } else {
+                scanOperator = new LogicalBinlogScanOperator(
+                        node.getTable(),
+                        colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap,
+                        Operator.DEFAULT_LIMIT);
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
@@ -667,10 +675,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
             String colName;
-            if (node.getColumnNames() == null) {
+            if (node.getColumnOutputNames() == null) {
                 colName = tableFunction.getDefaultColumnNames().get(i);
             } else {
-                colName = node.getColumnNames().get(i);
+                colName = node.getColumnOutputNames().get(i);
             }
 
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));

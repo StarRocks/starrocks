@@ -20,7 +20,7 @@
 
 namespace starrocks::pipeline {
 
-Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkPtr& chunk,
+Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
                                                         std::vector<uint32_t>& partition_row_indexes) {
     int32_t num_rows = chunk->num_rows();
     int32_t num_partitions = _source->get_sources().size();
@@ -38,14 +38,14 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
     // Compute hash for each partition column
     if (_part_type == TPartitionType::HASH_PARTITIONED) {
         _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-        for (const vectorized::ColumnPtr& column : _partitions_columns) {
+        for (const ColumnPtr& column : _partitions_columns) {
             column->fnv_hash(&_hash_values[0], 0, num_rows);
         }
     } else {
         // The data distribution was calculated using CRC32_HASH,
         // and bucket shuffle need to use the same hash function when sending data
         _hash_values.assign(num_rows, 0);
-        for (const vectorized::ColumnPtr& column : _partitions_columns) {
+        for (const ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
         }
     }
@@ -73,15 +73,29 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                                       const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
-        : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source) {
-    _partitioners.reserve(num_sinks);
-    for (size_t i = 0; i < num_sinks; i++) {
-        _partitioners.emplace_back(source, part_type, partition_expr_ctxs);
-    }
+                                       const std::vector<ExprContext*>& partition_expr_ctxs)
+        : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
+          _part_type(part_type),
+          _partition_exprs(partition_expr_ctxs) {}
+
+void PartitionExchanger::incr_sinker() {
+    LocalExchanger::incr_sinker();
+    _partitioners.emplace_back(_source, _part_type, _partition_exprs);
 }
 
-Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+Status PartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    return Status::OK();
+}
+
+void PartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_exprs, state);
+    LocalExchanger::close(state);
+}
+
+Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
@@ -109,14 +123,14 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
     return Status::OK();
 }
 
-Status BroadcastExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+Status BroadcastExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     for (auto* source : _source->get_sources()) {
         source->add_chunk(chunk);
     }
     return Status::OK();
 }
 
-Status PassthroughExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t sources_num = _source->get_sources().size();
     if (sources_num == 1) {
         _source->get_sources()[0]->add_chunk(chunk);

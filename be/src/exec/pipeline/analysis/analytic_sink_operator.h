@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/analytor.h"
 #include "exec/pipeline/operator.h"
-#include "exec/vectorized/analytor.h"
 
 namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
@@ -39,8 +39,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     using ProcessByPartitionIfNecessaryFunc = Status (AnalyticSinkOperator::*)();

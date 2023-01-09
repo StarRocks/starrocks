@@ -1,12 +1,12 @@
-# Lateral Join
+# Use Lateral Join for row-to-column conversion
 
 ## Background
 
-Row-to-column conversion is a common operation in ETL processing. Lateral is a special Join keyword that can associate a row with an internal subquery or table function. By using Lateral in conjunction with unnest, we can implement conversion from one-row to multi-row.
+Row-to-column conversion is a common operation in ETL processing. Lateral is a special Join keyword that can associate a row with an internal subquery or table function. By using Lateral in conjunction with unnest, we can implement conversion from one-row to multiple rows. For more information, see [unnest](../sql-reference/sql-functions/array-functions/unnest.md).
 
 ## Instructions for use
 
-To use lateral join, you need to open the new version of optimizer:
+To use lateral join, you need to use the new version of optimizer:
 
 ~~~SQL
 set global enable_cbo = true;
@@ -18,7 +18,7 @@ Syntax:
 from table_reference join [lateral] table_reference;
 ~~~
 
-The Unnest keyword is a table function that converts an array into multiple rows.Together with Lateral Join, it can implement our common row expansion logic.
+The Unnest keyword is a table function that converts an array into multiple rows. Together with Lateral Join, it can implement common row expansion logic.
 
 ~~~SQL
 SELECT student, score
@@ -33,12 +33,12 @@ The second syntax here is a shortened version of the first one, where the Latera
 
 ## Usage examples
 
-The current version of StarRocks supports  type transformation between Bitmap, String, Array, and Column.
-![Some conversions between types in Lateral Join](../assets/6.9.1.png)
+The current version of StarRocks supports  type conversion between Bitmap, String, Array, and Column.
+![Some conversions between types in Lateral Join](../assets/lateral_join_type_conversion.png)
 
 Together with Unnest, we can achieve the following features:
 
-* Expanding a string into multiple lines
+### Expanding a string into multiple lines
 
 ~~~SQL
 CREATE TABLE lateral_test2 (
@@ -80,7 +80,9 @@ select v1,unnest from lateral_test2 , unnest(split(v2, ",")) ;
 +------+--------+
 ~~~
 
-* Expanding an array into multiple rows
+### Expanding an array into multiple rows
+
+ **From 2.5, unnest can take multiple arrays of different types and lengths.** For more information, see [unnest()](../sql-reference/sql-functions/array-functions/unnest.md).
 
 ~~~SQL
 CREATE TABLE lateral_test (
@@ -123,7 +125,7 @@ select v1,v2,unnest from lateral_test , unnest(v2) ;
 +------+------------+--------+
 ~~~
 
-* Transforming Bitmap output
+### Transforming Bitmap output
 
 ~~~SQL
 CREATE TABLE lateral_test3 (
@@ -159,7 +161,7 @@ select v1, bitmap_to_string(v2) from lateral_test3;
 +------+------------------------+
 
 
-select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2)) ;
+select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2));
 
 +------+--------+
 | v1   | unnest |
@@ -173,5 +175,5 @@ select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2)) ;
 
 ## Caution
 
-* Currently, Lateral join is only used with Unnest to achieve row-to-column conversion. Other table functions / UDTF will be supported later.
+* Currently, Lateral join is only used with Unnest to achieve row-to-column conversion. Other table functions and UDTFs will be supported later.
 * Currently, Lateral join does not support subqueries.

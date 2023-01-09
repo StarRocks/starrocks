@@ -16,8 +16,8 @@
 
 #include <queue>
 
-#include "exec/vectorized/chunks_sorter.h"
-#include "exec/vectorized/partition/chunks_partitioner.h"
+#include "exec/chunks_sorter.h"
+#include "exec/partition/chunks_partitioner.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -47,7 +47,7 @@ public:
     Status prepare(RuntimeState* state);
 
     // Add one chunk to partitioner
-    Status push_one_chunk_to_partitioner(RuntimeState* state, const vectorized::ChunkPtr& chunk);
+    Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
 
     // Notify that there is no further input for partitiner
     void sink_complete();
@@ -62,26 +62,26 @@ public:
     bool is_finished();
 
     // Pull one chunk from sorters or downgrade_buffer
-    StatusOr<vectorized::ChunkPtr> pull_one_chunk();
+    StatusOr<ChunkPtr> pull_one_chunk();
 
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
-    StatusOr<vectorized::ChunkPtr> pull_one_chunk_from_sorters();
+    StatusOr<ChunkPtr> pull_one_chunk_from_sorters();
 
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
-    std::vector<vectorized::PartitionColumnType> _partition_types;
+    std::vector<PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
-    vectorized::ChunksPartitionerPtr _chunks_partitioner;
+    ChunksPartitionerPtr _chunks_partitioner;
     bool _is_transfered = false;
 
     // Every partition holds a chunks_sorter
-    vectorized::ChunksSorters _chunks_sorters;
+    ChunksSorters _chunks_sorters;
     const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
@@ -97,7 +97,7 @@ using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
 
 class LocalPartitionTopnContextFactory {
 public:
-    LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
+    LocalPartitionTopnContextFactory(const std::vector<TExpr>& t_partition_exprs,
                                      const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
                                      int64_t partition_limit, const TTopNType::type topn_type,
@@ -110,11 +110,11 @@ public:
     LocalPartitionTopnContext* create(int32_t driver_sequence);
 
 private:
-    std::vector<LocalPartitionTopnContextPtr> _ctxs;
+    std::unordered_map<int32_t, LocalPartitionTopnContextPtr> _ctxs;
 
     const std::vector<TExpr>& _t_partition_exprs;
 
-    vectorized::ChunksSorters _chunks_sorters;
+    ChunksSorters _chunks_sorters;
     const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;

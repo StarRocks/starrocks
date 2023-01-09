@@ -120,4 +120,4 @@ This project is used by the following companies. Learn more about their use case
 
 StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
 
-Today, there are only less than 20% of the code in StarRocks is from Apache® Doris™.
+Today, only less than 20% of the code in StarRocks is from Apache® Doris™.

@@ -16,7 +16,7 @@
 
 #include "gtest/gtest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnPoolTest : public ::testing::Test {
 protected:
@@ -88,4 +88,4 @@ TEST_F(ColumnPoolTest, single_thread) {
     delete c4;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

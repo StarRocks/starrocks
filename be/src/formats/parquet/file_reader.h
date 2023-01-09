@@ -28,9 +28,7 @@
 namespace starrocks {
 class RandomAccessFile;
 
-namespace vectorized {
 class HdfsScannerContext;
-} // namespace vectorized
 
 } // namespace starrocks
 
@@ -46,9 +44,9 @@ public:
     FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
-    Status init(vectorized::HdfsScannerContext* scanner_ctx);
+    Status init(HdfsScannerContext* scanner_ctx);
 
-    Status get_next(vectorized::ChunkPtr* chunk);
+    Status get_next(ChunkPtr* chunk);
 
 private:
     int _chunk_size;
@@ -72,12 +70,12 @@ private:
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
     Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
-                               vectorized::ChunkPtr* min_chunk, vectorized::ChunkPtr* max_chunk, bool* exist) const;
+                               ChunkPtr* min_chunk, ChunkPtr* max_chunk, bool* exist) const;
 
-    Status _get_next_internal(vectorized::ChunkPtr* chunk);
+    Status _get_next_internal(ChunkPtr* chunk);
 
     // only scan partition column + not exist column
-    Status _exec_only_partition_scan(vectorized::ChunkPtr* chunk);
+    Status _exec_only_partition_scan(ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
@@ -89,8 +87,8 @@ private:
     // decode min/max value from row group stats
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
-                                         const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
-                                         vectorized::ColumnPtr* max_column, bool* decode_ok);
+                                         const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
+                                         ColumnPtr* max_column, bool* decode_ok);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                        const tparquet::ColumnOrder* column_order);
     // statistics.min_value max_value
@@ -113,16 +111,15 @@ private:
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    vectorized::VectorizedSchema _schema;
+    VectorizedSchema _schema;
 
-    std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _is_only_partition_scan = false;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    vectorized::HdfsScannerContext* _scanner_ctx = nullptr;
+    HdfsScannerContext* _scanner_ctx = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
 };

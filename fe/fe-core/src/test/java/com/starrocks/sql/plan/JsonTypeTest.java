@@ -99,6 +99,9 @@ public class JsonTypeTest extends PlanTestBase {
 
     @Test
     public void testPredicateImplicitCast() throws Exception {
+        assertPlanContains("select parse_json('1') between 0.5 and 0.9",
+                "CAST(3: parse_json AS DOUBLE)");
+
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
             assertPlanContains(String.format("select parse_json('1') %s 1", operator),
@@ -215,5 +218,19 @@ public class JsonTypeTest extends PlanTestBase {
                 "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), " +
                         "CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), " +
                         "CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
+    }
+
+    @Test
+    public void testCastJsonToArray() throws Exception {
+        assertPlanContains("select cast(json_array(1,2,3) as array<int>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<INT>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<varchar>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<VARCHAR>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<JSON>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<JSON>)");
+
+        // Multi-dimension array casting is not supported
+        assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
+                "Invalid type cast from json to ARRAY<ARRAY<int(11)>> in sql `json_array(1, 2, 3)`");
     }
 }

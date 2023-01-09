@@ -14,7 +14,7 @@
 
 #include "array_reader.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 std::unique_ptr<ArrayReader> ArrayReader::create_array_reader(const Converter::Options& options) {
     std::unique_ptr<ArrayReader> array_reader;
@@ -139,4 +139,4 @@ char HiveTextArrayReader::get_collection_delimiter(char collection_delimiter, ch
     return static_cast<char>(tmp);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

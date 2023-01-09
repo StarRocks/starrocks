@@ -61,12 +61,12 @@ public:
     Status init(RuntimeState* state);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos);
+    Status send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence, bool eos);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos,
+    Status send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence, bool eos,
                           bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
@@ -79,8 +79,8 @@ public:
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(vectorized::Chunk* chunk, int32_t driver_sequence, const uint32_t* row_indexes,
-                              uint32_t from, uint32_t size, RuntimeState* state);
+    Status add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* row_indexes, uint32_t from,
+                              uint32_t size, RuntimeState* state);
 
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
@@ -124,7 +124,7 @@ private:
     // equals with dop of dest pipeline
     // If pipeline level shuffle is disable, the size of _chunks
     // always be 1
-    std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
+    std::vector<std::unique_ptr<Chunk>> _chunks;
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
 
@@ -181,9 +181,8 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chunk, int32_t driver_sequence,
-                                                         const uint32_t* indexes, uint32_t from, uint32_t size,
-                                                         RuntimeState* state) {
+Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* indexes,
+                                                         uint32_t from, uint32_t size, RuntimeState* state) {
     if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
         _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
     }
@@ -198,14 +197,14 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
-                                                     int32_t driver_sequence, bool eos) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence,
+                                                     bool eos) {
     bool is_real_sent = false;
     return send_one_chunk(state, chunk, driver_sequence, eos, &is_real_sent);
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
-                                                     int32_t driver_sequence, bool eos, bool* is_real_sent) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const Chunk* chunk, int32_t driver_sequence,
+                                                     bool eos, bool* is_real_sent) {
     *is_real_sent = false;
 
     if (_ignore_local_data && !eos) {
@@ -386,6 +385,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
+    _buffer->incr_sinker(state);
+
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {
         _encode_level = state->query_options().transmission_encode_level;
@@ -461,19 +462,19 @@ Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't call pull_chunk from exchange sink.");
 }
 
-Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     uint16_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
     }
     DCHECK_LE(num_rows, state->chunk_size());
 
-    vectorized::Chunk temp_chunk;
-    vectorized::Chunk* send_chunk = chunk.get();
+    Chunk temp_chunk;
+    Chunk* send_chunk = chunk.get();
     if (!_output_columns.empty()) {
         for (int32_t cid : _output_columns) {
             temp_chunk.append_column(chunk->get_column_by_slot_id(cid), cid);
@@ -555,14 +556,14 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                for (const vectorized::ColumnPtr& column : _partitions_columns) {
+                for (const ColumnPtr& column : _partitions_columns) {
                     column->fnv_hash(&_hash_values[0], 0, num_rows);
                 }
             } else {
                 // The data distribution was calculated using CRC32_HASH,
                 // and bucket shuffle need to use the same hash function when sending data
                 _hash_values.assign(num_rows, 0);
-                for (const vectorized::ColumnPtr& column : _partitions_columns) {
+                for (const ColumnPtr& column : _partitions_columns) {
                     column->crc32_hash(&_hash_values[0], 0, num_rows);
                 }
             }
@@ -641,8 +642,7 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
-                                             int num_receivers) {
+Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     {
         SCOPED_TIMER(_serialize_chunk_timer);

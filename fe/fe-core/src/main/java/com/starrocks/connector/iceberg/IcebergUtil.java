@@ -29,9 +29,9 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
@@ -53,7 +53,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
@@ -75,18 +74,23 @@ public class IcebergUtil {
     }
 
     /**
+     * Get IcebergCatalog from IcebergTable
      * Returns the corresponding catalog implementation.
      */
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
         IcebergCatalogType catalogType = table.getCatalogType();
+
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(table.getIcebergProperties(), null);
+
         switch (catalogType) {
             case HIVE_CATALOG:
-                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris(), table.getIcebergProperties());
+                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris(), table.getIcebergProperties(),
+                        hdfsEnvironment);
             case REST_CATALOG:
-                return getIcebergRESTCatalog(table.getIcebergProperties());
+                return getIcebergRESTCatalog(table.getIcebergProperties(), hdfsEnvironment);
             case CUSTOM_CATALOG:
-                return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
+                return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties(), hdfsEnvironment);
             default:
                 throw new StarRocksIcebergException(
                         "Unexpected catalog type: " + catalogType.toString());
@@ -96,32 +100,35 @@ public class IcebergUtil {
     /**
      * Returns the corresponding hive catalog implementation.
      */
-    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris, Map<String, String> icebergProperties)
+    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris, Map<String, String> icebergProperties,
+                                                       HdfsEnvironment hdfsEnvironment)
             throws StarRocksIcebergException {
-        return IcebergHiveCatalog.getInstance(metastoreUris, icebergProperties);
+        return IcebergHiveCatalog.getInstance(metastoreUris, icebergProperties, hdfsEnvironment);
     }
 
     /**
      * Returns the corresponding custom catalog implementation.
      */
-    public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
+    public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties,
+                                                         HdfsEnvironment hdfsEnvironment)
             throws StarRocksIcebergException {
         return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", catalogImpl),
-                new Configuration(), icebergProperties, catalogImpl).loadCatalog();
+                hdfsEnvironment.getConfiguration(), icebergProperties, catalogImpl).loadCatalog();
     }
 
     /**
      * Returns the corresponding glue catalog implementation.
      */
-    public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties) {
-        return IcebergGlueCatalog.getInstance(catalogName, icebergProperties);
+    public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties,
+                                                       HdfsEnvironment hdfsEnvironment) {
+        return IcebergGlueCatalog.getInstance(catalogName, icebergProperties, hdfsEnvironment);
     }
 
     /**
      * Returns the corresponding rest catalog implementation.
      */
-    public static IcebergCatalog getIcebergRESTCatalog(Map<String, String> icebergProperties) {
-        return IcebergRESTCatalog.getInstance(icebergProperties);
+    public static IcebergCatalog getIcebergRESTCatalog(Map<String, String> icebergProperties, HdfsEnvironment hdfsEnvironment) {
+        return IcebergRESTCatalog.getInstance(icebergProperties, hdfsEnvironment);
     }
 
     /**
@@ -304,26 +311,23 @@ public class IcebergUtil {
     private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
             throws DdlException {
         try {
-            Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
-                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
             List<Column> fullSchema = Lists.newArrayList();
-            for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
-                Types.NestedField icebergColumn = entry.getValue();
-                Type srType;
-                try {
-                    srType = convertColumnType(icebergColumn.type());
-                } catch (InternalError | Exception e) {
-                    LOG.error("Failed to convert iceberg type {}", icebergColumn.type().toString(), e);
-                    srType = Type.UNKNOWN_TYPE;
-                }
-
-                Column column = new Column(icebergColumn.name(), srType, true);
-                fullSchema.add(column);
-            }
-
+            icebergTable.schema().columns().forEach(
+                    field -> {
+                        Type srType;
+                        try {
+                            srType = convertColumnType(field.type());
+                        } catch (InternalError | Exception e) {
+                            LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
+                            srType = Type.UNKNOWN_TYPE;
+                        }
+                        Column column = new Column(field.name(), srType, true);
+                        fullSchema.add(column);
+                    }
+            );
             return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable,
                     true, icebergTable.name(), fullSchema, properties);
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
             throw new DdlException("iceberg table is not found.", e);
         }
     }

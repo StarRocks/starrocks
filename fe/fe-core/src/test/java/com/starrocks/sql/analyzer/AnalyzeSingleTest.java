@@ -83,6 +83,21 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testIdentifierStartWithDigit() {
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select a.11b.22c, * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT a.11b.22c, * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 00a.11b.22c, * from 00a.11b", 0).get(0);
+        Assert.assertEquals("SELECT 00a.11b.22c, * FROM 00a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 11b.* from 11b", 0).get(0);
+        Assert.assertEquals("SELECT 11b.* FROM 11b", AstToStringBuilder.toString(statementBase));
+    }
+
+    @Test
     public void testPrefix() {
         analyzeSuccess("select t0.v1 from t0");
         analyzeSuccess("select t0.*, v3, v2 from t0");
@@ -321,6 +336,9 @@ public class AnalyzeSingleTest {
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
+        analyzeSuccess("select @@SESSION.`sql_mode`");
+        analyzeSuccess("select @@SESSION.sql_mode");
+        analyzeSuccess("select @_123var");
     }
 
     @Test
@@ -636,5 +654,25 @@ public class AnalyzeSingleTest {
                 "Column '`test`.`v`' cannot be resolved");
 
         analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
+    }
+
+    @Test
+    public void testColumnAlias() {
+        analyzeFail("select * from test.t0 as t(a,b,c)", "You have an error in your SQL syntax");
+        analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t.a,* from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.column_0, * from (values(1,2,3)) t0")).getQueryRelation();
+        Assert.assertEquals("column_0,column_0,column_1,column_2",
+                String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
     }
 }

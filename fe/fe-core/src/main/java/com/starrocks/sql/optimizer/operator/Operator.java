@@ -14,10 +14,13 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 
 public abstract class Operator {
@@ -34,6 +37,8 @@ public abstract class Operator {
      * such as Join reorder
      */
     protected Projection projection;
+
+    protected RowOutputInfo rowOutputInfo;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -91,6 +96,31 @@ public abstract class Operator {
 
     public void setProjection(Projection projection) {
         this.projection = projection;
+    }
+
+    public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
+        if (rowOutputInfo != null) {
+            return rowOutputInfo;
+        }
+
+        if (projection != null) {
+            rowOutputInfo = new RowOutputInfo(projection.getColumnRefMap());
+        } else {
+            rowOutputInfo = deriveRowOutputInfo(inputs);
+        }
+        return rowOutputInfo;
+    }
+
+    protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        throw new UnsupportedOperationException();
+    }
+
+    protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (ColumnOutputInfo columnOutputInfo : inputRow.getColumnEntries()) {
+            entryList.add(new ColumnOutputInfo(columnOutputInfo.getColumnRef(), columnOutputInfo.getColumnRef()));
+        }
+        return new RowOutputInfo(entryList);
     }
 
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

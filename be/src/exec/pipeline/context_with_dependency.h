@@ -34,10 +34,7 @@ public:
     ContextWithDependency() = default;
     virtual ~ContextWithDependency() = default;
 
-    ContextWithDependency(const ContextWithDependency&) = delete;
-    ContextWithDependency(ContextWithDependency&&) = delete;
-    ContextWithDependency& operator=(ContextWithDependency&&) = delete;
-    ContextWithDependency& operator=(const ContextWithDependency&) = delete;
+    DISALLOW_COPY_AND_ASSIGN(ContextWithDependency);
 
     // For pipeline, it is called by unref() when the last operator is unreffed.
     // For non-pipeline, it is called by close() of the exec node directly

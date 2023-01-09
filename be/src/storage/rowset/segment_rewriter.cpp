@@ -19,9 +19,8 @@ namespace starrocks {
 SegmentRewriter::SegmentRewriter() = default;
 
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
-                                std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<vectorized::Column>>& columns, uint32_t segment_id,
-                                const FooterPointerPB& partial_rowset_footer) {
+                                std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
+                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
@@ -51,7 +50,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
+    auto schema = ChunkHelper::convert_schema(tschema, column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(columns[i].release());
@@ -66,9 +65,8 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 }
 
 Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
-                                std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<vectorized::Column>>& columns, uint32_t segment_id,
-                                const FooterPointerPB& partial_rowset_footer) {
+                                std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
+                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(src_path));
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(src_path));
 
@@ -85,7 +83,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
+    auto schema = ChunkHelper::convert_schema(tschema, column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(columns[i].release());

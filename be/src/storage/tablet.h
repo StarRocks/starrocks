@@ -70,11 +70,9 @@ class CompactionContext;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
-namespace vectorized {
 class ChunkIterator;
-} // namespace vectorized
 
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
@@ -243,6 +241,8 @@ public:
     // do not do compaction
     bool need_compaction();
 
+    bool force_base_compaction();
+
     double compaction_score();
     CompactionType compaction_type();
 
@@ -263,6 +263,8 @@ public:
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
+
+    void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
 
     Status contains_version(const Version& version);
 

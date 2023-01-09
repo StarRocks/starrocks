@@ -45,8 +45,8 @@
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fmt/core.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 #define __StarRocksMysql MYSQL
 #include <sstream>
@@ -102,16 +102,16 @@ Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string&
 
 struct ViewerBuilder {
     template <LogicalType ptype>
-    void operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, vectorized::ColumnPtr* column) {
+    void operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, ColumnPtr* column) {
         if constexpr (ptype == LogicalType::TYPE_TIME) {
-            *column = vectorized::ColumnHelper::convert_time_column_from_double_to_str(*column);
+            *column = ColumnHelper::convert_time_column_from_double_to_str(*column);
         } else {
-            _viewers->emplace_back(vectorized::ColumnViewer<ptype>(*column));
+            _viewers->emplace_back(ColumnViewer<ptype>(*column));
         }
     }
 };
 
-Status MysqlTableWriter::_build_viewers(vectorized::Columns& columns) {
+Status MysqlTableWriter::_build_viewers(Columns& columns) {
     _viewers.clear();
     DCHECK_EQ(columns.size(), _output_expr_ctxs.size());
 
@@ -155,14 +155,14 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             fmt::format_to(_stmt_buffer, "{}", viewer.value(i).to_string());
                         } else if constexpr (pt_is_decimal<type>) {
                             const auto& data_type = _output_expr_ctxs[col]->root()->type();
-                            using CppType = vectorized::RunTimeCppType<type>;
+                            using CppType = RunTimeCppType<type>;
                             fmt::format_to(_stmt_buffer, "{}",
                                            DecimalV3Cast::to_string<CppType>(viewer.value(i), data_type.precision,
                                                                              data_type.scale));
                         } else if constexpr (pt_is_date<type>) {
                             int y, m, d;
                             viewer.value(i).to_date(&y, &m, &d);
-                            fmt::format_to(_stmt_buffer, "'{}'", vectorized::date::to_string(y, m, d));
+                            fmt::format_to(_stmt_buffer, "'{}'", date::to_string(y, m, d));
                         } else if constexpr (pt_is_datetime<type>) {
                             fmt::format_to(_stmt_buffer, "'{}'", viewer.value(i).to_string());
                         } else if constexpr (pt_is_string<type>) {
@@ -195,13 +195,13 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
     return Status::OK();
 }
 
-Status MysqlTableWriter::append(vectorized::Chunk* chunk) {
+Status MysqlTableWriter::append(Chunk* chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
 
     // eval output expr
-    vectorized::Columns result_columns(_output_expr_ctxs.size());
+    Columns result_columns(_output_expr_ctxs.size());
     for (int i = 0; i < _output_expr_ctxs.size(); ++i) {
         ASSIGN_OR_RETURN(result_columns[i], _output_expr_ctxs[i]->evaluate(chunk));
     }

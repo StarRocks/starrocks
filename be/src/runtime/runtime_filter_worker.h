@@ -32,11 +32,9 @@ namespace starrocks {
 class ExecEnv;
 class RuntimeState;
 
-namespace vectorized {
 class JoinRuntimeFilter;
 class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
-} // namespace vectorized
 
 class RuntimeFilterRpcClosure;
 // RuntimeFilterPort is bind to a fragment instance
@@ -44,17 +42,16 @@ class RuntimeFilterRpcClosure;
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
-    void add_listener(vectorized::RuntimeFilterProbeDescriptor* rf_desc);
-    void publish_runtime_filters(std::list<vectorized::RuntimeFilterBuildDescriptor*>& rf_descs);
+    void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
+    void publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
-    void receive_runtime_filter(int32_t filter_id, const vectorized::JoinRuntimeFilter* rf);
-    void receive_shared_runtime_filter(int32_t filter_id,
-                                       const std::shared_ptr<const vectorized::JoinRuntimeFilter>& rf);
+    void receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf);
+    void receive_shared_runtime_filter(int32_t filter_id, const std::shared_ptr<const JoinRuntimeFilter>& rf);
     std::string listeners(int32_t filter_id);
 
 private:
-    std::map<int32_t, std::list<vectorized::RuntimeFilterProbeDescriptor*>> _listeners;
+    std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
     RuntimeState* _state;
 };
 
@@ -78,7 +75,7 @@ public:
     int32_t expect_number;
     ObjectPool pool;
     // each partitioned rf.
-    std::map<int32_t, vectorized::JoinRuntimeFilter*> filters;
+    std::map<int32_t, JoinRuntimeFilter*> filters;
     size_t current_size = 0;
     size_t max_size = 0;
     bool stop = false;

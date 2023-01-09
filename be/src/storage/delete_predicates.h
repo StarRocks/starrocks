@@ -19,7 +19,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/disjunctive_predicates.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // DeletePredicates is a set of delete predicates of different versions.
 // version is rowset index if tablet is lake tablet.
@@ -45,4 +45,4 @@ private:
     std::vector<VersionAndPredicate> _version_predicates;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

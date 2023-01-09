@@ -51,8 +51,8 @@ public:
     Status set_finishing(RuntimeState* state) override;
     Status set_cancelled(RuntimeState* state) override;
     void set_precondition_ready(RuntimeState* state) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:

@@ -35,13 +35,13 @@ DIAGNOSTIC_POP
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
 #include <column/type_traits.h>
-#include <exec/vectorized/arrow_type_traits.h>
+#include <exec/arrow_type_traits.h>
 
 #include "column/column_helper.h"
 #include "runtime/large_int_value.h"
 #include "storage/tablet_schema_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};
 
 template <LogicalType PT, ArrowTypeId AT>
@@ -199,7 +199,7 @@ struct ConstNullColumnTester {
     static inline void apply(size_t num_rows, const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
         std::vector<LogicalType> primitive_types(1, PT);
-        auto column = vectorized::ColumnHelper::create_const_null_column(num_rows);
+        auto column = ColumnHelper::create_const_null_column(num_rows);
         chunk->append_column(column, SlotId(0));
         std::shared_ptr<ArrowType> arrow_type;
         if constexpr (pt_is_decimalv2<PT>) {
@@ -508,4 +508,4 @@ TEST_F(StarRocksColumnToArrowTest, testConstNullColumn) {
     ConstNullColumnTester<TYPE_DECIMAL128, ArrowTypeId::DECIMAL>::apply(997, decimal128_type_desc);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

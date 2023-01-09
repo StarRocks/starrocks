@@ -18,13 +18,13 @@
 
 #include "column/type_traits.h"
 #include "glog/logging.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
 #endif
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType TYPE>
 class SIMD_muti_selector {
@@ -134,4 +134,4 @@ public:
         }
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

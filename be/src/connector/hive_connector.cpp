@@ -17,26 +17,25 @@
 #include <filesystem>
 
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
-#include "exec/vectorized/jni_scanner.h"
+#include "exec/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_text.h"
+#include "exec/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
-DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-HiveDataSourceProvider::HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -80,7 +79,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
-    _init_partition_values();
+    RETURN_IF_ERROR(_init_partition_values());
     if (_filter_by_eval_partition_conjuncts) {
         _no_data = true;
         return Status::OK();
@@ -115,6 +114,12 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
 
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
+    if (partition_desc == nullptr) {
+        return Status::InternalError(
+                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                            _scan_range.partition_id));
+    }
+
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
@@ -236,6 +241,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _profile.delete_build_timer = ADD_TIMER(_runtime_profile, "DeleteBuildTimer");
+    _profile.delete_file_per_scan_counter = ADD_COUNTER(_runtime_profile, "DeleteFilesPerScan", TUnit::UNIT);
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
@@ -284,7 +291,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path));
+    const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    FSOptions fsOptions =
+            FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
@@ -363,6 +374,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         jni_scanner_params["serde"] = hudi_table->get_serde_lib();
         jni_scanner_params["input_format"] = hudi_table->get_input_format();
 
+#ifndef NDEBUG
+        for (const auto& it : jni_scanner_params) {
+            VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
+        }
+#endif
         std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
 
         scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -399,7 +415,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
-Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }

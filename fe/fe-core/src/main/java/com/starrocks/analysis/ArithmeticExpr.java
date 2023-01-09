@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -49,9 +50,27 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 
 public class ArithmeticExpr extends Expr {
+    private static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
+            .put(Operator.MULTIPLY.getName(), Operator.MULTIPLY)
+            .put(Operator.DIVIDE.getName(), Operator.DIVIDE)
+            .put(Operator.MOD.getName(), Operator.MOD)
+            .put(Operator.INT_DIVIDE.getName(), Operator.INT_DIVIDE)
+            .put(Operator.ADD.getName(), Operator.ADD)
+            .put(Operator.SUBTRACT.getName(), Operator.SUBTRACT)
+            .put(Operator.BITAND.getName(), Operator.BITAND)
+            .put(Operator.BITOR.getName(), Operator.BITOR)
+            .put(Operator.BITXOR.getName(), Operator.BITXOR)
+            .put(Operator.BITNOT.getName(), Operator.BITNOT)
+            .put(Operator.FACTORIAL.getName(), Operator.FACTORIAL)
+            .put(Operator.BIT_SHIFT_LEFT.getName(), Operator.BIT_SHIFT_LEFT)
+            .put(Operator.BIT_SHIFT_RIGHT.getName(), Operator.BIT_SHIFT_RIGHT)
+            .put(Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Operator.BIT_SHIFT_RIGHT_LOGICAL)
+            .build();
+
     private final Operator op;
 
     public enum OperatorPosition {
@@ -132,6 +151,14 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, Type.BIGINT), t));
         }
+    }
+
+    public static boolean isArithmeticExpr(String functionName) {
+        return SUPPORT_FUNCTIONS.containsKey(functionName.toLowerCase());
+    }
+
+    public static Operator getArithmeticOperator(String functionName) {
+        return SUPPORT_FUNCTIONS.get(functionName.toLowerCase());
     }
 
     // cast int128 into decimal128(38, 0).
@@ -509,9 +536,12 @@ public class ArithmeticExpr extends Expr {
         BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
         BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
         FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true),
-        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT, false),
-        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT, false),
-        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
+        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT,
+                false),
+        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT,
+                false),
+        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX,
+                TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
 
         private final String description;
         private final String name;

@@ -863,7 +863,7 @@ public class RestoreJob extends AbstractJob {
             remoteIdx.clearTabletsForRestore();
             // generate new table
             status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
-                    visibleVersion, schemaHash, remotePart.getId());
+                    visibleVersion, schemaHash, remotePart.getId(), remotePart.getShardGroupId());
             if (!status.ok()) {
                 return null;
             }

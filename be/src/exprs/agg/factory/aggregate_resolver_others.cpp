@@ -17,10 +17,10 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/percentile_cont.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
@@ -58,4 +58,4 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

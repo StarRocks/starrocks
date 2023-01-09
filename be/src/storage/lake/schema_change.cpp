@@ -27,11 +27,11 @@
 
 namespace starrocks::lake {
 
-using ChunkChanger = vectorized::ChunkChanger;
-using ChunkPtr = vectorized::ChunkPtr;
-using VectorizedSchema = vectorized::VectorizedSchema;
-using SchemaChangeUtils = vectorized::SchemaChangeUtils;
-using TabletReaderParams = vectorized::TabletReaderParams;
+using ChunkChanger = ChunkChanger;
+using ChunkPtr = ChunkPtr;
+using VectorizedSchema = VectorizedSchema;
+using SchemaChangeUtils = SchemaChangeUtils;
+using TabletReaderParams = TabletReaderParams;
 
 class SchemaChange {
 public:
@@ -124,10 +124,10 @@ Status ConvertedSchemaChange::init() {
     _read_params.use_page_cache = false;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());
-    _base_schema = ChunkHelper::convert_schema_to_format_v2(*base_tablet_schema,
-                                                            *_chunk_changer->get_mutable_selected_column_indexs());
+    _base_schema =
+            ChunkHelper::convert_schema(*base_tablet_schema, *_chunk_changer->get_mutable_selected_column_indexs());
     ASSIGN_OR_RETURN(_new_tablet_schema, _new_tablet->get_schema());
-    _new_schema = ChunkHelper::convert_schema_to_format_v2(*_new_tablet_schema);
+    _new_schema = ChunkHelper::convert_schema(*_new_tablet_schema);
 
     _base_chunk = ChunkHelper::new_chunk(_base_schema, config::vector_chunk_size);
     _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
@@ -290,7 +290,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     SchemaChangeParams sc_params;
     sc_params.base_tablet = &base_tablet;
     sc_params.new_tablet = &new_tablet;
-    sc_params.chunk_changer = std::make_unique<vectorized::ChunkChanger>(*new_schema);
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(*new_schema);
     sc_params.version = alter_version;
 
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);

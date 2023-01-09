@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 38:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
@@ -86,6 +87,8 @@ OutPut Exchange Id: 38
 |  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
 |
 34:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [61: year, SMALLINT, true]
 cardinality: 2
 
 PLAN FRAGMENT 2(F18)
@@ -140,9 +143,13 @@ OutPut Exchange Id: 34
 |  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
 |
 |----30:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [17: l_orderkey, INT, true]
 |       cardinality: 4000253
 |
 14:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [33: o_orderkey, INT, true]
 cardinality: 13615647
 
 PLAN FRAGMENT 3(F16)
@@ -180,9 +187,13 @@ OutPut Exchange Id: 30
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----27:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [10: s_suppkey, INT, true]
 |       cardinality: 1000000
 |
 21:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [19: l_suppkey, INT, true]
 cardinality: 4000253
 
 PLAN FRAGMENT 4(F12)
@@ -214,6 +225,7 @@ OutPut Exchange Id: 27
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----24:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 25
 |
 22:HdfsScanNode
@@ -280,6 +292,7 @@ OutPut Exchange Id: 21
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----18:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 133333
 |
 15:HdfsScanNode
@@ -353,6 +366,7 @@ OutPut Exchange Id: 14
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
 |
 |----11:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 3000000
 |
 0:HdfsScanNode
@@ -397,6 +411,7 @@ OutPut Exchange Id: 11
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 |----8:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5
 |
 1:HdfsScanNode
@@ -438,6 +453,7 @@ OutPut Exchange Id: 08
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----5:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 2:HdfsScanNode

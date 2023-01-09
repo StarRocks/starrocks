@@ -303,7 +303,7 @@ class MultiBufferInputStream extends ByteBufferInputStream {
     }
 
     @Override
-    public void mark(int readlimit) {
+    public synchronized void mark(int readlimit) {
         if (mark >= 0) {
             discardMark();
         }
@@ -315,7 +315,7 @@ class MultiBufferInputStream extends ByteBufferInputStream {
     }
 
     @Override
-    public void reset() throws IOException {
+    public synchronized void reset() throws IOException {
         if (mark >= 0 && position < markLimit) {
             this.position = mark;
             // replace the current iterator with one that adds back the buffers that

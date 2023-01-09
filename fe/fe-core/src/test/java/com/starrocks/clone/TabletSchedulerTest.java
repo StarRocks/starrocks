@@ -172,31 +172,31 @@ public class TabletSchedulerTest {
         m.setAccessible(true);
         m.invoke(tabletScheduler, null);
         Map<Long, TabletScheduler.PathSlot> bslots = tabletScheduler.getBackendsWorkingSlots();
-        Assert.assertEquals(2, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(2, bslots.get(2L).peekSlot(22));
-        long result = takeSlotNTimes(2, bslots.get(1L), 11L);
+        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(2L).peekSlot(22));
+        long result = takeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
         Assert.assertEquals(11, result);
         result = takeSlotNTimes(1, bslots.get(1L), 11L);
         Assert.assertEquals(-1, result);
-        freeSlotNTimes(2, bslots.get(1L), 11L);
-        Assert.assertEquals(2, bslots.get(1L).getSlotTotal(11));
+        freeSlotNTimes(Config.tablet_sched_slot_num_per_path, bslots.get(1L), 11L);
+        Assert.assertEquals(Config.tablet_sched_slot_num_per_path, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(128, m, tabletScheduler); // test max slot
-        Assert.assertEquals(64, bslots.get(1L).getSlotTotal(11));
-        Assert.assertEquals(64, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
+        Assert.assertEquals(TabletScheduler.MAX_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
 
         updateSlotWithNewConfig(0, m, tabletScheduler); // test min slot
-        Assert.assertEquals(2, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(2, bslots.get(2L).peekSlot(22));
+        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(2L).peekSlot(22));
         takeSlotNTimes(10, bslots.get(1L), 11L); // not enough, can only get 2 free slot
         takeSlotNTimes(10, bslots.get(2L), 21L); // not enough, can only get 2 free slot
         Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
         Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
-        Assert.assertEquals(2, bslots.get(1L).getSlotTotal(11));
+        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).getSlotTotal(11));
 
         updateSlotWithNewConfig(2, m, tabletScheduler);
         Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
-        Assert.assertEquals(2, bslots.get(1L).peekSlot(12));
+        Assert.assertEquals(TabletScheduler.MIN_SLOT_PER_PATH, bslots.get(1L).peekSlot(12));
 
         updateSlotWithNewConfig(4, m, tabletScheduler);
         Assert.assertEquals(2, bslots.get(2L).peekSlot(21));

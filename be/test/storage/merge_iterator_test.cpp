@@ -25,7 +25,7 @@
 #include "common/config.h"
 #include "storage/vector_chunk_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 static inline std::string to_string(const std::vector<T>& v) {
@@ -366,4 +366,4 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

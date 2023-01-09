@@ -43,6 +43,7 @@ public class UpdatePlanTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("CAST(CAST(3: v2 AS BIGINT) + 1 AS INT)"));
 
         testExplain("explain update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        testExplain("explain update tprimary set v2 = DEFAULT where v1 = 'aaa'");
         testExplain("explain verbose update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
     }

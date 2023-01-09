@@ -33,7 +33,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TestRowsetWriter : public RowsetWriter {
 public:
@@ -41,17 +41,14 @@ public:
 
     Status init() override { return Status::OK(); }
 
-    Status add_chunk(const vectorized::Chunk& chunk) override {
+    Status add_chunk(const Chunk& chunk) override {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         return Status::OK();
     }
 
-    Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override {
-        return Status::NotSupported("");
-    }
+    Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) override { return Status::NotSupported(""); }
 
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
-                                    SegmentPB*) override {
+    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB*) override {
         return Status::NotSupported("");
     }
 
@@ -75,8 +72,7 @@ public:
     Status flush_columns() override { return Status::OK(); }
     Status final_flush() override { return Status::OK(); }
 
-    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                       bool is_key) override {
+    Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
@@ -89,7 +85,7 @@ public:
         return Status::OK();
     }
 
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
+    const DictColumnsValidMap& global_dict_columns_valid_info() const override {
         return _global_dict_columns_valid_info;
     }
 
@@ -97,13 +93,13 @@ public:
     vector<uint32_t> all_rssids;
 
     vector<std::unique_ptr<Column>> non_key_columns;
-    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+    DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 class RowsetMergerTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr) {
+                                  Column* one_delete = nullptr) {
         // TODO(cbl): test multi-segment rowsets
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -119,13 +115,13 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (long key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -181,9 +177,8 @@ protected:
     TabletSharedPtr _tablet;
 };
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::VectorizedSchema& schema) {
-    vectorized::TabletReaderParams params;
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+    TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
         return nullptr;
@@ -194,12 +189,12 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
         return nullptr;
     }
     if (seg_iters.empty()) {
-        return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+        return new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(seg_iters);
+    return new_union_iterator(seg_iters);
 }
 
-static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
+static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
@@ -217,8 +212,8 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -252,7 +247,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
 
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
-        vectorized::Int64Column deletes;
+        Int64Column deletes;
         deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
@@ -264,9 +259,9 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
 
@@ -301,7 +296,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
 
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
-        vectorized::Int64Column deletes;
+        Int64Column deletes;
         deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
@@ -313,11 +308,11 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
-    writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
-    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    writer.non_key_columns.emplace_back(std::move(Int16Column::create_mutable()));
+    writer.non_key_columns.emplace_back(std::move(Int32Column::create_mutable()));
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     ASSERT_EQ(2, writer.non_key_columns.size());
@@ -364,7 +359,7 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
 
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
-        vectorized::Int64Column deletes;
+        Int64Column deletes;
         deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
@@ -376,9 +371,9 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
     for (int64_t i = 0; i < pks.size(); i++) {
@@ -412,7 +407,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
 
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
-        vectorized::Int64Column deletes;
+        Int64Column deletes;
         deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
@@ -424,11 +419,11 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
-    writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
-    ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
+    writer.non_key_columns.emplace_back(std::move(Int16Column::create_mutable()));
+    writer.non_key_columns.emplace_back(std::move(Int32Column::create_mutable()));
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     ASSERT_EQ(2, writer.non_key_columns.size());
@@ -444,4 +439,4 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_schema.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct AlterMaterializedViewParam {
     std::string column_name;
@@ -74,4 +74,4 @@ private:
                                       const std::string& value);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

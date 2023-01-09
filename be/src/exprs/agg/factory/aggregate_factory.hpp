@@ -43,15 +43,16 @@
 #include "exprs/agg/percentile_cont.h"
 #include "exprs/agg/percentile_union.h"
 #include "exprs/agg/retention.h"
+#include "exprs/agg/stream/retract_maxmin.h"
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
 #include "exprs/agg/window_funnel.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO(murphy) refactor the factory into a shim style
 class AggregateFactory {
@@ -171,14 +172,14 @@ public:
 
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
-    template <LogicalType PT>
+    template <LogicalType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeFirstValueWindowFunction() {
-        return std::make_shared<FirstValueWindowFunction<PT>>();
+        return std::make_shared<FirstValueWindowFunction<PT, ignoreNulls>>();
     }
 
-    template <LogicalType PT>
+    template <LogicalType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeLastValueWindowFunction() {
-        return std::make_shared<LastValueWindowFunction<PT>>();
+        return std::make_shared<LastValueWindowFunction<PT, ignoreNulls>>();
     }
 
     template <LogicalType PT>
@@ -190,6 +191,13 @@ public:
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<PT>>();
     }
+
+    // Stream MV Retractable Agg Functions
+    template <LogicalType PT>
+    static auto MakeRetractMinAggregateFunction();
+
+    template <LogicalType PT>
+    static auto MakeRetractMaxAggregateFunction();
 };
 
 // The function should be placed by alphabetical order
@@ -315,4 +323,17 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<PT>>();
 }
 
-} // namespace starrocks::vectorized
+// Stream MV Retractable Aggregate Functions
+template <LogicalType PT>
+auto AggregateFactory::MakeRetractMinAggregateFunction() {
+    return std::make_shared<MaxMinAggregateFunctionRetractable<PT, MinAggregateDataRetractable<PT>,
+                                                               MinElement<PT, MinAggregateDataRetractable<PT>>>>();
+}
+
+template <LogicalType PT>
+auto AggregateFactory::MakeRetractMaxAggregateFunction() {
+    return std::make_shared<MaxMinAggregateFunctionRetractable<PT, MaxAggregateDataRetractable<PT>,
+                                                               MaxElement<PT, MaxAggregateDataRetractable<PT>>>>();
+}
+
+} // namespace starrocks

@@ -22,7 +22,7 @@
 
 #include "runtime/StringSearcher.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /** Search for a substring in a string by Volnitsky's algorithm
   * http://volnitsky.com/project/str_search/
@@ -165,4 +165,4 @@ protected:
 
 using VolnitskyUTF8 = VolnitskyBase<StringSearcher>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

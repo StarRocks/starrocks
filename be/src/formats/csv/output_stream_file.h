@@ -19,7 +19,7 @@
 #include "formats/csv/output_stream.h"
 #include "fs/fs.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class OutputStreamFile final : public OutputStream {
 public:
@@ -40,4 +40,4 @@ private:
     std::unique_ptr<WritableFile> _file;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

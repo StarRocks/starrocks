@@ -14,7 +14,7 @@
 
 #pragma once
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // A typelist is a type that represents a list of types and can be manipulated by a
 // template metapro-gram. It provides the operations typically associated with a list:
@@ -108,4 +108,4 @@ void ForEach(Func&& func) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

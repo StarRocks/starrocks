@@ -15,9 +15,9 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/vectorized/olap_scan_node.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -39,6 +39,11 @@ void OlapScanOperatorFactory::do_close(RuntimeState*) {}
 OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
     return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, dop, _scan_node,
                                               _ctx_factory->get_or_create(driver_sequence));
+}
+
+const std::vector<ExprContext*>& OlapScanOperatorFactory::partition_exprs() const {
+    auto* olap_scan_node = down_cast<OlapScanNode*>(_scan_node);
+    return olap_scan_node->bucket_exprs();
 }
 
 // ==================== OlapScanOperator ====================
@@ -90,7 +95,7 @@ Status OlapScanOperator::do_prepare(RuntimeState*) {
 void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+    auto* olap_scan_node = down_cast<OlapScanNode*>(_scan_node);
     return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
                                              std::move(morsel), olap_scan_node, _ctx.get());
 }
@@ -112,7 +117,7 @@ size_t OlapScanOperator::num_buffered_chunks() const {
 }
 
 ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
+    ChunkPtr chunk = nullptr;
     if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
         return chunk;
     }

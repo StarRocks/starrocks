@@ -47,6 +47,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -180,6 +181,21 @@ public class StarRocksAssert {
     public StarRocksAssert withLoad(String sql) throws Exception {
         LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLoadManager().createLoadJobFromStmt(loadStmt, ctx);
+        return this;
+    }
+
+    // When you want use this func, you need write mock method 'getAllKafkaPartitions' before call this func.
+    // example:
+    // new MockUp<BrokerMgr>() {
+    //     @Mock
+    //     public FsBroker getAnyBroker(String brokerName) {
+    //         return new FsBroker();
+    //     }
+    // };
+    public StarRocksAssert withExport(String sql) throws Exception {
+        StatementBase createExport = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        StmtExecutor executor = new StmtExecutor(ctx, createExport);
+        executor.execute();
         return this;
     }
 

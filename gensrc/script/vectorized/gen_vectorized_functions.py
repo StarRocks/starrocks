@@ -67,41 +67,47 @@ public class VectorizedBuiltinFunctions {
 cpp_template = Template("""
 ${license}
 
-#include "exprs/vectorized/array_functions.h"
-#include "exprs/vectorized/builtin_functions.h"
-#include "exprs/vectorized/map_functions.h"
-#include "exprs/vectorized/math_functions.h"
-#include "exprs/vectorized/bit_functions.h"
-#include "exprs/vectorized/string_functions.h"
-#include "exprs/vectorized/time_functions.h"
-#include "exprs/vectorized/like_predicate.h"
-#include "exprs/vectorized/is_null_predicate.h"
-#include "exprs/vectorized/hyperloglog_functions.h"
-#include "exprs/vectorized/bitmap_functions.h"
-#include "exprs/vectorized/json_functions.h"
-#include "exprs/vectorized/hash_functions.h"
-#include "exprs/vectorized/encryption_functions.h"
-#include "exprs/vectorized/geo_functions.h"
-#include "exprs/vectorized/percentile_functions.h"
-#include "exprs/vectorized/grouping_sets_functions.h"
-#include "exprs/vectorized/es_functions.h"
-#include "exprs/vectorized/utility_functions.h"
+#include "exprs/array_functions.h"
+#include "exprs/builtin_functions.h"
+#include "exprs/map_functions.h"
+#include "exprs/struct_functions.h"
+#include "exprs/math_functions.h"
+#include "exprs/bit_functions.h"
+#include "exprs/string_functions.h"
+#include "exprs/time_functions.h"
+#include "exprs/like_predicate.h"
+#include "exprs/is_null_predicate.h"
+#include "exprs/hyperloglog_functions.h"
+#include "exprs/bitmap_functions.h"
+#include "exprs/json_functions.h"
+#include "exprs/hash_functions.h"
+#include "exprs/encryption_functions.h"
+#include "exprs/geo_functions.h"
+#include "exprs/percentile_functions.h"
+#include "exprs/grouping_sets_functions.h"
+#include "exprs/es_functions.h"
+#include "exprs/utility_functions.h"
 
 namespace starrocks {
-namespace vectorized {
 
 BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
         ${functions}
 };
 
 }
-}
 """)
 
 function_list = list()
+function_set = set()
 
 def add_function(fn_data):
     entry = dict()
+    if fn_data[0] in function_set:
+        print("=================================================================")
+        print("Duplicated function id: " + str(fn_data))
+        print("=================================================================")
+        exit(1)
+    function_set.add(fn_data[0])
     entry["id"] = fn_data[0]
     entry["name"] = fn_data[1]
     entry["ret"] = fn_data[2]

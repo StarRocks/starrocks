@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO: we need to change the dict type to int16 later
 using DictId = int32_t;
@@ -24,4 +24,4 @@ using DictId = int32_t;
 constexpr auto LowCardDictType = TYPE_INT;
 constexpr int DICT_DECODE_MAX_SIZE = 256;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Reference to Apache Spark with some customization
+ * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
 public class OffHeapColumnVector {
     public enum OffHeapColumnType {
@@ -34,6 +35,7 @@ public class OffHeapColumnVector {
         DATE,
         DECIMAL
     }
+
     private long nulls;
     private long data;
 
@@ -81,6 +83,10 @@ public class OffHeapColumnVector {
         reserveInternal(capacity);
         reserveChildColumn();
         reset();
+    }
+
+    public static boolean isArray(OffHeapColumnType type) {
+        return type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL;
     }
 
     public long nullsNativeAddress() {
@@ -148,7 +154,7 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
         } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL) {
+        } else if (isArray(type)) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
@@ -160,7 +166,7 @@ public class OffHeapColumnVector {
     }
 
     private void reserveChildColumn() {
-        if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL) {
+        if (isArray(type)) {
             int childCapacity = capacity;
             childCapacity *= DEFAULT_ARRAY_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];

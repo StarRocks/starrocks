@@ -19,7 +19,7 @@
 #include "orc_test_util/MemoryInputStream.hh"
 #include "orc_test_util/MemoryOutputStream.hh"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(OrcLazyLoadTest, TestNormal) {
     MemoryOutputStream buffer(1024000);
@@ -296,4 +296,4 @@ TEST(OrcLazyLoadTest, TestWithSearchArgument) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

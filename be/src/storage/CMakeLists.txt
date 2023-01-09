@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
-    array_type_info.cpp
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -62,6 +61,7 @@ add_library(Storage STATIC
     utils.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
+    rowset/array_column_writer.cpp
     rowset/binary_plain_page.cpp
     rowset/bitmap_index_reader.cpp
     rowset/bitmap_index_writer.cpp
@@ -78,6 +78,10 @@ add_library(Storage STATIC
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
     rowset/indexed_column_writer.cpp
+    rowset/map_column_writer.cpp
+    rowset/map_column_iterator.cpp
+    rowset/struct_column_writer.cpp
+    rowset/struct_column_iterator.cpp
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
@@ -127,6 +131,7 @@ add_library(Storage STATIC
     schema_change_utils.cpp
     tablet_reader.cpp
     tablet_reader_params.cpp
+    table_reader.cpp
     meta_reader.cpp
     lake_meta_reader.cpp
     olap_meta_reader.cpp
@@ -159,6 +164,7 @@ add_library(Storage STATIC
     lake/delta_writer.cpp
     lake/gc.cpp
     lake/general_tablet_writer.cpp
+    lake/pk_tablet_writer.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -167,4 +173,8 @@ add_library(Storage STATIC
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
+    lake/update_manager.cpp
+    lake/rowset_update_state.cpp
+    lake/meta_file.cpp
+    lake/lake_primary_index.cpp
 )

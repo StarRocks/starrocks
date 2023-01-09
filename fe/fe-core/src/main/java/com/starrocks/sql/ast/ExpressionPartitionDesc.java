@@ -16,16 +16,21 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +47,10 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     public ExpressionPartitionDesc(Expr expr) {
         Preconditions.checkState(expr != null);
         this.expr = expr;
+    }
+
+    public RangePartitionDesc getRangePartitionDesc() {
+        return rangePartitionDesc;
     }
 
     public Expr getExpr() {
@@ -70,10 +79,67 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
+        if (rangePartitionDesc != null) {
+            rangePartitionDesc.analyze(columnDefs, otherProperties);
+        }
+    }
+
+    @Override
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         // we will support other PartitionInto in the future
-        return new ExpressionRangePartitionInfo(Arrays.asList(expr), columns);
+        if (rangePartitionDesc == null) {
+            // for materialized view express partition.
+            return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema);
+        }
+        List<Column> partitionColumns = Lists.newArrayList();
+
+        // check and get partition column
+        for (String colName : rangePartitionDesc.getPartitionColNames()) {
+            findRangePartitionColumn(schema, partitionColumns, colName);
+        }
+
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns);
+
+        for (SingleRangePartitionDesc desc : getRangePartitionDesc().getSingleRangePartitionDescs()) {
+            long partitionId = partitionNameToId.get(desc.getPartitionName());
+            expressionRangePartitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
+        }
+
+        return expressionRangePartitionInfo;
+    }
+
+    static void findRangePartitionColumn(List<Column> schema, List<Column> partitionColumns, String colName)
+            throws DdlException {
+        boolean find = false;
+        for (Column column : schema) {
+            if (column.getName().equalsIgnoreCase(colName)) {
+                if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
+                    throw new DdlException("The partition column could not be aggregated column"
+                            + " and unique table's partition column must be key column");
+                }
+
+                if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    throw new DdlException(String.format("Invalid partition column '%s': %s",
+                            column.getName(), "invalid data type " + column.getType()));
+                }
+
+                try {
+                    RangePartitionInfo.checkRangeColumnType(column);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+
+                partitionColumns.add(column);
+                find = true;
+                break;
+            }
+        }
+        if (!find) {
+            throw new DdlException("Partition column[" + colName + "] does not found");
+        }
     }
 
 }

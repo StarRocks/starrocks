@@ -19,7 +19,7 @@
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_schema_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/vectorized/schema_scan_node.h"
+#include "exec/schema_scan_node.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::pipeline {

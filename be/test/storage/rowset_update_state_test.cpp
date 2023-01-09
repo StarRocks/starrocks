@@ -55,7 +55,7 @@ public:
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr) {
+                                  Column* one_delete = nullptr) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -70,13 +70,13 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (long key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -141,14 +141,14 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+        auto schema = ChunkHelper::convert_schema(*partial_schema.get());
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto& cols = chunk->columns();
         for (long key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
@@ -162,9 +162,8 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::VectorizedSchema& schema) {
-    vectorized::TabletReaderParams params;
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+    TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
         return nullptr;
@@ -175,12 +174,12 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
         return nullptr;
     }
     if (seg_iters.empty()) {
-        return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+        return new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(seg_iters);
+    return new_union_iterator(seg_iters);
 }
 
-static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
+static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
@@ -199,8 +198,8 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -298,13 +297,13 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     auto chunk = ChunkHelper::new_chunk(schema, N);
     auto& cols = chunk->columns();
     for (size_t i = 0; i < N; i++) {
-        cols[0]->append_datum(vectorized::Datum(i));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(i % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum((int32_t)(i % 1000 + 3)));
+        cols[0]->append_datum(Datum(i));
+        cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));
+        cols[2]->append_datum(Datum((int32_t)(i % 1000 + 3)));
     }
     CHECK_OK(writer->flush_chunk(*chunk));
     RowsetSharedPtr new_rowset = *writer->build();
@@ -324,7 +323,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     st = index.load(_tablet.get());
     std::vector<uint32_t> read_column_ids = {2};
     state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
-                              latest_applied_version, read_column_ids, index);
+                              0, latest_applied_version, read_column_ids, index);
 
     // check data of write column
     const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();

@@ -38,13 +38,13 @@ namespace starrocks::pipeline {
 
 class Counter {
 public:
-    void process_push(const vectorized::ChunkPtr& chunk) {
+    void process_push(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_push_chunk_num;
         _push_chunk_row_num += chunk->num_rows();
     }
 
-    void process_pull(const vectorized::ChunkPtr& chunk) {
+    void process_pull(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_pull_chunk_num;
         _pull_chunk_row_num += chunk->num_rows();
@@ -208,12 +208,12 @@ public:
     bool is_finished() const override { return !has_output(); }
     bool pending_finish() const override { return --_pending_finish_cnt >= 0; }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     CounterPtr _counter;
-    std::vector<vectorized::ChunkPtr> _chunks;
+    std::vector<ChunkPtr> _chunks;
     size_t _index = 0;
     mutable std::atomic<int32_t> _pending_finish_cnt;
 
@@ -223,12 +223,12 @@ private:
     bool _is_closed = false;
 };
 
-Status TestSourceOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TestSourceOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::InternalError("Shouldn't push chunk to source operator");
 }
 
-StatusOr<vectorized::ChunkPtr> TestSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TestSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = _chunks[_index++];
     _counter->process_pull(chunk);
     return chunk;
@@ -274,8 +274,8 @@ public:
         return Status::OK();
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     CounterPtr _counter;
@@ -283,13 +283,13 @@ private:
     ChunkPtr _chunk = nullptr;
 };
 
-Status TestNormalOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TestNormalOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     _chunk = chunk;
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> TestNormalOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TestNormalOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr chunk = _chunk;
     _chunk = nullptr;
     _counter->process_pull(chunk);
@@ -327,20 +327,20 @@ public:
         return Status::OK();
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     CounterPtr _counter;
     bool _is_finished = false;
 };
 
-Status TestSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TestSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> TestSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TestSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk to sink operator");
 }
 

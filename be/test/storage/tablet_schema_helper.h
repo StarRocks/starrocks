@@ -156,6 +156,30 @@ inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length
     return column;
 }
 
+inline TabletColumn create_map(int32_t id, bool is_nullable = true) {
+    TabletColumn column;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(TYPE_MAP);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(16);
+    column.set_index_length(16);
+    return column;
+}
+
+inline TabletColumn create_struct(int32_t id, bool is_nullable = true) {
+    TabletColumn column;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(TYPE_STRUCT);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(16);
+    column.set_index_length(16);
+    return column;
+}
+
 inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::string default_value) {
     ColumnPB column;
     column.set_type(col_type);

@@ -255,6 +255,59 @@ TEST_F(ThreadPoolTest, TestVariableSizeThreadPool) {
     ASSERT_EQ(0, _pool->num_threads());
 }
 
+TEST_F(ThreadPoolTest, TestIncMaxThreadPool) {
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(1)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+
+    // There is 1 thread to start with.
+    ASSERT_EQ(1, _pool->num_threads());
+    // We get up to 4 threads when submitting work.
+    CountDownLatch latch(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(2, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(3, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    // The 5th piece of work gets queued.
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    // Finish all work
+    latch.count_down();
+    _pool->wait();
+    ASSERT_EQ(0, _pool->_active_threads);
+    // inc max threads to 6
+    _pool->update_max_threads(6);
+    CountDownLatch latch2(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(4, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(5, _pool->num_threads());
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(6, _pool->num_threads());
+    // The 7th piece of work gets queued.
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&latch2)).ok());
+    ASSERT_EQ(6, _pool->num_threads());
+    // Finish all work
+    latch2.count_down();
+    _pool->wait();
+    ASSERT_EQ(0, _pool->_active_threads);
+
+    _pool->shutdown();
+    ASSERT_EQ(0, _pool->num_threads());
+}
+
 TEST_F(ThreadPoolTest, TestMaxQueueSize) {
     ASSERT_TRUE(rebuild_pool_with_builder(
                         ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1).set_max_queue_size(1))

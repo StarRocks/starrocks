@@ -8,8 +8,8 @@ A Hudi catalog is an external catalog supported in StarRocks 2.4 and later versi
 
 - StarRocks supports querying data files of Hudi in the following formats: Parquet and ORC.
 - StarRocks supports querying compressed data files of Hudi in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Hudi data in the following types: BOOLEAN, INTEGER, DATE, TIME, BIGINT, FLOAT, DOUBLE, DECIMAL, CHAR, VARCHAR, MAP, and STRUCT. The ARRAY type is not supported. An error occurs when you query Hudi data of the ARRAY type.
-- StarRocks supports querying Copy On Write and Merge On Read tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
+- StarRocks does not support querying data of the ARRAY type from Hudi. Note that errors occur if you query Hudi data of the ARRAY type.
+- StarRocks supports querying Copy On Write and Merge On Read tables. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
 - StarRocks supports the following two query types of Hudi: Snapshot Queries and Read Optimized Queries (Hudi only supports performing Read Optimized Queries on Merge On Read tables). Incremental Queries are not supported. For more information about the query types of Hudi, see [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
@@ -19,86 +19,86 @@ Before you create a Hudi catalog, configure your StarRocks cluster so that StarR
 
 ## Create a Hudi catalog
 
-After you complete the preceding configurations, you can create a Hudi catalog.
-
-### Syntax
+After you complete the preceding configurations, you can create a Hudi catalog. The syntax and parameters are described below.
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
-### Parameters
+### catalog_name
 
-- `catalog_name`: the name of the Hudi catalog. This parameter is required.<br>The naming conventions are as follows:
+The name of the Hudi catalog. This parameter is required. The naming conventions are as follows:
 
-  - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
-  - The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hudi catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Hudi cluster.
+### PROPERTIES
 
-#### Hive metastore
+The properties of the Hudi catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Hudi cluster. You can configure the following properties:
 
-If you use Hive metastore for your Hudi cluster, configure the following properties for the Hudi catalog.
+- Configure the properties based on the metadata service used by your Hudi cluster.
+- Set the policy that the Hudi catalog uses to update cached metadata.
 
-| **Property**        | **Required** | **Description**                                              |
-| ------------------- | ------------ | ------------------------------------------------------------ |
-| type                | Yes          | The type of the data source. Set the value to `hudi`.        |
-| hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+#### Properties for metadata services
 
-> **Note**
->
-> Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+- If you use Hive metastore for your Hudi cluster, configure the following properties for the Hudi catalog.
 
-#### [Preview] AWS Glue
+  | **Property**        | **Required** | **Description**                                              |
+  | ------------------- | ------------ | ------------------------------------------------------------ |
+  | type                | Yes          | The type of the data source. Set the value to `hudi`.        |
+  | hive.metastore.uris | Yes          | The URI of the Hive metastore. Format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+  > **NOTE**
+  >
+  > Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+
+- [Preview] If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+
+  | **Property**                           | **Required** | **Description**                                              |
+  | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | type                                   | Yes          | The type of the data source. Set the value to `hudi`.        |
+  | hive.metastore.type                    | Yes          | The metadata service used by your Hudi cluster. Set the value to `glue`. |
+  | aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+  | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+  | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+
+#### Properties for update policies for cached metadata
+
+StarRocks develops a query execution plan based on the following data:
+
+- Metadata (such as table schema) of Hudi tables or partitions in the metadata service.
+- Metadata (such as file size) of the data files of Hudi tables or partitions in the storage system.
+
+Therefore, the time consumed by StarRocks to access the metadata service and storage system of Hudi directly affects the time consumed by a query. To reduce the impact, StarRocks supports caching metadata of Hudi and provides an update policy for cached metadata, based on which StarRocks can cache and update the metadata of Hudi tables or partitions and the metadata of their data files.
+
+Hudi catalogs use the asynchronous update policy to update the cached metadata of Hudi. For more information about the policy, see [Asynchronous update](../catalog/hive_catalog.md#asynchronous-update). In most cases, you do not need to tune the following parameters because the default settings already maximize query performance. However, if the frequency of updating Hudi data is relatively high, you can adjust the time interval of updating and discarding cached metadata to match the data update frequency.
 
 | **Property**                           | **Required** | **Description**                                              |
 | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-| type                                   | Yes          | The type of the data source. Set the value to `hudi`.        |
-| hive.metastore.type                    | Yes          | The metadata service used by your Hudi cluster. Set the value to `glue`. |
-| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
-| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
-| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+| enable_hive_metastore_cache            | No           | Whether the metadata of Hudi tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of Hudi tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of Hudi tables or partitions.</li></ul> |
+| enable_remote_file_cache               | No           | Whether the metadata of the data files of Hudi tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of data files of Hudi tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of data files of Hudi tables or partitions.</li></ul> |
+| metastore_cache_refresh_interval_sec   | No           | The time interval to asynchronously update the metadata of Hudi tables or partitions cached in StarRocks. Unit: seconds. Default value: `7200`, which is 2 hours. |
+| remote_file_cache_refresh_interval_sec | No           | The time interval to asynchronously update the metadata of the data files of Hudi tables or partitions cached in StarRocks. Unit: seconds. Default value: `60`. |
+| metastore_cache_ttl_sec                | No           | The time interval to automatically discard the metadata of Hudi tables or partitions cached in StarRocks. Unit: seconds. Default value: `86400`, which is 24 hours. |
+| remote_file_cache_ttl_sec              | No           | The time interval to automatically discard the metadata of the data files of Hudi tables or partitions cached in StarRocks. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
-## Caching strategy of Hudi metadata
+If you want to query the latest Hudi data but the time interval for updating cached metadata has not arrived, you can manually update the cached metadata. For example, there is a Hudi table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. If StarRocks only cached the two kinds of metadata of `p1`, `p2`, and `p3`, you can update the cached metadata in one of the following ways:
 
-StarRocks develops a query execution plan based on the metadata of Hudi tables. Therefore, the response time of Hive metastore directly affects the time consumed by a query. To reduce the impact, StarRocks provides caching strategies, based on which StarRocks can cache and update the metadata of Hudi tables, such as partition statistics and file information of partitions. Currently, StarRocks only supports the asynchronous update strategy.
-
-### How it works
-
-If a query hits a partition of a Hudi table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRocks asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
-
-You can set the default time interval by the `hive_meta_cache_refresh_interval_s` parameter. The parameter value defaults to `7200`. Unit: seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
-
-If a query hits a partition and the time interval from the last update exceeds the default time interval, but the metadata cached in StarRocks is not updated, that means the cached metadata is invalid and will be cached again at the next query. You can set the time period during which the cached metadata is valid by the `hive_meta_cache_ttl_s` parameter. The parameter value defaults to `86400`. Unit: Seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
-
-### Examples
-
-For example, there is a Hudi table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hit `p1`, and StarRocks cached the metadata of `p1`. If the default time interval to update the metadata cached in StarRocks is 1 hour, there are the following two situations for subsequent updates:
-
-- If another query hits `p1` again and the current time from the last update is more than 1 hour, StarRocks asynchronously updates the cached metadata of `p1`.
-- If another query hits `p1` again and the current time from the last update is less than 1 hour, StarRocks does not asynchronously update the cached metadata of `p1`.
-
-### Manual update
-
-To query the latest Hudi data, make sure that the metadata cached in StarRocks is updated to the latest. If the time interval from the last update does not exceed the default time interval, you can manually update the cached metadata before sending a query.
-
-- Execute the following statement to synchronize the schema changes (such as adding columns or removing partitions) of a Hudi table to StarRocks.
+- Updates the two kinds of cached metadata of all partitions (`p1`, `p2`, and `p3`) at the same time.
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
     ```
 
-- Execute the following statement to synchronize the data changes (such as data ingestion) of a Hudi table to StarRocks.
+- Updates the two kinds of cached metadata of given partitions.
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
 ## What to do next
 

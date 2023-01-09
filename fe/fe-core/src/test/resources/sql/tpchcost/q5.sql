@@ -30,6 +30,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 27:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 5
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
@@ -58,6 +59,8 @@ OutPut Exchange Id: 27
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 24:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [46: N_NAME, VARCHAR, false]
 cardinality: 5
 
 PLAN FRAGMENT 2(F00)
@@ -104,6 +107,8 @@ OutPut Exchange Id: 24
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----20:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [10: O_ORDERKEY, INT, false]
 |       cardinality: 22765073
 |
 13:Project
@@ -138,6 +143,7 @@ OutPut Exchange Id: 24
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----11:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 200000
 |       probe runtime filters:
 |       - filter_id = 4, probe_expr = (40: S_NATIONKEY)
@@ -186,6 +192,8 @@ OutPut Exchange Id: 20
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 |
 |----17:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [11: O_CUSTKEY, INT, false]
 |       cardinality: 22765073
 |
 14:OlapScanNode
@@ -258,6 +266,7 @@ OutPut Exchange Id: 11
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----8:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5
 |
 1:OlapScanNode
@@ -301,6 +310,7 @@ OutPut Exchange Id: 08
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----5:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 2:OlapScanNode

@@ -500,9 +500,9 @@ AGGREGATE ([GLOBAL] aggregate [{6: sum=sum(2: v2)}] group by [[]] having [null]
 [sql]
 select sum(v2) from t0, t1 group by v1;
 [result]
-AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(8: sum)}] group by [[1: v1]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(10: sum)}] group by [[1: v1]] having [null]
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
-        AGGREGATE ([GLOBAL] aggregate [{8: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{10: sum=sum(2: v2)}] group by [[1: v1]] having [null]
             SCAN (columns[1: v1, 2: v2] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[4: v4] predicate[null])

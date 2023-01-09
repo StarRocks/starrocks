@@ -17,9 +17,9 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 inline constexpr LogicalType SumResultPT = PT;
@@ -60,6 +60,15 @@ public:
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         this->data(state).sum += column.get_data()[row_num];
+    }
+
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        this->data(state).sum -= column.get_data()[row_num];
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
@@ -170,4 +179,4 @@ template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalSumAggregateFunction =
         SumAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

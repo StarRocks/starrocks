@@ -14,6 +14,7 @@
 
 #include "connector/connector.h"
 
+#include "connector/binlog_connector.h"
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
@@ -45,6 +46,7 @@ const std::string Connector::JDBC = "jdbc";
 const std::string Connector::MYSQL = "mysql";
 const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
+const std::string Connector::BINLOG = "binlog";
 
 class ConnectorManagerInit {
 public:
@@ -56,6 +58,7 @@ public:
         cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
+        cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
     }
 };
 
@@ -64,15 +67,15 @@ static ConnectorManagerInit _init;
 Status DataSource::parse_runtime_filters(RuntimeState* state) {
     if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
     for (const auto& item : _runtime_filters->descriptors()) {
-        vectorized::RuntimeFilterProbeDescriptor* probe = item.second;
-        const vectorized::JoinRuntimeFilter* filter = probe->runtime_filter();
+        RuntimeFilterProbeDescriptor* probe = item.second;
+        const JoinRuntimeFilter* filter = probe->runtime_filter();
         if (filter == nullptr) continue;
         SlotId slot_id;
         if (!probe->is_probe_slot_ref(&slot_id)) continue;
         LogicalType slot_type = probe->probe_expr_type();
         Expr* min_max_predicate = nullptr;
-        vectorized::RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
-                                                                        &min_max_predicate);
+        RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
+                                                            &min_max_predicate);
         if (min_max_predicate != nullptr) {
             ExprContext* ctx = state->obj_pool()->add(new ExprContext(min_max_predicate));
             RETURN_IF_ERROR(ctx->prepare(state));

@@ -18,16 +18,16 @@
 
 #include <atomic>
 
+#include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
 
-using HashJoiner = starrocks::vectorized::HashJoiner;
+using HashJoiner = starrocks::HashJoiner;
 
 class HashJoinBuildOperator final : public Operator {
 public:
@@ -49,8 +49,8 @@ public:
     Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     std::string get_name() const override {
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_builder.get());
@@ -76,12 +76,12 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
-    void retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns);
+    void retain_string_key_columns(int32_t driver_sequence, Columns&& columns);
 
 private:
     HashJoinerFactoryPtr _hash_joiner_factory;
     std::unique_ptr<PartialRuntimeFilterMerger> _partial_rf_merger;
-    std::vector<vectorized::Columns> _string_key_columns;
+    std::vector<Columns> _string_key_columns;
     const TJoinDistributionMode::type _distribution_mode;
 };
 

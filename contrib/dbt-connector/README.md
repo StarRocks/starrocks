@@ -61,5 +61,6 @@ config:
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
 ## Notice
-1. `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
-2. distributed_by is must
+1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
+2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
+3. distributed_by is must

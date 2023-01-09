@@ -1,4 +1,4 @@
-# Load data from a local file system or a streaming data source using HTTP push
+# Load data from a local file system or a streaming data source using HTTP PUT
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source.
 
@@ -38,7 +38,7 @@ You can use the `streaming_load_max_mb` parameter to specify the maximum size of
 
 Stream Load does not support loading the data of a CSV file that contains a JSON-formatted column.
 
-## Principles
+## How it works
 
 You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE. You can also directly submit a load request on your client to a BE of your choice.
 
@@ -58,7 +58,7 @@ The following figure shows the workflow of a Stream Load job.
 
 This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
-Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 #### Load CSV data
 

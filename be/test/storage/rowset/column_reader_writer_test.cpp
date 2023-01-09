@@ -103,7 +103,7 @@ protected:
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
-    void test_nullable_data(const vectorized::Column& src, const std::string& null_encoding = "0",
+    void test_nullable_data(const Column& src, const std::string& null_encoding = "0",
                             const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
 
@@ -168,19 +168,15 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-            ColumnIterator* iter = nullptr;
-            auto st = reader->new_iterator(&iter);
-            ASSERT_TRUE(st.ok());
-            std::unique_ptr<ColumnIterator> guard(iter);
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
-            ASSERT_TRUE(st.ok());
             ColumnIteratorOptions iter_opts;
             OlapReaderStatistics stats;
             iter_opts.stats = &stats;
             iter_opts.read_file = read_file.get();
             iter_opts.use_page_cache = true;
-            st = iter->init(iter_opts);
+            auto st = iter->init(iter_opts);
             ASSERT_TRUE(st.ok());
 
             // first read get data from disk
@@ -190,7 +186,7 @@ protected:
                 {
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok()) << st.to_string();
-                    vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
                     // will do direct copy to column
                     size_t rows_read = src.size();
                     dst->reserve(rows_read);
@@ -212,7 +208,7 @@ protected:
                         ASSERT_TRUE(st.ok());
 
                         size_t rows_read = 1024;
-                        vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                        ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
 
                         st = iter->next_batch(&rows_read, dst.get());
                         ASSERT_TRUE(st.ok());
@@ -229,12 +225,12 @@ protected:
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok());
 
-                    vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    vectorized::SparseRange read_range;
+                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                    SparseRange read_range;
                     size_t write_num = src.size();
-                    read_range.add(vectorized::Range(0, write_num / 3));
-                    read_range.add(vectorized::Range(write_num / 2, (write_num * 2 / 3)));
-                    read_range.add(vectorized::Range((write_num * 3 / 4), write_num));
+                    read_range.add(Range(0, write_num / 3));
+                    read_range.add(Range(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(Range((write_num * 3 / 4), write_num));
                     size_t read_num = read_range.span_size();
 
                     st = iter->next_batch(read_range, dst.get());
@@ -242,9 +238,9 @@ protected:
                     ASSERT_EQ(read_num, dst->size());
 
                     size_t offset = 0;
-                    vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+                    SparseRangeIterator read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
-                        vectorized::Range r = read_iter.next(read_num);
+                        Range r = read_iter.next(read_num);
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
                                     << " row " << r.begin() + i << ": "
@@ -333,9 +329,9 @@ protected:
         TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
-        auto src_offsets = vectorized::UInt32Column::create();
-        auto src_elements = vectorized::Int32Column::create();
-        vectorized::ColumnPtr src_column = vectorized::ArrayColumn::create(src_elements, src_offsets);
+        auto src_offsets = UInt32Column::create();
+        auto src_elements = Int32Column::create();
+        ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
         src_elements->append(1);
@@ -399,9 +395,7 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-            ColumnIterator* iter = nullptr;
-            ASSERT_TRUE(reader->new_iterator(&iter).ok());
-            std::unique_ptr<ColumnIterator> guard(iter);
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -415,16 +409,16 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_offsets = vectorized::UInt32Column::create();
-                auto dst_elements = vectorized::Int32Column::create();
-                auto dst_column = vectorized::ArrayColumn::create(dst_elements, dst_offsets);
+                auto dst_offsets = UInt32Column::create();
+                auto dst_elements = Int32Column::create();
+                auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("[1, 2, 3]", dst_column->debug_item(0));
-                ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
+                ASSERT_EQ("[1,2,3]", dst_column->debug_item(0));
+                ASSERT_EQ("[4,5,6]", dst_column->debug_item(1));
             }
 
             ASSERT_EQ(2, meta.num_rows());
@@ -433,7 +427,7 @@ protected:
     }
 
     template <LogicalType type>
-    vectorized::ColumnPtr numeric_data(int null_ratio) {
+    ColumnPtr numeric_data(int null_ratio) {
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
@@ -450,14 +444,14 @@ protected:
         return col;
     }
 
-    vectorized::ColumnPtr low_cardinality_strings(int null_ratio) {
+    ColumnPtr low_cardinality_strings(int null_ratio) {
         static std::string s1(4, 'a');
         static std::string s2(4, 'b');
         size_t count = 128 * 1024 / 4;
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-        auto nc = down_cast<vectorized::NullableColumn*>(col.get());
+        auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<vectorized::BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
+        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
         auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
         for (size_t i = 0; i < count; i += 16) {
             CHECK(col->append_strings(v));
@@ -470,7 +464,7 @@ protected:
         return col;
     }
 
-    vectorized::ColumnPtr high_cardinality_strings(int null_ratio) {
+    ColumnPtr high_cardinality_strings(int null_ratio) {
         std::string s1("abcdefghijklmnopqrstuvwxyz");
         std::string s2("bbcdefghijklmnopqrstuvwxyz");
         std::string s3("cbcdefghijklmnopqrstuvwxyz");
@@ -482,9 +476,9 @@ protected:
 
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
-        auto nc = down_cast<vectorized::NullableColumn*>(col.get());
+        auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<vectorized::BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
+        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
             (void)col->append_strings({s1, s2, s3, s4, s5, s6, s7, s8});
 
@@ -505,31 +499,31 @@ protected:
         return col;
     }
 
-    vectorized::ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(vectorized::DateValue);
+    ColumnPtr date_values(int null_ratio) {
+        size_t count = 4 * 1024 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
-        vectorized::DateValue value = vectorized::DateValue::create(2020, 10, 1);
+        DateValue value = DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
-            value = value.add<vectorized::TimeUnit::DAY>(1);
+            value = value.add<TimeUnit::DAY>(1);
         }
         for (size_t i = 0; i < count; i += null_ratio) {
-            ((vectorized::DateValue*)col->raw_data())[i] = vectorized::DateValue{0};
+            ((DateValue*)col->raw_data())[i] = DateValue{0};
             CHECK(col->set_null(i));
         }
         return col;
     }
 
-    vectorized::ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(vectorized::TimestampValue);
+    ColumnPtr datetime_values(int null_ratio) {
+        size_t count = 4 * 1024 * 1024 / sizeof(TimestampValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
-        vectorized::TimestampValue value = vectorized::TimestampValue::create(2020, 10, 1, 10, 20, 1);
+        TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
-            value = value.add<vectorized::TimeUnit::MICROSECOND>(1);
+            value = value.add<TimeUnit::MICROSECOND>(1);
         }
         for (size_t i = 0; i < count; i += null_ratio) {
-            ((vectorized::TimestampValue*)col->raw_data())[i] = vectorized::TimestampValue{0};
+            ((TimestampValue*)col->raw_data())[i] = TimestampValue{0};
             CHECK(col->set_null(i));
         }
         return col;

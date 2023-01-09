@@ -21,7 +21,7 @@
 #include "types/timestamp_value.h"
 #include "util/mysql_global.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class OutputStream {
 public:
@@ -135,4 +135,4 @@ private:
     char* _end;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

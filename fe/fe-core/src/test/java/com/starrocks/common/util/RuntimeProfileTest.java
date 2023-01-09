@@ -37,6 +37,9 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
@@ -406,5 +409,64 @@ public class RuntimeProfileTest {
         Assert.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
         Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
+    }
+
+    @Test
+    public void testJsonProfileFormater() {
+        //profile
+        RuntimeProfile profile = new RuntimeProfile("profile");
+        profile.addInfoString("key", "value");
+        profile.addInfoString("key1", "value1");
+        Counter count1 = profile.addCounter("count1", TUnit.UNIT);
+        count1.setValue(15);
+
+        //child1
+        RuntimeProfile child1 = new RuntimeProfile("child1");
+        child1.addInfoString("child1_key", "child1_value");
+        profile.addChild(child1);
+
+        //child11
+        RuntimeProfile child11 = new RuntimeProfile("child11");
+        child11.addInfoString("child11_key", "child11_value");
+        Counter count2 = child11.addCounter("data_size", TUnit.BYTES_PER_SECOND);
+        count2.setValue(10240);
+        Counter count3 = child11.addCounter("count2", TUnit.UNIT_PER_SECOND);
+        count3.setValue(1000);
+        child1.addChild(child11);
+
+        //child12
+        RuntimeProfile child12 = new RuntimeProfile("child12");
+        child1.addChild(child12);
+        Counter count4 = child12.addCounter("count3", TUnit.UNIT);
+        count4.setValue(15);
+        Counter count5 = child12.addCounter("data_size", TUnit.BYTES);
+        count5.setValue(10240);
+        Counter count6 = child12.addCounter("time_ns", TUnit.TIME_NS);
+        count6.setValue(1000000);
+
+
+        RuntimeProfile.JsonProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
+        String jsonStr = formater.format(profile);
+        JsonObject jsonObj = new Gson().fromJson(jsonStr, JsonElement.class).getAsJsonObject();
+
+        JsonObject jsonObjProfile = jsonObj.getAsJsonObject("profile");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key").getAsString(), "value");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("key1").getAsString(), "value1");
+        Assert.assertEquals(jsonObjProfile.getAsJsonPrimitive("count1").getAsString(), "15");
+
+        JsonObject jsonObjchild1 = jsonObjProfile.getAsJsonObject("child1");
+        Assert.assertEquals(jsonObjchild1.getAsJsonPrimitive("child1_key").getAsString(), "child1_value");
+
+        JsonObject jsonObjchild11 = jsonObjchild1.getAsJsonObject("child11");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("child11_key").getAsString(), "child11_value");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.0K /sec");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.0 KB/sec");
+
+
+        JsonObject jsonObjchild12 = jsonObjchild1.getAsJsonObject("child12");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("count3").getAsString(), "15");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.00 KB");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1.0ms");
+
     }
 }

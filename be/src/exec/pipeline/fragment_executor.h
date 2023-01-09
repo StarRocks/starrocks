@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
@@ -80,6 +81,8 @@ public:
     }
     const TDataSink& output_sink() const;
 
+    const bool is_stream_pipeline() const { return _common_request.is_stream_pipeline; }
+
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;
     static const PerDriverScanRangesMap _no_scan_ranges_per_driver_seq;
@@ -90,6 +93,7 @@ private:
 class FragmentExecutor {
 public:
     FragmentExecutor();
+
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);

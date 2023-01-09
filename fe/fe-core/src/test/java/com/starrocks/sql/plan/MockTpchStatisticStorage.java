@@ -15,9 +15,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.optimizer.statistics.TableStatistic;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.time.LocalDate;
@@ -32,14 +40,86 @@ import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MockTpchStatisticStorage implements StatisticStorage {
+    private final Map<Long, TableStatistic> rowCountStats;
     private final Map<String, Map<String, ColumnStatistic>> tableStatistics;
 
-    private final int tpchScala;
+    private final int scale;
 
-    public MockTpchStatisticStorage(int tpchScala) {
+    public MockTpchStatisticStorage(ConnectContext connectContext, int scale) {
+        rowCountStats = new CaseInsensitiveMap<>();
         tableStatistics = new CaseInsensitiveMap<>();
+        this.scale = scale;
+        mockTpchTableStats(connectContext, scale);
         mockTpchStatistics();
-        this.tpchScala = tpchScala;
+    }
+
+    private void mockTpchTableStats(ConnectContext connectContext, int scale) {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Database database = globalStateMgr.getDb("test");
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        rowCountStats.put(t0.getId(), new TableStatistic(t0.getId(), t0.getPartition("region").getId(),
+                5L));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t0.getId(), null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                        Maps.newHashMap()));
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        rowCountStats.put(t1.getId(), new TableStatistic(t1.getId(), t1.getPartition("nation").getId(),
+                25L));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t1.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        rowCountStats.put(t2.getId(), new TableStatistic(t2.getId(), t2.getPartition("supplier").getId(),
+                10000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t2.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        rowCountStats.put(t3.getId(), new TableStatistic(t3.getId(), t3.getPartition("customer").getId(),
+                150000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t3.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        rowCountStats.put(t4.getId(), new TableStatistic(t4.getId(), t4.getPartition("part").getId(),
+                200000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t4.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        rowCountStats.put(t5.getId(), new TableStatistic(t5.getId(), t5.getPartition("partsupp").getId(),
+                800000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t5.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        rowCountStats.put(t6.getId(), new TableStatistic(t6.getId(), t6.getPartition("orders").getId(),
+                1500000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t6.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
+
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        rowCountStats.put(t7.getId(), new TableStatistic(t7.getId(), t7.getPartition("lineitem").getId(),
+                6000000L * scale));
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t7.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1, 1),
+                Maps.newHashMap()));
     }
 
     private void mockTpchStatistics() {
@@ -238,6 +318,11 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     }
 
     @Override
+    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+        return rowCountStats.get(tableId);
+    }
+
+    @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
         if (tableStatistics.get(table.getName()) == null) {
             return ColumnStatistic.unknown();
@@ -251,10 +336,10 @@ public class MockTpchStatisticStorage implements StatisticStorage {
                 return statistic;
             } else if (column.toLowerCase().contains("key") || column.toLowerCase().contains("name")) {
                 return new ColumnStatistic(statistic.getMinValue(),
-                        statistic.getMaxValue() * tpchScala,
+                        statistic.getMaxValue() * scale,
                         statistic.getNullsFraction(),
                         statistic.getAverageRowSize(),
-                        statistic.getDistinctValuesCount() * tpchScala);
+                        statistic.getDistinctValuesCount() * scale);
             } else {
                 return statistic;
             }

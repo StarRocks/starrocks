@@ -191,12 +191,12 @@ class SingleBufferInputStream extends ByteBufferInputStream {
     }
 
     @Override
-    public void mark(int readlimit) {
+    public synchronized void mark(int readlimit) {
         this.mark = buffer.position();
     }
 
     @Override
-    public void reset() throws IOException {
+    public synchronized void reset() throws IOException {
         if (mark >= 0) {
             buffer.position(mark);
             this.mark = -1;

@@ -19,18 +19,14 @@
 
 #include <string>
 
+#include "runtime/datetime_value.h"
 #include "runtime/time_types.h"
 #include "types/date_value.h"
 #include "util/hash_util.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 enum DateTimeType { TIMESTAMP_TIME = 1, TIMESTAMP_DATE = 2, TIMESTAMP_DATETIME = 3 };
-
-const int DATE_MAX_DAYNR = 3652424;
-
-// Limits of time value
-const int TIME_MAX_HOUR = 838;
 
 class TimestampValue {
 public:
@@ -264,13 +260,11 @@ inline std::ostream& operator<<(std::ostream& os, const TimestampValue& value) {
     return os;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace std {
 template <>
-struct hash<starrocks::vectorized::TimestampValue> {
-    size_t operator()(const starrocks::vectorized::TimestampValue& v) const {
-        return std::hash<int64_t>()(v._timestamp);
-    }
+struct hash<starrocks::TimestampValue> {
+    size_t operator()(const starrocks::TimestampValue& v) const { return std::hash<int64_t>()(v._timestamp); }
 };
 } // namespace std

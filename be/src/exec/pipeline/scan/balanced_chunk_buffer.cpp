@@ -62,7 +62,7 @@ void BalancedChunkBuffer::close() {
     }
 }
 
-bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output_chunk) {
+bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     // Will release the token after exiting this scope.
     ChunkWithToken chunk_with_token = std::make_pair(nullptr, nullptr);
     bool ok = _get_sub_buffer(buffer_index)->try_get(&chunk_with_token);
@@ -72,7 +72,7 @@ bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output
     return ok;
 }
 
-bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
@@ -96,7 +96,7 @@ void BalancedChunkBuffer::set_finished(int buffer_index) {
     _get_sub_buffer(buffer_index)->clear();
 }
 
-void BalancedChunkBuffer::update_limiter(vectorized::Chunk* chunk) {
+void BalancedChunkBuffer::update_limiter(Chunk* chunk) {
     static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
     // Update local counters.
     LimiterContext& ctx = _limiter_context;

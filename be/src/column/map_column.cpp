@@ -24,7 +24,7 @@
 #include "gutil/strings/fastmem.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void MapColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _keys->size());
@@ -506,16 +506,16 @@ std::string MapColumn::debug_item(uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     std::stringstream ss;
-    ss << "[";
+    ss << "{";
     for (size_t i = 0; i < map_size; ++i) {
         if (i > 0) {
-            ss << ", ";
+            ss << ",";
         }
         ss << _keys->debug_item(offset + i);
-        ss << "->";
+        ss << ":";
         ss << _values->debug_item(offset + i);
     }
-    ss << "]";
+    ss << "}";
     return ss.str();
 }
 
@@ -552,4 +552,11 @@ StatusOr<ColumnPtr> MapColumn::downgrade() {
     return downgrade_helper_func(&_values);
 }
 
-} // namespace starrocks::vectorized
+Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == 2) << "Map schema does not match data's";
+    _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
+    _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
+    return Status::OK();
+}
+
+} // namespace starrocks

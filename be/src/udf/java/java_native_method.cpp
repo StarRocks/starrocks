@@ -22,9 +22,9 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class GetColumnAddrVistor : public ColumnVisitorAdapter<GetColumnAddrVistor> {
 public:
@@ -43,7 +43,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumn<T>& column) {
+    Status do_visit(const FixedLengthColumn<T>& column) {
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_data().data());
         return Status::OK();
     }
@@ -101,4 +101,4 @@ void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
     free(reinterpret_cast<void*>(address));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

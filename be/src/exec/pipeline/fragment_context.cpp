@@ -14,13 +14,96 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
+
+FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+
+FragmentContext::~FragmentContext() {
+    _data_sink.reset();
+    _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
+    clear_all_drivers();
+    close_all_pipelines();
+    if (_plan != nullptr) {
+        _plan->close(_runtime_state.get());
+    }
+}
+
+void FragmentContext::clear_all_drivers() {
+    for (auto& pipe : _pipelines) {
+        pipe->clear_drivers();
+    }
+}
+void FragmentContext::close_all_pipelines() {
+    for (auto& pipe : _pipelines) {
+        pipe->close(_runtime_state.get());
+    }
+}
+
+Status FragmentContext::iterate_drivers(const std::function<Status(const DriverPtr&)>& call) {
+    for (const auto& pipeline : _pipelines) {
+        for (const auto& driver : pipeline->drivers()) {
+            RETURN_IF_ERROR(call(driver));
+        }
+    }
+    return Status::OK();
+}
+
+size_t FragmentContext::total_dop() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->degree_of_parallelism();
+    }
+    return total;
+}
+
+size_t FragmentContext::num_drivers() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->drivers().size();
+    }
+    return total;
+}
+
+void FragmentContext::move_tplan(TPlan& tplan) {
+    swap(_tplan, tplan);
+}
+void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
+    _data_sink = std::move(data_sink);
+}
+
+void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
+    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
+    if (!all_pipelines_finished) {
+        return;
+    }
+
+    auto* query_ctx = state->query_ctx();
+
+    state->runtime_profile()->reverse_childs();
+    if (config::pipeline_print_profile) {
+        std::stringstream ss;
+        // Print profile for this fragment
+        state->runtime_profile()->compute_time_in_profile();
+        state->runtime_profile()->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
+    finish();
+    auto status = final_status();
+    state->exec_env()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+
+    destroy_pass_through_chunk_buffer();
+
+    query_ctx->count_down_fragments();
+}
 
 void FragmentContext::set_final_status(const Status& status) {
     if (_final_status.load() != nullptr) {
@@ -41,9 +124,10 @@ void FragmentContext::set_final_status(const Status& status) {
             }
             DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
                                                                : _runtime_state->exec_env()->driver_executor();
-            for (auto& driver : _drivers) {
+            iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
-            }
+                return Status::OK();
+            });
         }
     }
 }
@@ -174,4 +258,24 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     }
 }
 
+Status FragmentContext::reset_epoch() {
+    _num_finished_epoch_pipelines = 0;
+    for (const auto& pipeline : _pipelines) {
+        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
+    }
+    return Status::OK();
+}
+
+void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
+    VLOG_ROW << "count_down_epoch_pipeline"
+             << ", num_finished_epoch_pipelines:" << _num_finished_epoch_pipelines
+             << ", pipeline size:" << _pipelines.size();
+
+    bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
+    if (!all_pipelines_finished) {
+        return;
+    }
+
+    // TODO: do epoch report stats
+}
 } // namespace starrocks::pipeline

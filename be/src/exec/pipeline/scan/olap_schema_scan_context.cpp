@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "exec/vectorized/schema_scanner.h"
+#include "exec/schema_scanner.h"
 #include "exprs/expr.h"
 
 namespace starrocks::pipeline {
@@ -30,7 +30,7 @@ Status OlapSchemaScanContext::prepare(RuntimeState* state) {
 }
 
 Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
-    _param = std::make_shared<vectorized::SchemaScannerParam>();
+    _param = std::make_shared<SchemaScannerParam>();
     if (_tnode.schema_scan_node.__isset.db) {
         _param->db = _obj_pool.add(new std::string(_tnode.schema_scan_node.db));
     }

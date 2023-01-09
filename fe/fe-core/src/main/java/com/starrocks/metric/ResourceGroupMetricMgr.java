@@ -18,9 +18,9 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,7 +85,7 @@ public class ResourceGroupMetricMgr {
             return null;
         }
         if (!cacheMap.containsKey(resourceGroupName)) {
-            synchronized (cacheMap) {
+            synchronized (ResourceGroupMetricMgr.class) {
                 if (!cacheMap.containsKey(resourceGroupName)) {
                     LongCounterMetric metric = new LongCounterMetric(metricsName, Metric.MetricUnit.REQUESTS,
                             metricsMsg);
@@ -104,7 +104,7 @@ public class ResourceGroupMetricMgr {
         if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
             return null;
         }
-        ResourceGroup resourceGroup = ctx.getResourceGroup();
+        TWorkGroup resourceGroup = ctx.getResourceGroup();
         return resourceGroup == null ? "default_wg" : resourceGroup.getName();
     }
 
@@ -130,7 +130,7 @@ public class ResourceGroupMetricMgr {
                 {"mean", "75_quantile", "95_quantile", "98_quantile", "99_quantile", "999_quantile"};
 
         private MetricRegistry metricRegistry;
-        private volatile Histogram histogram;
+        private Histogram histogram;
         private List<GaugeMetricImpl> metricsList;
         private String metricsName;
 

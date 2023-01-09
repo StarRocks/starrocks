@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
@@ -32,6 +31,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -87,6 +87,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "                             AS\n" +
                 "                             SELECT k1,k2,k3,k4, bitmap_union(to_bitmap(k7)), " +
                 "bitmap_union(to_bitmap(k8)) FROM duplicate_table_with_null group by k1,k2,k3,k4");
+
+        starRocksAssert.withTable("CREATE TABLE `test_dict` (\n" +
+                "  `name` varchar(65533) NOT NULL COMMENT \"\",\n" +
+                "  `dt` date NOT NULL  ,\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`name`,`dt`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "PARTITION p20221202 VALUES [('2022-12-02'), ('2022-12-03')),\n" +
+                "PARTITION p20221203 VALUES [('2022-12-03'), ('2022-12-04')),\n" +
+                "PARTITION p20221204 VALUES [('2022-12-04'), ('2022-12-05')),\n" +
+                "PARTITION p20221205 VALUES [('2022-12-05'), ('2022-12-06')),\n" +
+                "PARTITION p20221206 VALUES [('2022-12-06'), ('2022-12-07')),\n" +
+                "PARTITION p20221207 VALUES [('2022-12-07'), ('2022-12-08')),\n" +
+                "PARTITION p20221208 VALUES [('2022-12-08'), ('2022-12-09')),\n" +
+                "PARTITION p20221209 VALUES [('2022-12-09'), ('2022-12-10')),\n" +
+                "PARTITION p20221210 VALUES [('2022-12-10'), ('2022-12-11')),\n" +
+                "PARTITION p20221211 VALUES [('2022-12-11'), ('2022-12-12')),\n" +
+                "PARTITION p20221212 VALUES [('2022-12-12'), ('2022-12-13')),\n" +
+                "PARTITION p20221213 VALUES [('2022-12-13'), ('2022-12-14')))\n" +
+                "DISTRIBUTED BY HASH(`name`) BUCKETS 9 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
         FeConstants.runningUnitTest = true;
     }
 
@@ -109,8 +138,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 20000000);
 
         String sql = "select t1a,v1 from test_all_type, t0";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("3:NESTLOOP JOIN"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:NESTLOOP JOIN");
 
         setTableStatistics(table2, 10000);
         setTableStatistics(t0, 10000);
@@ -126,14 +155,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
 
         String sql = "select sum(v2) from t0 group by v2";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge finalize)\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: sum(4: sum)\n"
-                + "  |  group by: 2: v2"));
-        Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n"
+                + "  |  group by: 2: v2");
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n"
                 + "  |  STREAMING\n"
                 + "  |  output: sum(2: v2)\n"
-                + "  |  group by: 2: v2"));
+                + "  |  group by: 2: v2");
     }
 
     @Test
@@ -146,11 +175,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
 
         String sql = "select sum(v2) from t0 group by v2";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n"
                 + "  |  output: sum(2: v2)\n"
-                + "  |  group by: 2: v2"));
-        Assert.assertFalse(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
+                + "  |  group by: 2: v2");
+        Assert.assertFalse(plan.contains("  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 2: v2"));
@@ -166,11 +195,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertFalse(planFragment.contains("TOP-N"));
-        Assert.assertTrue(planFragment.contains("  2:SORT\n"
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("TOP-N"));
+        assertContains(plan, "  2:SORT\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
-                + "  |  offset: 0"));
+                + "  |  offset: 0");
     }
 
     @Test
@@ -183,11 +212,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertFalse(planFragment.contains("TOP-N"));
-        Assert.assertTrue(planFragment.contains("  2:SORT\n"
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("TOP-N"));
+        assertContains(plan, "  2:SORT\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
-                + "  |  offset: 0"));
+                + "  |  offset: 0");
     }
 
     @Test
@@ -200,11 +229,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1 limit 1";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:TOP-N\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:TOP-N\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
                 + "  |  offset: 0\n"
-                + "  |  limit: 1"));
+                + "  |  limit: 1");
     }
 
     @Test
@@ -217,12 +246,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select v1, sum(v2) from t0 group by v1 order by v1 limit 1";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("TOP-N"));
-        Assert.assertTrue(planFragment.contains("  2:TOP-N\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TOP-N");
+        assertContains(plan, "  2:TOP-N\n"
                 + "  |  order by: <slot 1> 1: v1 ASC\n"
                 + "  |  offset: 0\n"
-                + "  |  limit: 1"));
+                + "  |  limit: 1");
     }
 
     @Test
@@ -237,17 +266,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select count(distinct v2), sum(v1) from t0";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge serialize)\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (merge serialize)\n"
                 + "  |  output: sum(5: sum)\n"
-                + "  |  group by: 2: v2"));
-        Assert.assertTrue(planFragment.contains("  6:AGGREGATE (merge finalize)\n"
+                + "  |  group by: 2: v2");
+        assertContains(plan, "  6:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count), sum(5: sum)\n"
-                + "  |  group by: \n"));
-        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
+                + "  |  group by: \n");
+        assertContains(plan, "  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 05\n"
-                + "    UNPARTITIONED"));
-        Assert.assertFalse(planFragment.contains("PLAN FRAGMENT 3"));
+                + "    UNPARTITIONED");
+        Assert.assertFalse(plan.contains("PLAN FRAGMENT 3"));
 
     }
 
@@ -263,10 +292,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select count(distinct v2), sum(v1) from t0";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n"
                 + "  |  output: multi_distinct_count(2: v2), sum(1: v1)\n"
-                + "  |  group by:"));
+                + "  |  group by:");
 
     }
 
@@ -282,12 +311,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select count(distinct v2) from t0 group by v3";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 2: v2, 3: v3"));
-        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (merge serialize)\n"
+                + "  |  group by: 2: v2, 3: v3");
+        assertContains(plan, "  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 06\n"
-                + "    UNPARTITIONED"));
+                + "    UNPARTITIONED");
 
     }
 
@@ -302,10 +331,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select count(distinct v2) from t0 group by v3";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains(" 4:AGGREGATE (update finalize)\n" +
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: v2)\n" +
-                "  |  group by: 3: v3"));
+                "  |  group by: 3: v3");
     }
 
     @Test
@@ -319,10 +348,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:Project\n" +
-                "  |  <slot 4> : -1 * 3: v3"));
-        Assert.assertTrue(planFragment.contains("PREDICATES: -1 * 3: v3 < 63"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 4> : -1 * 3: v3");
+        assertContains(plan, "PREDICATES: -1 * 3: v3 < 63");
     }
 
     @Test
@@ -336,9 +365,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:Project\n"
-                + "  |  <slot 4> : -1 * 3: v3"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n"
+                + "  |  <slot 4> : -1 * 3: v3");
     }
 
     @Test
@@ -351,24 +380,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 5000);
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:HASH JOIN\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
                 + "  |    \n"
-                + "  1:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("    EXCHANGE ID: 03\n"
+                + "  1:EXCHANGE");
+        assertContains(plan, "    EXCHANGE ID: 03\n"
                 + "    HASH_PARTITIONED: 7: t1d\n"
                 + "\n"
-                + "  2:OlapScanNode"));
-        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
+                + "  2:OlapScanNode");
+        assertContains(plan, "  STREAM DATA SINK\n"
                 + "    EXCHANGE ID: 01\n"
                 + "    HASH_PARTITIONED: 2: v2\n"
                 + "\n"
-                + "  0:OlapScanNode"));
+                + "  0:OlapScanNode");
         UtFrameUtils.dropMockBackend(10002);
         UtFrameUtils.dropMockBackend(10003);
     }
@@ -376,8 +405,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testBroadcastInnerJoin() throws Exception {
         String sql = "SELECT v1, t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
@@ -385,7 +414,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |----2:EXCHANGE\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
-                + "     TABLE: t0\n"));
+                + "     TABLE: t0\n");
     }
 
     @Test
@@ -394,8 +423,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable table = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table, 1000);
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d ;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 7: t1d = 1: v1\n"
@@ -403,101 +432,102 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |----2:EXCHANGE\n"
                 + "  |    \n"
                 + "  0:OlapScanNode\n"
-                + "     TABLE: test_all_type\n"));
+                + "     TABLE: test_all_type\n");
         setTableStatistics(table, 10000);
     }
 
     @Test
     public void testColocateJoin() throws Exception {
         String sql = "SELECT * from t0 join t0 as b on t0.v1 = b.v1;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("join op: INNER JOIN (COLOCATE)"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: INNER JOIN (COLOCATE)");
     }
 
     @Test
     public void testColocateAgg() throws Exception {
         String sql = "SELECT count(*) from t0 group by t0.v1;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update finalize)"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)");
     }
 
     @Test
     public void testDistinctExpr() throws Exception {
         String sql = "SELECT DISTINCT - - v1 DIV - 98 FROM t0;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertFalse(planFragment.contains("  2:AGGREGATE (update finalize)\n" +
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: <slot 4>\n" +
                 "  |  \n" +
                 "  1:Project"));
-        Assert.assertTrue(planFragment.contains("EXCHANGE"));
+        assertContains(plan, "EXCHANGE");
     }
 
     @Test
     public void testRollUp() throws Exception {
         String sql = "select event_day from test_mv group by event_day;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r3");
 
         sql = "select count(*) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
 
         sql = "select count(*), event_day from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
 
         sql = "select event_day from test_mv where citycode = 1 group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r2"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r2");
 
         sql = "select siteid from test_mv where event_day  = 1 group by siteid;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r1"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r1");
 
         sql = "select siteid from test_mv group by siteid, event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r1"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r1");
 
         sql = "select siteid from test_mv group by siteid, username;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
 
         sql = "select siteid,sum(pv) from test_mv group by siteid, username;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
 
         sql = "select sum(pv) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r4"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r4");
 
         sql = "select max(pv) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
 
         sql = "select max(event_day) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r3");
 
         sql = "select max(event_day), sum(pv) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r4"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: r4");
 
         sql = "select max(event_day), max(pv) from test_mv group by event_day;";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "rollup: test_mv");
     }
 
     @Test
     public void testMV() throws Exception {
         String sql = "select count(distinct k7), count(distinct k8) from duplicate_table_with_null;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count | 17: count"));
-        Assert.assertTrue(planFragment.contains("14: mv_bitmap_union_k7"));
-        Assert.assertTrue(planFragment.contains("15: mv_bitmap_union_k8"));
-        Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "OUTPUT EXPRS:16: count | 17: count");
+        assertContains(plan, "14: mv_bitmap_union_k7");
+        assertContains(plan, "15: mv_bitmap_union_k8");
+        assertContains(plan, "rollup: bitmap_mv");
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
@@ -508,16 +538,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
+        assertContains(plan, "  11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
-        Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
+                "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY");
+        assertContains(plan, "  14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
                 "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +
-                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum"));
+                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum");
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
@@ -526,27 +556,27 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by cube(v1, v2)";
         String plan = getCostExplain(sql);
         // check scan node
-        Assert.assertTrue(plan.contains("cardinality: 10000"));
+        assertContains(plan, "cardinality: 10000");
         // check repeat node
-        Assert.assertTrue(plan.contains("cardinality: 40000"));
-        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE"));
+        assertContains(plan, "cardinality: 40000");
+        assertContains(plan, " * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE");
 
         sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by rollup(v1, v2)";
         plan = getCostExplain(sql);
         // check scan node
-        Assert.assertTrue(plan.contains("cardinality: 10000"));
+        assertContains(plan, "cardinality: 10000");
         // check repeat node
-        Assert.assertTrue(plan.contains("cardinality: 30000"));
-        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE\n" +
-                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE"));
+        assertContains(plan, "cardinality: 30000");
+        assertContains(plan, "* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0] ESTIMATE");
     }
 
     @Test
     public void testRepeatNodeExchange() throws Exception {
         String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+        assertContains(plan, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
                 "    HASH_PARTITIONED: 1: v1, 2: v2, 5: GROUPING_ID\n" +
                 "\n" +
@@ -558,11 +588,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  \n" +
-                "  0:OlapScanNode"));
+                "  0:OlapScanNode");
 
         sql = "select v1, SUM(v3) from t0 group by rollup(v1)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
+        assertContains(plan, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
                 "    HASH_PARTITIONED: 1: v1, 5: GROUPING_ID\n" +
                 "\n" +
@@ -576,11 +606,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
-                "     PREAGGREGATION: ON"));
+                "     PREAGGREGATION: ON");
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
+        assertContains(plan, "  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -595,7 +625,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 5: GROUPING_ID\n" +
                 "  |  \n" +
-                "  1:REPEAT_NODE"));
+                "  1:REPEAT_NODE");
     }
 
     @Test
@@ -604,7 +634,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select count(1) from orders group by O_CUSTKEY, O_ORDERDATE";
         String plan = getFragmentPlan(sql);
         // check has 3 phase aggregation
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
@@ -616,7 +646,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // check can not generate 1 phase aggregation if column statistics is unknown
         String sql = "select count(v1) from t0 group by v2";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
         sql = "select count(distinct v1) from t0 group by v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
@@ -628,12 +658,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql =
                 "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+        assertContains(plan, "TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: v1 = 1, 2: v2 = 2"));
-        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     PREDICATES: 1: v1 = 1, 2: v2 = 2");
+        assertContains(plan, "TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1");
     }
 
     @Test
@@ -641,12 +671,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql =
                 "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+        assertContains(plan, "TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1"));
-        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     partitions=1/1");
+        assertContains(plan, "TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1");
     }
 
     @Test
@@ -659,8 +689,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("TPlanNode(node_id:3, node_type:HASH_JOIN_NODE"));
-        Assert.assertTrue(plan.contains("local_rf_waiting_set:[3]"));
+        assertContains(plan, "TPlanNode(node_id:3, node_type:HASH_JOIN_NODE");
+        assertContains(plan, "local_rf_waiting_set:[3]");
     }
 
     @Test
@@ -675,20 +705,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t2, 1);
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:INTERSECT\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n"));
-        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
+                "  2:EXCHANGE\n");
+        assertContains(plan, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
                 "    HASH_PARTITIONED: <slot 4>\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
-                "     TABLE: t2"));
+                "     TABLE: t2");
         setTableStatistics(t0, 10000);
     }
 
@@ -703,21 +733,22 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
                 "join [broadcast] t0 where t0.v1 = t1x.v4";
-        String planFragment = getVerboseExplain(sql);
+        String plan = getVerboseExplain(sql);
 
-        Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
+        assertContains(plan, "  1:TOP-N\n" +
                 "  |  order by: [1, BIGINT, true] ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 1000000000\n" +
                 "  |  cardinality: 1000000000\n" +
                 "  |  \n" +
-                "  0:OlapScanNode"));
+                "  0:OlapScanNode");
 
-        Assert.assertTrue(planFragment.contains("  2:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  2:MERGING-EXCHANGE\n" +
+                "     distribution type: GATHER\n" +
                 "     limit: 1000000000\n" +
                 "     cardinality: 1000000000\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (1: v4)"));
+                "     - filter_id = 1, probe_expr = (1: v4)");
 
         setTableStatistics(t0, 10000);
     }
@@ -789,9 +820,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testMergeTwoAggArgTypes() throws Exception {
         String sql = "select sum(t.int_sum) from (select sum(t1c) as int_sum from test_all_type)t";
-        String planFragment = getVerboseExplain(sql);
-        Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;"));
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: sum[([3: t1c, INT, true]); args: INT; result: BIGINT;");
     }
 
     @Test
@@ -985,10 +1016,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     actualRows=0, avgRowSize=1.0\n" +
                 "     cardinality: 400000");
 
-        Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
+        assertContains(plan, "  5:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
                 "     cardinality: 400000\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (1: v4)"));
+                "     - filter_id = 0, probe_expr = (1: v4)");
 
         assertContains(plan, "  11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -1129,9 +1161,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql =
                 "select count(t.a) from (select datediff(\"1981-09-06t03:40:33\", L_SHIPDATE) as a from lineitem) as t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 1:Project\n" +
-                "  |  <slot 18> : datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME))\n" +
-                "  |  ");
+        assertContains(plan,
+                "output: count(datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME)))");
     }
 
     @Test
@@ -1395,25 +1426,25 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
         String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
         String plan = getFragmentPlan(sql).replaceAll(" ", "");
-        Assert.assertTrue(plan.contains("1:UNION\n" +
+        assertContains(plan, "1:UNION\n" +
                 "|\n" +
                 "|----15:EXCHANGE\n" +
                 "|\n" +
                 "|----21:EXCHANGE\n" +
                 "|\n" +
-                "8:EXCHANGE\n"));
+                "8:EXCHANGE\n");
 
         sql = "select v1, SUM(v3) from t0 group by rollup(v1)";
         plan = getFragmentPlan(sql).replaceAll(" ", "");
-        Assert.assertTrue(plan.contains("1:UNION\n" +
+        assertContains(plan, "1:UNION\n" +
                 "|\n" +
                 "|----14:EXCHANGE\n" +
                 "|\n" +
-                "8:EXCHANGE\n"));
+                "8:EXCHANGE\n");
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
+        assertContains(plan, "  3:EXCHANGE\n" +
                 "\n" +
                 "PLAN FRAGMENT 2\n" +
                 " OUTPUT EXPRS:\n" +
@@ -1428,7 +1459,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 5: GROUPING_ID\n" +
                 "  |  \n" +
-                "  1:REPEAT_NODE"));
+                "  1:REPEAT_NODE");
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
     }
 
@@ -1496,7 +1527,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
+            throws Exception {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
@@ -1507,9 +1539,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
             final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
                     new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
+
             {
                 mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
-                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality, avgLowCardinality);
+                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality,
+                        avgLowCardinality);
             }
 
             {
@@ -1558,32 +1592,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(2: v2)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode");
-            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
+                    "  |  group by: 2: v2");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(2: v2)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode");
-            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
+                    "  |  group by: 2: v2\n");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
@@ -1595,166 +1613,279 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  *\n" +
                 "FROM t0\n" +
                 "WHERE\n" +
-                "  (\n" +
-                "    (v1 >= 27)\n" +
-                "    AND (v1 < 28)\n" +
-                "  )\n" +
-                "  OR (\n" +
-                "    (\n" +
-                "      (v1 >= 26)\n" +
-                "      AND (v1 < 27)\n" +
-                "    )\n" +
-                "    OR (\n" +
-                "      (\n" +
-                "        (v1 >= 25)\n" +
-                "        AND (v1 < 26)\n" +
-                "      )\n" +
-                "      OR (\n" +
-                "        (\n" +
-                "          (v1 >= 24)\n" +
-                "          AND (v1 < 25)\n" +
-                "        )\n" +
-                "        OR (\n" +
-                "          (\n" +
-                "            (v1 >= 23)\n" +
-                "            AND (v1 < 24)\n" +
-                "          )\n" +
-                "          OR (\n" +
-                "            (\n" +
-                "              (v1 >= 22)\n" +
-                "              AND (v1 < 23)\n" +
-                "            )\n" +
-                "            OR (\n" +
-                "              (\n" +
-                "                (v1 >= 21)\n" +
-                "                AND (v1 < 22)\n" +
-                "              )\n" +
-                "              OR (\n" +
-                "                (\n" +
-                "                  (v1 >= 20)\n" +
-                "                  AND (v1 < 21)\n" +
-                "                )\n" +
-                "                OR (\n" +
-                "                  (\n" +
-                "                    (v1 >= 19)\n" +
-                "                    AND (v1 < 20)\n" +
-                "                  )\n" +
-                "                  OR (\n" +
-                "                    (\n" +
-                "                      (v1 >= 18)\n" +
-                "                      AND (v1 < 19)\n" +
-                "                    )\n" +
-                "                    OR (\n" +
-                "                      (\n" +
-                "                        (v1 >= 17)\n" +
-                "                        AND (v1 < 18)\n" +
-                "                      )\n" +
-                "                      OR (\n" +
-                "                        (\n" +
-                "                          (v1 >= 16)\n" +
-                "                          AND (v1 < 17)\n" +
-                "                        )\n" +
-                "                        OR (\n" +
-                "                          (\n" +
-                "                            (v1 >= 15)\n" +
-                "                            AND (v1 < 16)\n" +
-                "                          )\n" +
-                "                          OR (\n" +
-                "                            (\n" +
-                "                              (v1 >= 14)\n" +
-                "                              AND (v1 < 15)\n" +
-                "                            )\n" +
-                "                            OR (\n" +
-                "                              (\n" +
-                "                                (v1 >= 13)\n" +
-                "                                AND (v1 < 14)\n" +
-                "                              )\n" +
-                "                              OR (\n" +
-                "                                (\n" +
-                "                                  (v1 >= 12)\n" +
-                "                                  AND (v1 < 13)\n" +
-                "                                )\n" +
-                "                                OR (\n" +
-                "                                  (\n" +
-                "                                    (v1 >= 11)\n" +
-                "                                    AND (v1 < 12)\n" +
-                "                                  )\n" +
-                "                                  OR (\n" +
-                "                                    (\n" +
-                "                                      (v1 >= 10)\n" +
-                "                                      AND (v1 < 11)\n" +
-                "                                    )\n" +
-                "                                    OR (\n" +
-                "                                      (\n" +
-                "                                        (v1 >= 09)\n" +
-                "                                        AND (v1 < 10)\n" +
-                "                                      )\n" +
-                "                                      OR (\n" +
-                "                                        (\n" +
-                "                                          (v1 >= 08)\n" +
-                "                                          AND (v1 < 09)\n" +
-                "                                        )\n" +
-                "                                        OR (\n" +
-                "                                          (\n" +
-                "                                            (v1 >= 07)\n" +
-                "                                            AND (v1 < 08)\n" +
-                "                                          )\n" +
-                "                                          OR (\n" +
-                "                                            (\n" +
-                "                                              (v1 >= 06)\n" +
-                "                                              AND (v1 < 07)\n" +
-                "                                            )\n" +
-                "                                            OR (\n" +
-                "                                              (\n" +
-                "                                                (v1 >= 05)\n" +
-                "                                                AND (v1 < 06)\n" +
-                "                                              )\n" +
-                "                                              OR (\n" +
-                "                                                (\n" +
-                "                                                  (v1 >= 04)\n" +
-                "                                                  AND (v1 < 05)\n" +
-                "                                                )\n" +
-                "                                                OR (\n" +
-                "                                                  (\n" +
-                "                                                    (v1 >= 03)\n" +
-                "                                                    AND (v1 < 04)\n" +
-                "                                                  )\n" +
-                "                                                  OR (\n" +
-                "                                                    (\n" +
-                "                                                      (v1 >= 02)\n" +
-                "                                                      AND (v1 < 03)\n" +
-                "                                                    )\n" +
-                "                                                    OR (\n" +
-                "                                                      (v1 >= 01)\n" +
-                "                                                      AND (v1 < 02)\n" +
-                "                                                    )\n" +
-                "                                                  )\n" +
-                "                                                )\n" +
-                "                                              )\n" +
-                "                                            )\n" +
-                "                                          )\n" +
-                "                                        )\n" +
-                "                                      )\n" +
-                "                                    )\n" +
-                "                                  )\n" +
-                "                                )\n" +
-                "                              )\n" +
-                "                            )\n" +
-                "                          )\n" +
-                "                        )\n" +
-                "                      )\n" +
-                "                    )\n" +
-                "                  )\n" +
-                "                )\n" +
-                "              )\n" +
-                "            )\n" +
-                "          )\n" +
-                "        )\n" +
-                "      )\n" +
-                "    )\n" +
-                "  )";
+                "  ((v1 >= 27 AND v1 < 28)) OR \n" +
+                " (((v1 >= 26 AND v1 < 27)) OR \n" +
+                " (((v1 >= 25 AND v1 < 26)) OR \n" +
+                " (((v1 >= 24 AND v1 < 25)) OR \n" +
+                " (((v1 >= 23 AND v1 < 24)) OR \n" +
+                " (((v1 >= 22 AND v1 < 23)) OR \n" +
+                " (((v1 >= 21 AND v1 < 22)) OR \n" +
+                " (((v1 >= 20 AND v1 < 21)) OR \n" +
+                " (((v1 >= 19 AND v1 < 20)) OR \n" +
+                " (((v1 >= 18 AND v1 < 19)) OR \n" +
+                " (((v1 >= 17 AND v1 < 18)) OR \n" +
+                " (((v1 >= 16 AND v1 < 17)) OR \n" +
+                " (((v1 >= 15 AND v1 < 16)) OR \n" +
+                " (((v1 >= 14 AND v1 < 15)) OR \n" +
+                " (((v1 >= 13 AND v1 < 14)) OR \n" +
+                " (((v1 >= 12 AND v1 < 13)) OR \n" +
+                " (((v1 >= 11 AND v1 < 12)) OR \n" +
+                " (((v1 >= 10 AND v1 < 11)) OR \n" +
+                " (((v1 >= 09 AND v1 < 10)) OR \n" +
+                " (((v1 >= 08 AND v1 < 09)) OR \n" +
+                " (((v1 >= 07 AND v1 < 08)) OR \n" +
+                " (((v1 >= 06 AND v1 < 07)) OR \n" +
+                " (((v1 >= 05 AND v1 < 06)) OR \n" +
+                " (((v1 >= 04 AND v1 < 05)) OR \n" +
+                " (((v1 >= 03 AND v1 < 04)) OR \n" +
+                " (((v1 >= 02 AND v1 < 03)) OR \n" +
+                "  ((v1 >= 01 AND v1 < 02)))))))))))))))))))))))))))";
 
         //Test excessive recursion and optimizer timeout due to too many OR
         getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testExcessiveAnd() throws Exception {
+        String sql = "SELECT\n" +
+                "  *\n" +
+                "FROM t0\n" +
+                "WHERE\n" +
+                "  ((v1 >= 27 OR v1 < 28)) AND \n" +
+                " (((v1 >= 26 OR v1 < 27)) AND \n" +
+                " (((v1 >= 25 OR v1 < 26)) AND \n" +
+                " (((v1 >= 24 OR v1 < 25)) AND \n" +
+                " (((v1 >= 23 OR v1 < 24)) AND \n" +
+                " (((v1 >= 22 OR v1 < 23)) AND \n" +
+                " (((v1 >= 21 OR v1 < 22)) AND \n" +
+                " (((v1 >= 20 OR v1 < 21)) AND \n" +
+                " (((v1 >= 19 OR v1 < 20)) AND \n" +
+                " (((v1 >= 18 OR v1 < 19)) AND \n" +
+                " (((v1 >= 17 OR v1 < 18)) AND \n" +
+                " (((v1 >= 16 OR v1 < 17)) AND \n" +
+                " (((v1 >= 15 OR v1 < 16)) AND \n" +
+                " (((v1 >= 14 OR v1 < 15)) AND \n" +
+                " (((v1 >= 13 OR v1 < 14)) AND \n" +
+                " (((v1 >= 12 OR v1 < 13)) AND \n" +
+                " (((v1 >= 11 OR v1 < 12)) AND \n" +
+                " (((v1 >= 10 OR v1 < 11)) AND \n" +
+                " (((v1 >= 09 OR v1 < 10)) AND \n" +
+                " (((v1 >= 08 OR v1 < 09)) AND \n" +
+                " (((v1 >= 07 OR v1 < 08)) AND \n" +
+                " (((v1 >= 06 OR v1 < 07)) AND \n" +
+                " (((v1 >= 05 OR v1 < 06)) AND \n" +
+                " (((v1 >= 04 OR v1 < 05)) AND \n" +
+                " (((v1 >= 03 OR v1 < 04)) AND \n" +
+                " (((v1 >= 02 OR v1 < 03)) AND \n" +
+                "  ((v1 >= 01 OR v1 < 02)))))))))))))))))))))))))))";
+
+        //Test excessive recursion and optimizer timeout due to too many OR
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testTimeOutOrAnd50() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE (v2 = 1\n" +
+                " OR ((v2 = 2\n" +
+                "  OR ((v2 = 3\n" +
+                "   OR ((v2 = 4\n" +
+                "    OR ((v2 = 5\n" +
+                "     OR ((v2 = 6\n" +
+                "      OR ((v2 = 7\n" +
+                "       OR ((v2 = 8\n" +
+                "        OR ((v2 = 9\n" +
+                "         OR ((v2 = 10\n" +
+                "          OR (v1 = 11 AND (v2 = 12\n" +
+                "           OR (v2 = 13\n" +
+                "            OR (v2 = 14\n" +
+                "             OR (v1 = 15 AND (v2 = 16\n" +
+                "              OR (v2 = 17\n" +
+                "               OR (v2 = 18\n" +
+                "                OR (v2 = 19\n" +
+                "                 OR (v2 = 20\n" +
+                "                  OR ((v2 = 21 AND v1 = 22)\n" +
+                "                     OR (v2 = 23 AND v1 = 24)) AND v1 = 25) AND v1 = 26\n" +
+                "                 OR (v2 = 27 AND v1 = 28)\n" +
+                "                 OR (v2 = 29 AND v1 = 30)\n" +
+                "                 OR (v2 = 31 AND v1 = 32)\n" +
+                "                 OR (v2 = 33 AND v1 = 34)\n" +
+                "                 OR (v2 = 35 AND v1 = 36)\n" +
+                "                 OR (v2 = 37 AND v1 = 38)) AND v1 = 39\n" +
+                "                OR v2 = 40 AND v1 = 41\n" +
+                "                OR v2 = 42 AND v1 = 43\n" +
+                "                OR v2 = 44 AND v1 = 45\n" +
+                "                OR v2 = 46 AND v1 = 47\n" +
+                "                OR v2 = 48 AND v1 = 49\n" +
+                "                OR v2 = 50 AND v1 = 51\n" +
+                "                OR v2 = 52 AND v1 = 53\n" +
+                "                OR v2 = 54 AND v1 = 55\n" +
+                "                OR v2 = 56 AND v1 = 57\n" +
+                "                OR v2 = 58 AND v1 = 59\n" +
+                "                OR v2 = 60 AND v1 = 61\n" +
+                "                OR v2 = 62 AND v1 = 63\n" +
+                "                OR v2 = 64 AND v1 = 65\n" +
+                "                OR v2 = 66 AND v1 = 67\n" +
+                "                OR v2 = 68 AND v1 = 69) AND v1 = 70\n" +
+                "               OR v2 = 71 AND v1 = 72) AND v1 = 73\n" +
+                "              OR v2 = 74 AND v1 = 75\n" +
+                "              OR v2 = 76 AND v1 = 77\n" +
+                "              OR v2 = 78 AND v1 = 79\n" +
+                "              OR v2 = 80))) AND v1 = 81 AND v1 = 82\n" +
+                "            OR v2 = 83 AND v1 = 84\n" +
+                "            OR v2 = 85 AND v1 = 86) AND v1 = 87\n" +
+                "           OR v2 = 88 AND v1 = 89\n" +
+                "           OR v2 = 90)))\n" +
+                "            AND v1 = 91))\n" +
+                "           AND v1 = 92))\n" +
+                "          AND v1 = 93))\n" +
+                "         AND v1 = 94))\n" +
+                "        AND v1 = 95))\n" +
+                "       AND v1 = 96))\n" +
+                "      AND v1 = 97))\n" +
+                "     AND v1 = 98))\n" +
+                "    AND v1 = 99))\n" +
+                "   AND v1 = 100";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
+    public void testTimeOutOr16() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE (v2 = 1\n" +
+                " OR ((v2 = 2\n" +
+                "  OR ((v2 = 3\n" +
+                "   OR ((v2 = 4\n" +
+                "    OR ((v2 = 5\n" +
+                "     OR ((v2 = 6\n" +
+                "      OR ((v2 = 7\n" +
+                "       OR ((v2 = 8\n" +
+                "        OR ((v2 = 9\n" +
+                "         OR ((v2 = 10\n" +
+                "          OR (v1 = 11 AND (v2 = 12\n" +
+                "           OR (v2 = 13\n" +
+                "            OR (v2 = 14\n" +
+                "             OR (v1 = 15 AND (v2 = 16\n" +
+                "              OR (v2 = 17  AND v1 = 70\n" +
+                "               OR v2 = 71 AND v1 = 72) AND v1 = 73\n" +
+                "              OR v2 = 80 AND (v1 = 2 OR (v2 = 99 AND v1 = 29))))) AND v1 = 81 AND v1 = 82\n" +
+                "            OR v2 = 85 AND v1 = 86) AND v1 = 87)))\n" +
+                "            AND v1 = 91))\n" +
+                "           AND v1 = 92))\n" +
+                "          AND v1 = 93))\n" +
+                "         AND v1 = 94))\n" +
+                "        AND v1 = 95))\n" +
+                "       AND v1 = 96))\n" +
+                "      AND v1 = 97))\n" +
+                "     AND v1 = 98))\n" +
+                "    AND v1 = 99))\n" +
+                "   AND v1 = 100";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void testTimeOutOr11() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE (v2 = 1\n" +
+                " OR ((v2 = 2\n" +
+                "  OR ((v2 = 3\n" +
+                "   OR ((v2 = 4\n" +
+                "    OR ((v2 = 5\n" +
+                "     OR ((v2 = 6\n" +
+                "      OR ((v2 = 7\n" +
+                "       OR ((v2 = 8\n" +
+                "        OR ((v2 = 9\n" +
+                "         OR ((v2 = 10\n" +
+                "          OR (v1 = 11 AND (v2 = 12\n" +
+                "           OR (v2 = 13)\n" +
+                "                   AND v1 = 87\n" +
+                "           OR v2 = 90)))\n" +
+                "                 AND v1 = 91))\n" +
+                "                AND v1 = 92))\n" +
+                "               AND v1 = 93))\n" +
+                "              AND v1 = 94))\n" +
+                "             AND v1 = 95))\n" +
+                "            AND v1 = 96))\n" +
+                "           AND v1 = 97))\n" +
+                "          AND v1 = 98))\n" +
+                "         AND v1 = 99))\n" +
+                "        AND v1 = 100;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void testTimeOutOnlyOr20() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE 1 = 0" +
+                "   OR v1 = 1" +
+                "   OR v2 = 2" +
+                "   OR v1 = 3" +
+                "   OR v2 = 4" +
+                "   OR v1 = 5" +
+                "   OR v2 = 6" +
+                "   OR v1 = 7" +
+                "   OR v2 = 8" +
+                "   OR v1 = 9" +
+                "   OR v2 = 0" +
+                "   OR v1 = 11" +
+                "   OR v2 = 12" +
+                "   OR v1 = 13" +
+                "   OR v2 = 14" +
+                "   OR v1 = 15" +
+                "   OR v2 = 16" +
+                "   OR v1 = 17" +
+                "   OR v2 = 18" +
+                "   OR v1 = 19" +
+                "   OR v2 = 20" +
+                "   OR v1 = 21" +
+                "   OR v2 = 22" +
+                "   OR v1 = 23" +
+                "   OR v2 = 24" +
+                "   OR v1 = 25" +
+                "   OR v2 = 26" +
+                "   OR v1 = 27" +
+                "   OR v2 = 28" +
+                "   OR v1 = 29" +
+                "   OR v2 = 30" +
+                "   OR v1 = 31" +
+                "   OR v2 = 32" +
+                "   OR v1 = 33" +
+                "   OR v2 = 34" +
+                "   OR v1 = 35" +
+                "   OR v2 = 36" +
+                "   OR v1 = 37" +
+                "   OR v2 = 38" +
+                "   OR v1 = 39" +
+                "   ;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void test() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
+        setTableStatistics(table2, 20000000);
+
+        String sql = getSQLFile("optimized-plan/large_predicate");
+        // need JVM -Xss10m
+
+        //        String plan = getFragmentPlan(sql);
+        //        System.out.println(PlannerProfile.printPlannerTimeCost(connectContext.getPlannerProfile()));
+        //        assertContains(plan, "  0:OlapScanNode\n" +
+        //                "     TABLE: test_dict");
     }
 }

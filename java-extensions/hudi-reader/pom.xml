@@ -16,9 +16,12 @@
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.32</slf4j.version>
-        <hudi.version>0.11.1</hudi.version>
+        <presto.hadoop.version>2.7.4-9</presto.hadoop.version>
+        <presto.hive.version>3.0.0-8</presto.hive.version>
+        <hudi.version>0.12.1</hudi.version>
         <fasterxml.version>2.13.4</fasterxml.version>
         <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
+        <esotericsoftware.kryo.shaded.version>4.0.2</esotericsoftware.kryo.shaded.version>
     </properties>
 
     <dependencies>
@@ -63,7 +66,7 @@
         <dependency>
             <groupId>com.facebook.presto.hive</groupId>
             <artifactId>hive-apache</artifactId>
-            <version>3.0.0-8</version>
+            <version>${presto.hive.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -75,7 +78,7 @@
         <dependency>
             <groupId>com.facebook.presto.hadoop</groupId>
             <artifactId>hadoop-apache2</artifactId>
-            <version>2.7.4-9</version>
+            <version>${presto.hadoop.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -111,7 +114,13 @@
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo-shaded</artifactId>
-            <version>4.0.2</version>
+            <version>${esotericsoftware.kryo.shaded.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.1</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>

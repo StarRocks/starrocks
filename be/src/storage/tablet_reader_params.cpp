@@ -16,7 +16,7 @@
 
 #include "thrift/protocol/TDebugProtocol.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TabletReaderParams::TabletReaderParams() = default;
 
@@ -72,4 +72,4 @@ std::ostream& operator<<(std::ostream& os, TabletReaderParams::RangeEndOperation
     return os;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

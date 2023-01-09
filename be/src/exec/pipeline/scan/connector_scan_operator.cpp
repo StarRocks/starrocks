@@ -15,8 +15,8 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/connector_scan_node.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/vectorized/connector_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -63,7 +63,7 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
@@ -98,7 +98,7 @@ size_t ConnectorScanOperator::num_buffered_chunks() const {
 ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
-    vectorized::ChunkPtr chunk = nullptr;
+    ChunkPtr chunk = nullptr;
     if (buffer.try_get(_driver_sequence, &chunk)) {
         return chunk;
     }
@@ -142,14 +142,14 @@ void ConnectorScanOperator::set_buffer_finished() {
 }
 
 connector::ConnectorType ConnectorScanOperator::connector_type() {
-    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();
 }
 
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                           MorselPtr&& morsel, ScanOperator* op,
-                                           vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+                                           MorselPtr&& morsel, ScanOperator* op, ConnectorScanNode* scan_node,
+                                           BalancedChunkBuffer& chunk_buffer)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
@@ -192,7 +192,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
-Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (!_opened) {
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
@@ -208,7 +208,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     }
 
     while (_status.ok()) {
-        vectorized::ChunkPtr tmp;
+        ChunkPtr tmp;
         _status = _data_source->get_next(state, &tmp);
         if (_status.ok()) {
             if (tmp->num_rows() == 0) continue;

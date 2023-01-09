@@ -12,21 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.privilege.FunctionPEntryObject;
+import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -36,10 +44,12 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -115,7 +125,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 info.setAuthPlugin(pluginName);
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
-            } catch (AuthenticationException e) {
+                if (stmt instanceof AlterUserStmt) {
+                    session.getGlobalStateMgr().getAuthenticationManager().checkPasswordReuse(
+                            userIdentity, stmt.getOriginalPassword());
+                }
+            } catch (AuthenticationException | DdlException e) {
                 SemanticException exception = new SemanticException("invalidate authentication: " + e.getMessage());
                 exception.initCause(e);
                 throw exception;
@@ -151,6 +165,64 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
+        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
+                throws PrivilegeException, AnalysisException {
+            stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+            String[] name = stmt.getFunctionName().split("\\.");
+            FunctionName functionName;
+            if (stmt.getTypeId() == PrivilegeType.GLOBAL_FUNCTION.getId()) {
+                if (name.length != 1) {
+                    throw new AnalysisException("global function has no database");
+                }
+                functionName = new FunctionName(name[0]);
+                functionName.setAsGlobalFunction();
+            } else {
+                if (name.length == 2) {
+                    functionName = new FunctionName(name[0], name[1]);
+                } else {
+                    String dbName = ConnectContext.get().getDatabase();
+                    if (dbName.equals("")) {
+                        throw new AnalysisException("database not selected");
+                    }
+                    functionName = new FunctionName(dbName, name[0]);
+                }
+            }
+            return functionName;
+        }
+
+        private PEntryObject parseFunctionObject(BaseGrantRevokePrivilegeStmt stmt, FunctionSearchDesc searchDesc)
+                throws PrivilegeException {
+            FunctionName name = searchDesc.getName();
+            if (name.isGlobalFunction()) {
+                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
+                        .getFunction(searchDesc);
+                if (function == null) {
+                    return privilegeManager.analyzeObject(
+                            stmt.getPrivType(),
+                            Arrays.asList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
+                } else {
+                    return privilegeManager.analyzeObject(
+                            stmt.getPrivType(),
+                            Arrays.asList(function.signatureString())
+                    );
+                }
+            }
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(name.getDb());
+            Function function = db.getFunction(searchDesc);
+            if (null == function) {
+                return privilegeManager.analyzeObject(
+                        stmt.getPrivType(),
+                        Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
+                );
+            } else {
+                return privilegeManager.analyzeObject(
+                        stmt.getPrivType(),
+                        Arrays.asList(function.dbName(), function.signatureString())
+                );
+            }
+        }
+
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             // validate user/role
@@ -176,6 +248,15 @@ public class PrivilegeStmtAnalyzerV2 {
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                             objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
                         }
+                    } else if (stmt.getFunctionArgsDef() != null) {
+                        FunctionName functionName = parseFunctionName(stmt);
+                        FunctionArgsDef argsDef = stmt.getFunctionArgsDef();
+                        argsDef.analyze();
+                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                argsDef.getArgTypes(),
+                                argsDef.isVariadic());
+                        PEntryObject object = parseFunctionObject(stmt, searchDesc);
+                        objectList.add(object);
                     } else {
                         // all statement
                         // TABLES -> TABLE
@@ -193,7 +274,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 }
                 privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
                 stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
-            } catch (PrivilegeException e) {
+            } catch (PrivilegeException | AnalysisException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
                 throw exception;

@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -53,6 +52,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -113,6 +114,14 @@ public class AstToStringBuilder {
 
             List<String> setVarList = new ArrayList<>();
             for (SetVar setVar : stmt.getSetVars()) {
+                if (setVar instanceof SetPassVar) {
+                    StringBuilder tmp = new StringBuilder();
+                    tmp.append("PASSWORD FOR ")
+                            .append(((SetPassVar) setVar).getUserIdent().toString())
+                            .append(" = PASSWORD('***')");
+                    setVarList.add(tmp.toString());
+                    continue;
+                }
                 String setVarSql = "";
 
                 // `SET DEFAULT` is not supported
@@ -371,9 +380,19 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")"
-                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias().getTbl());
+        public String visitSubquery(SubqueryRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+            return sqlBuilder.toString();
         }
 
         @Override
@@ -486,7 +505,16 @@ public class AstToStringBuilder {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias().getTbl());
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
 
             return sqlBuilder.toString();
         }
@@ -505,9 +533,9 @@ public class AstToStringBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
-                if (node.getColumnNames() != null) {
+                if (node.getColumnOutputNames() != null) {
                     sqlBuilder.append("(");
-                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnOutputNames()));
                     sqlBuilder.append(")");
                 }
             }

@@ -257,7 +257,11 @@ public class BinaryPredicate extends Predicate implements Writable {
         msg.node_type = TExprNodeType.BINARY_PRED;
         msg.setOpcode(opcode);
         msg.setVector_opcode(vectorOpcode);
-        msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        if (getChild(0).getType().isComplexType()) {
+            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        } else {
+            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        }
     }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
@@ -282,6 +286,13 @@ public class BinaryPredicate extends Predicate implements Writable {
         //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
         if (type1.isJsonType() || type2.isJsonType()) {
             return Type.JSON;
+        }
+        if (type1.isArrayType() || type2.isArrayType()) {
+            // Must both be array
+            if (!type1.equals(type2)) {
+                return Type.INVALID;
+            }
+            return type1;
         }
         if (type1.isComplexType() || type2.isComplexType()) {
             // We don't support complex type for binary predicate.

@@ -22,6 +22,16 @@ import java.util.List;
 import java.util.Map;
 
 public interface StatisticStorage {
+    default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+        return TableStatistic.unknown();
+    }
+
+    default void refreshTableStatistic(Table table) {
+    }
+
+    default void refreshTableStatisticSync(Table table) {
+    }
+
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
@@ -41,7 +51,7 @@ public interface StatisticStorage {
     default void expireHistogramStatistics(Long tableId, List<String> columns) {
     }
 
-    default void expireColumnStatistics(Table table, List<String> columns) {
+    default void expireTableAndColumnStatistics(Table table, List<String> columns) {
     }
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);

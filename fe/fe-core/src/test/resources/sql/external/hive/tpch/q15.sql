@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 24:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 1
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -101,6 +102,7 @@ OutPut Exchange Id: 24
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
 |----20:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 0:HdfsScanNode
@@ -146,6 +148,7 @@ OutPut Exchange Id: 20
 |  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
 |----17:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 5:AGGREGATE (merge finalize)
@@ -160,6 +163,8 @@ OutPut Exchange Id: 20
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1000000.0] ESTIMATE
 |
 4:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [10: l_suppkey, INT, true]
 cardinality: 1000000
 
 PLAN FRAGMENT 3(F05)
@@ -187,6 +192,7 @@ OutPut Exchange Id: 17
 |  * max-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
 13:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 4(F04)
@@ -217,6 +223,8 @@ OutPut Exchange Id: 13
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1000000.0] ESTIMATE
 |
 9:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [28: l_suppkey, INT, true]
 cardinality: 1000000
 
 PLAN FRAGMENT 5(F03)

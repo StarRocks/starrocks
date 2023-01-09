@@ -17,12 +17,12 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "exec/vectorized/arrow_type_traits.h"
+#include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
 struct ColumnToArrowConverter;
@@ -311,7 +311,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         Expr* expr = _output_expr_ctxs[i]->root();
         if (column->is_constant()) {
-            column = vectorized::ColumnHelper::unfold_const_column(expr->type(), chunk->num_rows(), column);
+            column = ColumnHelper::unfold_const_column(expr->type(), chunk->num_rows(), column);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type().type, array);
@@ -337,7 +337,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
     for (auto i = 0; i < slot_types.size(); ++i) {
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
         if (column->is_constant()) {
-            column = vectorized::ColumnHelper::unfold_const_column(*slot_types[i], chunk->num_rows(), column);
+            column = ColumnHelper::unfold_const_column(*slot_types[i], chunk->num_rows(), column);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, slot_types[i]->type, array);
@@ -349,4 +349,4 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
     *result = arrow::RecordBatch::Make(schema, chunk->num_rows(), std::move(arrays));
     return Status::OK();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

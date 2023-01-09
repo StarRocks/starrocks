@@ -24,6 +24,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_stream.cpp
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
@@ -34,55 +35,57 @@ set(EXPR_FILES
   function_context.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
-  vectorized/arithmetic_expr.cpp
-  vectorized/array_element_expr.cpp
-  vectorized/array_expr.cpp
-  vectorized/array_functions.cpp
-  vectorized/binary_predicate.cpp
-  vectorized/bitmap_functions.cpp
-  vectorized/case_expr.cpp
-  vectorized/cast_expr.cpp
-  vectorized/cast_expr_array.cpp
-  vectorized/column_ref.cpp
-  vectorized/placeholder_ref.cpp
-  vectorized/dictmapping_expr.cpp
-  vectorized/compound_predicate.cpp
-  vectorized/condition_expr.cpp
-  vectorized/encryption_functions.cpp
-  vectorized/es_functions.cpp
-  vectorized/find_in_set.cpp
-  vectorized/function_call_expr.cpp
-  vectorized/function_helper.cpp
-  vectorized/geo_functions.cpp
-  vectorized/grouping_sets_functions.cpp
-  vectorized/hyperloglog_functions.cpp
-  vectorized/in_const_predicate.cpp
-  vectorized/info_func.cpp
-  vectorized/in_predicate.cpp
-  vectorized/is_null_predicate.cpp
-  vectorized/json_functions.cpp
-  vectorized/jsonpath.cpp
-  vectorized/like_predicate.cpp
-  vectorized/literal.cpp
-  vectorized/locate.cpp
-  vectorized/map_element_expr.cpp
-  vectorized/map_functions.cpp
-  vectorized/math_functions.cpp
-  vectorized/percentile_functions.cpp
-  vectorized/runtime_filter_bank.cpp
-  vectorized/runtime_filter.cpp
-  vectorized/split.cpp
-  vectorized/split_part.cpp
-  vectorized/string_functions.cpp
-  vectorized/time_functions.cpp
-  vectorized/utility_functions.cpp
+  arithmetic_expr.cpp
+  array_element_expr.cpp
+  array_expr.cpp
+  array_functions.cpp
+  binary_predicate.cpp
+  bitmap_functions.cpp
+  case_expr.cpp
+  cast_expr.cpp
+  cast_expr_array.cpp
+  cast_nested.cpp
+  column_ref.cpp
+  placeholder_ref.cpp
+  dictmapping_expr.cpp
+  compound_predicate.cpp
+  condition_expr.cpp
+  encryption_functions.cpp
+  es_functions.cpp
+  find_in_set.cpp
+  function_call_expr.cpp
+  function_helper.cpp
+  geo_functions.cpp
+  grouping_sets_functions.cpp
+  hyperloglog_functions.cpp
+  in_const_predicate.cpp
+  info_func.cpp
+  in_predicate.cpp
+  is_null_predicate.cpp
+  json_functions.cpp
+  jsonpath.cpp
+  like_predicate.cpp
+  literal.cpp
+  locate.cpp
+  map_element_expr.cpp
+  map_functions.cpp
+  struct_functions.cpp
+  math_functions.cpp
+  percentile_functions.cpp
+  runtime_filter_bank.cpp
+  runtime_filter.cpp
+  split.cpp
+  split_part.cpp
+  string_functions.cpp
+  time_functions.cpp
+  utility_functions.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
-  vectorized/java_function_call_expr.cpp
-  vectorized/lambda_function.cpp
-  vectorized/array_map_expr.cpp
-  vectorized/subfield_expr.cpp
+  java_function_call_expr.cpp
+  lambda_function.cpp
+  array_map_expr.cpp
+  subfield_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
@@ -90,6 +93,6 @@ add_library(Exprs ${EXPR_FILES})
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-  set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-  set_source_files_properties(vectorized/json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+  set_source_files_properties(json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+  set_source_files_properties(json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 endif()

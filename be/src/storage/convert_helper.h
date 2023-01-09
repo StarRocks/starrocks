@@ -28,10 +28,6 @@ class TabletSchema;
 class VectorizedSchema;
 class TabletColumn;
 class TypeInfo;
-} // namespace starrocks
-
-namespace starrocks::vectorized {
-
 class VectorizedSchema;
 
 // Used for schema change
@@ -89,7 +85,6 @@ public:
 
     Status init(const TabletSchema& in_schema, const TabletSchema& out_schema);
 
-    Status init(const ::starrocks::VectorizedSchema& in_schema, const ::starrocks::VectorizedSchema& out_schema);
     Status init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema);
 
     void convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const;
@@ -114,4 +109,4 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

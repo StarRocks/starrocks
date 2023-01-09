@@ -58,7 +58,7 @@
 #include "util/coding.h"
 #include "util/faststring.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Column;
 }
 
@@ -213,9 +213,9 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* count, vectorized::Column* dst) override;
+    Status next_batch(size_t* count, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);

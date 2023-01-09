@@ -1,4 +1,4 @@
-# curdate
+# curdate,current_date
 
 ## Description
 
@@ -15,10 +15,18 @@ DATE CURDATE()
 ```Plain Text
 MySQL > SELECT CURDATE();
 +------------+
-| CURDATE()  |
+| curdate()  |
 +------------+
-| 2019-12-20 |
+| 2022-12-20 |
 +------------+
+
+SELECT CURRENT_DATE();
++----------------+
+| current_date() |
++----------------+
+| 2022-12-20     |
++----------------+
+
 
 MySQL > SELECT CURDATE() + 0;
 +---------------+

@@ -129,6 +129,22 @@ public class MvUtils {
         }
     }
 
+    public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = Lists.newArrayList();
+        getScanOperator(root, scanOperators);
+        return scanOperators;
+    }
+
+    public static void getScanOperator(OptExpression root, List<LogicalScanOperator> scanOperators) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            scanOperators.add((LogicalScanOperator) root.getOp());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getScanOperator(child, scanOperators);
+            }
+        }
+    }
+
     public static List<LogicalOlapScanOperator> getOlapScanNode(OptExpression root) {
         List<LogicalOlapScanOperator> olapScanOperators = Lists.newArrayList();
         getOlapScanNode(root, olapScanOperators);

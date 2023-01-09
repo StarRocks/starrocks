@@ -29,11 +29,11 @@ Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {
     return _partition_topn_ctx->prepare(state);
 }
 
-StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> LocalPartitionTopnSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't call pull_chunk from local partition topn sink operator.");
 }
 
-Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _partition_topn_ctx->push_one_chunk_to_partitioner(state, chunk);
 }
 

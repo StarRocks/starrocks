@@ -30,7 +30,7 @@ public class Delimiter {
         byte[] bytes = new byte[length];
         for (int i = 0; i < length; i++) {
             int pos = i * 2;
-            bytes[i] = (byte) (charToByte(hexChars[pos]) << 4 | charToByte(hexChars[pos + 1]));
+            bytes[i] = (byte) (charToByte(hexChars[pos]) << 4 | (0xff & charToByte(hexChars[pos + 1])));
         }
         return bytes;
     }

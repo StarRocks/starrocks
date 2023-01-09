@@ -31,8 +31,8 @@ public:
 
     ~ChunkAccumulateOperator() override = default;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     bool has_output() const override { return _acc.has_output(); }
     bool need_input() const override { return _acc.need_input(); }

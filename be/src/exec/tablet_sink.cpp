@@ -295,7 +295,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     return status;
 }
 
-Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst) {
+Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
     {
@@ -365,7 +365,7 @@ bool NodeChannel::is_full() {
     return false;
 }
 
-Status NodeChannel::add_chunk(vectorized::Chunk* input, const std::vector<int64_t>& tablet_ids,
+Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids,
                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos) {
     if (_cancelled || _send_finished) {
         return _err_st;
@@ -416,7 +416,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const std::vector<int64_
     return _send_request(eos);
 }
 
-Status NodeChannel::add_chunks(vectorized::Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
+Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
                                const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos) {
     if (_cancelled || _send_finished) {
         return _err_st;
@@ -474,7 +474,7 @@ Status NodeChannel::_send_request(bool eos) {
     if (eos) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
-                _cur_chunk = std::make_unique<vectorized::Chunk>();
+                _cur_chunk = std::make_unique<Chunk>();
             }
             _mem_tracker->consume(_cur_chunk->memory_usage());
             _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
@@ -818,7 +818,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
+    _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_vectorized_partition->init(state));
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
     _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
@@ -1080,7 +1080,7 @@ bool OlapTableSink::is_full() {
     return full;
 }
 
-Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     SCOPED_TIMER(_profile->total_time_counter());
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
@@ -1098,18 +1098,17 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         {
             SCOPED_RAW_TIMER(&_convert_batch_ns);
             if (!_output_expr_ctxs.empty()) {
-                _output_chunk = std::make_unique<vectorized::Chunk>();
+                _output_chunk = std::make_unique<Chunk>();
                 for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
                     ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
                     ColumnPtr output_column = nullptr;
                     if (tmp->only_null()) {
                         // Only null column maybe lost type info
-                        output_column =
-                                vectorized::ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
+                        output_column = ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
                         output_column->append_nulls(num_rows);
                     } else {
                         // Unpack normal const column
-                        output_column = vectorized::ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+                        output_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
                     }
                     DCHECK(output_column != nullptr);
                     _output_chunk->append_column(std::move(output_column), _output_tuple_desc->slots()[i]->id());
@@ -1172,7 +1171,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     }
 }
 
-Status OlapTableSink::_send_chunk(vectorized::Chunk* chunk) {
+Status OlapTableSink::_send_chunk(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     size_t selection_size = _validate_select_idx.size();
     if (selection_size == 0) {
@@ -1208,7 +1207,7 @@ Status OlapTableSink::_send_chunk(vectorized::Chunk* chunk) {
     return Status::OK();
 }
 
-Status OlapTableSink::_send_chunk_with_colocate_index(vectorized::Chunk* chunk) {
+Status OlapTableSink::_send_chunk_with_colocate_index(Chunk* chunk) {
     Status err_st = Status::OK();
     size_t num_rows = chunk->num_rows();
     size_t selection_size = _validate_select_idx.size();
@@ -1247,8 +1246,7 @@ Status OlapTableSink::_send_chunk_with_colocate_index(vectorized::Chunk* chunk) 
     return Status::OK();
 }
 
-Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
-                                          std::vector<uint16_t>& selection_idx) {
+Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
         int64_t be_id = it.first;
@@ -1346,6 +1344,11 @@ bool OlapTableSink::is_close_done() {
     }
 
     return _close_done;
+}
+
+void OlapTableSink::cancel() {
+    Status st = Status::Cancelled("cancel");
+    for_each_index_channel([&st](NodeChannel* ch) { ch->cancel(st); });
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
@@ -1494,7 +1497,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1510,11 +1513,11 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 }
 
 template <LogicalType PT>
-void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
+void OlapTableSink::_validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
-    using CppType = vectorized::RunTimeCppType<PT>;
-    using ColumnType = vectorized::RunTimeColumnType<PT>;
-    auto* data_column = down_cast<ColumnType*>(vectorized::ColumnHelper::get_data_column(column));
+    using CppType = RunTimeCppType<PT>;
+    using ColumnType = RunTimeColumnType<PT>;
+    auto* data_column = down_cast<ColumnType*>(ColumnHelper::get_data_column(column));
     const auto num_rows = data_column->get_data().size();
     auto* data = &data_column->get_data().front();
 
@@ -1533,7 +1536,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
     }
 }
 
-void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk) {
+void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
@@ -1550,15 +1553,14 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
-            ColumnPtr new_column =
-                    vectorized::NullableColumn::create(column_ptr, vectorized::NullColumn::create(num_rows, 0));
+            ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
         } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
-            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
-                vectorized::NullData& nulls = nullable->null_column_data();
+                NullData& nulls = nullable->null_column_data();
                 for (size_t j = 0; j < num_rows; ++j) {
                     if (nulls[j]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
@@ -1576,8 +1578,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             }
             chunk->update_column(nullable->data_column(), desc->id());
         } else if (column_ptr->has_null()) {
-            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
-            vectorized::NullData& nulls = nullable->null_column_data();
+            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
                     // for this column, there are some null values in the row
@@ -1587,15 +1589,15 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             }
         }
 
-        vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+        Column* column = chunk->get_column_by_slot_id(desc->id()).get();
         switch (desc->type().type) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
         case TYPE_VARBINARY: {
             uint32_t len = desc->type().len;
-            vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
-            vectorized::Offsets& offset = binary->get_offset();
+            Column* data_column = ColumnHelper::get_data_column(column);
+            auto* binary = down_cast<BinaryColumn*>(data_column);
+            Offsets& offset = binary->get_offset();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {
                     if (offset[j + 1] - offset[j] > len) {
@@ -1607,8 +1609,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             break;
         }
         case TYPE_DECIMALV2: {
-            column = vectorized::ColumnHelper::get_data_column(column);
-            auto* decimal = down_cast<vectorized::DecimalColumn*>(column);
+            column = ColumnHelper::get_data_column(column);
+            auto* decimal = down_cast<DecimalColumn*>(column);
             std::vector<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
@@ -1640,23 +1642,23 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
     }
 }
 
-void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
+void OlapTableSink::_padding_char_column(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
         if (desc->type().type == TYPE_CHAR) {
-            vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
-            vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
-            vectorized::Offsets& offset = binary->get_offset();
+            Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+            Column* data_column = ColumnHelper::get_data_column(column);
+            auto* binary = down_cast<BinaryColumn*>(data_column);
+            Offsets& offset = binary->get_offset();
             uint32_t len = desc->type().len;
 
-            vectorized::Bytes& bytes = binary->get_bytes();
+            Bytes& bytes = binary->get_bytes();
 
             // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
             // TODO(kks): we could improve this if there are many null values
-            auto new_binary = vectorized::BinaryColumn::create();
-            vectorized::Offsets& new_offset = new_binary->get_offset();
-            vectorized::Bytes& new_bytes = new_binary->get_bytes();
+            auto new_binary = BinaryColumn::create();
+            Offsets& new_offset = new_binary->get_offset();
+            Bytes& new_bytes = new_binary->get_bytes();
             new_offset.resize(num_rows + 1);
             new_bytes.assign(num_rows * len, 0); // padding 0
 
@@ -1672,8 +1674,8 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
             }
 
             if (desc->is_nullable()) {
-                auto* nullable_column = down_cast<vectorized::NullableColumn*>(column);
-                ColumnPtr new_column = vectorized::NullableColumn::create(new_binary, nullable_column->null_column());
+                auto* nullable_column = down_cast<NullableColumn*>(column);
+                ColumnPtr new_column = NullableColumn::create(new_binary, nullable_column->null_column());
                 chunk->update_column(new_column, desc->id());
             } else {
                 chunk->update_column(new_binary, desc->id());

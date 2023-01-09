@@ -42,16 +42,16 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    vectorized::ChunkPtr _build_chunk(const std::vector<vectorized::ColumnPtr>& output_columns);
+    ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
     void _process_table_function();
 
     const TPlanNode& _tnode;
-    const vectorized::TableFunction* _table_function = nullptr;
+    const TableFunction* _table_function = nullptr;
 
     // Slots of output by table function
     std::vector<SlotId> _fn_result_slots;
@@ -61,17 +61,17 @@ private:
     std::vector<SlotId> _param_slots;
 
     // Input chunk currently being processed
-    vectorized::ChunkPtr _input_chunk;
+    ChunkPtr _input_chunk;
     // The current chunk is processed to which row
     size_t _input_chunk_index = 0;
     // The current outer line needs to be repeated several times
     size_t _remain_repeat_times = 0;
     // table function result
-    std::pair<vectorized::Columns, vectorized::ColumnPtr> _table_function_result;
+    std::pair<Columns, ColumnPtr> _table_function_result;
     // table function return result end ?
     bool _table_function_result_eos = false;
     // table function param and return offset
-    vectorized::TableFunctionState* _table_function_state = nullptr;
+    TableFunctionState* _table_function_state = nullptr;
 
     RuntimeProfile::Counter* _table_function_exec_timer = nullptr;
     RuntimeProfile::Counter* _table_function_exec_counter = nullptr;

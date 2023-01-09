@@ -26,7 +26,7 @@ This topic uses curl as an example to describe how to load data by using Stream 
 
 - We recommend that you add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
 
-Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
@@ -112,6 +112,7 @@ Specifies some optional parameters, which are applied to the entire load job. Sy
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "merge_condition: <column_name>"
 ```
 
 The following table describes the optional parameters.
@@ -346,9 +347,9 @@ curl --location-trusted -u root: \
 >
 > - The `hll_hash` function is used to convert the values in `temp1` of `example7.csv` into HLL-type data and map `temp1` of `example7.csv` onto `col1` of `table7`.
 >
-> - The `empty_hll` function is used to fill the specified default value into `col2` of `table7`.
+> - The `hll_empty` function is used to fill the specified default value into `col2` of `table7`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [HLL](../../../sql-reference/sql-statements/data-definition/HLL.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
 
 #### Load data into tables containing BITMAP-type columns
 

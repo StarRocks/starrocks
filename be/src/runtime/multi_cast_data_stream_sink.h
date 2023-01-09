@@ -28,7 +28,7 @@ public:
     Status close(RuntimeState* state, Status exec_status) override;
     RuntimeProfile* profile() override { return nullptr; }
     std::vector<std::unique_ptr<DataStreamSender> >& get_sinks() { return _sinks; }
-    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+    Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
 private:
     std::vector<std::unique_ptr<DataStreamSender> > _sinks;

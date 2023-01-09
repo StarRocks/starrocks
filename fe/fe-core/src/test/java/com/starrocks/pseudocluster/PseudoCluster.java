@@ -17,14 +17,16 @@ package com.starrocks.pseudocluster;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -60,6 +62,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -87,6 +90,10 @@ public class PseudoCluster {
     PseudoBrpcRroxy brpcProxy = new PseudoBrpcRroxy();
 
     private BasicDataSource dataSource;
+
+    private static long backendIdStart = 10001;
+    private static int backendPortStart = 12100;
+    private static int backendHostStart = 10;
 
     static {
         try {
@@ -191,28 +198,44 @@ public class PseudoCluster {
         }
 
         @Override
-        public void createShardGroup(long groupId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+            return partitionId;
         }
 
         @Override
-        public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
-            throws DdlException {
+        public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                       long groupId)
+                throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
                 long id = nextId++;
                 shardIds.add(id);
+                List<ReplicaInfo> replicas = new ArrayList<>();
+                if (!workers.isEmpty()) {
+                    int availableReplicas = Math.min(workers.size(), replicaNum);
+                    int workerIndex = (int) (id % workers.size());
+                    for (int j = 0; j < availableReplicas; ++j) {
+                        replicas.add(ReplicaInfo.newBuilder()
+                                .setReplicaRole(ReplicaRole.PRIMARY)
+                                .setWorkerInfo(WorkerInfo.newBuilder()
+                                        .setWorkerId(workers.get(workerIndex).workerId)
+                                        .build())
+                                .build());
+                        workerIndex = (workerIndex + 1) % workers.size();
+                    }
+                }
                 ShardInfo shardInfo = ShardInfo.newBuilder().setFileCache(cacheInfo)
-                                               .setFilePath(pathInfo)
-                                               .setShardId(id)
-                                               .build();
+                        .addAllReplicaInfo(replicas)
+                        .setFilePath(pathInfo)
+                        .setShardId(id)
+                        .build();
                 shardInfos.add(shardInfo);
             }
             return shardIds;
         }
 
         @Override
-        public void deleteShards(Set<Long> shardIds) throws DdlException {
-            shardInfos.removeIf(s -> shardIds.contains(s.getShardId()));
+        public void deleteShardGroup(List<Long> groupIds) {
         }
 
         @Override
@@ -222,7 +245,13 @@ public class PseudoCluster {
 
         @Override
         public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
-            return Sets.newHashSet(getPrimaryBackendIdByShard(shardId));
+            Set<Long> results = new HashSet<>();
+            shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
+                for (ReplicaInfo info : y.getReplicaInfoList()) {
+                    results.add(info.getWorkerInfo().getWorkerId());
+                }
+            });
+            return results;
         }
     }
 
@@ -401,19 +430,18 @@ public class PseudoCluster {
 
         LOG.info("start create and start backends");
         cluster.backends = Maps.newConcurrentMap();
-        long backendIdStart = 10001;
-        int port = 12100;
         for (int i = 0; i < numBackends; i++) {
-            String host = String.format("127.0.0.%d", i + 10);
-            long beId = backendIdStart + i;
+            String host = genBackendHost();
+            long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host, port++, port++, port++, port++,
+            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host,
+                    backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), port - 1));
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
@@ -423,6 +451,44 @@ public class PseudoCluster {
         }
         Thread.sleep(2000);
         return cluster;
+    }
+
+    public List<Long> addBackends(int numBackends) {
+        List<Long> beIds = new ArrayList<>();
+        for (int i = 0; i < numBackends; i++) {
+            String host = genBackendHost();
+            long beId = backendIdStart++;
+            String beRunPath = runDir + "/be" + beId;
+            PseudoBackend backend = new PseudoBackend(this, beRunPath, beId, host,
+                    backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
+                    this.frontend.getFrontendService());
+            this.backends.put(backend.getHost(), backend);
+            this.backendIdToHost.put(beId, backend.getHost());
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
+            LOG.info("add PseudoBackend {} {}", beId, host);
+            beIds.add(beId);
+        }
+        int retry = 0;
+        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+                retry++ < 600) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        return beIds;
+    }
+
+    private static String genBackendHost() {
+        int i = backendHostStart % 128;
+        int j = (backendHostStart >> 7) % 128;
+        int k = (backendHostStart >> 14) % 128;
+        backendHostStart++;
+        return String.format("127.%d.%d.%d", k, j, i);
     }
 
     private static void logAddConsoleAppender() {

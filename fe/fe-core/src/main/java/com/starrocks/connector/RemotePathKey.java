@@ -81,7 +81,9 @@ public class RemotePathKey {
         final StringBuilder sb = new StringBuilder("RemotePathKey{");
         sb.append("path='").append(path).append('\'');
         sb.append(", isRecursive=").append(isRecursive);
-        sb.append(", hudiTableLocation=").append(hudiTableLocation);
+        if (hudiTableLocation.isPresent()) {
+            sb.append(", hudiTableLocation=").append(hudiTableLocation);
+        }
         sb.append('}');
         return sb.toString();
     }

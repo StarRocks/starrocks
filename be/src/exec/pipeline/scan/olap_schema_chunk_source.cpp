@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "exec/vectorized/schema_scanner.h"
+#include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
 
 namespace starrocks::pipeline {
@@ -44,7 +44,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
 
     _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
 
-    _schema_scanner = vectorized::SchemaScanner::create(schema_table->schema_table_type());
+    _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
     if (_schema_scanner == nullptr) {
         return Status::InternalError("schema scanner get null pointer");
     }
@@ -94,7 +94,7 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         return Status::EndOfFile("end of file");
     }
 
-    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_src = std::make_shared<Chunk>();
     if (chunk_src == nullptr) {
         return Status::InternalError("Failed to allocated new chunk");
     }
@@ -103,19 +103,18 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = vectorized::ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
 
-    ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_dst = std::make_shared<Chunk>();
     if (chunk_dst == nullptr) {
         return Status::InternalError("Failed to allocate new chunk");
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 

@@ -56,19 +56,17 @@ namespace starrocks {
 class TabletSchema;
 class ShortKeyIndexDecoder;
 
-namespace vectorized {
 class ChunkIterator;
 class VectorizedSchema;
 class SegmentIterator;
 class SegmentReadOptions;
-} // namespace vectorized
 
 class BitmapIndexIterator;
 class ColumnReader;
 class ColumnIterator;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 // A Segment is used to represent a segment in memory format. When segment is
 // generated, it won't be modified, so this struct aimed to help read operation.
@@ -109,13 +107,12 @@ public:
     ~Segment();
 
     // may return EndOfFile
-    StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::VectorizedSchema& schema,
-                                            const vectorized::SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
 
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
 
     Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);
 
@@ -210,12 +207,11 @@ private:
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(SegmentFooterPB* footer);
 
-    StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::VectorizedSchema& schema,
-                                             const vectorized::SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> _new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
 
     void _prepare_adapter_info();
 
-    friend class vectorized::SegmentIterator;
+    friend class SegmentIterator;
 
     std::shared_ptr<FileSystem> _fs;
     std::string _fname;
@@ -240,8 +236,6 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
-    // When the storage types is different with TabletSchema
-    bool _needs_block_adapter = false;
 };
 
 } // namespace starrocks

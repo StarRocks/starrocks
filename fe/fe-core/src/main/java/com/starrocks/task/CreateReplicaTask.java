@@ -35,11 +35,13 @@
 package com.starrocks.task;
 
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
@@ -86,6 +88,8 @@ public class CreateReplicaTask extends AgentTask {
 
     private boolean enablePersistentIndex;
 
+    private BinlogConfig binlogConfig;
+
     private TTabletType tabletType;
 
     // used for synchronous process
@@ -114,6 +118,23 @@ public class CreateReplicaTask extends AgentTask {
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount,
                 schemaHash, version, keysType, storageType, storageMedium, columns, bfColumns,
                 bfFpp, latch, indexes, isInMemory, enablePersistentIndex, tabletType, compressionType, null);
+    }
+
+    public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+                             short shortKeyColumnCount, int schemaHash, long version,
+                             KeysType keysType, TStorageType storageType,
+                             TStorageMedium storageMedium, List<Column> columns,
+                             Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
+                             List<Index> indexes,
+                             boolean isInMemory,
+                             boolean enablePersistentIndex,
+                             BinlogConfig binlogConfig,
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
+
+        this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
+                keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
+                enablePersistentIndex, tabletType, compressionType, sortKeyIdxes);
+        this.binlogConfig = binlogConfig;
     }
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
@@ -244,6 +265,12 @@ public class CreateReplicaTask extends AgentTask {
 
         createTabletReq.setStorage_medium(storageMedium);
         createTabletReq.setEnable_persistent_index(enablePersistentIndex);
+
+        if (binlogConfig != null) {
+            TBinlogConfig tBinlogConfig = binlogConfig.toTBinlogConfig();
+            createTabletReq.setBinlog_config(tBinlogConfig);
+        }
+
         if (inRestoreMode) {
             createTabletReq.setIn_restore_mode(true);
         }

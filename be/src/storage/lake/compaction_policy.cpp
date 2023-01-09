@@ -21,8 +21,6 @@
 
 namespace starrocks::lake {
 
-static const double kCompactionScoreThreshold = 0.999;
-
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
     explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}

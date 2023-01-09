@@ -25,8 +25,6 @@ class BitmapValue;
 class PercentileValue;
 class JsonValue;
 
-namespace vectorized {
-
 class DateValue;
 class TimestampValue;
 
@@ -114,5 +112,4 @@ using VectorizedFieldPtr = std::shared_ptr<VectorizedField>;
 using Filter = Buffer<uint8_t>;
 using FilterPtr = std::shared_ptr<Filter>;
 
-} // namespace vectorized
 } // namespace starrocks

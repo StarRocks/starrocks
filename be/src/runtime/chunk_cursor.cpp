@@ -21,7 +21,7 @@
 #include "exec/sort_exec_exprs.h"
 #include "exprs/expr_context.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
                          ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* exprs,
@@ -220,4 +220,4 @@ bool SimpleChunkSortCursor::is_eos() {
     return _eos;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

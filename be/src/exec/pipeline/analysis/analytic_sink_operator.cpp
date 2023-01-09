@@ -79,11 +79,11 @@ Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _analytor->remove_unused_buffer_values(state);
 
     RETURN_IF_ERROR(_analytor->add_chunk(chunk));
@@ -116,7 +116,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() 
 
         // Chunk may contains multiply partitions, so the chunk need to be reprocessed
         if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            vectorized::ChunkPtr chunk;
+            ChunkPtr chunk;
             RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
             _analytor->offer_chunk_to_buffer(chunk);
         }
@@ -163,7 +163,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
         }
     } while (!_analytor->is_current_chunk_finished_eval(chunk_size));
 
-    vectorized::ChunkPtr chunk;
+    ChunkPtr chunk;
     RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
     _analytor->offer_chunk_to_buffer(chunk);
 
@@ -219,7 +219,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
             _analytor->update_current_row_position(peer_group_end_offset - peer_group_start_offset);
 
             if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
-                vectorized::ChunkPtr chunk;
+                ChunkPtr chunk;
                 RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
                 _analytor->offer_chunk_to_buffer(chunk);
             }

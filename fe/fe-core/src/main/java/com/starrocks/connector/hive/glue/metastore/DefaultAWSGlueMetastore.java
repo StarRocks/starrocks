@@ -20,15 +20,27 @@ import com.amazonaws.services.glue.AWSGlue;
 import com.amazonaws.services.glue.model.BatchCreatePartitionRequest;
 import com.amazonaws.services.glue.model.BatchGetPartitionRequest;
 import com.amazonaws.services.glue.model.BatchGetPartitionResult;
+import com.amazonaws.services.glue.model.BinaryColumnStatisticsData;
+import com.amazonaws.services.glue.model.BooleanColumnStatisticsData;
+import com.amazonaws.services.glue.model.ColumnStatistics;
+import com.amazonaws.services.glue.model.ColumnStatisticsData;
+import com.amazonaws.services.glue.model.ColumnStatisticsType;
 import com.amazonaws.services.glue.model.CreateDatabaseRequest;
 import com.amazonaws.services.glue.model.CreateTableRequest;
 import com.amazonaws.services.glue.model.CreateUserDefinedFunctionRequest;
 import com.amazonaws.services.glue.model.Database;
 import com.amazonaws.services.glue.model.DatabaseInput;
+import com.amazonaws.services.glue.model.DateColumnStatisticsData;
+import com.amazonaws.services.glue.model.DecimalColumnStatisticsData;
 import com.amazonaws.services.glue.model.DeleteDatabaseRequest;
 import com.amazonaws.services.glue.model.DeletePartitionRequest;
 import com.amazonaws.services.glue.model.DeleteTableRequest;
 import com.amazonaws.services.glue.model.DeleteUserDefinedFunctionRequest;
+import com.amazonaws.services.glue.model.DoubleColumnStatisticsData;
+import com.amazonaws.services.glue.model.GetColumnStatisticsForPartitionRequest;
+import com.amazonaws.services.glue.model.GetColumnStatisticsForPartitionResult;
+import com.amazonaws.services.glue.model.GetColumnStatisticsForTableRequest;
+import com.amazonaws.services.glue.model.GetColumnStatisticsForTableResult;
 import com.amazonaws.services.glue.model.GetDatabaseRequest;
 import com.amazonaws.services.glue.model.GetDatabaseResult;
 import com.amazonaws.services.glue.model.GetDatabasesRequest;
@@ -43,11 +55,13 @@ import com.amazonaws.services.glue.model.GetTablesResult;
 import com.amazonaws.services.glue.model.GetUserDefinedFunctionRequest;
 import com.amazonaws.services.glue.model.GetUserDefinedFunctionsRequest;
 import com.amazonaws.services.glue.model.GetUserDefinedFunctionsResult;
+import com.amazonaws.services.glue.model.LongColumnStatisticsData;
 import com.amazonaws.services.glue.model.Partition;
 import com.amazonaws.services.glue.model.PartitionError;
 import com.amazonaws.services.glue.model.PartitionInput;
 import com.amazonaws.services.glue.model.PartitionValueList;
 import com.amazonaws.services.glue.model.Segment;
+import com.amazonaws.services.glue.model.StringColumnStatisticsData;
 import com.amazonaws.services.glue.model.Table;
 import com.amazonaws.services.glue.model.TableInput;
 import com.amazonaws.services.glue.model.UpdateDatabaseRequest;
@@ -58,23 +72,42 @@ import com.amazonaws.services.glue.model.UserDefinedFunction;
 import com.amazonaws.services.glue.model.UserDefinedFunctionInput;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.glue.util.MetastoreClientUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.BinaryColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.Date;
+import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.Decimal;
+import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.thrift.TException;
+import org.joda.time.DateTime;
+import org.joda.time.Days;
+import org.joda.time.MutableDateTime;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.CUSTOM_EXECUTOR_FACTORY_CONF;
 import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.NUM_PARTITION_SEGMENTS_CONF;
+import static java.util.concurrent.CompletableFuture.supplyAsync;
 
 public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
 
@@ -93,6 +126,10 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
      * https://docs.aws.amazon.com/glue/latest/webapi/API_Segment.html
      */
     public static final int MAX_NUM_PARTITION_SEGMENTS = 10;
+
+    // There are read limit for AWS Glue API : GetColumnStatisticsForPartition
+    // https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-catalog-partitions.html#aws-glue-api-catalog-partitions-GetColumnStatisticsForPartition
+    public static final int GLUE_COLUMN_STATS_SEGMENT_SIZE = 100;
 
     private final HiveConf conf;
     private final AWSGlue glueClient;
@@ -251,8 +288,8 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
                 result.addAll(future.get().getPartitions());
             }
         } catch (ExecutionException e) {
-            Throwables.propagateIfInstanceOf(e.getCause(), AmazonServiceException.class);
-            Throwables.propagate(e.getCause());
+            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfUnchecked(e.getCause());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -312,8 +349,8 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
                 }
             }
         } catch (ExecutionException e) {
-            Throwables.propagateIfInstanceOf(e.getCause(), AmazonServiceException.class);
-            Throwables.propagate(e.getCause());
+            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfUnchecked(e.getCause());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -418,5 +455,166 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
                 .withDatabaseName(dbName).withFunctionName(functionName).withFunctionInput(functionInput)
                 .withCatalogId(catalogId);
         glueClient.updateUserDefinedFunction(updateUserDefinedFunctionRequest);
+    }
+
+    @Override
+    public List<ColumnStatisticsObj> getTableColumnStatistics(String dbName, String tableName, List<String> colNames) {
+        // Split colNames into column chunks
+        List<List<String>> columnChunks = Lists.partition(colNames, GLUE_COLUMN_STATS_SEGMENT_SIZE);
+
+        // Submit Glue API calls in parallel using the thread pool.
+        List<CompletableFuture<GetColumnStatisticsForTableResult>> futures = columnChunks.stream().
+                map(columnChunk -> supplyAsync(() -> {
+                    GetColumnStatisticsForTableRequest request = new GetColumnStatisticsForTableRequest()
+                            .withDatabaseName(dbName)
+                            .withTableName(tableName)
+                            .withColumnNames(columnChunk);
+                    return glueClient.getColumnStatisticsForTable(request);
+                }, this.executorService)).collect(Collectors.toList());
+
+        // Get the column statistics
+        Map<String, ColumnStatisticsObj> columnStatisticsMap = Maps.newHashMap();
+        try {
+            for (CompletableFuture<GetColumnStatisticsForTableResult> future : futures) {
+                GetColumnStatisticsForTableResult columnStatisticsForTableResult = future.get();
+                for (ColumnStatistics columnStatistics : columnStatisticsForTableResult.getColumnStatisticsList()) {
+                    columnStatisticsMap.put(columnStatistics.getColumnName(),
+                            toHiveColumnStatistic(columnStatistics));
+                }
+            }
+        } catch (ExecutionException e) {
+            Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+            Throwables.throwIfUnchecked(e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return new ArrayList<>(columnStatisticsMap.values());
+    }
+
+    @Override
+    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatistics(String dbName, String tableName,
+                                                                               List<String> partitionNames,
+                                                                               List<String> colNames) {
+        Map<String, List<CompletableFuture<GetColumnStatisticsForPartitionResult>>> futureForPartition =
+                Maps.newHashMap();
+        for (String partitionName : partitionNames) {
+            // get column statistics for each partition
+            List<String> partitionValue = PartitionUtil.toPartitionValues(partitionName);
+            // Split colNames into column chunks
+            List<List<String>> columnChunks = Lists.partition(colNames, GLUE_COLUMN_STATS_SEGMENT_SIZE);
+            futureForPartition.put(partitionName, columnChunks.stream().map(columnChunk -> supplyAsync(() -> {
+                GetColumnStatisticsForPartitionRequest request = new GetColumnStatisticsForPartitionRequest()
+                        .withDatabaseName(dbName)
+                        .withTableName(tableName)
+                        .withColumnNames(columnChunk)
+                        .withPartitionValues(partitionValue);
+                return glueClient.getColumnStatisticsForPartition(request);
+            }, this.executorService)).collect(Collectors.toList()));
+        }
+
+        Map<String, List<ColumnStatisticsObj>> partitionColumnStats = Maps.newHashMap();
+        futureForPartition.forEach((partitionName, futures) -> {
+            List<ColumnStatisticsObj> columnStatisticsObjs = Lists.newArrayList();
+            for (CompletableFuture<GetColumnStatisticsForPartitionResult> future : futures) {
+                try {
+                    GetColumnStatisticsForPartitionResult result = future.get();
+                    result.getColumnStatisticsList().forEach(columnStatistics ->
+                            columnStatisticsObjs.add(toHiveColumnStatistic(columnStatistics)));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException e) {
+                    Throwables.throwIfInstanceOf(e.getCause(), AmazonServiceException.class);
+                    Throwables.throwIfUnchecked(e.getCause());
+                }
+            }
+            partitionColumnStats.put(partitionName, columnStatisticsObjs);
+        });
+
+        return partitionColumnStats;
+    }
+
+    private ColumnStatisticsObj toHiveColumnStatistic(ColumnStatistics columnStatistics) {
+        ColumnStatisticsData columnStatisticsData = columnStatistics.getStatisticsData();
+        ColumnStatisticsType type = ColumnStatisticsType.fromValue(columnStatisticsData.getType());
+        String columnName = columnStatistics.getColumnName();
+        switch (type) {
+            case BINARY: {
+                BinaryColumnStatisticsData data = columnStatisticsData.getBinaryColumnStatisticsData();
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.binaryStats(
+                                new BinaryColumnStatsData(data.getMaximumLength(), data.getAverageLength(),
+                                        data.getNumberOfNulls()));
+                return new ColumnStatisticsObj(columnName, "BINARY", hiveColumnStatisticsData);
+            }
+            case BOOLEAN: {
+                BooleanColumnStatisticsData data = columnStatisticsData.getBooleanColumnStatisticsData();
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.booleanStats(
+                                new BooleanColumnStatsData(data.getNumberOfTrues(), data.getNumberOfFalses(),
+                                        data.getNumberOfNulls()));
+                return new ColumnStatisticsObj(columnName, "BOOLEAN", hiveColumnStatisticsData);
+            }
+            case DATE: {
+                DateColumnStatisticsData data = columnStatisticsData.getDateColumnStatisticsData();
+                DateColumnStatsData dateColumnStatsData = new DateColumnStatsData(data.getNumberOfNulls(),
+                        data.getNumberOfDistinctValues());
+                MutableDateTime epoch = new MutableDateTime();
+                epoch.setDate(0); //Set to Epoch time
+                dateColumnStatsData.setHighValue(new Date(Days.daysBetween(epoch,
+                        new DateTime(data.getMaximumValue().getTime())).getDays()));
+                dateColumnStatsData.setLowValue(new Date(Days.daysBetween(epoch,
+                        new DateTime(data.getMinimumValue().getTime())).getDays()));
+
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.dateStats(dateColumnStatsData);
+                return new ColumnStatisticsObj(columnName, "DATE", hiveColumnStatisticsData);
+            }
+            case DECIMAL: {
+                DecimalColumnStatisticsData data = columnStatisticsData.getDecimalColumnStatisticsData();
+                DecimalColumnStatsData decimalColumnStatsData = new DecimalColumnStatsData(data.getNumberOfNulls(),
+                        data.getNumberOfDistinctValues());
+                decimalColumnStatsData.setHighValue(new Decimal(data.getMaximumValue().getScale().shortValue(),
+                        data.getMaximumValue().getUnscaledValue()));
+                decimalColumnStatsData.setLowValue(new Decimal(data.getMinimumValue().getScale().shortValue(),
+                        data.getMinimumValue().getUnscaledValue()));
+
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.decimalStats(decimalColumnStatsData);
+                return new ColumnStatisticsObj(columnName, "DECIMAL", hiveColumnStatisticsData);
+            }
+            case DOUBLE: {
+                DoubleColumnStatisticsData data = columnStatisticsData.getDoubleColumnStatisticsData();
+                DoubleColumnStatsData doubleColumnStatsData = new DoubleColumnStatsData(data.getNumberOfNulls(),
+                        data.getNumberOfDistinctValues());
+                doubleColumnStatsData.setHighValue(data.getMaximumValue());
+                doubleColumnStatsData.setLowValue(data.getMinimumValue());
+
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.doubleStats(doubleColumnStatsData);
+                return new ColumnStatisticsObj(columnName, "DOUBLE", hiveColumnStatisticsData);
+            }
+            case LONG: {
+                LongColumnStatisticsData data = columnStatisticsData.getLongColumnStatisticsData();
+                LongColumnStatsData longColumnStatsData = new LongColumnStatsData(data.getNumberOfNulls(),
+                        data.getNumberOfDistinctValues());
+                longColumnStatsData.setHighValue(data.getMaximumValue());
+                longColumnStatsData.setLowValue(data.getMinimumValue());
+
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.longStats(longColumnStatsData);
+                return new ColumnStatisticsObj(columnName, "LONG", hiveColumnStatisticsData);
+            }
+            case STRING: {
+                StringColumnStatisticsData data = columnStatisticsData.getStringColumnStatisticsData();
+                StringColumnStatsData stringColumnStatsData = new StringColumnStatsData(data.getMaximumLength(),
+                        data.getAverageLength(), data.getNumberOfNulls(), data.getNumberOfDistinctValues());
+
+                org.apache.hadoop.hive.metastore.api.ColumnStatisticsData hiveColumnStatisticsData =
+                        org.apache.hadoop.hive.metastore.api.ColumnStatisticsData.stringStats(stringColumnStatsData);
+                return new ColumnStatisticsObj(columnName, "STRING", hiveColumnStatisticsData);
+            }
+        }
+
+        throw new RuntimeException("Invalid glue column statistics : " + columnStatistics);
     }
 }

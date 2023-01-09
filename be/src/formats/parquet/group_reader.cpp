@@ -17,12 +17,13 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "utils.h"
 
 namespace starrocks::parquet {
 
@@ -37,13 +38,15 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param
 Status GroupReader::init() {
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
+    _dict_filter_ctx.init(_param.read_cols.size());
     _process_columns_and_conjunct_ctxs();
-    RETURN_IF_ERROR(_rewrite_dict_column_predicates());
+    RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
+                                                                         &_is_group_filtered));
     _init_read_chunk();
     return Status::OK();
 }
 
-Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
+Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -51,11 +54,10 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     _read_chunk->reset();
     size_t count = *row_count;
-    bool has_dict_filter = !_dict_filter_preds.empty();
     bool has_more_filter = !_left_conjunct_ctxs.empty();
     Status status;
 
-    vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
+    ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
         size_t rows_to_skip = _column_reader_opts.context->rows_to_skip;
         _column_reader_opts.context->rows_to_skip = 0;
@@ -74,13 +76,14 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     bool has_filter = false;
     int chunk_size = -1;
-    vectorized::Filter chunk_filter(count, 1);
-    // dict filter
-    if (has_dict_filter) {
+    Filter chunk_filter(count, 1);
+    DCHECK_EQ(active_chunk->num_rows(), count);
+
+    // dict filter chunk
+    {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        _dict_filter(&active_chunk, &chunk_filter);
-        has_filter = true;
+        has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
     }
 
     // other filter that not dict
@@ -103,7 +106,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
-        vectorized::ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
@@ -133,8 +136,8 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     *row_count = _read_chunk->num_rows();
 
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
-    // convert from _read_chunk
-    RETURN_IF_ERROR(_dict_decode(chunk));
+    // convert from _read_chunk to chunk.
+    RETURN_IF_ERROR(_dict_filter_ctx.decode_chunk(_param, _column_readers, _read_chunk, chunk));
 
     _column_reader_opts.context->filter = nullptr;
     return status;
@@ -180,19 +183,16 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     const auto& slots = _param.tuple_desc->slots();
     int read_col_idx = 0;
+
     for (auto& column : _param.read_cols) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
         const tparquet::ColumnMetaData& column_metadata =
                 _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
-        if (_can_using_dict_filter(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
-            column.content_type = ColumnContentType::DICT_CODE;
-            _dict_filter_columns.emplace_back(column);
-            _dict_filter_conjunct_ctxs[slot_id] = conjunct_ctxs_by_slot.at(slot_id);
+        if (_can_use_as_dict_filter_column(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
+            _dict_filter_ctx.use_as_dict_filter_column(read_col_idx, slot_id, conjunct_ctxs_by_slot.at(slot_id));
             _active_column_indices.emplace_back(read_col_idx);
         } else {
-            column.content_type = ColumnContentType::VALUE;
-            _direct_read_columns.emplace_back(column);
             bool has_conjunct = false;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
@@ -213,8 +213,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
-vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {
-    auto chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {
+    auto chunk = std::make_shared<Chunk>();
     chunk->columns().reserve(column_indices.size());
     for (auto col_idx : column_indices) {
         SlotId slot_id = _param.read_cols[col_idx].slot_id;
@@ -267,8 +267,9 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     }
 }
 
-bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& conjunct_ctxs_by_slot,
-                                         const tparquet::ColumnMetaData& column_metadata) {
+bool GroupReader::_can_use_as_dict_filter_column(const SlotDescriptor* slot,
+                                                 const SlotIdExprContextsMap& conjunct_ctxs_by_slot,
+                                                 const tparquet::ColumnMetaData& column_metadata) {
     // only varchar and char type support dict filter
     if (!slot->type().is_string_type()) {
         return false;
@@ -358,47 +359,6 @@ bool GroupReader::_column_all_pages_dict_encoded(const tparquet::ColumnMetaData&
     return true;
 }
 
-Status GroupReader::_rewrite_dict_column_predicates() {
-    for (const auto& column : _dict_filter_columns) {
-        SlotId slot_id = column.slot_id;
-        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
-        std::shared_ptr<vectorized::BinaryColumn> dict_value_column = vectorized::BinaryColumn::create();
-        dict_value_chunk->append_column(dict_value_column, slot_id);
-
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_dict_filter_conjunct_ctxs[slot_id], dict_value_chunk.get()));
-        dict_value_chunk->check_or_die();
-
-        // dict column is empty after conjunct eval, file group can be skipped
-        if (dict_value_chunk->num_rows() == 0) {
-            _is_group_filtered = true;
-            return Status::OK();
-        }
-
-        // get dict codes
-        std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
-
-        // eq predicate is faster than in predicate
-        // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
-            _dict_filter_preds[slot_id] = vectorized::new_column_eq_predicate(get_type_info(kDictCodeFieldType),
-                                                                              slot_id, std::to_string(dict_codes[0]));
-        } else {
-            std::vector<std::string> str_codes;
-            str_codes.reserve(dict_codes.size());
-            for (int code : dict_codes) {
-                str_codes.emplace_back(std::to_string(code));
-            }
-            _dict_filter_preds[slot_id] =
-                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
-        }
-        _obj_pool.add(_dict_filter_preds[slot_id]);
-    }
-
-    return Status::OK();
-}
-
 void GroupReader::_init_read_chunk() {
     const auto& slots = _param.tuple_desc->slots();
     std::vector<SlotDescriptor*> read_slots;
@@ -406,21 +366,12 @@ void GroupReader::_init_read_chunk() {
         int chunk_index = column.col_idx_in_chunk;
         read_slots.emplace_back(slots[chunk_index]);
     }
-
     size_t chunk_size = _param.chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
-
-    // replace dict filter column
-    for (const auto& column : _dict_filter_columns) {
-        SlotId slot_id = column.slot_id;
-        auto dict_code_column = vectorized::ColumnHelper::create_column(
-                TypeDescriptor::from_primtive_type(kDictCodePrimitiveType), true);
-        dict_code_column->reserve(chunk_size);
-        _read_chunk->update_column(dict_code_column, slot_id);
-    }
+    _dict_filter_ctx.init_chunk(_param, &_read_chunk);
 }
 
-Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk) {
+Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk) {
     if (read_columns.empty()) {
         *row_count = 0;
         return Status::OK();
@@ -429,10 +380,11 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     size_t count = *row_count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
+        ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
         SlotId slot_id = column.slot_id;
         _column_reader_opts.context->next_row = 0;
         count = *row_count;
-        Status status = _column_readers[slot_id]->next_batch(&count, column.content_type,
+        Status status = _column_readers[slot_id]->next_batch(&count, content_type,
                                                              (*chunk)->get_column_by_slot_id(slot_id).get());
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
@@ -448,18 +400,18 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
-                                    size_t chunk_size) {
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {
         return Status::OK();
     }
 
     size_t rows_to_skip = ctx->rows_to_skip;
-    vectorized::Filter empty_filter(1, 0);
+    Filter empty_filter(1, 0);
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
+        ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
         SlotId slot_id = column.slot_id;
         _column_reader_opts.context->next_row = 0;
 
@@ -467,7 +419,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
         while (ctx->rows_to_skip > 0) {
             size_t to_read = std::min(ctx->rows_to_skip, chunk_size);
             auto temp_column = chunk->get_column_by_slot_id(slot_id)->clone_empty();
-            Status status = _column_readers[slot_id]->next_batch(&to_read, column.content_type, temp_column.get());
+            Status status = _column_readers[slot_id]->next_batch(&to_read, content_type, temp_column.get());
             if (!status.ok()) {
                 return status;
             }
@@ -478,49 +430,121 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
     return Status::OK();
 }
 
-void GroupReader::_dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter) {
-    DCHECK(!_dict_filter_preds.empty());
+void GroupReader::DictFilterContext::init(size_t column_number) {
+    _is_dict_filter_column.assign(column_number, false);
+}
 
-    auto iter = _dict_filter_preds.begin();
+void GroupReader::DictFilterContext::use_as_dict_filter_column(int col_idx, SlotId slot_id,
+                                                               const std::vector<ExprContext*>& conjunct_ctxs) {
+    _is_dict_filter_column[col_idx] = true;
+    _dict_column_indices.emplace_back(col_idx);
+    _conjunct_ctxs_by_slot[slot_id] = conjunct_ctxs;
+}
+
+Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
+        const GroupReaderParam& param, std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
+        ObjectPool* obj_pool, bool* is_group_filtered) {
+    for (int col_idx : _dict_column_indices) {
+        const auto& column = param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
+        std::shared_ptr<BinaryColumn> dict_value_column = BinaryColumn::create();
+        dict_value_chunk->append_column(dict_value_column, slot_id);
+
+        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(dict_value_column.get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get()));
+        dict_value_chunk->check_or_die();
+
+        // dict column is empty after conjunct eval, file group can be skipped
+        if (dict_value_chunk->num_rows() == 0) {
+            *is_group_filtered = true;
+            return Status::OK();
+        }
+
+        // get dict codes
+        std::vector<int32_t> dict_codes;
+        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+
+        // eq predicate is faster than in predicate
+        // TODO: improve not eq and not in
+        if (dict_codes.size() == 1) {
+            _predicates[slot_id] =
+                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0]));
+        } else {
+            std::vector<std::string> str_codes;
+            str_codes.reserve(dict_codes.size());
+            for (int code : dict_codes) {
+                str_codes.emplace_back(std::to_string(code));
+            }
+            _predicates[slot_id] = new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+        }
+        obj_pool->add(_predicates[slot_id]);
+    }
+
+    return Status::OK();
+}
+
+void GroupReader::DictFilterContext::init_chunk(const GroupReaderParam& param, ChunkPtr* chunk) {
+    // replace dict filter column
+    size_t chunk_size = param.chunk_size;
+    for (int col_idx : _dict_column_indices) {
+        const auto& column = param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        auto dict_code_column =
+                ColumnHelper::create_column(TypeDescriptor::from_primtive_type(kDictCodePrimitiveType), true);
+        dict_code_column->reserve(chunk_size);
+        (*chunk)->update_column(dict_code_column, slot_id);
+    }
+}
+
+bool GroupReader::DictFilterContext::filter_chunk(ChunkPtr* chunk, Filter* filter) {
+    if (_predicates.empty()) return false;
+
+    auto iter = _predicates.begin();
     SlotId slot_id = iter->first;
     auto pred = iter->second;
     pred->evaluate((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
-    while (++iter != _dict_filter_preds.end()) {
+    while (++iter != _predicates.end()) {
         slot_id = iter->first;
         pred = iter->second;
         pred->evaluate_and((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
     }
+    return true;
 }
 
-Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
-    const auto& slots = _param.tuple_desc->slots();
+Status GroupReader::DictFilterContext::decode_chunk(
+        const GroupReaderParam& param, std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
+        const ChunkPtr& read_chunk, ChunkPtr* chunk) {
+    const auto& slots = param.tuple_desc->slots();
 
-    for (const auto& column : _dict_filter_columns) {
-        int chunk_index = column.col_idx_in_chunk;
+    for (int col_idx = 0; col_idx < _is_dict_filter_column.size(); col_idx++) {
+        const auto& column = param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
 
-        vectorized::ColumnPtr& dict_codes = _read_chunk->get_column_by_slot_id(slot_id);
-        vectorized::ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
-        dict_values->resize(0);
+        if (_is_dict_filter_column[col_idx]) {
+            int chunk_index = column.col_idx_in_chunk;
 
-        auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
-        auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
-                codes_nullable_column->data_column());
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
+            ColumnPtr& dict_codes = read_chunk->get_column_by_slot_id(slot_id);
+            ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
+            dict_values->resize(0);
 
-        DCHECK_EQ(dict_codes->size(), dict_values->size());
-        if (slots[chunk_index]->is_nullable()) {
-            auto* nullable_codes = down_cast<vectorized::NullableColumn*>(dict_codes.get());
-            auto* nullable_values = down_cast<vectorized::NullableColumn*>(dict_values.get());
-            nullable_values->null_column_data().swap(nullable_codes->null_column_data());
-            nullable_values->set_has_null(nullable_codes->has_null());
+            auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+            auto* codes_column =
+                    ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
+            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
+
+            DCHECK_EQ(dict_codes->size(), dict_values->size());
+            if (slots[chunk_index]->is_nullable()) {
+                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
+                auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
+                nullable_values->null_column_data().swap(nullable_codes->null_column_data());
+                nullable_values->set_has_null(nullable_codes->has_null());
+            }
+        } else {
+            (*chunk)->get_column_by_slot_id(slot_id)->swap_column(*(read_chunk->get_column_by_slot_id(slot_id)));
         }
-    }
-
-    for (const auto& column : _direct_read_columns) {
-        SlotId slot_id = column.slot_id;
-        (*chunk)->get_column_by_slot_id(slot_id)->swap_column(*(_read_chunk->get_column_by_slot_id(slot_id)));
     }
     return Status::OK();
 }
+
 } // namespace starrocks::parquet

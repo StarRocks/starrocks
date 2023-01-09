@@ -28,89 +28,96 @@ set(EXEC_FILES
         ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
-        ./exec/vectorized/agg_hash_map_test.cpp
-        ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
-        ./exec/vectorized/join_hash_map_test.cpp
-        ./exec/vectorized/json_scanner_test.cpp
-        ./exec/vectorized/json_parser_test.cpp
-        ./exec/vectorized/hdfs_scanner_test.cpp
-        ./exec/vectorized/table_function_node_test.cpp
-        ./exec/vectorized/file_scan_node_test.cpp
-        ./exec/schema_columns_scanner_test.cpp
-        ./exec/tablet_info_test.cpp
-        ./exec/vectorized/analytor_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
-        ./exec/vectorized/sorting_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
-        ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/repeat_node_test.cpp
-        ./exec/vectorized/analytor_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
-        ./exec/vectorized/hdfs_scan_node_test.cpp
-        ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
-        ./exec/pipeline/pipeline_file_scan_node_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/query_cache/query_cache_test.cpp
+        ./exec/query_cache/transform_operator.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/stream/mem_state_table_test.cpp
+        ./exec/stream/stream_aggregator_test.cpp
+        ./exec/stream/stream_operators_test.cpp
+        ./exec/stream/stream_pipeline_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/agg_hash_map_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/arrow_converter_test.cpp
+        ./exec/chunks_sorter_heap_sort_test.cpp
+        ./exec/chunks_sorter_test.cpp
+        ./exec/csv_scanner_test.cpp
+        ./exec/file_scan_node_test.cpp
+        ./exec/hdfs_scanner_test.cpp
+        ./exec/hdfs_scan_node_test.cpp
+        ./exec/join_hash_map_test.cpp
+        ./exec/json_parser_test.cpp
+        ./exec/json_scanner_test.cpp
+        ./exec/parquet_scanner_test.cpp
+        ./exec/repeat_node_test.cpp
+        ./exec/sorting_test.cpp
+        ./exec/table_function_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
-        ./exprs/vectorized/arithmetic_expr_test.cpp
-        ./exprs/vectorized/arithmetic_operation_test.cpp
-        ./exprs/vectorized/array_element_expr_test.cpp
-        ./exprs/vectorized/decimal_binary_function_test.cpp
-        ./exprs/vectorized/array_expr_test.cpp
-        ./exprs/vectorized/array_functions_test.cpp
-        ./exprs/vectorized/binary_functions_test.cpp
-        ./exprs/vectorized/binary_predicate_test.cpp
-        ./exprs/vectorized/bitmap_functions_test.cpp
-        ./exprs/vectorized/case_expr_test.cpp
-        ./exprs/vectorized/cast_expr_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_decimal_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_integer_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_float_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_time_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_decimalv2_test.cpp
-        ./exprs/vectorized/coalesce_expr_test.cpp
-        ./exprs/vectorized/compound_predicate_test.cpp
-        ./exprs/vectorized/condition_expr_test.cpp
-        ./exprs/vectorized/encryption_functions_test.cpp
-        ./exprs/vectorized/function_call_expr_test.cpp
-        ./exprs/vectorized/geography_functions_test.cpp
-        ./exprs/vectorized/hash_functions_test.cpp
-        ./exprs/vectorized/hyperloglog_functions_test.cpp
-        ./exprs/vectorized/if_expr_test.cpp
-        ./exprs/vectorized/function_helper_test.cpp
-        ./exprs/vectorized/in_predicate_test.cpp
-        ./exprs/vectorized/is_null_predicate_test.cpp
-        ./exprs/vectorized/json_functions_test.cpp
-        ./exprs/vectorized/lambda_function_expr_test.cpp
-        ./exprs/vectorized/like_test.cpp
-        ./exprs/vectorized/map_element_expr_test.cpp
-        ./exprs/vectorized/map_functions_test.cpp
-        ./exprs/vectorized/math_functions_test.cpp
-        ./exprs/vectorized/null_if_expr_test.cpp
-        ./exprs/vectorized/percentile_functions_test.cpp
-        ./exprs/vectorized/string_fn_concat_test.cpp
-        ./exprs/vectorized/string_fn_locate_test.cpp
-        ./exprs/vectorized/string_fn_pad_test.cpp
-        ./exprs/vectorized/string_fn_repeat_test.cpp
-        ./exprs/vectorized/string_fn_reverse_test.cpp
-        ./exprs/vectorized/string_fn_sm3_test.cpp
-        ./exprs/vectorized/string_fn_space_test.cpp
-        ./exprs/vectorized/string_fn_substr_test.cpp
-        ./exprs/vectorized/string_fn_test.cpp
-        ./exprs/vectorized/string_fn_trim_test.cpp
-        ./exprs/vectorized/string_fn_money_format_decimal_test.cpp
-        ./exprs/vectorized/time_functions_test.cpp
-        ./exprs/vectorized/es_functions_test.cpp
-        ./exprs/vectorized/utility_functions_test.cpp
-        ./exprs/vectorized/runtime_filter_test.cpp
-        ./exprs/vectorized/subfield_expr_test.cpp
+        ./exprs/arithmetic_expr_test.cpp
+        ./exprs/arithmetic_operation_test.cpp
+        ./exprs/array_element_expr_test.cpp
+        ./exprs/decimal_binary_function_test.cpp
+        ./exprs/array_expr_test.cpp
+        ./exprs/array_functions_test.cpp
+        ./exprs/binary_functions_test.cpp
+        ./exprs/binary_predicate_test.cpp
+        ./exprs/bitmap_functions_test.cpp
+        ./exprs/case_expr_test.cpp
+        ./exprs/cast_expr_test.cpp
+        ./exprs/decimal_cast_expr_decimal_test.cpp
+        ./exprs/decimal_cast_expr_integer_test.cpp
+        ./exprs/decimal_cast_expr_float_test.cpp
+        ./exprs/decimal_cast_expr_time_test.cpp
+        ./exprs/decimal_cast_expr_decimalv2_test.cpp
+        ./exprs/coalesce_expr_test.cpp
+        ./exprs/compound_predicate_test.cpp
+        ./exprs/condition_expr_test.cpp
+        ./exprs/encryption_functions_test.cpp
+        ./exprs/function_call_expr_test.cpp
+        ./exprs/geography_functions_test.cpp
+        ./exprs/hash_functions_test.cpp
+        ./exprs/hyperloglog_functions_test.cpp
+        ./exprs/if_expr_test.cpp
+        ./exprs/function_helper_test.cpp
+        ./exprs/in_predicate_test.cpp
+        ./exprs/is_null_predicate_test.cpp
+        ./exprs/json_functions_test.cpp
+        ./exprs/lambda_function_expr_test.cpp
+        ./exprs/like_test.cpp
+        ./exprs/map_element_expr_test.cpp
+        ./exprs/map_functions_test.cpp
+        ./exprs/math_functions_test.cpp
+        ./exprs/null_if_expr_test.cpp
+        ./exprs/percentile_functions_test.cpp
+        ./exprs/string_fn_concat_test.cpp
+        ./exprs/string_fn_locate_test.cpp
+        ./exprs/string_fn_pad_test.cpp
+        ./exprs/string_fn_repeat_test.cpp
+        ./exprs/string_fn_reverse_test.cpp
+        ./exprs/string_fn_sm3_test.cpp
+        ./exprs/string_fn_space_test.cpp
+        ./exprs/string_fn_substr_test.cpp
+        ./exprs/string_fn_test.cpp
+        ./exprs/string_fn_trim_test.cpp
+        ./exprs/string_fn_money_format_decimal_test.cpp
+        ./exprs/struct_functions_test.cpp
+        ./exprs/time_functions_test.cpp
+        ./exprs/es_functions_test.cpp
+        ./exprs/utility_functions_test.cpp
+        ./exprs/runtime_filter_test.cpp
+        ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
@@ -136,8 +143,10 @@ set(EXEC_FILES
         ./formats/parquet/file_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
+        ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
+        ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./io/array_input_stream_test.cpp
@@ -151,12 +160,14 @@ set(EXEC_FILES
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
+        ./storage/delete_handler_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/kv_store_test.cpp
+        ./storage/options_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
@@ -187,12 +198,14 @@ set(EXEC_FILES
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
+        ./storage/rowset/map_column_rw_test.cpp
         ./storage/rowset/ordinal_page_index_test.cpp
         ./storage/rowset/plain_page_test.cpp
         ./storage/rowset/rle_page_test.cpp
         ./storage/rowset/segment_rewriter_test.cpp
         ./storage/rowset/segment_test.cpp
         ./storage/rowset/segment_iterator_test.cpp
+        ./storage/rowset/struct_column_rw_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
@@ -203,6 +216,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
@@ -247,12 +261,15 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
+        ./runtime/routine_load_task_executor_test.cpp
+        ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./runtime/user_function_cache_test.cpp
+        ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
@@ -278,6 +295,7 @@ set(EXEC_FILES
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
+        ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
@@ -323,10 +341,10 @@ endif ()
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
@@ -341,11 +359,6 @@ add_executable(starrocks_test ${EXEC_FILES})
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
-
-add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
-
-TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
@@ -370,16 +383,7 @@ TARGET_LINK_LIBRARIES(bytes_test
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(http/metrics_action_test)
-ADD_BE_TEST(http/http_client_test)
-
-ADD_BE_TEST(runtime/routine_load_task_executor_test)
-ADD_BE_TEST(runtime/small_file_mgr_test)
-ADD_BE_TEST(runtime/user_function_cache_test)
-
-ADD_BE_TEST(storage/delete_handler_test)
-ADD_BE_TEST(storage/options_test)
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
-# ADD_BE_TEST(exec/vectorized/sorting_test)
+# ADD_BE_TEST(exec/sorting_test)

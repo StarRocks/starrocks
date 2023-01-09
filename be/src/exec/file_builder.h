@@ -27,7 +27,7 @@ public:
     virtual ~FileBuilder() = default;
 
     // appends this chunk to the file
-    virtual Status add_chunk(vectorized::Chunk* chunk) = 0;
+    virtual Status add_chunk(Chunk* chunk) = 0;
 
     // returns the size of underlying file or stream
     virtual std::size_t file_size() = 0;

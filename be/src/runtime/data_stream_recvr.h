@@ -49,10 +49,8 @@ class Closure;
 
 namespace starrocks {
 
-namespace vectorized {
 class SortedChunksMerger;
 class CascadeChunkMerger;
-} // namespace vectorized
 
 class DataStreamMgr;
 class MemTracker;
@@ -91,8 +89,8 @@ public:
 public:
     ~DataStreamRecvr();
 
-    Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
-    Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t driver_sequence);
+    Status get_chunk(std::unique_ptr<Chunk>* chunk);
+    Status get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();
@@ -107,8 +105,8 @@ public:
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
     // input streams. Must only be called if _is_merging is true.
-    Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
-    Status get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
+    Status get_next(ChunkPtr* chunk, bool* eos);
+    Status get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     PlanNodeId dest_node_id() const { return _dest_node_id; }
@@ -184,9 +182,9 @@ private:
     // receiver and placed in _sender_queue_pool.
     std::vector<SenderQueue*> _sender_queues;
 
-    // vectorized::SortedChunksMerger merges chunks from different senders.
-    std::unique_ptr<vectorized::SortedChunksMerger> _chunks_merger;
-    std::unique_ptr<vectorized::CascadeChunkMerger> _cascade_merger;
+    // SortedChunksMerger merges chunks from different senders.
+    std::unique_ptr<SortedChunksMerger> _chunks_merger;
+    std::unique_ptr<CascadeChunkMerger> _cascade_merger;
 
     // Pool of sender queues.
     ObjectPool _sender_queue_pool;

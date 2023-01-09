@@ -34,6 +34,8 @@
 
 #include "service/internal_service.h"
 
+#include <fmt/format.h>
+
 #include <atomic>
 #include <shared_mutex>
 
@@ -656,10 +658,75 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(controller);
-    cntl->SetFailed(brpc::EINTERNAL, "Not implemented");
-    Status st = Status::NotSupported("Not implemented");
+    Status st = _submit_mv_maintenance_task(cntl);
+    if (!st.ok()) {
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+    }
     st.to_protobuf(response->mutable_status());
     return;
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller* cntl) {
+    auto ser_request = cntl->request_attachment().to_string();
+    TMVMaintenanceTasks t_request;
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
+    }
+    LOG(INFO) << "submit mv maintenance task, query_id=" << t_request.query_id
+              << ", mv_task_type:" << t_request.task_type << "db_name=" << t_request.db_name
+              << ", mv_name=" << t_request.mv_name << ", job_id=" << t_request.job_id
+              << ", task_id=" << t_request.task_id << ", signature=" << t_request.signature;
+
+    auto mv_task_type = t_request.task_type;
+    switch (mv_task_type) {
+    case MVTaskType::START_MAINTENANCE: {
+        auto start_maintenance = t_request.start_maintenance;
+        auto fragments = start_maintenance.fragments;
+        TUniqueId query_id = t_request.query_id;
+        std::vector<PromiseStatusSharedPtr> promise_statuses;
+        for (int i = 0; i < fragments.size(); ++i) {
+            PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+            _exec_env->pipeline_prepare_pool()->offer([ms, fragments, i, this] {
+                pipeline::FragmentExecutor fragment_executor;
+                auto status = fragment_executor.prepare(_exec_env, fragments[i], fragments[i]);
+                if (status.ok()) {
+                    ms->set_value(fragment_executor.execute(_exec_env));
+                } else {
+                    auto final_status = status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+                    ms->set_value(final_status);
+                }
+            });
+            promise_statuses.emplace_back(std::move(ms));
+        }
+        for (auto& promise : promise_statuses) {
+            // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+            // since they can use the shared pointer of promise and t_batch_requests.
+            RETURN_IF_ERROR(promise->get_future().get());
+        }
+        break;
+    }
+    case MVTaskType::START_EPOCH: {
+        const TUniqueId& query_id = t_request.query_id;
+        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
+        if (!existing_query_ctx) {
+            LOG(WARNING) << "start_epoch maintenance failed, query id not found:" << print_id(query_id);
+            return Status::InternalError(fmt::format("MV Job has been cancelled: {}.", print_id(query_id)));
+        }
+        break;
+    }
+    case MVTaskType::COMMIT_EPOCH: {
+        break;
+    }
+    case MVTaskType::STOP_MAINTENANCE: {
+        break;
+    }
+    default:
+        return Status::NotSupported(fmt::format("Unsupported MVTaskType: {}", mv_task_type));
+    }
+    return Status::OK();
 }
 
 template class PInternalServiceImplBase<PInternalService>;

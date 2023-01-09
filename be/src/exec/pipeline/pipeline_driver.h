@@ -45,6 +45,7 @@ class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
+using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -60,6 +61,8 @@ enum DriverState : uint32_t {
     // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
     // pending io task's completion.
     PENDING_FINISH = 9,
+    EPOCH_PENDING_FINISH = 10,
+    EPOCH_FINISH = 11
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -84,6 +87,10 @@ static inline std::string ds_to_string(DriverState ds) {
         return "INTERNAL_ERROR";
     case PENDING_FINISH:
         return "PENDING_FINISH";
+    case EPOCH_PENDING_FINISH:
+        return "EPOCH_PENDING_FINISH";
+    case EPOCH_FINISH:
+        return "EPOCH_FINISH";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -148,10 +155,12 @@ enum OperatorStage {
     PREPARED = 1,
     PRECONDITION_NOT_READY = 2,
     PROCESSING = 3,
-    FINISHING = 4,
-    FINISHED = 5,
-    CANCELLED = 6,
-    CLOSED = 7,
+    EPOCH_FINISHING = 4,
+    EPOCH_FINISHED = 5,
+    FINISHING = 6,
+    FINISHED = 7,
+    CANCELLED = 8,
+    CLOSED = 9,
 };
 
 class PipelineDriver {
@@ -159,11 +168,12 @@ class PipelineDriver {
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   int32_t driver_id)
+                   Pipeline* pipeline, int32_t driver_id)
             : _operators(operators),
 
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
+              _pipeline(pipeline),
               _source_node_id(operators[0]->get_plan_node_id()),
               _driver_id(driver_id) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -174,9 +184,10 @@ public:
     }
 
     PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
+            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
+                             driver._driver_id) {}
 
-    ~PipelineDriver() noexcept;
+    virtual ~PipelineDriver() noexcept;
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -187,7 +198,7 @@ public:
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
-    StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
+    virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -378,7 +389,11 @@ public:
 
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
-private:
+    // Whether the query can be expirable or not.
+    virtual bool is_query_never_expired() { return false; }
+    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
+
+protected:
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
@@ -405,7 +420,7 @@ private:
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
 
-    std::vector<vectorized::RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
+    std::vector<RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
     bool _wait_global_rf_ready = false;
     bool _all_global_rf_ready_or_timeout = false;
     int64_t _global_rf_wait_timeout_ns = -1;
@@ -413,6 +428,7 @@ private:
     size_t _first_unfinished{0};
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
+    Pipeline* _pipeline;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;

@@ -2,7 +2,7 @@
 
 ## Description
 
-Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
+Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
 
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../data-definition/CANCEL%20BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../data-manipulation/SHOW%20SNAPSHOT.md).
 

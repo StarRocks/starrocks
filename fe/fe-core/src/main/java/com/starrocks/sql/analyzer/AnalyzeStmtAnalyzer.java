@@ -204,7 +204,8 @@ public class AnalyzeStmtAnalyzer {
                     }
                 } else if (sampleRows > Config.histogram_max_sample_row_count) {
                     properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
-                            BigDecimal.valueOf((double) Config.histogram_max_sample_row_count / (double) totalRows)
+                            BigDecimal.valueOf((double) Config.histogram_max_sample_row_count /
+                                            (double) (totalRows == 0L ? 1L : totalRows))
                                     .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
             }

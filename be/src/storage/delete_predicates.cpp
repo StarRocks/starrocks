@@ -18,7 +18,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void DeletePredicates::add(int32_t version, ConjunctivePredicates preds) {
     // fast path.
@@ -46,4 +46,4 @@ DisjunctivePredicates DeletePredicates::get_predicates(int32_t min_version) cons
     return ret;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

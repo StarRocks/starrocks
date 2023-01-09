@@ -63,11 +63,11 @@ Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from memory scratch sink operator");
 }
 
-Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }

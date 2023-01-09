@@ -487,7 +487,7 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 }
 
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                         const std::shared_ptr<const vectorized::JoinRuntimeFilter>& shared_rf) {
+                                         const std::shared_ptr<const JoinRuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
     _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
@@ -597,6 +597,8 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -660,6 +662,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -671,6 +675,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
                         fragment_exec_state->coord_addr());
                 continue;

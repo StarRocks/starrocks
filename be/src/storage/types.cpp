@@ -40,7 +40,6 @@
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
-#include "storage/array_type_info.h"
 #include "storage/collection.h"
 #include "storage/convert_helper.h"
 #include "storage/decimal12.h"
@@ -49,7 +48,10 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
+#include "types/array_type_info.h"
 #include "types/date_value.hpp"
+#include "types/map_type_info.h"
+#include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/mysql_global.h"
@@ -102,9 +104,6 @@ int TypeInfo::cmp(const Datum& left, const Datum& right) const {
 class ScalarTypeInfo final : public TypeInfo {
 public:
     virtual ~ScalarTypeInfo() = default;
-    bool equal(const void* left, const void* right) const override { return _equal(left, right); }
-
-    int cmp(const void* left, const void* right) const override { return _cmp(left, right); }
 
     void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
 
@@ -121,7 +120,6 @@ public:
     void set_to_max(void* buf) const override { _set_to_max(buf); }
     void set_to_min(void* buf) const override { _set_to_min(buf); }
 
-    uint32_t hash_code(const void* data, uint32_t seed) const override { return _hash_code(data, seed); }
     size_t size() const override { return _size; }
 
     LogicalType type() const override { return _field_type; }
@@ -130,9 +128,6 @@ protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
 
 private:
-    bool (*_equal)(const void* left, const void* right);
-    int (*_cmp)(const void* left, const void* right);
-
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
@@ -142,8 +137,6 @@ private:
 
     void (*_set_to_max)(void* buf);
     void (*_set_to_min)(void* buf);
-
-    uint32_t (*_hash_code)(const void* data, uint32_t seed);
 
     // Datum based methods.
     int (*_datum_cmp)(const Datum& left, const Datum& right);
@@ -205,8 +198,6 @@ struct ScalarTypeInfoImplBase {
 
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::lowest()); }
 
-    static uint32_t hash_code(const void* data, uint32_t seed) { return HashUtil::hash(data, sizeof(CppType), seed); }
-
     static std::string to_string(const void* src) {
         std::stringstream stream;
         stream << unaligned_load<CppType>(src);
@@ -222,7 +213,7 @@ struct ScalarTypeInfoImplBase {
         return Status::OK();
     }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         CppType v1 = left.get<CppType>();
         CppType v2 = right.get<CppType>();
         return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
@@ -268,16 +259,13 @@ private:
 
 template <typename TypeInfoImpl>
 ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
-        : _equal(TypeInfoImpl::equal),
-          _cmp(TypeInfoImpl::cmp),
-          _shallow_copy(TypeInfoImpl::shallow_copy),
+        : _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
           _direct_copy(TypeInfoImpl::direct_copy),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
           _set_to_min(TypeInfoImpl::set_to_min),
-          _hash_code(TypeInfoImpl::hash_code),
           _datum_cmp(TypeInfoImpl::datum_cmp),
           _size(TypeInfoImpl::size),
           _field_type(TypeInfoImpl::type) {}
@@ -328,6 +316,21 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
         return type_info;
+    } else if (type == TYPE_MAP) {
+        const ColumnMetaPB& key_meta = column_meta_pb.children_columns(0);
+        TypeInfoPtr key_type_info = get_type_info(key_meta);
+
+        const ColumnMetaPB& value_meta = column_meta_pb.children_columns(1);
+        TypeInfoPtr value_type_info = get_type_info(value_meta);
+
+        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+    } else if (type == TYPE_STRUCT) {
+        std::vector<TypeInfoPtr> field_types;
+        for (int i = 0; i < column_meta_pb.children_columns_size(); ++i) {
+            auto& meta = column_meta_pb.children_columns(i);
+            field_types.emplace_back(get_type_info(meta));
+        }
+        return get_struct_type_info(std::move(field_types));
     } else {
         return get_type_info(delegate_type(type));
     }
@@ -340,6 +343,20 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
         return type_info;
+    } else if (col.type() == TYPE_MAP) {
+        const TabletColumn& key_meta = col.subcolumn(0);
+        TypeInfoPtr key_type_info = get_type_info(key_meta);
+
+        const TabletColumn& value_meta = col.subcolumn(1);
+        TypeInfoPtr value_type_info = get_type_info(value_meta);
+
+        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+    } else if (col.type() == TYPE_STRUCT) {
+        std::vector<TypeInfoPtr> field_types;
+        for (int i = 0; i < col.subcolumn_count(); ++i) {
+            field_types.emplace_back(get_type_info(col.subcolumn(i)));
+        }
+        return get_struct_type_info(std::move(field_types));
     } else {
         return get_type_info(col.type(), col.precision(), col.scale());
     }
@@ -375,7 +392,7 @@ struct ScalarTypeInfoImpl<TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<TYPE_BOO
     static void set_to_max(void* buf) { (*(bool*)buf) = true; }
     static void set_to_min(void* buf) { (*(bool*)buf) = false; }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         uint8_t v1 = left.get<uint8_t>();
         uint8_t v2 = right.get<uint8_t>();
         return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
@@ -550,7 +567,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
         return Status::InternalError("Fail to cast to largeint.");
     }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         const int128_t& v1 = left.get_int128();
         const int128_t& v2 = right.get_int128();
         return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
@@ -686,7 +703,7 @@ struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_D
         unaligned_store<CppType>(buf, v);
     }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         const DecimalV2Value& v1 = left.get_decimal();
         const DecimalV2Value& v2 = right.get_decimal();
         return (v1 < v2) ? -1 : (v1 > v2) ? 1 : 0;
@@ -730,7 +747,7 @@ struct ScalarTypeInfoImpl<TYPE_DATE_V1> : public ScalarTypeInfoImplBase<TYPE_DAT
 
         if (src_type->type() == LogicalType::TYPE_DATETIME) {
             int year, month, day, hour, minute, second, usec;
-            auto src_value = unaligned_load<vectorized::TimestampValue>(src);
+            auto src_value = unaligned_load<TimestampValue>(src);
             src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
             unaligned_store<CppType>(dest, (year << 9) + (month << 5) + day);
             return Status::OK();
@@ -779,33 +796,33 @@ struct ScalarTypeInfoImpl<TYPE_DATE_V1> : public ScalarTypeInfoImplBase<TYPE_DAT
 template <>
 struct ScalarTypeInfoImpl<TYPE_DATE> : public ScalarTypeInfoImplBase<TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
-        vectorized::DateValue date;
+        DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
             // Compatible with TYPE_DATE_V1
             date.from_string("1400-01-01", sizeof("1400-01-01") - 1);
         }
-        unaligned_store<vectorized::DateValue>(buf, date);
+        unaligned_store<DateValue>(buf, date);
         return Status::OK();
     }
 
     static std::string to_string(const void* src) {
-        auto src_val = unaligned_load<vectorized::DateValue>(src);
+        auto src_val = unaligned_load<DateValue>(src);
         return src_val.to_string();
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        auto converter = vectorized::get_type_converter(src_type->type(), TYPE_DATE);
+        auto converter = get_type_converter(src_type->type(), TYPE_DATE);
         RETURN_IF_ERROR(converter->convert(dest, src, mem_pool));
         return Status::OK();
     }
     static void set_to_max(void* buf) {
         // max is 9999 * 16 * 32 + 12 * 32 + 31;
-        unaligned_store<CppType>(buf, vectorized::date::MAX_DATE);
+        unaligned_store<CppType>(buf, date::MAX_DATE);
     }
     static void set_to_min(void* buf) {
         // min is 0 * 16 * 32 + 1 * 32 + 1;
-        unaligned_store<CppType>(buf, vectorized::date::MIN_DATE);
+        unaligned_store<CppType>(buf, date::MIN_DATE);
     }
 };
 
@@ -861,7 +878,7 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
 
         // when convert date to datetime, automatic padding zero
         if (src_type->type() == LogicalType::TYPE_DATE) {
-            auto src_value = unaligned_load<vectorized::DateValue>(src);
+            auto src_value = unaligned_load<DateValue>(src);
             int year, month, day;
             src_value.to_date(&year, &month, &day);
             unaligned_store<CppType>(dest, (year * 10000L + month * 100L + day) * 1000000);
@@ -877,44 +894,34 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
 template <>
 struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
-        auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
+        auto timestamp = unaligned_load<TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
             // Compatible with TYPE_DATETIME_V1
             timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
         }
-        unaligned_store<vectorized::TimestampValue>(buf, timestamp);
+        unaligned_store<TimestampValue>(buf, timestamp);
         return Status::OK();
     }
 
     static std::string to_string(const void* src) {
-        auto timestamp = unaligned_load<vectorized::TimestampValue>(src);
+        auto timestamp = unaligned_load<TimestampValue>(src);
         return timestamp.to_string();
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
-        vectorized::TimestampValue value;
-        auto converter = vectorized::get_type_converter(src_type->type(), TYPE_DATETIME);
+        TimestampValue value;
+        auto converter = get_type_converter(src_type->type(), TYPE_DATETIME);
         auto st = converter->convert(&value, src, mem_pool);
-        unaligned_store<vectorized::TimestampValue>(dest, value);
+        unaligned_store<TimestampValue>(dest, value);
         RETURN_IF_ERROR(st);
         return Status::OK();
     }
-    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MAX_TIMESTAMP); }
-    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MIN_TIMESTAMP); }
+    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, timestamp::MAX_TIMESTAMP); }
+    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, timestamp::MIN_TIMESTAMP); }
 };
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> {
-    static bool equal(const void* left, const void* right) {
-        auto l_slice = unaligned_load<Slice>(left);
-        auto r_slice = unaligned_load<Slice>(right);
-        return l_slice == r_slice;
-    }
-    static int cmp(const void* left, const void* right) {
-        auto l_slice = unaligned_load<Slice>(left);
-        auto r_slice = unaligned_load<Slice>(right);
-        return l_slice.compare(r_slice);
-    }
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
         if (value_len > OLAP_STRING_MAX_LENGTH) {
@@ -967,12 +974,8 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
         auto slice = unaligned_load<Slice>(buf);
         memset(slice.data, 0, slice.size);
     }
-    static uint32_t hash_code(const void* data, uint32_t seed) {
-        auto slice = unaligned_load<Slice>(data);
-        return HashUtil::hash(slice.data, slice.size, seed);
-    }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         const Slice& v1 = left.get_slice();
         const Slice& v2 = right.get_slice();
         return v1.compare(v2);
@@ -1024,7 +1027,7 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
         slice->size = 0;
     }
 
-    static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
+    static int datum_cmp(const Datum& left, const Datum& right) {
         const Slice& v1 = left.get_slice();
         const Slice& v2 = right.get_slice();
         return v1.compare(v2);

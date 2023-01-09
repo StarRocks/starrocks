@@ -7,14 +7,14 @@ Adds a specified time interval to a date.
 ## Syntax
 
 ```Haskell
-DATETIME DATE_ADD(DATETIME date,INTERVAL expr type)
+DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
 ```
 
 ## Parameters
 
-- `date`: It must be a valid date expression.
+- `date`: It must be a valid date or datetime expression.
 - `expr`: the time interval you want to add. It must be of the INT type.
-- `type`: It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
+- `type`: the unit of the time interval. It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
 
 ## Return value
 

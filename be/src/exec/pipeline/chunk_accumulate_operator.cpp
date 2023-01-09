@@ -19,12 +19,12 @@
 
 namespace starrocks::pipeline {
 
-Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _acc.push(chunk);
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> ChunkAccumulateOperator::pull_chunk(RuntimeState*) {
+StatusOr<ChunkPtr> ChunkAccumulateOperator::pull_chunk(RuntimeState*) {
     return std::move(_acc.pull());
 }
 

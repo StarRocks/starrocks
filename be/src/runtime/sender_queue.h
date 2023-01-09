@@ -28,21 +28,19 @@ class Closure;
 } // namespace google::protobuf
 
 namespace starrocks {
-using vectorized::ChunkUniquePtr;
-
 class DataStreamRecvr::SenderQueue {
 public:
     SenderQueue(DataStreamRecvr* parent_recvr) : _recvr(parent_recvr) {}
     virtual ~SenderQueue() = default;
 
     // get chunk from this sender queue, driver_sequence is only meaningful in pipeline engine
-    virtual Status get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence = -1) = 0;
+    virtual Status get_chunk(Chunk** chunk, const int32_t driver_sequence = -1) = 0;
 
     // check if data has come, work with try_get_chunk.
     virtual bool has_chunk() = 0;
 
     // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
-    virtual bool try_get_chunk(vectorized::Chunk** chunk) = 0;
+    virtual bool try_get_chunk(Chunk** chunk) = 0;
 
     // add chunks to this sender queue if this stream has not been cancelled
     virtual Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) = 0;
@@ -62,7 +60,7 @@ public:
 protected:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk, faststring* uncompressed_buffer);
 
     DataStreamRecvr* _recvr = nullptr;
 
@@ -74,11 +72,11 @@ public:
     NonPipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders);
     ~NonPipelineSenderQueue() override = default;
 
-    Status get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence = -1) override;
+    Status get_chunk(Chunk** chunk, const int32_t driver_sequence = -1) override;
 
     bool has_chunk() override;
 
-    bool try_get_chunk(vectorized::Chunk** chunk) override;
+    bool try_get_chunk(Chunk** chunk) override;
 
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
 
@@ -148,11 +146,11 @@ public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
     ~PipelineSenderQueue() override = default;
 
-    Status get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence = -1) override;
+    Status get_chunk(Chunk** chunk, const int32_t driver_sequence = -1) override;
 
     bool has_chunk() override;
 
-    bool try_get_chunk(vectorized::Chunk** chunk) override;
+    bool try_get_chunk(Chunk** chunk) override;
 
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) override;
 

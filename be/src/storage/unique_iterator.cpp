@@ -14,10 +14,10 @@
 
 #include "storage/aggregate_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunkIteratorPtr new_unique_iterator(const ChunkIteratorPtr& child) {
     return new_aggregate_iterator(child);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

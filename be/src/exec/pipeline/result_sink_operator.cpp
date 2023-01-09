@@ -37,10 +37,10 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     case TResultSinkType::STATISTIC:
-        _writer = std::make_shared<vectorized::StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     case TResultSinkType::VARIABLE:
-        _writer = std::make_shared<vectorized::VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -84,7 +84,7 @@ void ResultSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from result sink operator");
 }
 
@@ -114,7 +114,7 @@ bool ResultSinkOperator::need_input() const {
     }
 }
 
-Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     // The ResultWriter memory that sends the results is no longer recorded to the query memory.
     // There are two reason:
     // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary

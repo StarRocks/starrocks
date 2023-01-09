@@ -20,23 +20,23 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exec/vectorized/olap_scan_prepare.h"
-#include "exprs/vectorized/binary_predicate.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exec/olap_scan_prepare.h"
+#include "exprs/binary_predicate.h"
+#include "exprs/column_ref.h"
+#include "exprs/mock_vectorized_expr.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/tablet_schema.h"
-#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
     static std::unordered_map<PredicateType, TExprOpcode::type> mapping = {
@@ -398,4 +398,4 @@ INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                                                           LogicalType::TYPE_LARGEINT, LogicalType::TYPE_VARCHAR,
                                                           LogicalType::TYPE_CHAR, LogicalType::TYPE_BOOLEAN)));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

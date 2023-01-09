@@ -43,44 +43,36 @@
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exprs/vectorized/arithmetic_expr.h"
-#include "exprs/vectorized/array_element_expr.h"
-#include "exprs/vectorized/array_expr.h"
-#include "exprs/vectorized/array_map_expr.h"
-#include "exprs/vectorized/binary_predicate.h"
-#include "exprs/vectorized/case_expr.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/clone_expr.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/compound_predicate.h"
-#include "exprs/vectorized/condition_expr.h"
-#include "exprs/vectorized/dictmapping_expr.h"
-#include "exprs/vectorized/function_call_expr.h"
-#include "exprs/vectorized/in_predicate.h"
-#include "exprs/vectorized/info_func.h"
-#include "exprs/vectorized/is_null_predicate.h"
-#include "exprs/vectorized/java_function_call_expr.h"
-#include "exprs/vectorized/lambda_function.h"
-#include "exprs/vectorized/literal.h"
-#include "exprs/vectorized/map_element_expr.h"
-#include "exprs/vectorized/placeholder_ref.h"
-#include "exprs/vectorized/subfield_expr.h"
-#include "runtime/primitive_type.h"
+#include "exprs/arithmetic_expr.h"
+#include "exprs/array_element_expr.h"
+#include "exprs/array_expr.h"
+#include "exprs/array_map_expr.h"
+#include "exprs/binary_predicate.h"
+#include "exprs/case_expr.h"
+#include "exprs/cast_expr.h"
+#include "exprs/clone_expr.h"
+#include "exprs/column_ref.h"
+#include "exprs/compound_predicate.h"
+#include "exprs/condition_expr.h"
+#include "exprs/dictmapping_expr.h"
+#include "exprs/function_call_expr.h"
+#include "exprs/in_predicate.h"
+#include "exprs/info_func.h"
+#include "exprs/is_null_predicate.h"
+#include "exprs/java_function_call_expr.h"
+#include "exprs/lambda_function.h"
+#include "exprs/literal.h"
+#include "exprs/map_element_expr.h"
+#include "exprs/placeholder_ref.h"
+#include "exprs/subfield_expr.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 using std::vector;
 namespace starrocks {
-
-using vectorized::Int8Column;
-using vectorized::Int16Column;
-using vectorized::Int32Column;
-using vectorized::Int64Column;
-using vectorized::Int128Column;
-using vectorized::DoubleColumn;
-using vectorized::FloatColumn;
-using vectorized::BooleanColumn;
 
 // No children here
 Expr::Expr(const Expr& expr)
@@ -227,7 +219,10 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
                                      Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     // propagate error case
     if (*node_idx >= nodes.size()) {
-        return Status::InternalError("Failed to reconstruct expression tree from thrift.");
+        return Status::InternalError(
+                strings::Substitute("Failed to reconstruct expression tree from thrift, "
+                                    "node_idx:$0, nodes size:$1.",
+                                    *node_idx, nodes.size()));
     }
     int num_children = nodes[*node_idx].num_children;
     Expr* expr = nullptr;
@@ -242,7 +237,10 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= nodes.size()) {
-            return Status::InternalError("Failed to reconstruct expression tree from thrift.");
+            return Status::InternalError(
+                    strings::Substitute("Failed to reconstruct expression tree from thrift, "
+                                        "node_idx:$0, nodes size:$1.",
+                                        *node_idx, nodes.size()));
         }
     }
     if (parent == nullptr) {
@@ -271,20 +269,20 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::STRING_LITERAL:
     case TExprNodeType::BINARY_LITERAL:
     case TExprNodeType::NULL_LITERAL: {
-        *expr = pool->add(new vectorized::VectorizedLiteral(texpr_node));
+        *expr = pool->add(new VectorizedLiteral(texpr_node));
         break;
     }
     case TExprNodeType::COMPOUND_PRED: {
-        *expr = pool->add(vectorized::VectorizedCompoundPredicateFactory::from_thrift(texpr_node));
+        *expr = pool->add(VectorizedCompoundPredicateFactory::from_thrift(texpr_node));
         break;
     }
     case TExprNodeType::BINARY_PRED: {
-        *expr = pool->add(vectorized::VectorizedBinaryPredicateFactory::from_thrift(texpr_node));
+        *expr = pool->add(VectorizedBinaryPredicateFactory::from_thrift(texpr_node));
         break;
     }
     case TExprNodeType::ARITHMETIC_EXPR: {
         if (texpr_node.opcode != TExprOpcode::INVALID_OPCODE) {
-            *expr = pool->add(vectorized::VectorizedArithmeticExprFactory::from_thrift(texpr_node));
+            *expr = pool->add(VectorizedArithmeticExprFactory::from_thrift(texpr_node));
             break;
         } else {
             // @TODO: will call FunctionExpr, implement later
@@ -293,7 +291,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(
+            *expr = pool->add(VectorizedCastExprFactory::from_thrift(
                     pool, texpr_node, (state == nullptr) ? false : state->query_options().allow_throw_exception));
             if (*expr == nullptr) {
                 LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
@@ -315,34 +313,34 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-            *expr = pool->add(new vectorized::JavaFunctionCallExpr(texpr_node));
+            *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "if") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_expr(texpr_node));
+            *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
+            *expr = pool->add(VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "ifnull") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_if_null_expr(texpr_node));
+            *expr = pool->add(VectorizedConditionExprFactory::create_if_null_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "coalesce") {
-            *expr = pool->add(vectorized::VectorizedConditionExprFactory::create_coalesce_expr(texpr_node));
+            *expr = pool->add(VectorizedConditionExprFactory::create_coalesce_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
-            *expr = pool->add(vectorized::VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
+            *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
         } else if (texpr_node.fn.name.function_name == "array_map") {
-            *expr = pool->add(new vectorized::ArrayMapExpr(texpr_node));
+            *expr = pool->add(new ArrayMapExpr(texpr_node));
         } else {
-            *expr = pool->add(new vectorized::VectorizedFunctionCallExpr(texpr_node));
+            *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
         }
         break;
     }
     case TExprNodeType::IN_PRED: {
-        *expr = pool->add(vectorized::VectorizedInPredicateFactory::from_thrift(texpr_node));
+        *expr = pool->add(VectorizedInPredicateFactory::from_thrift(texpr_node));
         break;
     }
     case TExprNodeType::SLOT_REF: {
         if (!texpr_node.__isset.slot_ref) {
             return Status::InternalError("Slot reference not set in thrift node");
         }
-        *expr = pool->add(new vectorized::ColumnRef(texpr_node));
+        *expr = pool->add(new ColumnRef(texpr_node));
         break;
     }
     case TExprNodeType::CASE_EXPR: {
@@ -350,35 +348,35 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
             return Status::InternalError("Case expression not set in thrift node");
         }
 
-        *expr = pool->add(vectorized::VectorizedCaseExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(VectorizedCaseExprFactory::from_thrift(texpr_node));
         break;
     }
     case TExprNodeType::ARRAY_EXPR:
-        *expr = pool->add(vectorized::ArrayExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(ArrayExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::ARRAY_ELEMENT_EXPR:
-        *expr = pool->add(vectorized::ArrayElementExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(ArrayElementExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::MAP_ELEMENT_EXPR:
-        *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(MapElementExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::SUBFIELD_EXPR:
-        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
+        *expr = pool->add(SubfieldExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::INFO_FUNC:
-        *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));
+        *expr = pool->add(new VectorizedInfoFunc(texpr_node));
         break;
     case TExprNodeType::PLACEHOLDER_EXPR:
-        *expr = pool->add(new vectorized::PlaceHolderRef(texpr_node));
+        *expr = pool->add(new PlaceHolderRef(texpr_node));
         break;
     case TExprNodeType::DICT_EXPR:
-        *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
+        *expr = pool->add(new DictMappingExpr(texpr_node));
         break;
     case TExprNodeType::LAMBDA_FUNCTION_EXPR:
-        *expr = pool->add(new vectorized::LambdaFunction(texpr_node));
+        *expr = pool->add(new LambdaFunction(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:
-        *expr = pool->add(new vectorized::CloneExpr(texpr_node));
+        *expr = pool->add(new CloneExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
@@ -614,16 +612,16 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     return _constant_column;
 }
 
-StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) {
     return evaluate_checked(context, ptr);
 }
 
-vectorized::ColumnRef* Expr::get_column_ref() {
+ColumnRef* Expr::get_column_ref() {
     if (this->is_slotref()) {
-        return down_cast<vectorized::ColumnRef*>(this);
+        return down_cast<ColumnRef*>(this);
     }
     for (auto child : this->children()) {
-        vectorized::ColumnRef* ref = nullptr;
+        ColumnRef* ref = nullptr;
         if ((ref = child->get_column_ref()) != nullptr) {
             return ref;
         }

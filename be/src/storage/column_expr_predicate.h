@@ -1,8 +1,8 @@
 #include <utility>
 
+#include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 class ZoneMapDetail;
@@ -14,7 +14,7 @@ class BitmapIndexIterator;
 class ObjectPool;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Column;
 
@@ -95,4 +95,4 @@ public:
     std::string debug_string() const override;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

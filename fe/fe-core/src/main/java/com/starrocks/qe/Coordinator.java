@@ -51,7 +51,6 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
@@ -72,6 +71,7 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -95,9 +95,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -121,7 +118,7 @@ import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     // Overall status of the entire query; set to the first reported fragment error
     // status or to CANCELLED, if Cancel() is called.
@@ -133,7 +130,7 @@ public class Coordinator {
     // When `NOW()` function is in sql, we need only one now(),
     // but, we execute `NOW()` distributed.
     // So we make a query global value here to make one `now()` value in one query process.
-    private final TQueryGlobals queryGlobals = new TQueryGlobals();
+    private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
     // protects all fields below
     private final Lock lock = new ReentrantLock();
@@ -188,22 +185,16 @@ public class Coordinator {
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
         long startTime = context.getStartTime();
-        if (context.getSessionVariable().getTimeZone().equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
-        }
-        String nowString =
-                DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
+        String timezone = context.getSessionVariable().getTimeZone();
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
         this.needReport = context.getSessionVariable().isEnableProfile();
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
+                        queryOptions);
     }
 
     // Used for broker export task coordinator
@@ -231,14 +222,12 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        this.queryGlobals.setTime_zone(timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, this.descTable, queryGlobals,
+                        queryOptions);
     }
 
     // Used for broker load task coordinator
@@ -261,20 +250,18 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        this.queryGlobals.setTime_zone(timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, this.descTable, queryGlobals,
+                        queryOptions);
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
+        ConnectContext context = loadPlanner.getContext();
         this.isBlockQuery = true;
         this.jobId = loadPlanner.getLoadJobId();
-        ConnectContext context = loadPlanner.getContext();
         this.queryId = loadPlanner.getLoadId();
         this.connectContext = context;
         this.descTable = loadPlanner.getDescTable().toThrift();
@@ -298,27 +285,24 @@ public class Coordinator {
             }
         }
 
-        long startTime = loadPlanner.getStartTime();
-        String timezone = loadPlanner.getTimeZone();
-        if (timezone.equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(timezone);
-        }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(loadPlanner.getStartTime(),
+                loadPlanner.getTimeZone());
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
 
         this.needReport = true;
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
+                        queryOptions);
     }
 
     public long getJobId() {
         return jobId;
+    }
+
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
     }
 
     public TUniqueId getQueryId() {
@@ -327,10 +311,9 @@ public class Coordinator {
 
     public void setQueryId(TUniqueId queryId) {
         this.queryId = queryId;
-    }
-
-    public void setJobId(Long jobId) {
-        this.jobId = jobId;
+        if (this.coordinatorPreprocessor != null) {
+            this.coordinatorPreprocessor.setQueryId(queryId);
+        }
     }
 
     public void setQueryType(TQueryType type) {
@@ -501,11 +484,11 @@ public class Coordinator {
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
                     coordinatorPreprocessor.getAddressToBackendID().get(execBeAddr),
-                    coordinatorPreprocessor.toBrpcHost(execBeAddr),
+                    SystemInfoService.toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, coordinatorPreprocessor.toBrpcHost(execBeAddr));
+            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcHost(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -1087,7 +1070,7 @@ public class Coordinator {
                 for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
-                    probeParam.setFragment_instance_address(coordinatorPreprocessor.toBrpcHost(instance.host));
+                    probeParam.setFragment_instance_address(SystemInfoService.toBrpcHost(instance.host));
                     probeParamList.add(probeParam);
                 }
                 if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
@@ -1461,7 +1444,13 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                int timeout;
+                // connectContext can be null for broker export task coordinator
+                if (connectContext != null) {
+                    timeout = connectContext.getSessionVariable().getProfileTimeout();
+                } else {
+                    timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
+                }
                 // Waiting for other fragment instances to finish execution
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
@@ -1800,7 +1789,7 @@ public class Coordinator {
                     return false;
                 }
 
-                TNetworkAddress brpcAddress = coordinatorPreprocessor.toBrpcHost(address);
+                TNetworkAddress brpcAddress = SystemInfoService.toBrpcHost(address);
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,

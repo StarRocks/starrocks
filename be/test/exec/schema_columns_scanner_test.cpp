@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
+#include "exec/schema_scanner/schema_columns_scanner.h"
 
 #include <gtest/gtest.h>
 
@@ -20,7 +20,7 @@
 #include <tuple>
 #include <vector>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class SchemaColumnsScannerTest : public ::testing::Test {};
 
 TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
@@ -47,4 +47,4 @@ TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
         ASSERT_EQ(actual_type_string, type_string);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

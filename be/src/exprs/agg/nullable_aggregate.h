@@ -28,7 +28,7 @@
 #include "exprs/function_context.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 constexpr bool IsWindowFunctionSliceState = false;
@@ -859,4 +859,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

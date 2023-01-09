@@ -28,14 +28,9 @@
 
 namespace starrocks {
 
-class ObjectStore;
-
 struct HdfsFsHandle {
-    enum class Type { LOCAL, HDFS, S3 };
-    Type type;
     std::string namenode;
     hdfsFS hdfs_fs;
-    ObjectStore* object_store;
 };
 
 // Cache for HDFS file system

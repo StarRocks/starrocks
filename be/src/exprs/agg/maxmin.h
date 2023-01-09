@@ -23,7 +23,7 @@
 #include "gutil/casts.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
@@ -65,7 +65,7 @@ struct MinAggregateData<PT, AggregatePTGuard<PT>> {
 template <LogicalType PT>
 struct MinAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    raw::RawVector<uint8_t> buffer;
 
     bool has_value() const { return size > -1; }
 
@@ -80,17 +80,31 @@ struct MinAggregateData<PT, StringPTGuard<PT>> {
 template <LogicalType PT, typename State, typename = guard::Guard>
 struct MaxElement {
     using T = RunTimeCppType<PT>;
+    // `is_sync` indicates whether to sync detail state to genreate the
+    // final result. If retract's row is greater or equal to now maxest value,
+    // need sync details from detail state table.
+    static bool is_sync(State& state, const T& right) { return state.result <= right; }
     void operator()(State& state, const T& right) const { state.result = std::max<T>(state.result, right); }
 };
 
 template <LogicalType PT, typename State, typename = guard::Guard>
 struct MinElement {
     using T = RunTimeCppType<PT>;
+    // `is_sync` indicates whether to sync detail state to genreate the
+    // final result. If retract's row is smaller or equal to now maxest value,
+    // need sync details from detail state table.
+    static bool is_sync(State& state, const T& right) { return state.result >= right; }
     void operator()(State& state, const T& right) const { state.result = std::min<T>(state.result, right); }
 };
 
 template <LogicalType PT, typename State>
 struct MaxElement<PT, State, StringPTGuard<PT>> {
+    // `is_sync` indicates whether to sync detail state to genreate the
+    // final result. If retract's row is greater or equal to now maxest value,
+    // need sync details from detail state table.
+    static bool is_sync(State& state, const Slice& right) {
+        return !state.has_value() || state.slice().compare(right) <= 0;
+    }
     void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
             state.buffer.resize(right.size);
@@ -102,6 +116,12 @@ struct MaxElement<PT, State, StringPTGuard<PT>> {
 
 template <LogicalType PT, typename State>
 struct MinElement<PT, State, StringPTGuard<PT>> {
+    // `is_sync` indicates whether to sync detail state to genreate the
+    // final result. If retract's row is smaller or equal to now maxest value,
+    // need sync details from detail state table.
+    static bool is_sync(State& state, const Slice& right) {
+        return !state.has_value() || state.slice().compare(right) >= 0;
+    }
     void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
             state.buffer.resize(right.size);
@@ -229,4 +249,4 @@ public:
     std::string get_name() const override { return "maxmin"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

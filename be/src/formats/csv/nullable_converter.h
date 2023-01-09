@@ -16,7 +16,7 @@
 
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class NullableConverter final : public Converter {
 public:
@@ -33,4 +33,4 @@ private:
     std::unique_ptr<Converter> _base_converter;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

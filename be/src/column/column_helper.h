@@ -30,14 +30,14 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
 struct TypeDescriptor;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnHelper {
 public:
@@ -72,6 +72,12 @@ public:
      * @param col must be a boolean column
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
+
+    // Find the first non-null value
+    static size_t find_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find the non-null value in reversed order
+    static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
@@ -137,7 +143,7 @@ public:
             DCHECK(ok);
         } else {
             // 2. If src is constant and non-nullable, copy and unfold the constant column.
-            auto* const_column = as_raw_column<vectorized::ConstColumn>(src_column);
+            auto* const_column = as_raw_column<ConstColumn>(src_column);
             // Note: we must create a new column every time here,
             // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
             dst_column->append(*const_column->data_column(), 0, 1);
@@ -415,7 +421,7 @@ public:
                     // the index for vgetq_lane_u8 should be a literal integer
                     // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
                     // in ASAN/DEBUG
-#ifndef NDEBUG
+#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER)
                     if (vgetq_lane_u8(filter, i)) {
 #else
                     if (f_data[i]) {
@@ -487,8 +493,8 @@ struct ChunkSlice {
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    vectorized::ChunkPtr cutoff(size_t required_rows);
-    void reset(vectorized::ChunkUniquePtr input);
+    ChunkPtr cutoff(size_t required_rows);
+    void reset(ChunkUniquePtr input);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

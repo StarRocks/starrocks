@@ -22,7 +22,7 @@
 #include "column/datum.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // VectorizedSchema with 3 columns: INT, VARCHAR, INT.
 class VectorIterator final : public ChunkIterator {
@@ -130,4 +130,4 @@ TEST_F(ProjectionIteratorTest, all) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

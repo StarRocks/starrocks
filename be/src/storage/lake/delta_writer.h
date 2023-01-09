@@ -23,11 +23,8 @@
 namespace starrocks {
 class MemTracker;
 class SlotDescriptor;
-} // namespace starrocks
-
-namespace starrocks::vectorized {
 class Chunk;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -35,7 +32,7 @@ class DeltaWriterImpl;
 class TabletWriter;
 
 class DeltaWriter {
-    using Chunk = starrocks::vectorized::Chunk;
+    using Chunk = starrocks::Chunk;
 
 public:
     using Ptr = std::unique_ptr<DeltaWriter>;

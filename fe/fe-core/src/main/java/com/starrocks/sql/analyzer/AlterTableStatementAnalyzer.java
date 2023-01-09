@@ -55,7 +55,6 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
-import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
@@ -112,14 +111,14 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-            @CheckForNull
             Map<String, String> properties = clause.getProperties();
             if (properties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
             }
 
             if (properties.size() != 1
-                    && !TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)) {
+                    && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
+                    || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only set one table property at a time");
             }
 
@@ -189,6 +188,38 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
                                     " must be bool type(false/true)");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)) {
+                    String binlogEnable = properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE);
+                    if (!(binlogEnable.equals("false") || binlogEnable.equals("true"))) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE +
+                                        " must be true of false");
+                    }
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)) {
+                        try {
+                            Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_TTL));
+                        } catch (NumberFormatException e) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_TTL +
+                                            " must be long");
+                        }
+                    }
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+                        try {
+                            Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+                        } catch (NumberFormatException e) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE +
+                                            " must be long");
+                        }
+                    }
                 }
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);

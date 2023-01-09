@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/gen_cpp")
 
 set (GEN_CPP_DIR ${GENSRC_DIR}/gen_cpp)
 set(SRC_FILES
+    ${SRC_DIR}/gen_cpp/thrift_types_customize_impl.cpp
     ${GEN_CPP_DIR}/AgentService_constants.cpp
     ${GEN_CPP_DIR}/AgentService_types.cpp
     ${GEN_CPP_DIR}/BackendService_constants.cpp
@@ -91,6 +92,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_constants.cpp
     ${GEN_CPP_DIR}/version.cpp
+    ${GEN_CPP_DIR}/CloudConfiguration_constants.cpp
+    ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
 )
 
 # keep everything in one library, the object files reference

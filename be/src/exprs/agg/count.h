@@ -18,7 +18,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct AggregateCountWindowFunctionState {
     // The following field are only used in "update_state_removable_cumulatively"
@@ -46,6 +46,13 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         ++this->data(state).count;
+    }
+
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        --this->data(state).count;
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
@@ -343,4 +350,4 @@ public:
     std::string get_name() const override { return "count_nullable"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

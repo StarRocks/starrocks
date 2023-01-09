@@ -24,7 +24,7 @@
 #include "storage/txn_manager.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Process push command, the main logical is as follows:
 //    a. related tablets not exist:
@@ -298,7 +298,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // read data from broker and write into Rowset of cur_tablet
         VLOG(3) << "start to convert etl file to delta.";
-        auto schema = ChunkHelper::convert_schema_to_format_v2(cur_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(cur_tablet->tablet_schema());
         ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
         while (!reader->eof()) {
             st = reader->next_chunk(&chunk);
@@ -338,4 +338,4 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
              << ", processed_rows" << num_rows;
     return st;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

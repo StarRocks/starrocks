@@ -19,7 +19,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class DatetimeConverterTest : public ::testing::Test {
 public:
@@ -101,4 +101,4 @@ TEST_F(DatetimeConverterTest, test_write_string) {
     ASSERT_EQ("1999-01-01 10:09:082000-11-20 10:09:08\"1999-01-01 10:09:08\"\"2000-11-20 10:09:08\"", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

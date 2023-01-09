@@ -54,9 +54,7 @@ class TypeInfo;
 class BlockCompressionCodec;
 class WritableFile;
 
-namespace vectorized {
 class Column;
-} // namespace vectorized
 
 struct ColumnWriterOptions {
     // input and output parameter:
@@ -77,7 +75,7 @@ struct ColumnWriterOptions {
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    vectorized::GlobalDictMap* global_dict = nullptr;
+    GlobalDictMap* global_dict = nullptr;
 };
 
 class BitmapIndexWriter;
@@ -101,9 +99,7 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status append(const vectorized::Column& column) = 0;
-
-    virtual Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) = 0;
+    virtual Status append(const Column& column) = 0;
 
     virtual Status finish_current_page() = 0;
 
@@ -155,15 +151,10 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override;
-
-    // Write offset data, it's only used in ArrayColumn
-    Status append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+    Status append(const Column& column) override;
 
     // Write offset column, it's only used in ArrayColumn
-    Status append_array_offsets(const vectorized::Column& column);
+    Status append_array_offsets(const Column& column);
 
     // rebuild char/varchar encoding when _page_builder is empty
     Status set_encoding(const EncodingTypePB& encoding);
@@ -220,6 +211,8 @@ private:
         _data_size += 20;
     }
 
+    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+
     Status _write_data_page(Page* page);
 
     ColumnWriterOptions _opts;
@@ -257,46 +250,6 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
-};
-
-class ArrayColumnWriter final : public ColumnWriter {
-public:
-    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                               std::unique_ptr<ScalarColumnWriter> null_writer,
-                               std::unique_ptr<ScalarColumnWriter> offset_writer,
-                               std::unique_ptr<ColumnWriter> element_writer);
-    ~ArrayColumnWriter() override = default;
-
-    Status init() override;
-
-    Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) override;
-
-    uint64_t estimate_buffer_size() override;
-
-    Status finish() override;
-    Status write_data() override;
-    Status write_ordinal_index() override;
-
-    Status finish_current_page() override;
-
-    Status write_zone_map() override { return Status::OK(); }
-
-    Status write_bitmap_index() override { return Status::OK(); }
-
-    Status write_bloom_filter_index() override { return Status::OK(); }
-
-    ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
-
-    uint64_t total_mem_footprint() const override;
-
-private:
-    ColumnWriterOptions _opts;
-
-    std::unique_ptr<ScalarColumnWriter> _null_writer;
-    std::unique_ptr<ScalarColumnWriter> _array_size_writer;
-    std::unique_ptr<ColumnWriter> _element_writer;
 };
 
 } // namespace starrocks

@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -123,6 +124,11 @@ public class ReportHandler extends Daemon {
         RESOURCE_GROUP_REPORT,
         RESOURCE_USAGE_REPORT
     }
+
+    /**
+     * If the time of report handling exceeds this limit, we will log it.
+     */
+    private static final long MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS = 3000;
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
@@ -254,7 +260,7 @@ public class ReportHandler extends Daemon {
             return result;
         }
 
-        LOG.info("receive report from be {}. type: {}, current queue size: {}",
+        LOG.debug("report received from be {}. type: {}, current queue size: {}",
                 backend.getId(), reportType, reportQueue.size());
         return result;
     }
@@ -414,6 +420,9 @@ public class ReportHandler extends Daemon {
         // 11. send set tablet enable persistent index to be
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
 
+        // 12. send set table binlog config to be
+        handleSetTabletBinlogConfig(backendId, backendTablets);
+
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
@@ -421,12 +430,14 @@ public class ReportHandler extends Daemon {
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
-        long end = System.currentTimeMillis();
-        LOG.info("tablet report from backend[{}] cost: {} ms", backendId, (end - start));
+        long cost = System.currentTimeMillis() - start;
+        if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
+            LOG.info("tablet report from backend[{}] cost: {} ms", backendId, cost);
+        }
     }
 
     private static void taskReport(long backendId, Map<TTaskType, Set<Long>> runningTasks) {
-        LOG.info("begin to handle task report from backend {}", backendId);
+        LOG.debug("begin to handle task report from backend {}", backendId);
         long start = System.currentTimeMillis();
 
         if (LOG.isDebugEnabled()) {
@@ -456,19 +467,22 @@ public class ReportHandler extends Daemon {
             if (task.shouldResend(taskReportTime)) {
                 batchTask.addTask(task);
             }
-
         }
 
         LOG.debug("get {} diff task(s) to resend", batchTask.getTaskNum());
         if (batchTask.getTaskNum() > 0) {
             AgentTaskExecutor.submit(batchTask);
         }
-        LOG.info("finished to handle task report from backend {}, diff task num: {}. cost: {} ms",
-                backendId, batchTask.getTaskNum(), (System.currentTimeMillis() - start));
+
+        long cost = System.currentTimeMillis() - start;
+        if (batchTask.getTaskNum() != 0 || cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
+            LOG.info("finished to handle task report from backend {}, diff task num: {}. cost: {} ms",
+                    backendId, batchTask.getTaskNum(), cost);
+        }
     }
 
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
-        LOG.info("begin to handle disk report from backend {}", backendId);
+        LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
@@ -477,8 +491,11 @@ public class ReportHandler extends Daemon {
         }
 
         backend.updateDisks(backendDisks);
-        LOG.info("finished to handle disk report from backend {}, cost: {} ms",
-                backendId, (System.currentTimeMillis() - start));
+        long cost = System.currentTimeMillis() - start;
+        if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
+            LOG.info("finished to handle disk report from backend {}, cost: {} ms",
+                    backendId, cost);
+        }
     }
 
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
@@ -833,6 +850,7 @@ public class ReportHandler extends Daemon {
             AgentTaskExecutor.submit(createReplicaBatchTask);
         }
     }
+
     private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
                                            long tabletId, int schemaHash, String reason, boolean force) {
         DropReplicaTask task =
@@ -864,7 +882,9 @@ public class ReportHandler extends Daemon {
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
                         -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
-                invertedIndex.eraseTabletForceDelete(tabletId);
+                if (!FeConstants.runningUnitTest) {
+                    invertedIndex.eraseTabletForceDelete(tabletId);
+                }
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;
@@ -923,8 +943,10 @@ public class ReportHandler extends Daemon {
         } // end for backendTabletIds
         AgentTaskExecutor.submit(batchTask);
 
-        LOG.info("delete {} tablet(s) from backend[{}]", deleteFromBackendCounter, backendId);
-        LOG.info("add {} replica(s) to meta. backend[{}]", addToMetaCounter, backendId);
+        if (deleteFromBackendCounter != 0 || addToMetaCounter != 0) {
+            LOG.info("delete {} tablet(s), add {} replica(s) to meta, backend[{}]",
+                    deleteFromBackendCounter, addToMetaCounter, backendId);
+        }
     }
 
     // replica is used and no version missing
@@ -1100,7 +1122,9 @@ public class ReportHandler extends Daemon {
     }
 
     private static void handleSetTabletPartitionId(long backendId, Set<Pair<Long, Integer>> tabletWithoutPartitionId) {
-        LOG.info("find [{}] tablets without partition id, try to set them", tabletWithoutPartitionId.size());
+        if (!tabletWithoutPartitionId.isEmpty()) {
+            LOG.info("find [{}] tablets without partition id, try to set them", tabletWithoutPartitionId.size());
+        }
         if (tabletWithoutPartitionId.size() < 1) {
             return;
         }
@@ -1153,9 +1177,9 @@ public class ReportHandler extends Daemon {
             }
         }
 
-        LOG.info("find [{}] tablets need set in memory meta", tabletToInMemory.size());
-        // When report, needn't synchronous
+        // When reported, needn't synchronous
         if (!tabletToInMemory.isEmpty()) {
+            LOG.info("find [{}] tablet(s) which need to be set with in-memory state", tabletToInMemory.size());
             AgentBatchTask batchTask = new AgentBatchTask();
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory,
                     TTabletMetaType.INMEMORY);
@@ -1166,6 +1190,10 @@ public class ReportHandler extends Daemon {
 
     public static void testHandleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
+    public static void testHandleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletBinlogConfig(backendId, backendTablets);
     }
 
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
@@ -1204,8 +1232,9 @@ public class ReportHandler extends Daemon {
             }
         }
 
-        LOG.info("find [{}] tablets need set enable persistent index meta", tabletToEnablePersistentIndex.size());
         if (!tabletToEnablePersistentIndex.isEmpty()) {
+            LOG.info("find [{}] tablet(s) which need to be set with persistent index enabled",
+                    tabletToEnablePersistentIndex.size());
             AgentBatchTask batchTask = new AgentBatchTask();
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
                     TTabletMetaType.ENABLE_PERSISTENT_INDEX);
@@ -1213,6 +1242,73 @@ public class ReportHandler extends Daemon {
             if (FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);
             }
+        }
+    }
+
+    private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetBinlog_config_version()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                long beBinlogConfigVersion = tabletInfo.binlog_config_version;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+
+                boolean needToCheck = false;
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                try {
+                    if (olapTable == null) {
+                        continue;
+                    }
+
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    // backward compatible
+                    if (binlogConfig == null) {
+                        continue;
+                    }
+                    Long feBinlogConfigVersion = binlogConfig.getVersion();
+                    if (beBinlogConfigVersion < feBinlogConfigVersion) {
+                        tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
+                                olapTable.getCurBinlogConfig()));
+                    } else if (beBinlogConfigVersion == feBinlogConfigVersion) {
+                        if (olapTable.enableBinlog() && olapTable.getBinlogAvailableVersion().size() == 0) {
+                            // not to check here is that the function may need to get the write db lock
+                            needToCheck = true;
+                        }
+                    } else {
+                        LOG.warn("table {} binlog config version of tabletId: {}, BeId: {}, is {} " +
+                                        "greater than version of FE, which is {}", olapTable.getName(), tabletId, backendId,
+                                beBinlogConfigVersion, feBinlogConfigVersion);
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+
+                if (needToCheck) {
+                    GlobalStateMgr.getCurrentState().getBinlogManager().checkAndSetBinlogAvailableVersion(db,
+                            olapTable, tabletId, backendId);
+                }
+            }
+        }
+
+        LOG.info("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
+        if (!tabletToBinlogConfig.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig);
+            batchTask.addTask(task);
+            AgentTaskExecutor.submit(batchTask);
         }
     }
 

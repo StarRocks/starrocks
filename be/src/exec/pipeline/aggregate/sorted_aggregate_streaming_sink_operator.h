@@ -16,8 +16,8 @@
 
 #include <memory>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 // TODO: implements cache-relation method
@@ -36,8 +36,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;

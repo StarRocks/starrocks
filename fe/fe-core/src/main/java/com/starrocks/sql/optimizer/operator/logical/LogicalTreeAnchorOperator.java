@@ -18,9 +18,12 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+
+import java.util.List;
 
 /*
  * For rewrite task to anchor all tree
@@ -33,6 +36,11 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         return null;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return RowOutputInfo.createEmptyDescriptor();
     }
 
     @Override

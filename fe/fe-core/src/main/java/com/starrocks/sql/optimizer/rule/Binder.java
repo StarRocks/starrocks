@@ -132,9 +132,7 @@ public class Binder {
             groupExpressionIndex++;
         }
 
-        OptExpression result = new OptExpression(groupExpression);
-        result.getInputs().addAll(resultInputs);
-        return result;
+        return new OptExpression(groupExpression, resultInputs);
     }
 
     private void trace() {

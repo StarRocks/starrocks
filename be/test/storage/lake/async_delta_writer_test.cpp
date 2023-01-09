@@ -43,10 +43,10 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
-using VSchema = starrocks::vectorized::VectorizedSchema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class AsyncDeltaWriterTest : public testing::Test {
 public:
@@ -148,7 +148,6 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }

@@ -26,8 +26,6 @@ class ExprContext;
 class SlotDescriptor;
 class RuntimeState;
 
-namespace vectorized {
-
 class ColumnPredicate;
 
 class PredicateParser {
@@ -46,9 +44,10 @@ public:
     StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
                                               ExprContext* expr_ctx) const;
 
+    uint32_t column_id(const SlotDescriptor& slot_desc);
+
 private:
     const TabletSchema& _schema;
 };
 
-} // namespace vectorized
 } // namespace starrocks

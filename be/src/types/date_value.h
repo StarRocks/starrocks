@@ -22,7 +22,7 @@
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class TimestampValue;
 
 /**
@@ -144,11 +144,11 @@ inline std::ostream& operator<<(std::ostream& os, const DateValue& value) {
     os << value.to_string();
     return os;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace std {
 template <>
-struct hash<starrocks::vectorized::DateValue> {
-    size_t operator()(const starrocks::vectorized::DateValue& v) const { return std::hash<int32_t>()(v._julian); }
+struct hash<starrocks::DateValue> {
+    size_t operator()(const starrocks::DateValue& v) const { return std::hash<int32_t>()(v._julian); }
 };
 } // namespace std

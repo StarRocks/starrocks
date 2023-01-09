@@ -58,10 +58,10 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
-    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
-                                    output_rs_writer->version(), schema);
-    vectorized::TabletReaderParams reader_params;
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
+                        schema);
+    TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
@@ -114,8 +114,8 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     return Status::OK();
 }
 
-StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, vectorized::TabletReader& reader,
-                                                         const vectorized::VectorizedSchema& schema,
+StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, TabletReader& reader,
+                                                         const VectorizedSchema& schema,
                                                          RowsetWriter* output_rs_writer) {
     TRACE("[Compaction] start to compact data");
     auto status = Status::OK();

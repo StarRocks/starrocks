@@ -34,8 +34,8 @@ namespace starrocks {
 // `next_dict_codes(size_t*, Column*)`.
 class DictCodeColumnIterator final : public ColumnIterator {
 public:
-    using Column = starrocks::vectorized::Column;
-    using ColumnPredicate = starrocks::vectorized::ColumnPredicate;
+    using Column = starrocks::Column;
+    using ColumnPredicate = starrocks::ColumnPredicate;
     // does not take the ownership of |iter|.
     DictCodeColumnIterator(ColumnId cid, ColumnIterator* iter) : _cid(cid), _col_iter(iter) {}
 
@@ -47,11 +47,9 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
-        return _col_iter->next_dict_codes(range, dst);
-    }
+    Status next_batch(const SparseRange& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         return _col_iter->fetch_values_by_rowid(rowids, size, values);
     }
 
@@ -65,15 +63,14 @@ public:
 
     int dict_lookup(const Slice& word) override { return _col_iter->dict_lookup(word); }
 
-    Status next_dict_codes(size_t* n, vectorized::Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
+    Status next_dict_codes(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return _col_iter->decode_dict_codes(codes, size, words);
     }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* row_ranges) override {
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
@@ -86,10 +83,10 @@ private:
 // used in global dict optimize
 class GlobalDictCodeColumnIterator final : public ColumnIterator {
 public:
-    using Column = starrocks::vectorized::Column;
-    using ColumnPredicate = starrocks::vectorized::ColumnPredicate;
-    using GlobalDictMap = starrocks::vectorized::GlobalDictMap;
-    using LowCardDictColumn = starrocks::vectorized::LowCardDictColumn;
+    using Column = starrocks::Column;
+    using ColumnPredicate = starrocks::ColumnPredicate;
+    using GlobalDictMap = starrocks::GlobalDictMap;
+    using LowCardDictColumn = starrocks::LowCardDictColumn;
 
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data) {}
@@ -102,11 +99,9 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(const vectorized::SparseRange& range, Column* dst) override {
-        return _col_iter->next_dict_codes(range, dst);
-    }
+    Status next_batch(const SparseRange& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         if (_local_dict_code_col == nullptr) {
             _local_dict_code_col = _new_local_dict_col(values->is_nullable());
         }
@@ -129,19 +124,18 @@ public:
     // we need return local dict code
     int dict_lookup(const Slice& word) override { return _col_iter->dict_lookup(word); }
 
-    Status next_dict_codes(size_t* n, vectorized::Column* dst) override {
+    Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("GlobalDictCodeColumnIterator does not support next_dict_codes");
     }
 
-    Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) override;
+    Status decode_dict_codes(const Column& codes, Column* words) override;
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return Status::NotSupported("unsupport decode_dict_codes in GlobalDictCodeColumnIterator");
     }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* row_ranges) override {
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
@@ -150,7 +144,7 @@ public:
 
 private:
     // create a new empty local dict column
-    vectorized::ColumnPtr _new_local_dict_col(bool nullable);
+    ColumnPtr _new_local_dict_col(bool nullable);
     // swap null column between src and dst column
     void _swap_null_columns(Column* src, Column* dst);
 
@@ -160,7 +154,7 @@ private:
     // _local_to_global[-1] is accessable
     int16_t* _local_to_global;
 
-    vectorized::ColumnPtr _local_dict_code_col;
+    ColumnPtr _local_dict_code_col;
 };
 
 } // namespace starrocks

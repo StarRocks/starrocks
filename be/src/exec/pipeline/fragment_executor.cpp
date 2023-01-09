@@ -17,11 +17,14 @@
 #include <unordered_map>
 
 #include "common/config.h"
+#include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/olap_scan_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -33,10 +36,9 @@
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
-#include "exec/vectorized/cross_join_node.h"
-#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -86,24 +88,6 @@ const TDataSink& UnifiedExecPlanFragmentParams::output_sink() const {
         return _unique_request.fragment.output_sink;
     }
     return _common_request.fragment.output_sink;
-}
-
-/// Profile methods.
-static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
-    runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
-}
-
-static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
-    pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
-    COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
-    auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
-    COUNTER_SET(total_dop_counter, dop_counter->value());
-    auto& operators = driver->operators();
-    for (int32_t i = operators.size() - 1; i >= 0; --i) {
-        auto& curr_op = operators[i];
-        driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
-    }
 }
 
 /// FragmentExecutor.
@@ -159,35 +143,40 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& is_stream_pipeline = request.is_stream_pipeline();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
+              << " fragment_instance_id=" << print_id(fragment_instance_id)
+              << " is_stream_pipeline=" << is_stream_pipeline << " backend_num=" << request.backend_num();
 
     return Status::OK();
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
-    // wg is always non-nullable, when request.enable_resource_group is true.
-    WorkGroupPtr wg = nullptr;
-    if (request.common().__isset.enable_resource_group && request.common().enable_resource_group) {
-        _fragment_ctx->set_enable_resource_group();
-        if (request.common().__isset.workgroup && request.common().workgroup.id != WorkGroup::DEFAULT_WG_ID) {
-            wg = std::make_shared<WorkGroup>(request.common().workgroup);
-            wg = WorkGroupManager::instance()->add_workgroup(wg);
-        } else {
-            wg = WorkGroupManager::instance()->get_default_workgroup();
-        }
-        DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
-        _wg = wg;
+    bool enable_resource_group =
+            request.common().__isset.enable_resource_group && request.common().enable_resource_group;
+    if (!enable_resource_group) {
+        return Status::OK();
     }
-    DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
+
+    WorkGroupPtr wg = nullptr;
+    if (request.common().__isset.workgroup && request.common().workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+        wg = std::make_shared<WorkGroup>(request.common().workgroup);
+        wg = WorkGroupManager::instance()->add_workgroup(wg);
+    } else {
+        wg = WorkGroupManager::instance()->get_default_workgroup();
+    }
+    DCHECK(wg != nullptr);
+    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
+    _fragment_ctx->set_workgroup(wg);
+    _wg = wg;
 
     return Status::OK();
 }
@@ -206,6 +195,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
+    runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    runtime_state->set_query_ctx(_query_ctx);
 
     if (wg != nullptr && wg->use_big_query_mem_limit()) {
         _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
@@ -225,7 +216,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
-    runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
     if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
@@ -306,7 +296,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                                                 : TTabletInternalParallelMode::type::AUTO;
 
     // Set up plan
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
+    _fragment_ctx->move_tplan(*const_cast<TPlan*>(&fragment.plan));
+    RETURN_IF_ERROR(
+            ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
@@ -482,7 +474,6 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
@@ -515,81 +506,27 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
                                                          fragment.output_exprs));
     }
+    _fragment_ctx->set_data_sink(std::move(datasink));
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
-    size_t driver_id = 0;
+    // Set morsel_queue_factory to pipeline.
     for (const auto& pipeline : pipelines) {
-        // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
-        const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
-        VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
-                 << " fragment_instance_id=" << print_id(fragment_instance_id);
-
-        // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
-        // at present, only OlapScanOperator need a MorselQueue attached.
-        setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-            // DOP of OlapScanPrepareOperator is 1 (shared scan)
-            // or equal to DOP of OlapScanOperator (morsel_queue_factory->size()).
-            DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
-            for (size_t i = 0; i < cur_pipeline_dop; ++i) {
-                auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
-                                                                    _fragment_ctx.get(), driver_id++);
-                driver->set_morsel_queue(morsel_queue_factory->create(i));
-                if (auto* scan_operator = driver->source_scan_operator()) {
-                    scan_operator->set_workgroup(_wg);
-                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
-                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        if (_wg != nullptr) {
-                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
-                        } else {
-                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_without_workgroup());
-                        }
-                    } else {
-                        if (_wg != nullptr) {
-                            scan_operator->set_scan_executor(exec_env->scan_executor_with_workgroup());
-                        } else {
-                            scan_operator->set_scan_executor(exec_env->scan_executor_without_workgroup());
-                        }
-                    }
-                }
-
-                setup_profile_hierarchy(pipeline, driver);
-                drivers.emplace_back(std::move(driver));
-            }
-        } else {
-            for (size_t i = 0; i < cur_pipeline_dop; ++i) {
-                auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
-                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
-                                                                    _fragment_ctx.get(), driver_id++);
-                setup_profile_hierarchy(pipeline, driver);
-                drivers.emplace_back(std::move(driver));
-            }
         }
     }
-    // The pipeline created later should be placed in the front
-    runtime_state->runtime_profile()->reverse_childs();
-    _fragment_ctx->set_drivers(std::move(drivers));
-    _query_ctx->query_trace()->register_drivers(fragment_instance_id, _fragment_ctx->drivers());
+
+    for (const auto& pipeline : pipelines) {
+        pipeline->instantiate_drivers(runtime_state);
+    }
 
     // Acquire driver token to avoid overload
-    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
-    if (maybe_driver_token.ok()) {
-        _fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
-    } else {
-        return maybe_driver_token.status();
-    }
-
-    if (_wg != nullptr) {
-        for (auto& driver : _fragment_ctx->drivers()) {
-            driver->set_workgroup(_wg);
-        }
-    }
+    ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    _fragment_ctx->set_driver_token(std::move(driver_token));
 
     return Status::OK();
 }
@@ -653,17 +590,17 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         }
     });
 
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
-    }
+    RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     prepare_success = true;
 
     auto* executor =
             _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        DCHECK(!_fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
+    _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
+        DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
         executor->submit(driver.get());
-    }
+        return Status::OK();
+    });
 
     return Status::OK();
 }
@@ -675,10 +612,7 @@ void FragmentExecutor::_fail_cleanup() {
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
-        if (_query_ctx->count_down_fragments()) {
-            auto query_id = _query_ctx->query_id();
-            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
-        }
+        _query_ctx->count_down_fragments();
     }
 }
 
@@ -700,7 +634,7 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     }
 
     std::shared_ptr<SinkBuffer> sink_buffer =
-            std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
+            std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge);
 
     auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),

@@ -25,7 +25,7 @@
 #include "column/vectorized_fwd.h"
 #include "runtime/decimalv3.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 ColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, const std::string& prefix) {
@@ -99,4 +99,4 @@ TEST(DecimalV3ColumnTest, test_xor_checksum_decimal128p27s10) {
     ASSERT_EQ(checksum, expected_checksum);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -25,7 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class PushHandlerTest : public testing::Test {
 public:
@@ -357,4 +357,4 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
 
     reader.close();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

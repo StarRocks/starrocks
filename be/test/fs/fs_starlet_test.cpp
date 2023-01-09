@@ -42,10 +42,12 @@ public:
         fs_info->set_fs_type(staros::FileStoreType::S3);
         auto s3_fs_info = fs_info->mutable_s3_fs_info();
         s3_fs_info->set_bucket("starrocks-test-bucket");
-        s3_fs_info->set_access_key("5LXNPOQY3KB1LH4X4UQ6");
-        s3_fs_info->set_access_key_secret("EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb");
         s3_fs_info->set_endpoint("172.26.92.205:39000");
         s3_fs_info->set_region("us-east-1");
+        auto credential = s3_fs_info->mutable_credential();
+        auto simple_credential = credential->mutable_simple_credential();
+        simple_credential->set_access_key("5LXNPOQY3KB1LH4X4UQ6");
+        simple_credential->set_access_key_secret("EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb");
         // set full path
         shard_info.path_info.set_full_path(absl::StrFormat("s3://%s/%d/", s3_fs_info->bucket(), time(NULL)));
 

@@ -1007,10 +1007,12 @@ public class MaterializedViewHandler extends AlterHandler {
             if (alterJob.getDbId() != db.getId()) {
                 continue;
             }
-            if (ctx != null) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
-                    continue;
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (ctx != null) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
+                        continue;
+                    }
                 }
             }
             alterJob.getInfo(rollupJobInfos);

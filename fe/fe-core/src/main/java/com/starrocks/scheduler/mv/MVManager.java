@@ -28,6 +28,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochTask;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -87,6 +88,17 @@ public class MVManager {
         } catch (EOFException ignored) {
         }
         return checksum;
+    }
+
+    public void replay(MVMaintenanceJob job) throws IOException {
+        Preconditions.checkState(jobMap.isEmpty());
+
+        try {
+            jobMap.put(job.getView().getMvId(), job);
+            LOG.info("replay MV maintenance jobs: {}", job);
+        } catch (Exception ignored) {
+            LOG.warn("Replay MV maintenannce job failed: {}", job);
+        }
     }
 
     /**
@@ -178,12 +190,27 @@ public class MVManager {
      * Refresh the MV
      */
     public void onTxnPublish(MaterializedView view) {
+        LOG.info("onTxnPublish: {}", view);
         MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
         job.onTransactionPublish();
     }
 
     public void onReportEpoch(TMVMaintenanceTasks request) {
-        throw UnsupportedException.unsupportedException("TODO: implement reportEpoch");
+        Preconditions.checkArgument(request.isSetDb_id(), "required");
+        Preconditions.checkArgument(request.isSetMv_id(), "required");
+        Preconditions.checkArgument(request.isSetTask_id(), "required");
+        Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
+
+        long dbId = request.getDb_id();
+        long tableId = request.getMv_id();
+        long taskId = request.getTask_id();
+
+        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(new MvId(dbId, tableId)));
+        MVMaintenanceTask task = job.getTask(taskId);
+        TMVReportEpochTask report = request.getReport_epoch();
+        task.updateEpochState(report);
+
+        // TODO(murphy) trigger the epoch commit in report event
     }
 
     /**

@@ -22,7 +22,7 @@ The vectorized execution engine also makes full use of SIMD instructions. This e
 
 In addition to operator vectorization, StarRocks has implemented other optimizations for the query engine. For example, StarRocks uses the Operation on Encoded Data technology to directly execute operators on encoded strings, without the need for decoding. This noticeably reduces SQL complexity and increases the query speed by more than 2 times.
 
-## Coste-based optimizer
+## Cost-based optimizer
 
 ![CBO](../assets/1.1-5-cbo.png)
 
@@ -40,7 +40,7 @@ StarRocks can load data within seconds for near-real-time analytics. StarRocks' 
 
 ![Realtime](../assets/1.1-6-realtime.png)
 
-StarRocks' storage engine uses the Delete-and-insert pattern, which allows for efficient Append and UPSERT operations. The storage engine can quickly filter data using primary key indexes,  eliminating the need for Sort and Merge operations at data reading. The engine can also make full use of secondary indexes. It delivers ultimate query performance even on huge amounts of data updates.
+StarRocks' storage engine uses the Delete-and-insert (Merge on Read) pattern, which allows for efficient Append and UPSERT operations. The storage engine can quickly filter data using primary key indexes,  eliminating the need for Sort and Merge operations at data reading. The engine can also make full use of secondary indexes. It delivers ultimate query performance even on huge amounts of data updates.
 
 ## Intelligent materialized view
 

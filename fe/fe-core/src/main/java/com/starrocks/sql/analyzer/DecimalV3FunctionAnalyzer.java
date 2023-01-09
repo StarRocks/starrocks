@@ -55,7 +55,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)
-                    .add(FunctionSet.COUNT).add(FunctionSet.SUM).add(FunctionSet.SUM_DISTINCT)
+                    .add(FunctionSet.COUNT).add(FunctionSet.SUM)
                     .add(FunctionSet.MULTI_DISTINCT_SUM).add(FunctionSet.AVG).add(FunctionSet.VARIANCE)
                     .add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP).add(FunctionSet.VARIANCE_SAMP)
                     .add(FunctionSet.VAR_SAMP).add(FunctionSet.STD).add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP)
@@ -69,7 +69,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_SUM_FUNCTION_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo).add(FunctionSet.SUM)
-                    .add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).build();
+                    .add(FunctionSet.MULTI_DISTINCT_SUM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION =
             new ImmutableSortedSet.Builder<>(String::compareTo)

@@ -44,7 +44,7 @@ namespace starrocks {
 
 class MemtableFlushTask final : public Runnable {
 public:
-    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<MemTable> memtable, bool eos,
                       std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
             : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
 
@@ -79,7 +79,7 @@ public:
 
 private:
     FlushToken* _flush_token;
-    std::unique_ptr<vectorized::MemTable> _memtable;
+    std::unique_ptr<MemTable> _memtable;
     bool _eos;
     std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
 };
@@ -90,7 +90,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
                           std::function<void(std::unique_ptr<SegmentPB>, bool)> cb) {
     RETURN_IF_ERROR(status());
     if (memtable == nullptr && !eos) {
@@ -102,8 +102,16 @@ Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable, bool e
     return _flush_token->submit(std::move(task));
 }
 
-void FlushToken::cancel() {
+void FlushToken::shutdown() {
     _flush_token->shutdown();
+}
+
+void FlushToken::cancel(const Status& st) {
+    if (st.ok()) return;
+    std::lock_guard l(_status_lock);
+    if (_status.ok()) {
+        _status = st;
+    }
 }
 
 Status FlushToken::wait() {
@@ -112,7 +120,7 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(vectorized::MemTable* memtable, SegmentPB* segment) {
+void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
     // If previous flush has failed, return directly
     if (!status().ok()) return;
 
@@ -132,6 +140,14 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_flush_pool);
+}
+
+Status MemTableFlushExecutor::update_max_threads(int max_threads) {
+    if (_flush_pool != nullptr) {
+        return _flush_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
 }
 
 std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {

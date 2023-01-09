@@ -35,8 +35,10 @@
 #include "storage/chunk_iterator.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
+#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/lake/update_manager.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
@@ -53,10 +55,9 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
@@ -95,8 +96,7 @@ static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Vec
 
 class SegmentIterator final : public ChunkIterator {
 public:
-    SegmentIterator(std::shared_ptr<Segment> segment, vectorized::VectorizedSchema _schema,
-                    vectorized::SegmentReadOptions options);
+    SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema _schema, SegmentReadOptions options);
 
     ~SegmentIterator() override = default;
 
@@ -127,7 +127,7 @@ private:
             return Status::OK();
         }
 
-        Status read_columns(Chunk* chunk, const vectorized::SparseRange& range) {
+        Status read_columns(Chunk* chunk, const SparseRange& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 const ColumnPtr& col = chunk->get_column_by_index(i);
@@ -246,10 +246,10 @@ private:
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
 private:
-    using RawColumnIterators = std::vector<ColumnIterator*>;
+    using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
     std::shared_ptr<Segment> _segment;
-    vectorized::SegmentReadOptions _opts;
+    SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
@@ -301,8 +301,7 @@ private:
     bool _context_switch_next_time = false;
 };
 
-SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::VectorizedSchema schema,
-                                 vectorized::SegmentReadOptions options)
+SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema schema, SegmentReadOptions options)
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
@@ -322,8 +321,13 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::V
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
-        _get_del_vec_st =
-                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec);
+        if (_opts.is_lake_table) {
+            // load delvec from meta file
+            _get_del_vec_st = _opts.update_mgr->get_del_vec(tsid, _opts.version, &_del_vec);
+        } else {
+            _get_del_vec_st = StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version,
+                                                                                       &_del_vec);
+        }
         if (_get_del_vec_st.ok()) {
             if (_del_vec && _del_vec->empty()) {
                 _del_vec.reset();
@@ -391,20 +395,23 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
-    return _opts.runtime_range_pruner.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
-        const ColumnPredicate* del_pred;
-        auto iter = _del_predicates.find(cid);
-        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange r;
-        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
-        size_t prev_size = _scan_range.span_size();
-        SparseRange res;
-        _range_iter = _range_iter.intersection(r, &res);
-        std::swap(res, _scan_range);
-        _range_iter.set_range(&_scan_range);
-        _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
-        return Status::OK();
-    });
+    return _opts.runtime_range_pruner.update_range_if_arrived(
+            _opts.global_dictmaps,
+            [this](auto cid, const PredicateList& predicates) {
+                const ColumnPredicate* del_pred;
+                auto iter = _del_predicates.find(cid);
+                del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
+                SparseRange r;
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
+                size_t prev_size = _scan_range.span_size();
+                SparseRange res;
+                _range_iter = _range_iter.intersection(r, &res);
+                std::swap(res, _scan_range);
+                _range_iter.set_range(&_scan_range);
+                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                return Status::OK();
+            },
+            _opts.stats->raw_rows_read);
 }
 
 template <bool check_global_dict>
@@ -412,7 +419,7 @@ Status SegmentIterator::_init_column_iterators(const VectorizedSchema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
 
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
-    _column_iterators.resize(n, nullptr);
+    _column_iterators.resize(n);
     if constexpr (check_global_dict) {
         _column_decoders.resize(n);
     }
@@ -436,9 +443,8 @@ Status SegmentIterator::_init_column_iterators(const VectorizedSchema& schema) {
                 check_dict_enc = has_predicate;
             }
 
-            RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
+            ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
 
-            _obj_pool.add(_column_iterators[cid]);
             ColumnIteratorOptions iter_opts;
             iter_opts.stats = _opts.stats;
             iter_opts.use_page_cache = _opts.use_page_cache;
@@ -448,7 +454,7 @@ Status SegmentIterator::_init_column_iterators(const VectorizedSchema& schema) {
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
             if constexpr (check_global_dict) {
-                _column_decoders[cid].set_iterator(_column_iterators[cid]);
+                _column_decoders[cid].set_iterator(_column_iterators[cid].get());
                 _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
@@ -515,7 +521,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators<false>(range.lower().schema());
+            _init_column_iterators<false>(range.upper().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
@@ -790,9 +796,9 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
-        vectorized::SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more()) {
-            vectorized::Range r = iter.next(n);
+            Range r = iter.next(n);
             for (uint32_t i = r.begin(); i < r.end(); i++) {
                 rowids->push_back(i);
             }
@@ -1212,11 +1218,11 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             auto f2 = std::make_shared<VectorizedField>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                         _column_decoders[cid].code_convert_data(),
                                                         _opts.global_dictmaps->at(cid));
             } else {
-                iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
+                iter = new DictCodeColumnIterator(cid, _column_iterators[cid].get());
             }
 
             _obj_pool.add(iter);
@@ -1239,7 +1245,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             }
         } else {
             ctx->_read_schema.append(f);
-            ctx->_column_iterators.emplace_back(_column_iterators[cid]);
+            ctx->_column_iterators.emplace_back(_column_iterators[cid].get());
             ctx->_is_dict_column.emplace_back(false);
             ctx->_dict_decode_schema.append(f);
         }
@@ -1329,7 +1335,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const VectorizedFieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
-            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
+            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                          _column_decoders[cid].code_convert_data(),
                                                          _opts.global_dictmaps->at(cid));
             _obj_pool.add(iter);
@@ -1604,7 +1610,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_opts.predicates.empty(), Status::OK());
     size_t prev_size = _scan_range.span_size();
     for (const auto& [cid, preds] : _opts.predicates) {
-        ColumnIterator* column_iter = _column_iterators[cid];
+        ColumnIterator* column_iter = _column_iterators[cid].get();
         RETURN_IF_ERROR(column_iter->get_row_ranges_by_bloom_filter(preds, &_scan_range));
     }
     _opts.stats->rows_bf_filtered += prev_size - _scan_range.span_size();
@@ -1626,6 +1632,7 @@ void SegmentIterator::close() {
     }
     _context_list[0].close();
     _context_list[1].close();
+    _column_iterators.resize(0);
     _obj_pool.clear();
     _rfile.reset();
     _segment.reset();
@@ -1660,9 +1667,8 @@ inline VectorizedSchema reorder_schema(const VectorizedSchema& input,
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment,
-                                      const vectorized::VectorizedSchema& schema,
-                                      const vectorized::SegmentReadOptions& options) {
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const VectorizedSchema& schema,
+                                      const SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
@@ -1672,4 +1678,4 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment,
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

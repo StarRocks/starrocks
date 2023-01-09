@@ -42,11 +42,9 @@ namespace starrocks {
 
 class CondColumn;
 
-namespace vectorized {
 class Column;
 class ColumnPredicate;
 class SparseRange;
-} // namespace vectorized
 
 class ColumnReader;
 class RandomAccessFile;
@@ -93,21 +91,20 @@ public:
     // then returns false.
     virtual Status seek_to_ordinal(ordinal_t ord) = 0;
 
-    virtual Status next_batch(size_t* n, vectorized::Column* dst) = 0;
+    virtual Status next_batch(size_t* n, Column* dst) = 0;
 
-    virtual Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
+    virtual Status next_batch(const SparseRange& range, Column* dst) {
         return Status::NotSupported("ColumnIterator Not Support batch read");
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
     /// for vectorized engine
-    virtual Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                              const vectorized::ColumnPredicate* del_predicate,
-                                              vectorized::SparseRange* row_ranges) = 0;
+    virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                              const ColumnPredicate* del_predicate, SparseRange* row_ranges) = 0;
 
-    virtual Status get_row_ranges_by_bloom_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                                  vectorized::SparseRange* row_ranges) {
+    virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                  SparseRange* row_ranges) {
         return Status::OK();
     }
 
@@ -131,17 +128,15 @@ public:
     // batch of dictionary codes for dictionary encoded values.
     // this method can be invoked only if `all_page_dict_encoded` returns true.
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
-    virtual Status next_dict_codes(size_t* n, vectorized::Column* dst) { return Status::NotSupported(""); }
+    virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
 
-    virtual Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
-        return Status::NotSupported("");
-    }
+    virtual Status next_dict_codes(const SparseRange& range, Column* dst) { return Status::NotSupported(""); }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.
     // |size| size of dictionary code array.
     // |words| column used to save the columns values, by append into it.
-    virtual Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) {
+    virtual Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) {
         return Status::NotSupported("");
     }
 
@@ -156,25 +151,25 @@ public:
         return Status::NotSupported("seek_to_ordinal_and_calc_element_ordinal");
     }
 
-    // same as `decode_dict_codes(const int32_t*, size_t, vectorized::Column*)` but extract
+    // same as `decode_dict_codes(const int32_t*, size_t, Column*)` but extract
     // dictionary codes from the column |codes|.
     // |codes| must be of type `FixedLengthColumn<int32_t>` or `NullableColumn<FixedLengthColumn<int32_t>`
     // and assume no `null` value in |codes|.
-    virtual Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words);
+    virtual Status decode_dict_codes(const Column& codes, Column* words);
 
     // given a list of ordinals, fetch corresponding values.
     // |ordinals| must be ascending sorted.
-    virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
-    Status fetch_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
+    Status fetch_values_by_rowid(const Column& rowids, Column* values);
 
-    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
-    Status fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
+    Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
 
 protected:
     ColumnIteratorOptions _opts;

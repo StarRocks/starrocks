@@ -43,7 +43,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) override;
 
     Status _open_mysql_table_writer();
 
@@ -62,9 +62,9 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(
-            _exec_queue_id.get(), &options, &MysqlTableSinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const ChunkPtr>>();
+    int ret = bthread::execution_queue_start<const ChunkPtr>(_exec_queue_id.get(), &options,
+                                                             &MysqlTableSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -78,7 +78,7 @@ void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) {
     --_num_pending_chunks;
     if (_is_finished) {
         return;
@@ -153,11 +153,11 @@ Status MysqlTableSinkOperator::set_cancelled(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MysqlTableSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MysqlTableSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from mysql table sink operator");
 }
 
-Status MysqlTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MysqlTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _mysql_table_sink_buffer->append_chunk(state, chunk);
 }
 

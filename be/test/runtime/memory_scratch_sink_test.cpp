@@ -54,18 +54,18 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/vectorized/csv_scanner.h"
+#include "exec/csv_scanner.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
+#include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
 #include "util/logging.h"
 
@@ -106,6 +106,7 @@ public:
 
     void SetUp() override {
         config::periodic_counter_update_period_ms = 500;
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = "./data";
 
         system("mkdir -p ./test_run/output/");
@@ -118,12 +119,13 @@ public:
     void TearDown() override {
         _obj_pool.clear();
         system("rm -rf ./test_run");
+        config::storage_root_path = _default_storage_root_path;
     }
 
-    std::unique_ptr<vectorized::CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
-                                                               const std::vector<TBrokerRangeDesc>& ranges,
-                                                               const string& multi_row_delimiter = "\n",
-                                                               const string& multi_column_separator = "|") {
+    std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
+                                                   const std::vector<TBrokerRangeDesc>& ranges,
+                                                   const string& multi_row_delimiter = "\n",
+                                                   const string& multi_column_separator = "|") {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -168,12 +170,12 @@ public:
 
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
 
-        vectorized::ScannerCounter* counter = _obj_pool.add(new vectorized::ScannerCounter());
+        ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
 
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<vectorized::CSVScanner>(state, profile, *broker_scan_range, counter);
+        return std::make_unique<CSVScanner>(state, profile, *broker_scan_range, counter);
     }
 
     void init();
@@ -191,6 +193,7 @@ private:
     TMemoryScratchSink _tsink;
     DescriptorTbl* _desc_tbl = nullptr;
     std::vector<TExpr> _exprs;
+    std::string _default_storage_root_path;
 };
 
 void MemoryScratchSinkTest::init() {

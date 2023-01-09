@@ -19,6 +19,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
+#include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
@@ -74,12 +75,16 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
     return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
 }
 
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(RowsetTxnMetaPB* rowset_txn_meta,
+                                                           std::shared_ptr<const TabletSchema>& tschema) {
+    return std::make_unique<PkTabletWriter>(*this, rowset_txn_meta, tschema);
+}
+
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
-    // TODO: check tablet type
     return std::make_unique<GeneralTabletWriter>(*this);
 }
 
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vectorized::VectorizedSchema schema) {
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, VectorizedSchema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 
@@ -94,6 +99,17 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     rowsets.reserve(tablet_metadata->rowsets_size());
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
         const auto& rowset_metadata = tablet_metadata->rowsets(i);
+        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
+        rowsets.emplace_back(std::move(rowset));
+    }
+    return rowsets;
+}
+
+StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(TabletMetadata* metadata) {
+    std::vector<RowsetPtr> rowsets;
+    rowsets.reserve(metadata->rowsets_size());
+    for (int i = 0, size = metadata->rowsets_size(); i < size; ++i) {
+        const auto& rowset_metadata = metadata->rowsets(i);
         auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
@@ -120,6 +136,10 @@ std::string Tablet::metadata_location(int64_t version) const {
     return _mgr->tablet_metadata_location(_id, version);
 }
 
+std::string Tablet::metadata_root_location() const {
+    return _mgr->tablet_metadata_root_location(_id);
+}
+
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
 }
@@ -130,6 +150,10 @@ std::string Tablet::txn_vlog_location(int64_t version) const {
 
 std::string Tablet::segment_location(std::string_view segment_name) const {
     return _mgr->segment_location(_id, segment_name);
+}
+
+std::string Tablet::del_location(std::string_view del_name) const {
+    return _mgr->del_location(_id, del_name);
 }
 
 std::string Tablet::root_location() const {

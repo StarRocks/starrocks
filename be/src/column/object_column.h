@@ -22,7 +22,7 @@
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 //class Object {
 //    Object();
@@ -265,4 +265,4 @@ private:
     mutable Buffer<Slice> _slices;
     mutable Buffer<uint8_t> _buffer;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

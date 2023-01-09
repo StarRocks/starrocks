@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -129,6 +128,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         if (groupBy.isEmpty() || groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns())) {
+            return false;
+        }
+
+        // check limit
+        if (aggregate.hasLimit()) {
             return false;
         }
 

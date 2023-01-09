@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -100,7 +99,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class OptimizerTraceUtil {
@@ -637,58 +635,6 @@ public class OptimizerTraceUtil {
         @Override
         public String visitTable(TableRelation node, String indent) {
             return node.toString();
-        }
-    }
-
-    /*
-     * For test optimizer performance
-     */
-    public static class Timer {
-        private static final Logger LOG = LogManager.getLogger(Timer.class);
-        private static final ThreadLocal<Timer> ALL_TIMERS = ThreadLocal.withInitial(Timer::new);
-
-        private long stmtId = -1;
-        private long start = 0;
-        private long record = 0;
-        private long stop = 0;
-        private int phase = 0;
-        private Stopwatch watch = Stopwatch.createUnstarted();
-
-        public static void start() {
-            Timer t = ALL_TIMERS.get();
-            t.watch = Stopwatch.createStarted();
-            t.start = t.watch.elapsed(TimeUnit.MILLISECONDS);
-            t.record = t.start;
-            if (ConnectContext.get() != null) {
-                t.stmtId = ConnectContext.get().getStmtId();
-            }
-            t.phase = 1;
-            LOG.info("phase." + t.phase + ": start watch sql: " + t.stmtId);
-        }
-
-        public static void record() {
-            record("record phase");
-        }
-
-        public static void record(String str) {
-            Timer t = ALL_TIMERS.get();
-            long tmp = t.record;
-            t.record = t.watch.elapsed(TimeUnit.MILLISECONDS);
-            long cost = t.record - tmp;
-            long total = t.record - t.start;
-            t.phase++;
-            LOG.info("phase." + t.phase + ": " + str + ", cost: " + cost + "ms, " + "total: " + total + "ms");
-        }
-
-        public static void stop() {
-            Timer t = ALL_TIMERS.get();
-            t.watch.stop();
-            t.stop = t.watch.elapsed(TimeUnit.MILLISECONDS);
-            long cost = t.stop - t.record;
-            long total = t.stop - t.start;
-            t.phase++;
-            LOG.info("phase." + t.phase + ": stop watch sql: " + t.stmtId + ", cost: " + cost + "ms, " + "total: " +
-                    total + "ms");
         }
     }
 }

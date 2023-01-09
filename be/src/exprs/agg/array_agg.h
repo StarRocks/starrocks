@@ -19,9 +19,9 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "runtime/mem_pool.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT>
 struct ArrayAggAggregateState {
@@ -91,4 +91,4 @@ public:
     std::string get_name() const override { return "array_agg"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

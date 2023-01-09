@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "exec/meta_scan_node.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/vectorized/meta_scan_node.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::pipeline {

@@ -15,8 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import mockit.Expectations;
 import mockit.Mock;
@@ -41,7 +40,9 @@ public class IcebergGlueCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergGlueCatalog icebergGlueCatalog = IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergGlueCatalog icebergGlueCatalog =
+                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.GLUE_CATALOG, icebergGlueCatalog.getIcebergCatalogType());
     }
 
@@ -66,7 +67,9 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergGlueCatalog icebergGlueCatalog = IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergGlueCatalog icebergGlueCatalog =
+                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         Table table = icebergGlueCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -92,7 +95,9 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergGlueCatalog icebergGlueCatalog = IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergGlueCatalog icebergGlueCatalog =
+                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

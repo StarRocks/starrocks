@@ -17,10 +17,10 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream_string.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class FloatConverterTest : public ::testing::Test {
 public:
@@ -121,4 +121,4 @@ TEST_F(FloatConverterTest, test_float_write_string) {
     ASSERT_EQ("7.092579e+08", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

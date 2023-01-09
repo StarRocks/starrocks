@@ -27,11 +27,11 @@
 namespace starrocks::pipeline {
 
 /// Morsel.
-void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
+void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
 }
 
-void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
+void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->short_key_ranges = _short_key_ranges;
 }
 
@@ -118,10 +118,10 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
             continue;
         }
 
-        _range_start_op = key_range->begin_include ? vectorized::TabletReaderParams::RangeStartOperation::GE
-                                                   : vectorized::TabletReaderParams::RangeStartOperation::GT;
-        _range_end_op = key_range->end_include ? vectorized::TabletReaderParams::RangeEndOperation::LE
-                                               : vectorized::TabletReaderParams::RangeEndOperation::LT;
+        _range_start_op = key_range->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                                   : TabletReaderParams::RangeStartOperation::GT;
+        _range_end_op = key_range->end_include ? TabletReaderParams::RangeEndOperation::LE
+                                               : TabletReaderParams::RangeEndOperation::LT;
 
         _range_start_key.emplace_back(key_range->begin_scan_range);
         _range_end_key.emplace_back(key_range->end_scan_range);
@@ -158,7 +158,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
         }
     }
 
-    vectorized::SparseRange taken_range;
+    SparseRange taken_range;
     _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
     _num_segment_rest_rows -= taken_range.span_size();
     if (_num_segment_rest_rows < _splitted_scan_rows) {
@@ -169,8 +169,8 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 
     auto* scan_morsel = _cur_scan_morsel();
     auto* rowset = _cur_rowset();
-    auto rowid_range = std::make_shared<vectorized::RowidRangeOption>(
-            rowset->rowset_id(), rowset->segments()[_segment_idx]->id(), std::move(taken_range));
+    auto rowid_range = std::make_shared<RowidRangeOption>(rowset->rowset_id(), rowset->segments()[_segment_idx]->id(),
+                                                          std::move(taken_range));
 
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
@@ -179,8 +179,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     return morsel;
 }
 
-rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key,
-                                                       bool lower) const {
+rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const {
     std::string index_key =
             key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
     uint32_t start_block_id;
@@ -202,7 +201,7 @@ rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const v
     return start_block_id * segment->num_rows_per_block();
 }
 
-rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower,
+rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower,
                                                        rowid_t end) const {
     std::string index_key =
             key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
@@ -256,9 +255,9 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         if (0 == _rowset_idx) {
             _tablet_seek_ranges.clear();
             _mempool.clear();
-            RETURN_IF_ERROR(vectorized::TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op,
-                                                                       _range_end_op, _range_start_key, _range_end_key,
-                                                                       &_tablet_seek_ranges, &_mempool));
+            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
+                                                           _range_start_key, _range_end_key, &_tablet_seek_ranges,
+                                                           &_mempool));
         }
         // Read a new rowset.
         RETURN_IF_ERROR(_cur_rowset()->load());
@@ -275,7 +274,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
 
     // Find the rowid range of each key range in this segment.
     if (_tablet_seek_ranges.empty()) {
-        _segment_scan_range.add(vectorized::Range(0, segment->num_rows()));
+        _segment_scan_range.add(Range(0, segment->num_rows()));
     } else {
         RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {
@@ -290,7 +289,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
                 lower_rowid = _lower_bound_ordinal(segment, range.lower(), range.inclusive_lower());
             }
             if (lower_rowid <= upper_rowid) {
-                _segment_scan_range.add(vectorized::Range{lower_rowid, upper_rowid});
+                _segment_scan_range.add(Range{lower_rowid, upper_rowid});
             }
         }
     }
@@ -311,10 +310,10 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
             continue;
         }
 
-        _range_start_op = key_range->begin_include ? vectorized::TabletReaderParams::RangeStartOperation::GE
-                                                   : vectorized::TabletReaderParams::RangeStartOperation::GT;
-        _range_end_op = key_range->end_include ? vectorized::TabletReaderParams::RangeEndOperation::LE
-                                               : vectorized::TabletReaderParams::RangeEndOperation::LT;
+        _range_start_op = key_range->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                                   : TabletReaderParams::RangeStartOperation::GT;
+        _range_end_op = key_range->end_include ? TabletReaderParams::RangeEndOperation::LE
+                                               : TabletReaderParams::RangeEndOperation::LT;
 
         _range_start_key.emplace_back(key_range->begin_scan_range);
         _range_end_key.emplace_back(key_range->end_scan_range);
@@ -380,9 +379,9 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     // As for morsel5, it trys to take index 2~4 firstly, but there will be only 1 block left.
     // Therefore, morsel5 and morsel6 each takes 2 morsel.
     size_t num_taken_blocks = 0;
-    std::vector<vectorized::ShortKeyRangeOptionPtr> short_key_ranges;
-    vectorized::ShortKeyOptionPtr _cur_range_lower = nullptr;
-    vectorized::ShortKeyOptionPtr _cur_range_upper = nullptr;
+    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+    ShortKeyOptionPtr _cur_range_lower = nullptr;
+    ShortKeyOptionPtr _cur_range_upper = nullptr;
     bool need_more_blocks = true;
     while (!_cur_tablet_finished() &&      // One morsel only read data from one tablet.
            (_cur_range_lower != nullptr || // Haven't found the _cur_range_upper different from _cur_range_lower.
@@ -418,8 +417,8 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
         _cur_range_upper = _create_range_upper();
 
         if (num_rest_blocks == 0 || _valid_range(_cur_range_lower, _cur_range_upper)) {
-            short_key_ranges.emplace_back(std::make_shared<vectorized::ShortKeyRangeOption>(
-                    std::move(_cur_range_lower), std::move(_cur_range_upper)));
+            short_key_ranges.emplace_back(
+                    std::make_shared<ShortKeyRangeOption>(std::move(_cur_range_lower), std::move(_cur_range_upper)));
         }
 
         // The current key range has no more blocks, so move to next key range.
@@ -442,8 +441,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
 }
 
 // Validate that the splitted start short key and end short key shouldn't be the same.
-bool LogicalSplitMorselQueue::_valid_range(const vectorized::ShortKeyOptionPtr& lower,
-                                           const vectorized::ShortKeyOptionPtr& upper) const {
+bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const ShortKeyOptionPtr& upper) const {
     // It is validated that any of endpoint is infinite or the original short key range is a point.
     if (lower->is_infinite() || upper->is_infinite() ||
         _block_ranges_per_seek_range[_range_idx].first == _block_ranges_per_seek_range[_range_idx].second) {
@@ -469,33 +467,33 @@ bool LogicalSplitMorselQueue::_valid_range(const vectorized::ShortKeyOptionPtr& 
     return lower_key.compare(upper_key) != 0;
 }
 
-vectorized::ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_lower() const {
+ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_lower() const {
     // If it is the first splitted key range, the start point is the original start key.
     if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].first) {
         if (_tablet_seek_ranges.empty()) {
-            return std::make_unique<vectorized::ShortKeyOption>();
+            return std::make_unique<ShortKeyOption>();
         } else {
-            return std::make_unique<vectorized::ShortKeyOption>(&_tablet_seek_ranges[_range_idx].lower(),
-                                                                _tablet_seek_ranges[_range_idx].inclusive_lower());
+            return std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].lower(),
+                                                    _tablet_seek_ranges[_range_idx].inclusive_lower());
         }
     } else {
         Slice short_key = *_next_lower_block_iter;
-        return std::make_unique<vectorized::ShortKeyOption>(_short_key_schema, short_key, true);
+        return std::make_unique<ShortKeyOption>(_short_key_schema, short_key, true);
     }
 }
 
-vectorized::ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_upper() const {
+ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_upper() const {
     // If it is the last splitted key range, the end point is the original end key.
     if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].second) {
         if (_tablet_seek_ranges.empty()) {
-            return std::make_unique<vectorized::ShortKeyOption>();
+            return std::make_unique<ShortKeyOption>();
         } else {
-            return std::make_unique<vectorized::ShortKeyOption>(&_tablet_seek_ranges[_range_idx].upper(),
-                                                                _tablet_seek_ranges[_range_idx].inclusive_upper());
+            return std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].upper(),
+                                                    _tablet_seek_ranges[_range_idx].inclusive_upper());
         }
     } else {
         Slice short_key = *_next_lower_block_iter;
-        return std::make_unique<vectorized::ShortKeyOption>(_short_key_schema, short_key, false);
+        return std::make_unique<ShortKeyOption>(_short_key_schema, short_key, false);
     }
 }
 
@@ -569,9 +567,9 @@ Status LogicalSplitMorselQueue::_init_tablet() {
 
     if (_tablet_idx == 0) {
         // All the tablets have the same schema, so parse seek range with the first table schema.
-        RETURN_IF_ERROR(vectorized::TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op,
-                                                                   _range_end_op, _range_start_key, _range_end_key,
-                                                                   &_tablet_seek_ranges, &_mempool));
+        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
+                                                       _range_start_key, _range_end_key, &_tablet_seek_ranges,
+                                                       &_mempool));
     }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);
@@ -582,8 +580,8 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     RETURN_IF_ERROR(_largest_rowset->load());
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
-    _short_key_schema = std::make_shared<vectorized::VectorizedSchema>(
-            ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
+    _short_key_schema = std::make_shared<VectorizedSchema>(
+            ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
     _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);
@@ -616,8 +614,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     return Status::OK();
 }
 
-ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const vectorized::SeekTuple& key,
-                                                                         bool lower) const {
+ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const SeekTuple& key, bool lower) const {
     std::string index_key =
             key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 
@@ -638,8 +635,7 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const v
     return start_iter;
 }
 
-ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const vectorized::SeekTuple& key,
-                                                                         bool lower) const {
+ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const SeekTuple& key, bool lower) const {
     std::string index_key =
             key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 

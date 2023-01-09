@@ -17,11 +17,13 @@ log([base,] arg)
 > **NOTE**
 >
 > StarRocks returns NULL if `base` is specified as a negative, 0, or 1.
+
 - `arg`: The value whose logarithm you want to calculate. Only DOUBLE data type is supported.
 
 > **NOTE**
 >
 > StarRocks returns NULL if `arg` is specified as a negative or 0.
+
 ## Return value
 
 Returns a value of the DOUBLE data type.

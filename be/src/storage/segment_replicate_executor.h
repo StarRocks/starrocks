@@ -33,12 +33,9 @@ class ExecEnv;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-
-namespace vectorized {
 class DeltaWriterOptions;
-}
 
-using DeltaWriterOptions = starrocks::vectorized::DeltaWriterOptions;
+using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 
 class ReplicateChannel {
 public:
@@ -86,7 +83,9 @@ public:
 
     // when error has happpens, so we cancel this token
     // and remove all tasks in the queue.
-    void cancel();
+    void cancel(const Status& st);
+
+    void shutdown();
 
     // wait all tasks in token to be completed.
     Status wait();
@@ -143,6 +142,8 @@ public:
     // init should be called after storage engine is opened,
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
+
+    Status update_max_threads(int max_threads);
 
     // NOTE: we use SERIAL mode here to ensure all segment from one tablet are synced in order.
     std::unique_ptr<ReplicateToken> create_replicate_token(

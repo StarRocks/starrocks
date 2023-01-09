@@ -31,7 +31,7 @@ set -e
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
-export STARROCKS_HOME=$curdir/..
+export STARROCKS_HOME=${STARROCKS_HOME:-$curdir/..}
 export TP_DIR=$curdir
 
 # include custom environment variables
@@ -842,10 +842,17 @@ build_mariadb() {
     export BUILD_SYSTEM=$OLD_BUILD_SYSTEM
 }
 
-# aliyun_oss_jars
-build_aliyun_oss_jars() {
-    check_if_source_exist $ALIYUN_OSS_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
+# jindosdk for Aliyun OSS
+build_aliyun_jindosdk() {
+    check_if_source_exist $JINDOSDK_SOURCE
+    mkdir -p $TP_INSTALL_DIR/jindosdk
+    cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/*.jar $TP_INSTALL_DIR/jindosdk
+}
+
+build_tencent_cos_jars() {
+    check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
+    mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/*cos* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
 }
 
 build_aws_cpp_sdk() {
@@ -994,9 +1001,9 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_librdkafka
-build_pulsar
 build_flatbuffers
 build_arrow
+build_pulsar
 build_s2
 build_bitshuffle
 build_croaringbitmap
@@ -1008,7 +1015,8 @@ build_jdk
 build_ragel
 build_hyperscan
 build_mariadb
-build_aliyun_oss_jars
+build_aliyun_jindosdk
+build_tencent_cos_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry

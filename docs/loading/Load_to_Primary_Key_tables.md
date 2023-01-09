@@ -2,7 +2,7 @@
 
 The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, the Primary Key model does not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
 
-StarRocks also supports partial updates. This feature is in preview.
+StarRocks also supports partial updates and conditional updates.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
@@ -52,7 +52,7 @@ See the "Background information" section in [Load data from HDFS or cloud storag
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
 
-## Examples
+## Basic operations
 
 This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
@@ -439,7 +439,7 @@ MySQL [test_db]> SELECT * FROM table3;
 
 As shown in the preceding query result, the record whose `id` is `101` in `example3.csv` has been deleted from `table3`, the record whose `id` is `102` in `example3.csv` has been updated to `table3`, and the record whose `id` is `103` in `example3.csv` has been inserted into `table3`.
 
-## Partial updates [Preview]
+## Partial updates
 
 Since v2.2, StarRocks supports updating only the specified columns of a table that uses the Primary Key model. This section uses CSV as an example to describe how to perform partial updates.
 
@@ -584,7 +584,8 @@ The conditional update feature is designed to resolve data disorder. If the sour
           `id` int(11) NOT NULL COMMENT "user ID", 
           `version` int NOT NULL COMMENT "version",
           `score` int(11) NOT NULL COMMENT "user score"
-      ) ENGINE=OLAP
+      )
+      ENGINE=OLAP
       PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
       ```
 

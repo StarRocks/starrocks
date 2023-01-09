@@ -15,9 +15,12 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
 add_library(Types STATIC
+    array_type_info.cpp
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
     logical_type.cpp
+    map_type_info.cpp
+    struct_type_info.cpp
     timestamp_value.cpp
 )

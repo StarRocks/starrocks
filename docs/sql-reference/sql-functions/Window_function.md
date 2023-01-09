@@ -14,13 +14,13 @@ partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ~~~
 
-### Function
+### Functions
 
-Currently supported Functions include:
+Currently supported functions include:
 
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
-* ROW_NUMBER(), RANK(), DENSE_RANK()
+* ROW_NUMBER(), RANK(), DENSE_RANK(), QUALIFY()
 
 ### PARTITION BY clause
 
@@ -30,7 +30,7 @@ The Partition By clause is similar to Group By. It groups the input rows by one 
 
 The `Order By` clause is basically the same as the outer `Order By`. It defines the order of the input rows. If`Partition By` is specified, `Order By` defines the order within each Partition grouping. The only difference is that `Order By n` (n is a positive integer) in the `OVER` clause is equivalent to no operation, whereas the n in the outer `Order By` indicates sorting by the nth column.
 
-Example 1:
+Example:
 
 This example shows adding an id column to the select list with values of 1, 2, 3, etc., sorted by the `date_and_time` column in the events table.
 
@@ -40,7 +40,7 @@ SELECT row_number() OVER (ORDER BY date_and_time) AS id,
 FROM events;
 ~~~
 
-### Window Clause
+### Window clause
 
 The window clause is used to specify a range of rows for operations ( the previous and later lines based on the current line). It supports the following syntaxes – AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE() and SUM(). For MAX() and MIN(), the window clause can specify the start to `UNBOUNDED PRECEDING`.
 
@@ -50,7 +50,7 @@ Syntax:
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ~~~
 
-Example 2:
+Example:
 
 Suppose we have the following stock data, the stock symbol is JDR, and the closing price is the daily closing price.
 
@@ -123,7 +123,7 @@ Syntax:
 AVG([DISTINCT | ALL] *expression*) [OVER (*analytic_clause*)]
 ~~~
 
-Example 3:
+Example:
 
 Calculate the x-average of the current row and each row before and after it.
 
@@ -164,7 +164,7 @@ Syntax:
 COUNT([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 ~~~
 
-Example 4:
+Example:
 
 Count the occurrence of x from the current row to the first row.
 
@@ -214,7 +214,7 @@ select x, y,
         over (
             partition by x
             order by y
-        ) as rank
+        ) as `rank`
 from int_t;
 ~~~
 
@@ -304,7 +304,7 @@ Syntax:
 FIRST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
 
-For example 5:
+Example:
 
 We have the following data:
 
@@ -353,30 +353,46 @@ from mail_merge;
 
 ### LAG()
 
-The LAG() method is used to calculate the value of rows ahead of the current row.
+Returns the value of the row that lags the current row by `offset` rows. This function is often used to compare values between rows and filter data.
+
+`LAG()` can be used to query data of the following types:
+
+* Numeric: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
+* String: CHAR, VARCHAR
+* Date: DATE, DATETIME
+* BITMAP and HLL are supported from StarRocks 2.5.
 
 Syntax:
 
-~~~SQL
-LAG (expr, offset, default) OVER (partition_by_clause order_by_clause)
+~~~Haskell
+LAG(expr[, offset[, default]])
+OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
-Example 6:
+Parameters:
 
-Calculate the closing price of the previous day
+* `expr`: the field you want to compute.
+* `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
+* `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+
+Example:
+
+Calculate the `closing_price` of the previous day. In this example, `default` is set to 0, which means 0 is returned if no matching row is found.
 
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
-    lag(closing_price,1, 0) over
-    (
-        partition by stock_symbol
-        order by closing_date
+    lag(closing_price, 1, 0)
+    over(
+    partition by stock_symbol
+    order by closing_date
     ) as "yesterday closing"
 from stock_ticker
 order by closing_date;
 ~~~
 
-~~~Plain Text
+Output:
+
+~~~Plain
 +--------------+---------------------+---------------+-------------------+
 | stock_symbol | closing_date        | closing_price | yesterday closing |
 +--------------+---------------------+---------------+-------------------+
@@ -390,6 +406,8 @@ order by closing_date;
 +--------------+---------------------+---------------+-------------------+
 ~~~
 
+The first row shows what happens when there is no previous row. The function returns the ***`default`*** value 0.
+
 ### LAST_VALUE()
 
 LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
@@ -400,7 +418,7 @@ Syntax:
 LAST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
 
-Use the data form the example 6:
+Use the data from the example:
 
 ~~~SQL
 select country, name,
@@ -427,33 +445,42 @@ from mail_merge;
 
 ### LEAD()
 
-The LEAD() method is used to calculate the value of rows after the current row.
+Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
 
-Syntax:
+Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
 
-~~~SQL
-LEAD (expr, offset, default]) OVER (partition_by_clause order_by_clause)
+Syntax：
+
+~~~Haskell
+LEAD(expr[, offset[, default]])
+OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
-Example 7:
+Parameters：
 
-Calculate the next day's closing price and compare it to today's  to see whether it is higher or lower.
+* `expr`: the field you want to compute.
+* `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
+* `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+
+Example：
+
+Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
-    case
-        (lead(closing_price,1, 0)
-            over (partition by stock_symbol
-                  order by closing_date)
-         - closing_price) > 0
-    when true then "higher"
-    when false then "flat or lower"
-    end as "trending"
+    case(lead(closing_price, 1, 0) 
+         over (partition by stock_symbol
+         order by closing_date)- closing_price) > 0 
+        when true then "higher"
+        when false then "flat or lower" end
+    as "trending"
 from stock_ticker
 order by closing_date;
 ~~~
 
-~~~Plain Text
+Output
+
+~~~Plain
 +--------------+---------------------+---------------+---------------+
 | stock_symbol | closing_date        | closing_price | trending      |
 +--------------+---------------------+---------------+---------------+
@@ -477,7 +504,7 @@ Syntax：
 MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 ~~~
 
-Example 8:
+Example:
 
 Calculate the maximum value of rows from the first row to the row after the current row.
 
@@ -530,7 +557,7 @@ Syntax：
 MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 ~~~
 
-Example 9:
+Example:
 
 Calculate the minimum value of rows from the first row to the row after the current row.
 
@@ -583,12 +610,12 @@ Syntax:
 RANK() OVER(partition_by_clause order_by_clause)
 ~~~
 
-Example 10:
+Example:
 
 Ranking according to column x:
 
 ~~~SQL
-select x, y, rank() over(partition by x order by y) as rank
+select x, y, rank() over(partition by x order by y) as `rank`
 from int_t;
 ~~~
 
@@ -618,10 +645,10 @@ Syntax:
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ~~~
 
-Example 11:
+Example:
 
 ~~~SQL
-select x, y, row_number() over(partition by x order by y) as rank
+select x, y, row_number() over(partition by x order by y) as `rank`
 from int_t;
 ~~~
 
@@ -641,6 +668,142 @@ from int_t;
 +---+---+------+
 ~~~
 
+### QUALIFY()
+
+The QUALIFY clause filters the results of window functions. In a SELECT statement, you can use the QUALIFY clause to apply conditions to a column to filter results. QUALIFY is analogous to the HAVING clause in aggregate functions.
+
+QUALIFY simplifies the writing of SELECT statements.
+
+Before QUALIFY is used, a SELECT statement may go like this:
+
+~~~SQL
+SELECT *
+FROM (SELECT DATE,
+             PROVINCE_CODE,
+             TOTAL_SCORE,
+             ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) AS SCORE_ROWNUMBER
+      FROM example_table) T1
+WHERE T1.SCORE_ROWNUMBER = 1;
+~~~
+
+After QUALIFY is used, the statement is shortened to:
+
+~~~SQL
+SELECT DATE, PROVINCE_CODE, TOTAL_SCORE
+FROM example_table 
+QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
+~~~
+
+QUALIFY supports only the following three window functions: ROW_NUMBER(), RANK(), and DENSE_RANK().
+
+**Syntax:**
+
+~~~SQL
+SELECT <column_list>
+FROM <data_source>
+[GROUP BY ...]
+[HAVING ...]
+QUALIFY <window_function>
+[ ... ]
+~~~
+
+**Parameters:**
+
+`<column_list>`: columns from which you want to obtain data.
+
+`<data_source>`: The data source is generally a table.
+
+`<window_function>`: The `QUALIFY` clause can only be followed by a window function, including ROW_NUMBER(), RANK(), and DENSE_RANK().
+
+**Examples:**
+
+~~~SQL
+-- Create a table.
+CREATE TABLE sales_record (
+   city_id INT,
+   item STRING,
+   sales INT
+) DISTRIBUTED BY HASH(`city_id`) BUCKETS 1;
+
+-- Insert data into the table.
+insert into sales_record values
+(1,'fruit',95),
+(2,'drinks',70),
+(3,'fruit',87),
+(4,'drinks',98);
+
+-- Query data from the table.
+select * from sales_record order by city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       2 | drinks |    70 |
+|       3 | fruit  |    87 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+Example 1: Obtain records whose row number is greater than 1 from the table.
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record
+QUALIFY row_number() OVER (ORDER BY city_id) > 1;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       2 | drinks |    70 |
+|       3 | fruit  |    87 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+Example 2: Obtain records whose row number is 1 from each partition of the table. The table is divided into two partitions by `item` and the first row in each partition is returned.
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record 
+QUALIFY ROW_NUMBER() OVER (PARTITION BY item ORDER BY city_id) = 1
+ORDER BY city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       2 | drinks |    70 |
++---------+--------+-------+
+2 rows in set (0.01 sec)
+~~~
+
+Example 3: Obtain records whose sales rank No.1 from each partition of the table. The table is divided into two partitions by `item` and the row with the highest sales in each partition is returned.
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record
+QUALIFY RANK() OVER (PARTITION BY item ORDER BY sales DESC) = 1
+ORDER BY city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+**Usage notes:**
+
+The execution order of clauses in a query with QUALIFY is evaluated in the following order:
+
+> 1. From
+> 2. Where
+> 3. Group by
+> 4. Having
+> 5. Window
+> 6. QUALIFY
+> 7. Distinct
+> 8. Order by
+> 9. Limit
+
 ### SUM()
 
 Syntax：
@@ -649,7 +812,7 @@ Syntax：
 SUM([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 ~~~
 
-Example 12:
+Example:
 
 Group by property and calculate the sum of the **current, preceding, and following rows** within the group.
 

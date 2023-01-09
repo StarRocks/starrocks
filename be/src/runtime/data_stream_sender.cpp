@@ -108,13 +108,13 @@ public:
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(RuntimeState* state, vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from,
+    Status add_rows_selective(RuntimeState* state, Chunk* chunk, const uint32_t* row_indexes, uint32_t from,
                               uint32_t size);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than backend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent);
+    Status send_one_chunk(const Chunk* chunk, bool eos, bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
@@ -168,7 +168,7 @@ private:
     int64_t _num_data_bytes_sent{0};
     int64_t _request_seq{0};
 
-    std::unique_ptr<vectorized::Chunk> _chunk;
+    std::unique_ptr<Chunk> _chunk;
     bool _is_first_chunk = true;
 
     bool _need_close{false};
@@ -239,7 +239,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent) {
+Status DataStreamSender::Channel::send_one_chunk(const Chunk* chunk, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
 
     // If chunk is not null, append it to request
@@ -294,14 +294,13 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
-    TRY_CATCH_BAD_ALLOC(
-            _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure));
+    _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
     _request_seq++;
     return Status::OK();
 }
 
-Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, vectorized::Chunk* chunk,
-                                                     const uint32_t* indexes, uint32_t from, uint32_t size) {
+Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk* chunk, const uint32_t* indexes,
+                                                     uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
         _chunk = chunk->clone_empty_with_tuple();
@@ -512,7 +511,7 @@ Status DataStreamSender::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     SCOPED_TIMER(_profile->total_time_counter());
     uint16_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
@@ -644,8 +643,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     return _close_status;
 }
 
-Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
-                                         int num_receivers) {
+Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
     {

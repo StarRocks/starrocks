@@ -18,7 +18,7 @@
 
 #include "column/datum.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedSchema;
 
@@ -49,4 +49,4 @@ private:
     std::vector<Datum> _datums;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

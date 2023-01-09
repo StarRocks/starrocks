@@ -62,7 +62,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     // Maps the dst slot id of the dest chunk to that of the src chunk.
@@ -74,7 +74,7 @@ private:
     const std::vector<SlotDescriptor*>& _src_slots;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _dst_chunk = nullptr;
+    ChunkPtr _dst_chunk = nullptr;
 };
 
 class UnionPassthroughOperatorFactory final : public OperatorFactory {

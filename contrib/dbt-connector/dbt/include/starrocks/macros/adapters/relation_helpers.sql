@@ -36,39 +36,37 @@
   {% endif %}
 
   {# 2. SET KEYS #}
-  {% if is_create_table %}
-    {% if keys is not none %}
-      {% if table_type == "DUPLICATE" %}
-        DUPLICATE KEY (
-          {% for item in keys %}
-            {{ item }}{% if not loop.last %},{% endif %}
-          {% endfor %}
-        )
-      {% elif table_type == "PRIMARY" %}
-        PRIMARY KEY (
-          {% for item in keys %}
-            {{ item }}{% if not loop.last %},{% endif %}
-          {% endfor %}
-        )
-      {% elif table_type == "UNIQUE" %}
-        UNIQUE KEY (
-          {% for item in keys %}
-            {{ item }}{% if not loop.last %},{% endif %}
-          {% endfor %}
-        )
-      {% else %}
-        {% set msg -%}
-          "{{ table_type }}" is not support
-        {%- endset %}
-        {{ exceptions.raise_compiler_error(msg) }}
-      {% endif %}
+  {% if keys is not none %}
+    {% if table_type == "DUPLICATE" %}
+      DUPLICATE KEY (
+        {% for item in keys %}
+          {{ item }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+      )
+    {% elif table_type == "PRIMARY" %}
+      PRIMARY KEY (
+        {% for item in keys %}
+          {{ item }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+      )
+    {% elif table_type == "UNIQUE" %}
+      UNIQUE KEY (
+        {% for item in keys %}
+          {{ item }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+      )
     {% else %}
-      {% if table_type != "DUPLICATE" %}
-        {% set msg -%}
-          "{{ table_type }}" is must set "keys"
-        {%- endset %}
-        {{ exceptions.raise_compiler_error(msg) }}
-      {% endif %}
+      {% set msg -%}
+        "{{ table_type }}" is not support
+      {%- endset %}
+      {{ exceptions.raise_compiler_error(msg) }}
+    {% endif %}
+  {% else %}
+    {% if table_type != "DUPLICATE" %}
+      {% set msg -%}
+        "{{ table_type }}" is must set "keys"
+      {%- endset %}
+      {{ exceptions.raise_compiler_error(msg) }}
     {% endif %}
   {% endif %}
 

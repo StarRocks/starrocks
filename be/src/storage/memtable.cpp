@@ -18,19 +18,19 @@
 
 #include "column/json_column.h"
 #include "common/logging.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
+#include "types/logical_type_infra.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
@@ -38,12 +38,12 @@ static const size_t kPrimaryKeyLimitSize = 128;
 
 VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
                                           const std::vector<SlotDescriptor*>* slot_descs) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::vectorized::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                                  LogicalType::TYPE_TINYINT, false);
+        auto op_column = std::make_shared<starrocks::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
+                                                                      LogicalType::TYPE_TINYINT, false);
         op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
         schema.append(op_column);
     }
@@ -131,8 +131,12 @@ size_t MemTable::write_buffer_size() const {
     return _chunk_bytes_usage + _aggregator_bytes_usage;
 }
 
+size_t MemTable::write_buffer_rows() const {
+    return _total_rows - _merged_rows;
+}
+
 bool MemTable::is_full() const {
-    return write_buffer_size() >= _max_buffer_size;
+    return write_buffer_size() >= _max_buffer_size || write_buffer_rows() >= _max_buffer_row;
 }
 
 bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -162,6 +166,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
+        _total_rows += chunk.num_rows();
     }
 
     // if memtable is full, push it to the flush executor,
@@ -319,6 +324,7 @@ void MemTable::_aggregate(bool is_final) {
     // impossible finish
     DCHECK(!_aggregator->is_finish());
     DCHECK(_aggregator->source_exhausted());
+    _merged_rows = _aggregator->merged_rows();
 
     if (is_final) {
         _result_chunk.reset();
@@ -434,4 +440,4 @@ void MemTable::_sort_column_inc(bool by_sort_key) {
     CHECK(st.ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

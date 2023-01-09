@@ -117,7 +117,7 @@ public class ScalarOperatorsReuseTest {
         List<ScalarOperator> oldOperators = Lists.newArrayList(add1, add3, multi);
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
-                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory);
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, false);
 
         // FixMe(kks): This case could improve
         assertEquals(commonSubScalarOperators.size(), 3);
@@ -145,7 +145,7 @@ public class ScalarOperatorsReuseTest {
         List<ScalarOperator> oldOperators = Lists.newArrayList(addABC, addBCD);
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
-                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory);
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, false);
 
         // FixMe(kks): could we improve this case?
         assertTrue(commonSubScalarOperators.isEmpty());
@@ -170,7 +170,8 @@ public class ScalarOperatorsReuseTest {
                 Lists.newArrayList(add3, ConstantOperator.createInt(1)));
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
-                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4), columnRefFactory);
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4),
+                        columnRefFactory, false);
         assertTrue(commonSubScalarOperators.isEmpty());
     }
 
@@ -193,8 +194,61 @@ public class ScalarOperatorsReuseTest {
                 Lists.newArrayList(add3, column3));
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
-                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4), columnRefFactory);
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4),
+                        columnRefFactory, false);
         assertEquals(2, commonSubScalarOperators.size());
     }
 
+    @Test
+    public void testLambdaFunctionWithoutLambdaArguments() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", ScalarType.INT, true, true);
+
+
+        CallOperator multi = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(column1, ConstantOperator.createInt(2)));
+
+        CallOperator multi1 = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(column1, ConstantOperator.createInt(2)));
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, multi1));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add1, arg));
+        // x-> t1 * 2 + t1 *2 + x
+        List<ScalarOperator> oldOperators = Lists.newArrayList(add2);
+
+        // reuse lambda argument non-related sub expressions : t1*2
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, false);
+        assertEquals(commonSubScalarOperators.size(), 1);
+    }
+
+    @Test
+    public void testLambdaFunctionScalarOperatorsWithLambdaArguments() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", ScalarType.INT, true, true);
+
+
+        CallOperator multi = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+
+        CallOperator multi1 = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, multi1));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add1, column1));
+        // x-> x * 2 + x *2 + t1
+        List<ScalarOperator> oldOperators = Lists.newArrayList(add2);
+
+        // reuse lambda argument related sub expressions : x*2
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, true);
+        assertEquals(commonSubScalarOperators.size(), 1);
+
+    }
 }

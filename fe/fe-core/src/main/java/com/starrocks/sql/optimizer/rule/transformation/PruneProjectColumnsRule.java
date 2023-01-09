@@ -18,15 +18,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -63,15 +64,9 @@ public class PruneProjectColumnsRule extends TransformationRule {
         }));
 
         if (newMap.isEmpty()) {
-            ColumnRefSet candidates = new ColumnRefSet(projectOperator.getColumnRefMap().keySet());
-            ColumnRefOperator smallestColumn =
-                    ((LogicalOperator) input.inputAt(0).getOp())
-                            .getSmallestColumn(candidates, context.getColumnRefFactory(), input.inputAt(0));
-            if (smallestColumn != null) {
-                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
-                newMap.put(smallestColumn, expr);
-                requiredInputColumns.union(smallestColumn);
-            }
+            ColumnRefOperator constCol = context.getColumnRefFactory()
+                    .create("auto_fill_col", Type.TINYINT, false);
+            newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
         }
 
         // Change the requiredOutputColumns in context

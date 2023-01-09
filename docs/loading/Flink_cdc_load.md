@@ -4,7 +4,7 @@ StarRocks supports real-time data synchronization from MySQL within seconds, del
 
 This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
 
-## Principles
+## How it works
 
 The following figure illustrates the entire synchronization process.
 
@@ -110,20 +110,12 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > $ ./bin/start-cluster.sh
     > ```
 
-5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU. You can also run the following command to obtain the SMT package.
-
-    For x86:
+5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU.
 
     ```Bash
     ## for Linux x86
     wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
     ## for macOS ARM64
-    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
-    ```
-
-    For M1:
-
-    ```Bash
     wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
     ```
 

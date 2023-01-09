@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.staros.proto.FileCacheInfo;
@@ -69,6 +68,12 @@ public class LakeTable extends OlapTable {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
+    public static LakeTable read(DataInput in) throws IOException {
+        // type is already read in Table
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
+    }
+
     public String getStorageGroup() {
         return getDefaultFilePathInfo().getFullPath();
     }
@@ -77,7 +82,7 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+    public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
@@ -120,12 +125,6 @@ public class LakeTable extends OlapTable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
-    }
-
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         dropAllTempPartitions();
@@ -166,13 +165,15 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, long shardGroupId) {
+        FilePathInfo fsInfo = getPartitionFilePathInfo();
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
 
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, partitionId);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, replicationNum, fsInfo, cacheInfo,
+                    shardGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
@@ -182,5 +183,13 @@ public class LakeTable extends OlapTable {
             index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
+    }
+
+    @Override
+    public Short getDefaultReplicationNum() {
+        if (tableProperty != null) {
+            return tableProperty.getReplicationNum();
+        }
+        return 1;
     }
 }

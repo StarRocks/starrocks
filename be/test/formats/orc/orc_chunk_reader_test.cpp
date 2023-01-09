@@ -30,7 +30,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcChunkReaderTest : public testing::Test {
 public:
@@ -211,7 +211,7 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 TEST_F(OrcChunkReaderTest, Normal) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
     auto input_stream = orc::readLocalFile(default_orc_file);
     reader.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&reader);
@@ -222,7 +222,7 @@ TEST_F(OrcChunkReaderTest, NullSlotDescriptor) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     src_slot_descs.emplace_back(nullptr);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
     auto input_stream = orc::readLocalFile(default_orc_file);
     reader.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&reader);
@@ -245,7 +245,7 @@ public:
 TEST_F(OrcChunkReaderTest, SkipStripe) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     reader.set_row_reader_filter(filter);
 
@@ -373,7 +373,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
     std::vector<TExprNode> nodes;
@@ -394,7 +394,7 @@ TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
 
     // lo_orderdate == 200000
     // stripe0 min/max = 9/199927 [5120]
@@ -422,7 +422,7 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsInPred) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
     std::vector<TExprNode> nodes;
@@ -475,7 +475,7 @@ private:
 TEST_F(OrcChunkReaderTest, SkipRowGroups) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
-    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     reader.set_row_reader_filter(filter);
 
@@ -546,7 +546,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
-    OrcChunkReader reader(state, slots);
+    OrcChunkReader reader(state->chunk_size(), slots);
     reader.init(std::move(reader0));
     Status st = reader.read_next();
     CHECK(st.ok()) << st.to_string();
@@ -876,7 +876,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
-    OrcChunkReader reader(state, slots);
+    OrcChunkReader reader(state->chunk_size(), slots);
     reader.set_timezone(reader_tz);
     reader.init(std::move(reader0));
     Status st = reader.read_next();
@@ -968,7 +968,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
     create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -995,7 +995,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
     }
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         std::vector<std::string> hive_column_names = {"mm", "b", "a", "c"};
         reader.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -1070,7 +1070,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
     create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1118,7 +1118,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
     create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1139,8 +1139,8 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
             std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
         }
         EXPECT_EQ(result->debug_row(0), "[1, [0.999999999]]");
-        EXPECT_EQ(result->debug_row(1), "[2, [0.000000001, NULL]]");
-        EXPECT_EQ(result->debug_row(2), "[3, [NULL, NULL]]");
+        EXPECT_EQ(result->debug_row(1), "[2, [0.000000001,NULL]]");
+        EXPECT_EQ(result->debug_row(2), "[3, [NULL,NULL]]");
         EXPECT_EQ(result->debug_row(3), "[4, [0.123456789]]");
     }
 }
@@ -1189,7 +1189,7 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
     create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1256,7 +1256,7 @@ Padding ratio: 0%
 TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     SlotDesc slot_descs[] = {
             {"col_upper_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-            {"col_upper_char", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
+            {"col_upper_CHAR", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
             {""},
     };
 
@@ -1266,7 +1266,7 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1327,7 +1327,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
         // Read all fields
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1348,10 +1348,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc0: 11, cc1: 'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc0: 22, cc1: 'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc0: 33, cc1: 'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc0: 44, cc1: 'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc0:11,cc1:'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0:22,cc1:'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0:33,cc1:'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0:44,cc1:'World'}]", result->debug_row(3));
     }
 
     {
@@ -1368,7 +1368,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1389,10 +1389,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc0: NULL, cc1: 'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc0: NULL, cc1: 'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc0: NULL, cc1: 'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc0: NULL, cc1: 'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc0:NULL,cc1:'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0:NULL,cc1:'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0:NULL,cc1:'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0:NULL,cc1:'World'}]", result->debug_row(3));
     }
 }
 
@@ -1430,7 +1430,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
         // Read all fields
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1451,10 +1451,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc1: 'Smith', cc0: 11}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc1: 'Cruise', cc0: 22}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc1: 'hello', cc0: 33}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc1: 'World', cc0: 44}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc1:'Smith',cc0:11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1:'Cruise',cc0:22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1:'hello',cc0:33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1:'World',cc0:44}]", result->debug_row(3));
     }
 
     {
@@ -1472,7 +1472,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
         // Read all fields
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(false);
         const std::vector<std::string> hive_column_names = {"c0", "c1"};
         reader.set_hive_column_names(&hive_column_names);
@@ -1495,10 +1495,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[{cc1: 'Smith', cc0: 11}, 1]", result->debug_row(0));
-        EXPECT_EQ("[{cc1: 'Cruise', cc0: 22}, 2]", result->debug_row(1));
-        EXPECT_EQ("[{cc1: 'hello', cc0: 33}, 3]", result->debug_row(2));
-        EXPECT_EQ("[{cc1: 'World', cc0: 44}, 4]", result->debug_row(3));
+        EXPECT_EQ("[{cc1:'Smith',cc0:11}, 1]", result->debug_row(0));
+        EXPECT_EQ("[{cc1:'Cruise',cc0:22}, 2]", result->debug_row(1));
+        EXPECT_EQ("[{cc1:'hello',cc0:33}, 3]", result->debug_row(2));
+        EXPECT_EQ("[{cc1:'World',cc0:44}, 4]", result->debug_row(3));
     }
 
     {
@@ -1515,7 +1515,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1536,10 +1536,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc1: NULL, cc0: 11}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc1: NULL, cc0: 22}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc1: NULL, cc0: 33}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc1: NULL, cc0: 44}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc1:NULL,cc0:11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1:NULL,cc0:22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1:NULL,cc0:33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1:NULL,cc0:44}]", result->debug_row(3));
     }
 }
 
@@ -1572,7 +1572,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -1594,10 +1594,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {Cc1: 'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {Cc1: 'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {Cc1: 'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {Cc1: 'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {Cc1:'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {Cc1:'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {Cc1:'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {Cc1:'World'}]", result->debug_row(3));
     }
 
     {
@@ -1618,7 +1618,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -1656,7 +1656,7 @@ TEST_F(OrcChunkReaderTest, TestUnConvertableType) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -1727,7 +1727,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
         // Read all fields
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1754,24 +1754,22 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         //        }
 
         EXPECT_EQ(
-                "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
-                "[[1->{c21: 11, c22: 'hi1'}], [5->{c21: 23, c22: 'p4'}], [9->{c21: 25, c22: 'p5'}]]]",
+                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], "
+                "[{1:{c21:11,c22:'hi1'}},{5:{c21:23,c22:'p4'}},{9:{c21:25,c22:'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: 12, c22: "
-                "'hi2'}], [6->{c21: 24, c22: 'p5'}]]]",
+                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
+                "[{2:{c21:12,c22:'hi2'}},{6:{c21:24,c22:'p5'}}]]",
                 result->debug_row(1));
+        EXPECT_EQ("[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:13,c22:'hi3'}},{7:{c21:25,c22:'p6'}}]]",
+                  result->debug_row(2));
         EXPECT_EQ(
-                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: 13, c22: 'hi3'}], [7->{c21: 25, "
-                "c22: 'p6'}]]]",
-                result->debug_row(2));
-        EXPECT_EQ(
-                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: 14, c22: "
-                "'hi4'}], [8->{c21: 26, c22: 'p7'}]]]",
+                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
+                "[{4:{c21:14,c22:'hi4'}},{8:{c21:26,c22:'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: 14, c22: 'hi4'}], "
-                "[9->{c21: 26, c22: 'p7'}]]]",
+                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], "
+                "[{5:{c21:14,c22:'hi4'}},{9:{c21:26,c22:'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -1797,7 +1795,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1824,27 +1822,24 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         //        }
 
         EXPECT_EQ(
-                "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
-                "[[1->{c21: NULL, c22: 'hi1'}], [5->{c21: NULL, c22: 'p4'}], [9->{c21: NULL, c22: 'p5'}]]]",
+                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], "
+                "[{1:{c21:NULL,c22:'hi1'}},{5:{c21:NULL,c22:'p4'}},{9:{c21:NULL,c22:'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: NULL, c22: "
-                "'hi2'}], "
-                "[6->{c21: NULL, c22: 'p5'}]]]",
+                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
+                "[{2:{c21:NULL,c22:'hi2'}},{6:{c21:NULL,c22:'p5'}}]]",
                 result->debug_row(1));
         EXPECT_EQ(
-                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: NULL, c22: 'hi3'}], [7->{c21: "
-                "NULL, c22: 'p6'}]]]",
+                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], "
+                "[{3:{c21:NULL,c22:'hi3'}},{7:{c21:NULL,c22:'p6'}}]]",
                 result->debug_row(2));
         EXPECT_EQ(
-                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: NULL, c22: "
-                "'hi4'}], "
-                "[8->{c21: NULL, c22: 'p7'}]]]",
+                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
+                "[{4:{c21:NULL,c22:'hi4'}},{8:{c21:NULL,c22:'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: NULL, c22: 'hi4'}], "
-                "[9->{c21: NULL, c22: "
-                "'p7'}]]]",
+                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], "
+                "[{5:{c21:NULL,c22:'hi4'}},{9:{c21:NULL,c22:'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -1864,7 +1859,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
         // Read all fields
-        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
@@ -1886,16 +1881,12 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         EXPECT_EQ(result->num_rows(), 5);
         EXPECT_EQ(result->num_columns(), 1);
 
-        //        for (size_t i = 0; i < result->num_rows(); i++) {
-        //            std::cout << result->debug_row(i) << std::endl;
-        //        }
-
-        EXPECT_EQ("[[[1->NULL], [5->NULL], [9->NULL]]]", result->debug_row(0));
-        EXPECT_EQ("[[[2->NULL], [6->NULL]]]", result->debug_row(1));
-        EXPECT_EQ("[[[3->NULL], [7->NULL]]]", result->debug_row(2));
-        EXPECT_EQ("[[[4->NULL], [8->NULL]]]", result->debug_row(3));
-        EXPECT_EQ("[[[5->NULL], [9->NULL]]]", result->debug_row(4));
+        EXPECT_EQ("[[{1:NULL},{5:NULL},{9:NULL}]]", result->debug_row(0));
+        EXPECT_EQ("[[{2:NULL},{6:NULL}]]", result->debug_row(1));
+        EXPECT_EQ("[[{3:NULL},{7:NULL}]]", result->debug_row(2));
+        EXPECT_EQ("[[{4:NULL},{8:NULL}]]", result->debug_row(3));
+        EXPECT_EQ("[[{5:NULL},{9:NULL}]]", result->debug_row(4));
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

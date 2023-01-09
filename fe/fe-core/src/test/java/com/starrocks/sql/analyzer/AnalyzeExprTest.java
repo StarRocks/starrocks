@@ -119,6 +119,14 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map([1], x -> x + v1) from t0");
         analyzeSuccess("select transform([1], x -> x)");
         analyzeSuccess("select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T");
+        analyzeSuccess("select array_agg(array_length(array_map(x->x*2, v3))) from tarray");
+        analyzeSuccess("select array_map(x->x+ array_length(array_agg(v1)),[2,6]) from tarray");
+        analyzeSuccess("select array_agg(v1), array_map(x->(array_map((y,z)->y+z, x, array_agg(v1))), [[2,4]]) from tarray");
+        analyzeSuccess("select array_map(x->x+12, array_agg(v1)) from tarray");
+        analyzeSuccess("select array_map(x->x >  count(v1), v3) from tarray group by v3");
+        analyzeSuccess("select array_map(x-> x +  count(v1) over (partition by v1 order by v2),[111]) from tarray");
+        analyzeSuccess("select v1, v2, count(v1) over (partition by v1 order by v2) from tarray");
+        analyzeSuccess("select v1, v2, count(v1) over (partition by array_sum(array_map(x->x+1, [1])) order by v2) from tarray");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
@@ -141,6 +149,8 @@ public class AnalyzeExprTest {
         analyzeFail("select transform(null, null)");
         analyzeFail("select transform([1],null);");
         analyzeFail("select transform(1)");
+        analyzeFail("select array_map(x->x+ array_length(array_agg(x)),[2,6]) from tarray");
+        analyzeFail("select array_map(x->x >  count(v1), v3) from tarray");
     }
 
     @Test

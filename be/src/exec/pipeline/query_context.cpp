@@ -25,6 +25,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/stream_epoch_manager.h"
 #include "util/thread.h"
 
 namespace starrocks::pipeline {
@@ -40,6 +41,7 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -62,6 +64,25 @@ QueryContext::~QueryContext() noexcept {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
+    }
+}
+
+void QueryContext::count_down_fragments() {
+    size_t old = _num_active_fragments.fetch_sub(1);
+    DCHECK_GE(old, 1);
+    bool all_fragments_finished = old == 1;
+    if (!all_fragments_finished) {
+        return;
+    }
+
+    // Acquire the pointer to avoid be released when removing query
+    auto query_trace = shared_query_trace();
+    ExecEnv::GetInstance()->query_context_mgr()->remove(_query_id);
+    // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
+    // considering that this feature is generally used for debugging,
+    // I think it should not have a big impact now
+    if (query_trace != nullptr) {
+        query_trace->dump();
     }
 }
 
@@ -346,7 +367,7 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 reported[i] = true;
                 continue;
             }
@@ -354,6 +375,8 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -444,12 +467,14 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 continue;
             }
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -465,6 +490,8 @@ void QueryContextManager::report_fragments(
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 exec_env->frontend_client_cache()->close_connections(fe_addr);
                 continue;
             }

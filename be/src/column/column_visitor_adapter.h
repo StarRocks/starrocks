@@ -31,67 +31,67 @@ public:
 
     ~ColumnVisitorAdapter() override = default;
 
-    Status visit(const vectorized::JsonColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const JsonColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::HyperLogLogColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const HyperLogLogColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::BitmapColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const BitmapColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::PercentileColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const PercentileColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Int8Column& column) override { return _impl->_impl->do_visit(column); }
+    Status visit(const Int8Column& column) override { return _impl->_impl->do_visit(column); }
 
-    Status visit(const vectorized::UInt8Column& column) override { return _impl->do_visit(column); }
+    Status visit(const UInt8Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Int16Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Int16Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::UInt16Column& column) override { return _impl->do_visit(column); }
+    Status visit(const UInt16Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Int32Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Int32Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::UInt32Column& column) override { return _impl->do_visit(column); }
+    Status visit(const UInt32Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Int64Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Int64Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::UInt64Column& column) override { return _impl->do_visit(column); }
+    Status visit(const UInt64Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Int128Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Int128Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::DoubleColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const DoubleColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::FloatColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const FloatColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::DateColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const DateColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::TimestampColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const TimestampColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::DecimalColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const DecimalColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Decimal32Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Decimal32Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Decimal64Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Decimal64Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::Decimal128Column& column) override { return _impl->do_visit(column); }
+    Status visit(const Decimal128Column& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::FixedLengthColumn<int96_t>& column) override { return _impl->do_visit(column); }
+    Status visit(const FixedLengthColumn<int96_t>& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::FixedLengthColumn<uint24_t>& column) override { return _impl->do_visit(column); }
+    Status visit(const FixedLengthColumn<uint24_t>& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::FixedLengthColumn<decimal12_t>& column) override { return _impl->do_visit(column); }
+    Status visit(const FixedLengthColumn<decimal12_t>& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::NullableColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const NullableColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::ConstColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const ConstColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::ArrayColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const ArrayColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::MapColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const MapColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::StructColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const StructColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::BinaryColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const BinaryColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const vectorized::LargeBinaryColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const LargeBinaryColumn& column) override { return _impl->do_visit(column); }
 
 private:
     Impl* _impl;
@@ -104,67 +104,67 @@ public:
 
     ~ColumnVisitorMutableAdapter() override = default;
 
-    Status visit(vectorized::JsonColumn* column) override { return _impl->do_visit(column); }
+    Status visit(JsonColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::HyperLogLogColumn* column) override { return _impl->do_visit(column); }
+    Status visit(HyperLogLogColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::BitmapColumn* column) override { return _impl->do_visit(column); }
+    Status visit(BitmapColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::PercentileColumn* column) override { return _impl->do_visit(column); }
+    Status visit(PercentileColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Int8Column* column) override { return _impl->_impl->do_visit(column); }
+    Status visit(Int8Column* column) override { return _impl->_impl->do_visit(column); }
 
-    Status visit(vectorized::UInt8Column* column) override { return _impl->do_visit(column); }
+    Status visit(UInt8Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Int16Column* column) override { return _impl->do_visit(column); }
+    Status visit(Int16Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::UInt16Column* column) override { return _impl->do_visit(column); }
+    Status visit(UInt16Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Int32Column* column) override { return _impl->do_visit(column); }
+    Status visit(Int32Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::UInt32Column* column) override { return _impl->do_visit(column); }
+    Status visit(UInt32Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Int64Column* column) override { return _impl->do_visit(column); }
+    Status visit(Int64Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::UInt64Column* column) override { return _impl->do_visit(column); }
+    Status visit(UInt64Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Int128Column* column) override { return _impl->do_visit(column); }
+    Status visit(Int128Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::DoubleColumn* column) override { return _impl->do_visit(column); }
+    Status visit(DoubleColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::FloatColumn* column) override { return _impl->do_visit(column); }
+    Status visit(FloatColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::DateColumn* column) override { return _impl->do_visit(column); }
+    Status visit(DateColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::TimestampColumn* column) override { return _impl->do_visit(column); }
+    Status visit(TimestampColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::DecimalColumn* column) override { return _impl->do_visit(column); }
+    Status visit(DecimalColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Decimal32Column* column) override { return _impl->do_visit(column); }
+    Status visit(Decimal32Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Decimal64Column* column) override { return _impl->do_visit(column); }
+    Status visit(Decimal64Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::Decimal128Column* column) override { return _impl->do_visit(column); }
+    Status visit(Decimal128Column* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::FixedLengthColumn<int96_t>* column) override { return _impl->do_visit(column); }
+    Status visit(FixedLengthColumn<int96_t>* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::FixedLengthColumn<uint24_t>* column) override { return _impl->do_visit(column); }
+    Status visit(FixedLengthColumn<uint24_t>* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::FixedLengthColumn<decimal12_t>* column) override { return _impl->do_visit(column); }
+    Status visit(FixedLengthColumn<decimal12_t>* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::NullableColumn* column) override { return _impl->do_visit(column); }
+    Status visit(NullableColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::ConstColumn* column) override { return _impl->do_visit(column); }
+    Status visit(ConstColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::ArrayColumn* column) override { return _impl->do_visit(column); }
+    Status visit(ArrayColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::MapColumn* column) override { return _impl->do_visit(column); }
+    Status visit(MapColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::StructColumn* column) override { return _impl->do_visit(column); }
+    Status visit(StructColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::BinaryColumn* column) override { return _impl->do_visit(column); }
+    Status visit(BinaryColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(vectorized::LargeBinaryColumn* column) override { return _impl->do_visit(column); }
+    Status visit(LargeBinaryColumn* column) override { return _impl->do_visit(column); }
 
 private:
     Impl* _impl;

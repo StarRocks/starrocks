@@ -171,7 +171,7 @@ Status ExportSink::gen_file_name(std::string* file_name) {
     return Status::OK();
 }
 
-Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status ExportSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     Status status = _file_builder->add_chunk(chunk);
     if (!status.ok()) {
         Status status;

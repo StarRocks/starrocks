@@ -18,9 +18,9 @@
 #include <type_traits>
 
 #include "column/nullable_column.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,
 // we just need to implement similar apply operation can be more convenient to implement a new ColumnPredicate.
 
@@ -30,7 +30,7 @@ public:
     using SpecColumnOperator = ColumnOperator<field_type>;
     ColumnOperatorPredicate(const ColumnOperatorPredicate&) = delete;
     ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args&&... args)
-            : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}
+            : ColumnPredicate(type_info, id), _predicate_operator(std::move(args)...) {}
 
     // evaluate
     uint8_t evaluate_at(int index, const ColumnType* column) const {
@@ -185,4 +185,4 @@ public:
 private:
     SpecColumnOperator _predicate_operator;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

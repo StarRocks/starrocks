@@ -60,11 +60,11 @@ Example 1: Update the cached metadata of the corresponding Hive table in StarRoc
 REFRESH EXTERNAL TABLE hive1;
 ```
 
-Example 2: Update the cached metadata of the partitions of the corresponding Hudi table in StarRocks by specifying the external table `hudi1` and the `p1` and `p2` partitions of the corresponding Hudi table.
+Example 2: Update the cached metadata of the partitions of the corresponding Hudi table in StarRocks by specifying the external table `hudi1` and the partitions of the corresponding Hudi table.
 
 ```SQL
 REFRESH EXTERNAL TABLE hudi1
-PARTITION ('p1', 'p2');
+PARTITION ('date=2022-12-20', 'date=2022-12-21');
 ```
 
 ### External catalog
@@ -82,9 +82,9 @@ USE hive_catalog.hive_db;
 REFRESH EXTERNAL TABLE hive_table;
 ```
 
-Example 2: Update the cached metadata of the `p1` and `p2` partitions of `hudi_table` in StarRocks.
+Example 2: Update the cached metadata of the partitions of `hudi_table` in StarRocks.
 
 ```SQL
 REFRESH EXTERNAL TABLE hudi_catalog.hudi_db.hudi_table
-PARTITION ('p1', 'p2');
+PARTITION ('date=2022-12-20', 'date=2022-12-21');
 ```

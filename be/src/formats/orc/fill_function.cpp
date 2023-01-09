@@ -20,19 +20,19 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
+#include "exec/hdfs_scanner_orc.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_primitive_type_mapping = {
@@ -62,33 +62,31 @@ const std::set<LogicalType> g_starrocks_decimal_type = {starrocks::TYPE_DECIMAL3
                                                         starrocks::TYPE_DECIMAL128, starrocks::TYPE_DECIMALV2,
                                                         starrocks::TYPE_DECIMAL};
 
-static void fill_boolean_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
-                                size_t size, const starrocks::TypeDescriptor& type_desc,
-                                const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_boolean_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size,
+                                const starrocks::TypeDescriptor& type_desc, const starrocks::OrcMappingPtr& mapping,
+                                void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col_start + size);
 
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(col)->get_data().data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(col)->get_data().data();
 
     auto* cvbd = data->data.data();
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         values[i] = (cvbd[from] != 0);
     }
 }
-static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col,
-                                          size_t from, size_t size, const starrocks::TypeDescriptor& type_desc,
-                                          const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+                                          size_t size, const starrocks::TypeDescriptor& type_desc,
+                                          const starrocks::OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto c = starrocks::vectorized::ColumnHelper::as_raw_column<starrocks::vectorized::NullableColumn>(col);
+    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
     auto* nulls = c->null_column()->get_data().data();
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(c->data_column())
-                           ->get_data()
-                           .data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(c->data_column())->get_data().data();
 
     auto* cvbd = data->data.data();
     auto pos = from;
@@ -105,15 +103,15 @@ static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, starrocks
     c->update_has_null();
 }
 template <starrocks::LogicalType Type, typename OrcColumnVectorBatch>
-static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::vectorized::ColumnPtr& col, size_t from,
-                                     size_t size, const starrocks::TypeDescriptor& type_desc,
-                                     const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
-    auto* reader = static_cast<starrocks::vectorized::OrcChunkReader*>(ctx);
+static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::ColumnPtr& col, size_t from, size_t size,
+                                     const starrocks::TypeDescriptor& type_desc,
+                                     const starrocks::OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<starrocks::OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col_start + size);
 
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
 
     auto* cvbd = data->data.data();
 
@@ -133,8 +131,8 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::vect
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (value < numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::lowest() ||
-                    value > numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::max()) {
+                if (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
+                    value > numeric_limits<starrocks::RunTimeCppType<Type>>::max()) {
                     // can not accept null, so we have to discard it.
                     filter[i] = 0;
                     if (!reported) {
@@ -151,17 +149,17 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::vect
     }
 }
 template <starrocks::LogicalType Type, typename OrcColumnVectorBatch>
-static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, starrocks::vectorized::ColumnPtr& col,
-                                               size_t from, size_t size, const starrocks::TypeDescriptor& type_desc,
-                                               const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
-    auto* reader = static_cast<starrocks::vectorized::OrcChunkReader*>(ctx);
+static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, starrocks::ColumnPtr& col, size_t from,
+                                               size_t size, const starrocks::TypeDescriptor& type_desc,
+                                               const starrocks::OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<starrocks::OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto c = starrocks::vectorized::ColumnHelper::as_raw_column<starrocks::vectorized::NullableColumn>(col);
+    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
     auto* nulls = c->null_column()->get_data().data();
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
 
     auto* cvbd = data->data.data();
     auto pos = from;
@@ -187,8 +185,8 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, starr
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
+                                      value > numeric_limits<starrocks::RunTimeCppType<Type>>::max())) {
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
@@ -204,8 +202,8 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, starr
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<starrocks::vectorized::RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
+                                      value > numeric_limits<starrocks::RunTimeCppType<Type>>::max())) {
                     nulls[i] = 1;
                 }
             }
@@ -215,9 +213,9 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, starr
     c->update_has_null();
 }
 template <starrocks::LogicalType Type>
-static void fill_int_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
-                            size_t size, const starrocks::TypeDescriptor& type_desc,
-                            const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_int_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size,
+                            const starrocks::TypeDescriptor& type_desc, const starrocks::OrcMappingPtr& mapping,
+                            void* ctx) {
     // try to dyn_cast to long vector batch first. in most case, the cast will succeed.
     // so there is no performance loss comparing to call `down_cast` directly
     // because in `down_cast` implementation, there is also a dyn_cast.
@@ -240,9 +238,9 @@ static void fill_int_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::
     col->resize(col->size() + size);
 }
 template <starrocks::LogicalType Type>
-static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
-                                      size_t size, const starrocks::TypeDescriptor& type_desc,
-                                      const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size,
+                                      const starrocks::TypeDescriptor& type_desc,
+                                      const starrocks::OrcMappingPtr& mapping, void* ctx) {
     {
         auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
         if (data != nullptr) {
@@ -261,15 +259,15 @@ static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::ve
     col->resize(col->size() + size);
 }
 template <starrocks::LogicalType Type>
-static void fill_float_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
-                              size_t size, const starrocks::TypeDescriptor& type_desc,
-                              const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_float_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size,
+                              const starrocks::TypeDescriptor& type_desc, const starrocks::OrcMappingPtr& mapping,
+                              void* ctx) {
     auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col_start + size);
 
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
 
     auto* cvbd = data->data.data();
     for (int i = col_start; i < col_start + size; ++i, ++from) {
@@ -277,16 +275,16 @@ static void fill_float_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized
     }
 }
 template <starrocks::LogicalType Type>
-static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
+static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
                                         size_t size, const starrocks::TypeDescriptor& type_desc,
-                                        const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+                                        const starrocks::OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto c = starrocks::vectorized::ColumnHelper::as_raw_column<starrocks::vectorized::NullableColumn>(col);
+    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
     auto* nulls = c->null_column()->get_data().data();
-    auto* values = starrocks::vectorized::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
 
     auto* cvbd = data->data.data();
     auto pos = from;
@@ -302,45 +300,44 @@ static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::
     }
     c->update_has_null();
 }
-static void fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col,
-                                                   size_t from, size_t size, const starrocks::TypeDescriptor& type_desc,
-                                                   const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+                                                   size_t size, const starrocks::TypeDescriptor& type_desc,
+                                                   const starrocks::OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::Decimal64VectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    static_assert(sizeof(starrocks::DecimalV2Value) == sizeof(starrocks::vectorized::int128_t));
-    auto* values = reinterpret_cast<starrocks::vectorized::int128_t*>(
-            down_cast<starrocks::vectorized::DecimalColumn*>(col.get())->get_data().data());
+    static_assert(sizeof(starrocks::DecimalV2Value) == sizeof(starrocks::int128_t));
+    auto* values =
+            reinterpret_cast<starrocks::int128_t*>(down_cast<starrocks::DecimalColumn*>(col.get())->get_data().data());
 
     auto* cvbd = data->values.data();
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
-        values[i] = static_cast<starrocks::vectorized::int128_t>(cvbd[from]);
+        values[i] = static_cast<starrocks::int128_t>(cvbd[from]);
     }
 
     if (starrocks::DecimalV2Value::SCALE < data->scale) {
-        starrocks::vectorized::int128_t d =
+        starrocks::int128_t d =
                 starrocks::DecimalV2Value::get_scale_base(data->scale - starrocks::DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
     } else if (starrocks::DecimalV2Value::SCALE > data->scale) {
-        starrocks::vectorized::int128_t m =
+        starrocks::int128_t m =
                 starrocks::DecimalV2Value::get_scale_base(starrocks::DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
     }
 }
-static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb,
-                                                             starrocks::vectorized::ColumnPtr& col, size_t from,
-                                                             size_t size, const starrocks::TypeDescriptor& type_desc,
-                                                             const starrocks::vectorized::OrcMappingPtr& mapping,
-                                                             void* ctx) {
+static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
+                                                             size_t from, size_t size,
+                                                             const starrocks::TypeDescriptor& type_desc,
+                                                             const starrocks::OrcMappingPtr& mapping, void* ctx) {
     int col_start = col->size();
-    auto c = starrocks::vectorized::ColumnHelper::as_raw_column<starrocks::vectorized::NullableColumn>(col);
+    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
@@ -358,44 +355,42 @@ static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBa
         c->update_has_null();
     }
 }
-static void fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col,
-                                                    size_t from, size_t size,
-                                                    const starrocks::TypeDescriptor& type_desc,
-                                                    const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+                                                    size_t size, const starrocks::TypeDescriptor& type_desc,
+                                                    const starrocks::OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::Decimal128VectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto* values = reinterpret_cast<starrocks::vectorized::int128_t*>(
-            down_cast<starrocks::vectorized::DecimalColumn*>(col.get())->get_data().data());
+    auto* values =
+            reinterpret_cast<starrocks::int128_t*>(down_cast<starrocks::DecimalColumn*>(col.get())->get_data().data());
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         uint64_t hi = data->values[from].getHighBits();
         uint64_t lo = data->values[from].getLowBits();
-        values[i] = (((starrocks::vectorized::int128_t)hi) << 64) | (starrocks::vectorized::int128_t)lo;
+        values[i] = (((starrocks::int128_t)hi) << 64) | (starrocks::int128_t)lo;
     }
     if (starrocks::DecimalV2Value::SCALE < data->scale) {
-        starrocks::vectorized::int128_t d =
+        starrocks::int128_t d =
                 starrocks::DecimalV2Value::get_scale_base(data->scale - starrocks::DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
     } else if (starrocks::DecimalV2Value::SCALE > data->scale) {
-        starrocks::vectorized::int128_t m =
+        starrocks::int128_t m =
                 starrocks::DecimalV2Value::get_scale_base(starrocks::DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
     }
 }
-static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                              starrocks::vectorized::ColumnPtr& col, size_t from,
-                                                              size_t size, const starrocks::TypeDescriptor& type_desc,
-                                                              const starrocks::vectorized::OrcMappingPtr& mapping,
-                                                              void* ctx) {
+static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
+                                                              size_t from, size_t size,
+                                                              const starrocks::TypeDescriptor& type_desc,
+                                                              const starrocks::OrcMappingPtr& mapping, void* ctx) {
     int col_start = col->size();
-    auto c = starrocks::vectorized::ColumnHelper::as_raw_column<starrocks::vectorized::NullableColumn>(col);
+    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
@@ -413,18 +408,18 @@ static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorB
         c->update_has_null();
     }
 }
-static void fill_decimal_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
-                                size_t size, const starrocks::TypeDescriptor& type_desc,
-                                const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_decimal_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size,
+                                const starrocks::TypeDescriptor& type_desc, const starrocks::OrcMappingPtr& mapping,
+                                void* ctx) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
         fill_decimal_column_from_orc_decimal64(cvb, col, from, size, type_desc, nullptr, ctx);
     } else {
         fill_decimal_column_from_orc_decimal128(cvb, col, from, size, type_desc, nullptr, ctx);
     }
 }
-static void fill_decimal_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col,
-                                          size_t from, size_t size, const starrocks::TypeDescriptor& type_desc,
-                                          const starrocks::vectorized::OrcMappingPtr& mapping, void* ctx) {
+static void fill_decimal_column_with_null(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+                                          size_t size, const starrocks::TypeDescriptor& type_desc,
+                                          const starrocks::OrcMappingPtr& mapping, void* ctx) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
         fill_decimal_column_with_null_from_orc_decimal64(cvb, col, from, size, type_desc, nullptr, ctx);
     } else {
@@ -1056,4 +1051,4 @@ const FillColumnFunction& find_fill_func(LogicalType type, bool nullable) {
     return nullable ? FunctionsMap::instance()->get_nullable_func(type) : FunctionsMap::instance()->get_func(type);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

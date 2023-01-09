@@ -26,8 +26,8 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
@@ -35,17 +35,17 @@
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
 
-#define DOWN_CAST_ASSIGN_MIN_MAX(TYPE)                                     \
-    do {                                                                   \
-        vectorized::ColumnHelper::cast_to_raw<TYPE>(min_col)->append(min); \
-        vectorized::ColumnHelper::cast_to_raw<TYPE>(max_col)->append(max); \
-        return Status::OK();                                               \
+#define DOWN_CAST_ASSIGN_MIN_MAX(TYPE)                         \
+    do {                                                       \
+        ColumnHelper::cast_to_raw<TYPE>(min_col)->append(min); \
+        ColumnHelper::cast_to_raw<TYPE>(max_col)->append(max); \
+        return Status::OK();                                   \
     } while (0)
 
 static Status decode_int_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
@@ -122,7 +122,7 @@ static Status decode_date_min_max(LogicalType ptype, const orc::proto::ColumnSta
     if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
         colStats.datestatistics().has_maximum()) {
         const auto& stats = colStats.datestatistics();
-        vectorized::DateValue min, max;
+        DateValue min, max;
         OrcDateHelper::orc_date_to_native_date(&min, stats.minimum());
         OrcDateHelper::orc_date_to_native_date(&max, stats.maximum());
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATE);
@@ -139,7 +139,7 @@ static Status decode_datetime_min_max(LogicalType ptype, const orc::proto::Colum
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
-        vectorized::TimestampValue min, max;
+        TimestampValue min, max;
         const cctz::time_zone utc_tzinfo = cctz::utc_time_zone();
         {
             int64_t ms = stats.minimumutc();
@@ -171,8 +171,8 @@ static Status decode_datetime_min_max(LogicalType ptype, const orc::proto::Colum
 Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats, ColumnPtr min_col,
                                 ColumnPtr max_col, int64_t tz_offset_in_seconds) {
     if (slot->is_nullable()) {
-        auto* a = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(min_col);
-        auto* b = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(max_col);
+        auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
+        auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
         a->mutable_null_column()->append(0);
         b->mutable_null_column()->append(0);
         min_col = a->data_column();

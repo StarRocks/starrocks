@@ -33,7 +33,7 @@
 #include "arm_acle.h"
 #endif
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 typedef unsigned __int128 uint128_t;
 inline uint64_t umul128(uint64_t a, uint64_t b, uint64_t* high) {
@@ -328,4 +328,4 @@ struct Hash128WithSeed {
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

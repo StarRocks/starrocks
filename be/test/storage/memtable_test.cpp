@@ -35,7 +35,7 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using namespace std;
 
@@ -262,7 +262,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -308,7 +308,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -423,4 +423,4 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -721,7 +721,7 @@ public class DatabaseTransactionMgr {
                 return TransactionStatus.UNKNOWN;
             }
             // find the latest txn (which id is largest)
-            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).get();
+            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
             return unprotectedGetTransactionState(maxTxnId).getTransactionStatus();
         } finally {
             readUnlock();
@@ -811,7 +811,7 @@ public class DatabaseTransactionMgr {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
-                            // which means publish version task finished in replica  
+                            // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
@@ -1453,6 +1453,7 @@ public class DatabaseTransactionMgr {
                 for (Long tblId : tblIds) {
                     Table tbl = db.getTable(tblId);
                     if (tbl != null) {
+                        // won't check privilege in new RBAC framework
                         if (!GlobalStateMgr.getCurrentState().getAuth()
                                 .checkTblPriv(ConnectContext.get(), db.getFullName(),
                                         tbl.getName(), PrivPredicate.SHOW)) {

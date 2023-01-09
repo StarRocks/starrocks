@@ -37,6 +37,7 @@ RESULT SINK
 |  * expr-->[128.71428571428572, 14992.785714285714, 0.0, 16.0, 1.0] ESTIMATE
 |
 12:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F03)
@@ -90,6 +91,8 @@ OutPut Exchange Id: 12
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |
 6:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [17: p_partkey, INT, true]
 cardinality: 600038
 
 PLAN FRAGMENT 2(F00)
@@ -123,6 +126,7 @@ OutPut Exchange Id: 06
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 20000
 |
 0:HdfsScanNode

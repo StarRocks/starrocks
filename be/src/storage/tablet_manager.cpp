@@ -875,6 +875,15 @@ Status TabletManager::start_trash_sweep() {
             continue;
         }
 
+        if (tablet->updates() != nullptr) {
+            Status st = tablet->updates()->check_and_remove_rowset();
+            if (!st.ok()) {
+                LOG(WARNING) << "there are some rowsets still been referenced, drop tablet: " << tablet->tablet_id()
+                             << " later";
+                continue;
+            }
+        }
+
         bool remove_meta = false;
         TabletMeta tablet_meta;
         Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash(),

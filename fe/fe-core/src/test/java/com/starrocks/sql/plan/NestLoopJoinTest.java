@@ -124,14 +124,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         getFragmentPlan(sql);
 
         sql = " select a.v2 from t0 a join t0 b on a.v3 < b.v3;";
-        String planFragment = getFragmentPlan(sql);
-        System.err.println(planFragment);
-        Assert.assertTrue(planFragment, planFragment.contains(" 3:NESTLOOP JOIN\n" +
+        assertPlanContains(sql, " 3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n"));
+                "  |----2:EXCHANGE\n");
 
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         // Prune should make the HASH JOIN(LEFT ANTI) could output the left table, but not join slot
@@ -140,10 +138,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "left anti join " +
                 " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
-        assertPlanContains(sql, "11:Project\n" +
-                "  |  <slot 7> : 7: v7\n" +
+        assertPlanContains(sql, "13:Project\n" +
+                "  |  <slot 20> : 1\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
+                "  12:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: substr = 15: substr");
@@ -153,12 +151,12 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "4:Project\n" +
+        assertVerbosePlanContains(sql, "5:Project\n" +
                 "  |  output columns:\n" +
-                "  |  34 <-> [34: id_char, CHAR, false]\n" +
+                "  |  56 <-> 1\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
+                "  4:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
                 "  |  cardinality: 1");
@@ -185,12 +183,12 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "left anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
+        assertVerbosePlanContains(sql, "  5:Project\n" +
                 "  |  output columns:\n" +
-                "  |  8 <-> [8: id_char, CHAR, false]\n" +
+                "  |  56 <-> 1\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
+                "  4:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
                 "  |  cardinality: 1");
@@ -350,28 +348,28 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "       join t0 c " +
                 "       join t0 d " +
                 ") e on a.v1 < e.v1";
-        assertPlanContains(sql, "  11:NESTLOOP JOIN\n" +
+        assertPlanContains(sql, "  12:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 10: v1\n" +
                 "  |  \n" +
-                "  |----10:Project\n" +
+                "  |----11:Project\n" +
                 "  |    |  <slot 10> : 10: v1\n" +
                 "  |    |  \n" +
-                "  |    9:NESTLOOP JOIN\n" +
+                "  |    10:NESTLOOP JOIN\n" +
                 "  |    |  join op: CROSS JOIN\n" +
                 "  |    |  colocate: false, reason: \n" +
                 "  |    |  \n" +
-                "  |    |----8:EXCHANGE\n" +
+                "  |    |----9:EXCHANGE\n" +
                 "  |    |    \n" +
-                "  |    6:Project\n" +
-                "  |    |  <slot 4> : 4: v1\n" +
+                "  |    7:Project\n" +
+                "  |    |  <slot 19> : 1\n" +
                 "  |    |  \n" +
-                "  |    5:NESTLOOP JOIN\n" +
+                "  |    6:NESTLOOP JOIN\n" +
                 "  |    |  join op: CROSS JOIN\n" +
                 "  |    |  colocate: false, reason: \n" +
                 "  |    |  \n" +
-                "  |    |----4:EXCHANGE\n" +
+                "  |    |----5:EXCHANGE\n" +
                 "  |    |    \n" +
                 "  |    2:EMPTYSET\n" +
                 "  |    \n" +

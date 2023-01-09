@@ -27,7 +27,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/bit_util.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
@@ -45,7 +45,7 @@ public:
     Int32ToDateConverter() = default;
     ~Int32ToDateConverter() override = default;
 
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override;
+    Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
 class Int96ToDateTimeConverter : public ColumnConverter {
@@ -55,14 +55,14 @@ public:
 
     Status init(const std::string& timezone);
     // convert column from int96 to timestamp
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override;
+    Status convert(const ColumnPtr& src, Column* dst) override;
 
 private:
     // When Hive stores a timestamp value into Parquet format, it converts local time
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
-    [[nodiscard]] vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) const {
-        return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
+    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
+        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
     }
 
 private:
@@ -75,18 +75,16 @@ public:
     ~Int64ToDateTimeConverter() override = default;
 
     Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
-        return _convert_to_timestamp_column(src, dst);
-    }
+    Status convert(const ColumnPtr& src, Column* dst) override { return _convert_to_timestamp_column(src, dst); }
 
 private:
     // convert column from int64 to timestamp
-    Status _convert_to_timestamp_column(const vectorized::ColumnPtr& src, vectorized::Column* dst);
+    Status _convert_to_timestamp_column(const ColumnPtr& src, Column* dst);
     // When Hive stores a timestamp value into Parquet format, it converts local time
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
-    [[nodiscard]] vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) const {
-        return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
+    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
+        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
     }
 
 private:
@@ -110,17 +108,16 @@ public:
     IntToIntConverter() = default;
     ~IntToIntConverter() override = default;
 
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
-        auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+    Status convert(const ColumnPtr& src, Column* dst) override {
+        auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
-        auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
         dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-        auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
-                src_nullable_column->data_column());
-        auto* dst_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<DestType>>(
-                dst_nullable_column->data_column());
+        auto* src_column =
+                ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<FixedLengthColumn<DestType>>(dst_nullable_column->data_column());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
@@ -138,9 +135,9 @@ public:
 template <typename SourceType, LogicalType DestType>
 class PrimitiveToDecimalConverter : public ColumnConverter {
 public:
-    using DestDecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
-    using DestColumnType = typename vectorized::RunTimeTypeTraits<DestType>::ColumnType;
-    using DestPrimitiveType = typename vectorized::RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
+    using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
+    using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
+    using DestPrimitiveType = typename RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
 
     PrimitiveToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
         if (src_scale < dst_scale) {
@@ -152,16 +149,16 @@ public:
         }
     }
 
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
-        auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+    Status convert(const ColumnPtr& src, Column* dst) override {
+        auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
-        auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
         dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-        auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
-                src_nullable_column->data_column());
-        auto* dst_column = vectorized::ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->data_column());
+        auto* src_column =
+                ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->data_column());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
@@ -199,9 +196,9 @@ private:
 template <LogicalType DestType>
 class BinaryToDecimalConverter : public ColumnConverter {
 public:
-    using DecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
-    using ColumnType = typename vectorized::RunTimeTypeTraits<DestType>::ColumnType;
-    using DestPrimitiveType = typename vectorized::RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
+    using DecimalType = typename RunTimeTypeTraits<DestType>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
+    using DestPrimitiveType = typename RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
     BinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale, int32_t type_length) {
         if (src_scale < dst_scale) {
             _scale_type = DecimalScaleType::kScaleUp;
@@ -256,18 +253,17 @@ public:
         }
     }
 
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
-        auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+    Status convert(const ColumnPtr& src, Column* dst) override {
+        auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
-        auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
         dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-        auto* src_column =
-                vectorized::ColumnHelper::as_raw_column<vectorized::BinaryColumn>(src_nullable_column->data_column());
-        auto* dst_column = vectorized::ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
+        auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
 
-        const vectorized::BinaryColumn::Bytes& src_data = src_column->get_bytes();
+        const BinaryColumn::Bytes& src_data = src_column->get_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column()->get_data();
@@ -513,46 +509,44 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     return Status::OK();
 }
 
-vectorized::ColumnPtr ColumnConverter::create_src_column() {
-    vectorized::ColumnPtr data_column = nullptr;
+ColumnPtr ColumnConverter::create_src_column() {
+    ColumnPtr data_column = nullptr;
     switch (parquet_type) {
     case tparquet::Type::type::BOOLEAN:
-        data_column = vectorized::FixedLengthColumn<uint8_t>::create();
+        data_column = FixedLengthColumn<uint8_t>::create();
         break;
     case tparquet::Type::type::INT32:
-        data_column = vectorized::FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT32>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT32>::CppType>::create();
         break;
     case tparquet::Type::type::INT64:
-        data_column = vectorized::FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT64>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT64>::CppType>::create();
         break;
     case tparquet::Type::type::INT96:
-        data_column = vectorized::FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT96>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT96>::CppType>::create();
         break;
     case tparquet::Type::type::FLOAT:
-        data_column = vectorized::FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::FLOAT>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::FLOAT>::CppType>::create();
         break;
     case tparquet::Type::type::DOUBLE:
-        data_column = vectorized::FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::DOUBLE>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::DOUBLE>::CppType>::create();
         break;
     case tparquet::Type::type::BYTE_ARRAY:
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY:
-        data_column = vectorized::BinaryColumn::create();
+        data_column = BinaryColumn::create();
         break;
     }
-    return vectorized::NullableColumn::create(data_column, vectorized::NullColumn::create());
+    return NullableColumn::create(data_column, NullColumn::create());
 }
 
-Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) {
-    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
-    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
-            src_nullable_column->data_column());
-    auto* dst_column =
-            vectorized::ColumnHelper::as_raw_column<vectorized::DateColumn>(dst_nullable_column->data_column());
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DateColumn>(dst_nullable_column->data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
@@ -562,7 +556,7 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     size_t size = src_column->size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
-        dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
+        dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -581,17 +575,15 @@ Status Int96ToDateTimeConverter::init(const std::string& timezone) {
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) {
-    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
-    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int96_t>>(
-            src_nullable_column->data_column());
-    auto* dst_column =
-            vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int96_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
@@ -602,7 +594,7 @@ Status Int96ToDateTimeConverter::convert(const vectorized::ColumnPtr& src, vecto
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            vectorized::Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
+            Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }
@@ -671,18 +663,15 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
     return Status::OK();
 }
 
-Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::ColumnPtr& src,
-                                                              vectorized::Column* dst) {
-    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
-    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
-    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int64_t>>(
-            src_nullable_column->data_column());
-    auto* dst_column =
-            vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
@@ -693,9 +682,9 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            vectorized::Timestamp timestamp = vectorized::timestamp::of_epoch_second(
-                    static_cast<int>(src_data[i] / _second_mask),
-                    static_cast<int>((src_data[i] % _second_mask) * _scale_to_nano_factor));
+            Timestamp timestamp =
+                    timestamp::of_epoch_second(static_cast<int>(src_data[i] / _second_mask),
+                                               static_cast<int>((src_data[i] % _second_mask) * _scale_to_nano_factor));
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }

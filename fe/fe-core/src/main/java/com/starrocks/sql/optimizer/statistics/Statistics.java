@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,7 +32,7 @@ public class Statistics {
     // This flag set true if get table row count from GlobalStateMgr LE 1
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
-    private boolean tableRowCountMayInaccurate;
+    private final boolean tableRowCountMayInaccurate;
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
@@ -66,7 +67,7 @@ public class Statistics {
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
         ColumnStatistic result = columnStatistics.get(column);
-        Preconditions.checkState(result != null);
+        Preconditions.checkState(result != null, "cannot find statistics of col: %s", column);
         return result;
     }
 
@@ -124,7 +125,13 @@ public class Statistics {
             // Due to the influence of the default filter coefficient,
             // the number of calculated rows may be less than 1.
             // The minimum value of rowCount is set to 1, and values less than 1 are meaningless.
-            this.outputRowCount = Math.max(1, outputRowCount);
+            if (outputRowCount < 1D) {
+                this.outputRowCount = 1D;
+            } else if (outputRowCount > StatsConstants.MAXIMUM_ROW_COUNT) {
+                this.outputRowCount = StatsConstants.MAXIMUM_ROW_COUNT;
+            } else {
+                this.outputRowCount = outputRowCount;
+            }
             return this;
         }
 
@@ -145,11 +152,6 @@ public class Statistics {
 
         public ColumnStatistic getColumnStatistics(ColumnRefOperator columnRefOperator) {
             return this.columnStatistics.get(columnRefOperator);
-        }
-
-        public Builder removeColumnStatistics(ColumnRefOperator column) {
-            columnStatistics.remove(column);
-            return this;
         }
 
         public Statistics build() {

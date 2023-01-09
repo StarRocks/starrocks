@@ -63,12 +63,12 @@ using std::shared_ptr;
 
 using std::vector;
 
-using ValueGenerator = std::function<vectorized::Datum(size_t rid, int cid, int block_id)>;
+using ValueGenerator = std::function<Datum(size_t rid, int cid, int block_id)>;
 
 // 0,  1,  2,  3
 // 10, 11, 12, 13
 // 20, 21, 22, 23
-static vectorized::Datum DefaultIntGenerator(size_t rid, int cid, int block_id) {
+static Datum DefaultIntGenerator(size_t rid, int cid, int block_id) {
     return {static_cast<int32_t>(rid * 10 + cid)};
 }
 
@@ -94,7 +94,7 @@ protected:
         SegmentWriter writer(std::move(wfile), 0, &build_schema, opts);
         ASSERT_OK(writer.init());
 
-        auto schema = ChunkHelper::convert_schema_to_format_v2(build_schema);
+        auto schema = ChunkHelper::convert_schema(build_schema);
         auto chunk = ChunkHelper::new_chunk(schema, nrows);
         for (size_t rid = 0; rid < nrows; ++rid) {
             auto& cols = chunk->columns();
@@ -141,12 +141,12 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     // 10, 11, 12, 13
     // 20, 21, 22, 23
     size_t nrows = 1048576;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, nrows);
     for (size_t rid = 0; rid < nrows; ++rid) {
         auto& cols = chunk->columns();
         for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
-            cols[cid]->append_datum(vectorized::Datum(static_cast<int32_t>(rid * 10 + cid)));
+            cols[cid]->append_datum(Datum(static_cast<int32_t>(rid * 10 + cid)));
         }
     }
     ASSERT_OK(writer.append_chunk(*chunk));
@@ -198,16 +198,16 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         chunk->reset();
         auto& cols = chunk->columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
         }
         ASSERT_OK(writer.append_chunk(*chunk));
     }
@@ -220,7 +220,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
@@ -269,14 +269,14 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -287,13 +287,13 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -304,13 +304,13 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col4
         std::vector<uint32_t> column_indexes{3};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -322,11 +322,11 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -386,14 +386,14 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -404,13 +404,13 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(data_strs[j % 8]));
+                cols[0]->append_datum(Datum(data_strs[j % 8]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -421,11 +421,11 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();

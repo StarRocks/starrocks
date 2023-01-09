@@ -57,18 +57,17 @@ public:
 
     Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicate,
-                                      const vectorized::ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* range) override;
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                      const ColumnPredicate* del_predicate, SparseRange* range) override;
 
-    Status get_row_ranges_by_bloom_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                          vectorized::SparseRange* range) override;
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          SparseRange* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
@@ -76,15 +75,15 @@ public:
 
     int dict_lookup(const Slice& word) override;
 
-    Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_dict_codes(const SparseRange& range, Column* dst) override;
 
-    Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override;
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ParsedPage* get_current_page() { return _page.get(); }
 
@@ -105,13 +104,13 @@ private:
     int _do_dict_lookup(const Slice& word);
 
     template <LogicalType Type>
-    Status _do_next_dict_codes(size_t* n, vectorized::Column* dst);
+    Status _do_next_dict_codes(size_t* n, Column* dst);
 
     template <LogicalType Type>
-    Status _do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst);
+    Status _do_next_batch_dict_codes(const SparseRange& range, Column* dst);
 
     template <LogicalType Type>
-    Status _do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words);
+    Status _do_decode_dict_codes(const int32_t* codes, size_t size, Column* words);
 
     template <LogicalType Type>
     Status _do_init_dict_decoder();
@@ -120,7 +119,7 @@ private:
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
     template <typename ParseFunc>
-    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values, ParseFunc&& page_parse);
+    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
 
     Status _load_dict_page();
 
@@ -151,11 +150,9 @@ private:
     std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
-    Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, vectorized::Column* dst) = nullptr;
-    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const vectorized::SparseRange& range,
-                                                                vectorized::Column* dst) = nullptr;
-    Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
-                                                            vectorized::Column* words) = nullptr;
+    Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const SparseRange& range, Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size, Column* words) = nullptr;
     Status (ScalarColumnIterator::*_init_dict_decoder_func)() = nullptr;
 
     Status (ScalarColumnIterator::*_fetch_all_dict_words_func)(std::vector<Slice>* words) const = nullptr;
@@ -167,7 +164,7 @@ private:
     // It's used to get element ordinal for specfied offset value.
     int64_t _element_ordinal = 0;
 
-    vectorized::UInt32Column _array_size;
+    UInt32Column _array_size;
 };
 
 } // namespace starrocks

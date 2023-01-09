@@ -38,7 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -74,12 +73,6 @@ public class FunctionCallExpr extends Expr {
     // because when create merge agg fn from update agg fn,
     // The slot SlotDescriptor nullable info will lost or change
     private boolean mergeAggFnHasNullableChild = true;
-
-    private static final ImmutableSet<String> STDDEV_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_VAL).add(FunctionSet.STDDEV_SAMP)
-                    .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VARIANCE_POP)
-                    .add(FunctionSet.VAR_SAMP).add(FunctionSet.VAR_POP).build();
 
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =

@@ -566,29 +566,31 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbId);
         }
 
-        // check auth
-        try {
-            Set<String> tableNames = getTableNames();
-            if (tableNames.isEmpty()) {
-                // forward compatibility
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db.getFullName(),
-                        PrivPredicate.LOAD)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            Privilege.LOAD_PRIV);
-                }
-            } else {
-                for (String tblName : tableNames) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), db.getFullName(),
-                            tblName, PrivPredicate.LOAD)) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                command,
-                                ConnectContext.get().getQualifiedUser(),
-                                ConnectContext.get().getRemoteIP(), tblName);
+        // check auth, In new RBAC framework, cancel load and show load will be checked in PrivilegeCheckerV2
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            try {
+                Set<String> tableNames = getTableNames();
+                if (tableNames.isEmpty()) {
+                    // forward compatibility
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db.getFullName(),
+                            PrivPredicate.LOAD)) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                Privilege.LOAD_PRIV);
+                    }
+                } else {
+                    for (String tblName : tableNames) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), db.getFullName(),
+                                tblName, PrivPredicate.LOAD)) {
+                            ErrorReport.reportDdlException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                                    command,
+                                    ConnectContext.get().getQualifiedUser(),
+                                    ConnectContext.get().getRemoteIP(), tblName);
+                        }
                     }
                 }
+            } catch (MetaNotFoundException e) {
+                throw new DdlException(e.getMessage());
             }
-        } catch (MetaNotFoundException e) {
-            throw new DdlException(e.getMessage());
         }
     }
 

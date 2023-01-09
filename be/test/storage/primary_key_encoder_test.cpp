@@ -28,28 +28,28 @@ using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<vectorized::VectorizedSchema> create_key_schema(const vector<LogicalType>& types) {
-    vectorized::VectorizedFields fields;
+static unique_ptr<VectorizedSchema> create_key_schema(const vector<LogicalType>& types) {
+    VectorizedFields fields;
     std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
-        auto fd = new vectorized::VectorizedField(i, name, types[i], false);
+        auto fd = new VectorizedField(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }
-    return std::make_unique<vectorized::VectorizedSchema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+    return std::make_unique<VectorizedSchema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     auto sc = create_key_schema({TYPE_INT});
-    unique_ptr<vectorized::Column> dest;
+    unique_ptr<Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
-        vectorized::Datum tmp;
+        Datum tmp;
         tmp.set_int32(i * 2343);
         pchunk->columns()[0]->append_datum(tmp);
     }
@@ -65,12 +65,12 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     auto sc = create_key_schema({TYPE_LARGEINT});
-    unique_ptr<vectorized::Column> dest;
+    unique_ptr<Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
-        vectorized::Datum tmp;
+        Datum tmp;
         tmp.set_int128(i * 2343);
         pchunk->columns()[0]->append_datum(tmp);
     }
@@ -90,12 +90,12 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
-    unique_ptr<vectorized::Column> dest;
+    unique_ptr<Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
-        vectorized::Datum tmp;
+        Datum tmp;
         tmp.set_int32(i * 2343);
         pchunk->columns()[0]->append_datum(tmp);
         string tmpstr = StringPrintf("slice000%d", i * 17);
@@ -135,7 +135,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
-        vectorized::Datum tmp;
+        Datum tmp;
         tmp.set_int32(42);
         pchunk->columns()[0]->append_datum(tmp);
         string tmpstr("slice0000");
@@ -154,7 +154,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
-        vectorized::Datum tmp;
+        Datum tmp;
         tmp.set_int32(42);
         pchunk->columns()[0]->append_datum(tmp);
         string tmpstr(128, 's');

@@ -39,11 +39,11 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override {
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override {
         return Status::InternalError("Shouldn't pull chunk from sink operator");
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override { return Status::OK(); }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
 
 private:
     bool _is_finished{false};

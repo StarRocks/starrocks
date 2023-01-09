@@ -145,6 +145,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -270,10 +271,12 @@ public class StmtExecutor {
         context.getPlannerProfile().build(plannerProfile);
 
         if (coord != null) {
-            coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-            coord.endProfile();
-            coord.mergeIsomorphicProfiles();
-            profile.addChild(coord.getQueryProfile());
+            if (coord.getQueryProfile() != null) {
+                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.endProfile();
+                coord.mergeIsomorphicProfiles();
+                profile.addChild(coord.getQueryProfile());
+            }
             coord = null;
         }
     }
@@ -906,7 +909,7 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr()
                 .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
     }
 
     private void handleDropHistogramStmt() {
@@ -1097,7 +1100,7 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                ResourceGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
+                TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
                 String resourceGroupStr =
                         resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
@@ -1139,7 +1142,7 @@ public class StmtExecutor {
             }
             context.setState(e.getQueryState());
         } catch (Throwable e) {
-            // Maybe our bug or wrong input parematers
+            // Maybe our bug or wrong input parameters
             String sql = AstToStringBuilder.toString(parsedStmt);
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;

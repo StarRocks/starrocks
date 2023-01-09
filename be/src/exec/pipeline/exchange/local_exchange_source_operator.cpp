@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 
 // Used for PassthroughExchanger.
 // The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
-Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -34,9 +34,8 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
 
 // Used for PartitionExchanger.
 // Only enqueue the partition chunk information here, and merge chunk in pull_chunk().
-Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk,
-                                              std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from,
-                                              uint32_t size) {
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes,
+                                              uint32_t from, uint32_t size) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -81,8 +80,8 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
-    vectorized::ChunkPtr chunk = _pull_passthrough_chunk(state);
+StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
+    ChunkPtr chunk = _pull_passthrough_chunk(state);
     if (chunk == nullptr) {
         chunk = _pull_shuffle_chunk(state);
     }
@@ -90,11 +89,11 @@ StatusOr<vectorized::ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeSt
     return std::move(chunk);
 }
 
-vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* state) {
+ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* state) {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
     if (!_full_chunk_queue.empty()) {
-        vectorized::ChunkPtr chunk = std::move(_full_chunk_queue.front());
+        ChunkPtr chunk = std::move(_full_chunk_queue.front());
         _full_chunk_queue.pop();
         return chunk;
     }
@@ -102,7 +101,7 @@ vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(Runtim
     return nullptr;
 }
 
-vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
+ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
     std::vector<PartitionChunk> selected_partition_chunks;
     size_t rows_num = 0;
     // Lock during pop partition chunks from queue.
@@ -121,7 +120,7 @@ vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeSta
     }
 
     // Unlock during merging partition chunks into a full chunk.
-    vectorized::ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
+    ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
     chunk->reserve(rows_num);
     for (const auto& partition_chunk : selected_partition_chunks) {
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,

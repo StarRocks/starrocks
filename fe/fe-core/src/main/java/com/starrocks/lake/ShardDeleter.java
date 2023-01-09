@@ -15,14 +15,18 @@
 
 package com.starrocks.lake;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.google.gson.annotations.SerializedName;
-import com.staros.util.LockCloseable;
+import autovalue.shaded.com.google.common.common.collect.Lists;
+import autovalue.shaded.com.google.common.common.collect.Sets;
+import com.google.common.base.Preconditions;
+import com.staros.proto.ShardGroupInfo;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.persist.ShardInfo;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -32,57 +36,69 @@ import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class ShardDeleter extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
 
-    @SerializedName(value = "shardIds")
-    private final Set<Long> shardIds;
-
-    private final ReentrantReadWriteLock rwLock;
-
     public ShardDeleter() {
-        shardIds = Sets.newHashSet();
-        rwLock = new ReentrantReadWriteLock();
+        super("ShardDeleter", Config.shard_deleter_run_interval_sec * 1000L);
     }
 
-    public void addUnusedShardId(Set<Long> tableIds) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            shardIds.addAll(tableIds);
-        }
-    }
+    private List<Long> getAllPartitionShardGroupId() {
+        List<Long> groupIds = new ArrayList<>();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+            if (db == null) {
+                continue;
+            }
+            if (db.isInfoSchemaDb()) {
+                continue;
+            }
 
-    private void deleteUnusedShard() {
-        // delete shard and drop lakeTablet
-        if (shardIds.isEmpty()) {
-            return;
-        }
-
-        Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
-        // group shards by be
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            for (long shardId : shardIds) {
-                try {
-                    long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
-                    shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-                } catch (UserException ignored1) {
-                    // ignore error
+            db.readLock();
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
+                    if (table.isLakeTable()) {
+                        GlobalStateMgr.getCurrentState()
+                                .getAllPartitionsIncludeRecycleBin((OlapTable) table)
+                                .stream()
+                                .map(Partition::getShardGroupId)
+                                .forEach(groupIds::add);
+                    }
                 }
+            } finally {
+                db.readUnlock();
             }
         }
+        return groupIds;
+    }
 
-        Set<Long> deletedShards = Sets.newHashSet();
+    public static void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
+        Preconditions.checkNotNull(starOSAgent);
+        Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
+        // group shards by be
+        for (long shardId : shardIds) {
+            try {
+                long backendId = starOSAgent.getPrimaryBackendIdByShard(shardId);
+                shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+            } catch (UserException ignored1) {
+                // ignore error
+            }
+        }
 
         for (Map.Entry<Long, Set<Long>> entry : shardIdsByBeMap.entrySet()) {
             long backendId = entry.getKey();
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+            Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackend(backendId);
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
@@ -95,40 +111,83 @@ public class ShardDeleter extends LeaderDaemon {
                 }
             } catch (Throwable e) {
                 LOG.error(e);
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 continue;
             }
 
             // 2. delete shard
             try {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
+                starOSAgent.deleteShards(shards);
             } catch (DdlException e) {
                 LOG.warn("failed to delete shard from starMgr");
                 continue;
             }
+        }
+    }
 
-            deletedShards.addAll(shards);
+    /**
+     * Delete redundant shard & shard group.
+     * 1. List shard groups from FE and from StarMgr
+     * 2. Compare the list and get a list of shard groups that in StarMgr but not in FE
+     * 3. shard groups with empty shards and older than threshold, will be permanently deleted.
+     */
+    private void deleteUnusedShardAndShardGroup() {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+
+        List<Long> groupIdFe = getAllPartitionShardGroupId();
+        List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
+                        .stream()
+                        .filter(x -> x.getGroupId() != 0L)
+                        .collect(Collectors.toList());
+
+        if (shardGroupsInfo.isEmpty()) {
+            return;
         }
 
-        // 3. succ both, remove from the map
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            shardIds.removeAll(deletedShards);
+        LOG.debug("size of groupIdFe is {}, size of shardGroupsInfo is {}",
+                groupIdFe.size(), shardGroupsInfo.size());
+        LOG.debug("groupIdFe is {}", groupIdFe);
+
+        Map<Long, String> groupToCreateTimeMap = shardGroupsInfo.stream().collect(Collectors.toMap(
+                ShardGroupInfo::getGroupId,
+                val -> val.getPropertiesMap().get("createTime"),
+                (key1, key2) -> key1
+        ));
+
+        List<Long> diffList = shardGroupsInfo.stream()
+                .map(ShardGroupInfo::getGroupId)
+                .filter(x -> !groupIdFe.contains(x))
+                .collect(Collectors.toList());
+        LOG.debug("diff.size is {}, diff: {}", diffList.size(), diffList);
+
+        // 1.4.collect redundant shard groups and delete
+        long nowMs = System.currentTimeMillis();
+        List<Long> emptyShardGroup = new ArrayList<>();
+        for (long groupId : diffList) {
+            if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
+                try {
+                    List<Long> shardIds = starOSAgent.listShard(groupId);
+                    if (shardIds.isEmpty()) {
+                        emptyShardGroup.add(groupId);
+                    } else {
+                        dropTabletAndDeleteShard(shardIds, starOSAgent);
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
+            }
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logDeleteUnusedShard(deletedShards);
+
+        LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
+        if (!emptyShardGroup.isEmpty()) {
+            starOSAgent.deleteShardGroup(emptyShardGroup);
+        }
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        deleteUnusedShard();
+        deleteUnusedShardAndShardGroup();
     }
-
-    public void replayDeleteUnusedShard(ShardInfo shardInfo) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            this.shardIds.removeAll(shardInfo.getShardIds());
-        }
-    }
-
-    public void replayAddUnusedShard(ShardInfo shardInfo) {
-        addUnusedShardId(shardInfo.getShardIds());
-    }
-
 }

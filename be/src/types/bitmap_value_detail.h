@@ -409,25 +409,22 @@ public:
                 continue;
             }
 
-            do {
-                // if the right map has reached its end, ensure that the right
-                // map contains only empty Bitmaps
-                if (rhs_iter == r.roarings.cend()) {
-                    while (lhs_iter != roarings.cend()) {
-                        if (lhs_iter->second.isEmpty()) {
-                            ++lhs_iter;
-                            continue;
-                        }
-                        return false;
+            // if the right map has reached its end, ensure that the right
+            // map contains only empty Bitmaps
+            if (rhs_iter == r.roarings.cend()) {
+                while (lhs_iter != roarings.cend()) {
+                    if (lhs_iter->second.isEmpty()) {
+                        ++lhs_iter;
+                        continue;
                     }
-                    return true;
+                    return false;
                 }
-                // if the right map has an empty bitmap, skip it
-                if (rhs_iter->second.isEmpty()) {
-                    ++rhs_iter;
-                    continue;
-                }
-            } while (false);
+                return true;
+            }
+            // if the right map has an empty bitmap, skip it
+            if (rhs_iter->second.isEmpty()) {
+                ++rhs_iter;
+            }
             // if neither map has reached its end ensure elements are equal and
             // move to the next element in both
         } while (lhs_iter++->second == rhs_iter++->second);

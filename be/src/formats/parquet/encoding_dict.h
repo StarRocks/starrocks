@@ -108,18 +108,18 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
-        vectorized::FixedLengthColumn<T>* data_column = nullptr;
+        FixedLengthColumn<T>* data_column = nullptr;
 
         if (dst->is_nullable()) {
-            auto nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            auto nullable_column = down_cast<NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
-            data_column = down_cast<vectorized::FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
         } else {
-            data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
+            data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
 
         RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes, _dict));
@@ -161,7 +161,7 @@ public:
         _dict_code_by_value.reserve(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        _dict_data.resize(total_length + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE);
+        _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
         size_t offset = 0;
         _max_value_length = 0;
         for (int i = 0; i < num_values; ++i) {
@@ -179,12 +179,12 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(vectorized::Column* column) override {
+    Status get_dict_values(Column* column) override {
         [[maybe_unused]] auto ret = column->append_strings_overflow(_dict, _max_value_length);
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) override {
         std::vector<Slice> slices(dict_codes.size());
         RETURN_IF_ERROR(check_dict_code_out_of_range(dict_codes, _dict));
         for (size_t i = 0; i < dict_codes.size(); i++) {
@@ -213,12 +213,13 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
         switch (content_type) {
         case DICT_CODE: {
             [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            DCHECK(ret) << "append_numbers failed";
             break;
         }
         case VALUE: {
@@ -228,6 +229,7 @@ public:
                 _slices[i] = _dict[_indexes[i]];
             }
             [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            DCHECK(ret) << "append_strings_overflow failed";
             break;
         }
         default:

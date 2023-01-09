@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
@@ -24,11 +23,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
@@ -49,25 +50,48 @@ import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_TH
 
 public class PlannerProfile {
     private static final Logger LOG = LogManager.getLogger(PlannerProfile.class);
-    private ConnectContext ctx;
 
     public static class ScopedTimer implements AutoCloseable {
         private volatile long currentThreadId = 0;
+        private PlannerProfile profile;
+        private final String name;
+        private final int level;
+        private final int order;
+        private final AtomicInteger count = new AtomicInteger(0);
         private int totalCount = 0;
         // possible to record p99?
 
         private final Stopwatch watch = Stopwatch.createUnstarted();
 
+        public ScopedTimer(PlannerProfile profile, String name) {
+            this.profile = profile;
+            this.name = name;
+            this.level = profile.levels.getAndIncrement();
+            this.order = profile.orders.getAndIncrement();
+        }
+
         public void start() {
-            Preconditions.checkState(currentThreadId == 0);
-            currentThreadId = Thread.currentThread().getId();
-            watch.start();
+            if (count.getAndIncrement() == 0) {
+                Preconditions.checkState(currentThreadId == 0);
+                currentThreadId = Thread.currentThread().getId();
+                watch.start();
+            } else {
+                Preconditions.checkState(currentThreadId == Thread.currentThread().getId());
+            }
+
+            totalCount++;
         }
 
         public void close() {
             Preconditions.checkState(currentThreadId == Thread.currentThread().getId());
+            if (count.decrementAndGet() != 0) {
+                return;
+            }
+            if (profile != null) {
+                profile.levels.decrementAndGet();
+                profile = null;
+            }
             currentThreadId = 0;
-            totalCount += 1;
             watch.stop();
 
             printBackgroundLog();
@@ -91,16 +115,16 @@ public class PlannerProfile {
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
     private final Map<String, String> customProperties = new ConcurrentHashMap<>();
-
-    public PlannerProfile() {
-    }
-
-    public void init(ConnectContext ctx) {
-        this.ctx = ctx;
-    }
+    private final Map<String, Long> timePoint = new ConcurrentHashMap<>();
+    private final AtomicInteger orders = new AtomicInteger();
+    private final AtomicInteger levels = new AtomicInteger();
+    private final Stopwatch timing = Stopwatch.createStarted();
 
     private ScopedTimer getOrCreateScopedTimer(String name) {
-        return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
+        return timers.computeIfAbsent(name, key -> {
+            timePoint.put(name, timing.elapsed(TimeUnit.MICROSECONDS) / 1000);
+            return new ScopedTimer(this, name);
+        });
     }
 
     public static ScopedTimer getScopedTimer(String name) {
@@ -213,28 +237,17 @@ public class PlannerProfile {
         }
     }
 
-    private static String print(String name, long time, int step) {
-        return String.join("", Collections.nCopies(step, "    ")) + "-- " + name + " " + time + "ms" + "\n";
+    private static String print(String name, long point, ScopedTimer timer) {
+        return String.format("%8dms|", point) + String.join("", Collections.nCopies(timer.level, "    "))
+                + "-- " + name + "[" + timer.getTotalCount() + "] " + timer.getTotalTime() + "ms\n";
     }
 
     public static String printPlannerTimeCost(PlannerProfile profile) {
         StringBuilder trace = new StringBuilder();
         Map<String, PlannerProfile.ScopedTimer> times = profile.getTimers();
 
-        trace.append(print("Total", getTime("Total", times), 0));
-        trace.append(print("Parser", getTime("Parser", times), 1));
-        trace.append(print("Analyzer", getTime("Analyzer", times), 1));
-        trace.append(print("Optimizer", getTime("Optimizer", times), 1));
-        trace.append(print("Optimizer.RuleBaseOptimize",
-                getTime("Optimizer.RuleBaseOptimize", times), 2));
-        trace.append(print("Optimizer.CostBaseOptimize",
-                getTime("Optimizer.CostBaseOptimize", times), 2));
-        trace.append(print("Optimizer.PhysicalRewrite",
-                getTime("Optimizer.PhysicalRewrite", times), 2));
-        trace.append(print("Optimizer.preprocessMvs",
-                getTime("Optimizer.preprocessMvs", times), 2));
-        trace.append(print("ExecPlanBuild", getTime("ExecPlanBuild", times), 1));
-
+        times.entrySet().stream().sorted(Comparator.comparingInt(o -> o.getValue().order)).forEach(
+                entry -> trace.append(print(entry.getKey(), profile.timePoint.get(entry.getKey()), entry.getValue())));
         return trace.toString();
     }
 }

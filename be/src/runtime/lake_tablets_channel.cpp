@@ -57,10 +57,12 @@ public:
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     void cancel() override;
+
+    void abort() override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -106,7 +108,7 @@ private:
         mutable bthread::Mutex _mtx;
         PTabletWriterAddBatchResult* _response;
 
-        vectorized::Chunk _chunk;
+        Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
@@ -115,13 +117,13 @@ private:
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    StatusOr<std::unique_ptr<WriteContext>> _create_write_context(vectorized::Chunk* chunk,
+    StatusOr<std::unique_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
 
@@ -148,7 +150,7 @@ private:
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 
-    vectorized::GlobalDictByNameMaps _global_dicts;
+    GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
 };
 
@@ -173,7 +175,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sha
     return Status::OK();
 }
 
-void LakeTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                    PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
 
@@ -346,7 +348,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     }
     // init global dict info if needed
     for (auto& slot : params.schema().slot_descs()) {
-        vectorized::GlobalDictMap global_dict;
+        GlobalDictMap global_dict;
         if (slot.global_dict_words_size()) {
             for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                 const std::string& dict_word = slot.global_dict_words(i);
@@ -376,14 +378,18 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     return Status::OK();
 }
 
-void LakeTabletsChannel::cancel() {
+void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }
 }
 
+void LakeTabletsChannel::cancel() {
+    //TODO: Current LakeDeltaWriter don't support fast cancel
+}
+
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
-        vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+        Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     if (chunk == nullptr && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }

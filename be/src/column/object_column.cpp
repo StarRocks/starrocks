@@ -22,7 +22,7 @@
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 size_t ObjectColumn<T>::byte_size(size_t from, size_t size) const {
@@ -87,7 +87,7 @@ void ObjectColumn<T>::append(const Column& src, size_t offset, size_t count) {
 }
 
 template <typename T>
-void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src, const uint32_t* indexes, uint32_t from,
+void ObjectColumn<T>::append_selective(const starrocks::Column& src, const uint32_t* indexes, uint32_t from,
                                        uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     for (uint32_t j = 0; j < size; ++j) {
@@ -96,8 +96,7 @@ void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src,
 };
 
 template <typename T>
-void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::Column& src, uint32_t index,
-                                                  uint32_t size) {
+void ObjectColumn<T>::append_value_multiple_times(const starrocks::Column& src, uint32_t index, uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     for (uint32_t j = 0; j < size; ++j) {
         append(obj_col.get_object(index));
@@ -219,8 +218,7 @@ size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, 
 }
 
 template <typename T>
-int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::vectorized::Column& rhs,
-                                int nan_direction_hint) const {
+int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::Column& rhs, int nan_direction_hint) const {
     DCHECK(false) << "Don't support object column compare_at";
     return 0;
 }
@@ -318,4 +316,4 @@ template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
 template class ObjectColumn<JsonValue>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

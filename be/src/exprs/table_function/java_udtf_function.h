@@ -17,7 +17,7 @@
 #include "exprs/table_function/table_function.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Now UDTF only support one column return
 class JavaUDTFFunction final : public TableFunction {
@@ -31,4 +31,4 @@ public:
     std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override;
     Status close(RuntimeState* _runtime_state, TableFunctionState* state) const override;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

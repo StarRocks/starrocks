@@ -43,7 +43,7 @@
 #include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
@@ -81,7 +81,6 @@ using std::stringstream;
 using std::vector;
 using std::map;
 
-using vectorized::ChunkPtr;
 // Superclass of all executor nodes.
 // All subclasses need to make sure to check RuntimeState::is_cancelled()
 // periodically in order to ensure timely termination after the cancellation
@@ -168,26 +167,25 @@ public:
     // evaluate exprs over chunk to get a filter
     // if filter_ptr is not null, save filter to filter_ptr.
     // then running filter on chunk.
-    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                 vectorized::FilterPtr* filter_ptr = nullptr, bool apply_filter = true);
-    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                                       vectorized::Filter* filter);
+    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr = nullptr,
+                                 bool apply_filter = true);
+    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
+                                                       Filter* filter);
 
-    static void eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
+    static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
 
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
-    void register_runtime_filter_descriptor(RuntimeState* state, vectorized::RuntimeFilterProbeDescriptor* rf_desc);
-    void eval_join_runtime_filters(vectorized::Chunk* chunk);
-    void eval_join_runtime_filters(vectorized::ChunkPtr* chunk);
-    void eval_filter_null_values(vectorized::Chunk* chunk);
+    void register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc);
+    void eval_join_runtime_filters(Chunk* chunk);
+    void eval_join_runtime_filters(ChunkPtr* chunk);
+    void eval_filter_null_values(Chunk* chunk);
 
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
     virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs);
-    virtual void push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector);
-    void push_down_join_runtime_filter_to_children(RuntimeState* state,
-                                                   vectorized::RuntimeFilterProbeCollector* collector);
+    virtual void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector);
+    void push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector);
 
     void push_down_join_runtime_filter_recursively(RuntimeState* state) {
         push_down_join_runtime_filter(state, &_runtime_filter_collector);
@@ -229,7 +227,7 @@ public:
 
     bool use_vectorized() { return _use_vectorized; }
 
-    vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
+    RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
     // local runtime filters that are conducted on this ExecNode.
     const std::set<TPlanNodeId>& local_rf_waiting_set() const { return _local_rf_waiting_set; }
@@ -256,7 +254,7 @@ protected:
     std::vector<ExprContext*> _conjunct_ctxs;
     std::vector<TupleId> _tuple_ids;
 
-    vectorized::RuntimeFilterProbeCollector _runtime_filter_collector;
+    RuntimeFilterProbeCollector _runtime_filter_collector;
     std::vector<SlotId> _filter_null_value_columns;
     std::set<TPlanNodeId> _local_rf_waiting_set;
 

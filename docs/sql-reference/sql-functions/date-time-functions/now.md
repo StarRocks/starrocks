@@ -1,4 +1,4 @@
-# now
+# now, current_timestamp, localtime, localtimestamp
 
 ## Description
 

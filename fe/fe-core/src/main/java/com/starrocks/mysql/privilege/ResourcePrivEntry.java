@@ -79,17 +79,17 @@ public class ResourcePrivEntry extends PrivEntry {
         }
 
         ResourcePrivEntry otherEntry = (ResourcePrivEntry) other;
-        int res = origHost.compareTo(otherEntry.origHost);
+        int res = otherEntry.origHost.compareTo(origHost);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        res = origResource.compareTo(otherEntry.origResource);
+        res = otherEntry.origResource.compareTo(origResource);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        return -realOrigUser.compareTo(otherEntry.realOrigUser);
+        return otherEntry.realOrigUser.compareTo(realOrigUser);
     }
 
     @Override

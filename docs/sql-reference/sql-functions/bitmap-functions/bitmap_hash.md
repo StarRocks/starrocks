@@ -16,7 +16,6 @@ cat data | curl --location-trusted -u user:passwd -T - \
 BITMAP BITMAP_HASH(expr)
 ```
 
-
 ## Examples
 
 ```Plain Text
@@ -26,6 +25,13 @@ MySQL > select bitmap_count(bitmap_hash('hello'));
 +------------------------------------+
 |                                  1 |
 +------------------------------------+
+
+select bitmap_to_string(bitmap_hash('hello'));
++----------------------------------------+
+| bitmap_to_string(bitmap_hash('hello')) |
++----------------------------------------+
+| 1321743225                             |
++----------------------------------------+
 ```
 
 ## keyword

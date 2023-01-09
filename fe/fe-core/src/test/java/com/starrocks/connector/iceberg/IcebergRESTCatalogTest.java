@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.connector.HdfsEnvironment;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -61,7 +62,8 @@ public class IcebergRESTCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties, hdfsEnvironment);
         Table table = icebergRESTCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -77,7 +79,8 @@ public class IcebergRESTCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

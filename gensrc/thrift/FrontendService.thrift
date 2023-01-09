@@ -60,9 +60,9 @@ struct TSetSessionParams {
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
-    3: required string host
-    4: required string db_name
-    5: required list<string> table_names;
+    3: optional string host
+    4: optional string db_name
+    5: optional list<string> table_names;
 }
 
 struct TColumnDesc {
@@ -623,6 +623,14 @@ struct TStreamLoadPutRequest {
     31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
+    // only valid when file type is CSV
+    51: optional i64 skipHeader
+    // only valid when file type is CSV
+    52: optional bool trimSpace
+    // only valid when file type is CSV
+    53: optional byte enclose
+    // only valid when file type is CSV
+    54: optional byte escape
 }
 
 struct TStreamLoadPutResult {
@@ -1014,6 +1022,23 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
+struct TCreatePartitionRequest {
+    1: optional i64 txn_id
+    2: optional i64 db_id
+    3: optional i64 table_id
+    // for each partition column's partition values
+    4: optional list<list<string>> partitionValues
+}
+
+struct TCreatePartitionResult {
+    1: optional Status.TStatus status
+    // If the status is not OK, err_msg will be a specific error reason
+    2: optional string err_msg;
+    3: optional list<Descriptors.TOlapTablePartition> partitions
+    4: optional list<Descriptors.TTabletLocation> tablets
+    5: optional list<Descriptors.TNodeInfo> nodes
+}
+
 struct TAuthInfo {
     // If not set, match every database
     1: optional string pattern
@@ -1139,6 +1164,7 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+    TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
     

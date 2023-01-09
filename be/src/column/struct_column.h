@@ -18,23 +18,24 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
 public:
     using Container = Buffer<std::string>;
 
-    StructColumn(Columns fields, BinaryColumn::Ptr field_names) {
+    // Used to construct an unnamed struct
+    StructColumn(Columns fields) : _fields(std::move(fields)) {}
+
+    StructColumn(Columns fields, std::vector<std::string> field_names)
+            : _fields(std::move(fields)), _field_names(std::move(field_names)) {
         // Struct must have at least one field.
-        DCHECK(fields.size() > 0);
-        DCHECK(field_names->size() > 0);
+        DCHECK(_fields.size() > 0);
+        DCHECK(_field_names.size() > 0);
 
         // fields and field_names must have the same size.
-        DCHECK(fields.size() == field_names->size());
-
-        _fields = std::move(fields);
-        _field_names = std::move(field_names);
+        DCHECK(_fields.size() == _field_names.size());
     }
 
     StructColumn(const StructColumn& rhs) {
@@ -43,7 +44,7 @@ public:
             fields.emplace_back(field->clone_shared());
         }
         _fields = fields;
-        _field_names = std::static_pointer_cast<BinaryColumn>(rhs._field_names->clone_shared());
+        _field_names = rhs._field_names;
     }
 
     StructColumn(StructColumn&& rhs) noexcept
@@ -159,20 +160,24 @@ public:
     // Struct Column own functions
     const Columns& fields() const;
 
+    bool is_unnamed_struct() const { return _field_names.empty(); }
+
     Columns& fields_column();
 
     ColumnPtr field_column(const std::string& field_name);
 
-    const BinaryColumn& field_names() const;
+    const std::vector<std::string>& field_names() const { return _field_names; }
 
-    BinaryColumn::Ptr& field_names_column();
+    Status unfold_const_children(const TypeDescriptor& type) override;
 
 private:
     // A collection that contains StructType's subfield column.
     Columns _fields;
+
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
     // _field_names will not participate in serialization because it is created based on meta information
-    BinaryColumn::Ptr _field_names;
+    std::vector<std::string> _field_names;
 };
-} // namespace starrocks::vectorized
+
+} // namespace starrocks

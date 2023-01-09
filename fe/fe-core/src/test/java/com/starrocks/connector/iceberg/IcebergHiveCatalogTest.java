@@ -15,9 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.IcebergHiveCatalog;
-import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.HdfsEnvironment;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -42,7 +40,9 @@ public class IcebergHiveCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergHiveCatalog icebergHiveCatalog =
+                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.HIVE_CATALOG, icebergHiveCatalog.getIcebergCatalogType());
     }
 
@@ -67,7 +67,9 @@ public class IcebergHiveCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergHiveCatalog icebergHiveCatalog =
+                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Table table = icebergHiveCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -93,7 +95,9 @@ public class IcebergHiveCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergHiveCatalog icebergHiveCatalog =
+                IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

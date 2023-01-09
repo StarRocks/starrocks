@@ -31,7 +31,7 @@
 #include "gutil/dynamic_annotations.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 struct ColumnPoolBlockSize {
@@ -448,4 +448,4 @@ inline void TEST_clear_all_columns_this_thread() {
     ForEach<ColumnPoolList>(detail::ClearColumnPool());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

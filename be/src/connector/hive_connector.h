@@ -16,7 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 
 namespace starrocks::connector {
 
@@ -24,7 +24,7 @@ class HiveConnector final : public Connector {
 public:
     ~HiveConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::HIVE; }
@@ -37,11 +37,11 @@ class HiveDataSourceProvider final : public DataSourceProvider {
 public:
     ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
-    HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
 };
 
@@ -52,7 +52,7 @@ public:
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -75,7 +75,7 @@ private:
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
-    vectorized::HdfsScanner* _scanner = nullptr;
+    HdfsScanner* _scanner = nullptr;
     bool _use_block_cache = false;
     bool _enable_populate_block_cache = false;
 
@@ -119,7 +119,7 @@ private:
 
     // ======================================
     // The following are profile metrics
-    vectorized::HdfsScanProfile _profile;
+    HdfsScanProfile _profile;
 };
 
 } // namespace starrocks::connector

@@ -275,11 +275,16 @@ public abstract class JoinOrder {
         double cost = exprInfo.expr.getStatistics().getOutputRowCount();
         exprInfo.rowCount = cost;
         if (exprInfo.leftChildExpr != null) {
-            cost += exprInfo.leftChildExpr.bestExprInfo.cost;
-            cost += exprInfo.rightChildExpr.bestExprInfo.cost;
+            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
+                    StatsConstants.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
+
+            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
+                    StatsConstants.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
+
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
             if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
-                cost *= StatsConstants.CROSS_JOIN_COST_PENALTY;
+                cost = cost > (StatsConstants.MAXIMUM_COST / StatsConstants.CROSS_JOIN_COST_PENALTY) ?
+                        StatsConstants.MAXIMUM_COST : cost * StatsConstants.CROSS_JOIN_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;

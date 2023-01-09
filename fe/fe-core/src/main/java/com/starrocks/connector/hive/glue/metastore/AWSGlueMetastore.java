@@ -25,9 +25,11 @@ import com.amazonaws.services.glue.model.Table;
 import com.amazonaws.services.glue.model.TableInput;
 import com.amazonaws.services.glue.model.UserDefinedFunction;
 import com.amazonaws.services.glue.model.UserDefinedFunctionInput;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.thrift.TException;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * This is the accessor interface for using AWS Glue as a metastore.
@@ -86,4 +88,10 @@ public interface AWSGlueMetastore {
     void deleteUserDefinedFunction(String dbName, String functionName);
 
     void updateUserDefinedFunction(String dbName, String functionName, UserDefinedFunctionInput functionInput);
+
+    List<ColumnStatisticsObj> getTableColumnStatistics(String dbName, String tableName, List<String> colNames);
+
+    Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatistics(String dbName, String tableName,
+                                                                        List<String> partitionNames,
+                                                                        List<String> colNames);
 }

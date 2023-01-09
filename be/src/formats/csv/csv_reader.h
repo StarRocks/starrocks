@@ -14,32 +14,49 @@
 
 #pragma once
 
+#include <queue>
+#include <unordered_set>
+
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class CSVBuffer {
 public:
     // Does NOT take the ownership of |buff|.
-    CSVBuffer(char* buff, size_t cap) : _begin(buff), _position(buff), _limit(buff), _end(buff + cap) {}
+    CSVBuffer(char* buff, size_t cap) : _begin(buff), _position_offset(0), _limit_offset(0), _end(buff + cap) {}
 
-    void append(char c) { *_limit++ = c; }
+    void append(char c) {
+        *(_begin + _limit_offset) = c;
+        _limit_offset++;
+    }
 
     // Returns the number of bytes between the current position and the limit.
-    size_t available() const { return _limit - _position; }
+    size_t available() const { return _limit_offset - _position_offset; }
 
     // Returns the number of elements between the the limit and the end.
-    size_t free_space() const { return _end - _limit; }
+    size_t free_space() const { return _end - _begin - _limit_offset; }
 
     // Returns this buffer's capacity.
     size_t capacity() const { return _end - _begin; }
 
-    // Returns this buffer's read position.
-    char* position() { return _position; }
+    size_t have_read() const { return _position_offset; }
+
+    char* position() { return _begin + _position_offset; }
+
+    // Returns this buffer's read position offset.
+    size_t position_offset() { return _position_offset; }
+
+    void set_position_offset(size_t position_offset) { _position_offset = position_offset; }
 
     // Returns this buffer's write position.
-    char* limit() { return _limit; }
+    char* limit() { return _begin + _limit_offset; }
 
-    void add_limit(size_t n) { _limit += n; }
+    // Returns this buffer's write position offset.
+    size_t limit_offset() { return _limit_offset; }
+
+    void set_limit_offset(size_t limit_offset) { _limit_offset = limit_offset; }
+
+    void add_limit(size_t n) { _limit_offset += n; }
 
     // Finds the first character equal to the given character |c|. Search begins at |pos|.
     // Return: address of the first character of the found character or NULL if no such
@@ -50,23 +67,89 @@ public:
         return (char*)memmem(position() + pos, available() - pos, str.c_str(), str.size());
     }
 
-    void skip(size_t n) { _position += n; }
+    void skip(size_t n) { _position_offset += n; }
+
+    char get_char(size_t p) { return _begin[p]; }
+
+    char* base_ptr() { return _begin; }
 
     // Compacts this buffer.
     // The bytes between the buffer's current position and its limit, if any,
     // are copied to the beginning of the buffer.
     void compact() {
-        size_t n = available();
-        memmove(_begin, _position, available());
-        _limit = _begin + n;
-        _position = _begin;
+        memmove(_begin, _begin + _position_offset, available());
+        _limit_offset -= _position_offset;
+        _position_offset = 0;
     }
 
 private:
     char* _begin;
-    char* _position; // next read position
-    char* _limit;    // next write position
+    size_t _position_offset;
+    size_t _limit_offset;
     char* _end;
+};
+
+enum ParseState {
+    START = 0,
+    ORDINARY = 1,
+    COLUMN_DELIMITER = 2,
+    NEWROW = 3,
+    ESCAPE = 4,
+    ENCLOSE = 5,
+    ENCLOSE_ESCAPE = 6
+};
+
+struct CSVColumn {
+    size_t start_pos;
+    size_t length;
+    bool is_escaped_column;
+    CSVColumn(size_t pos, size_t len, bool isEscape) : start_pos(pos), length(len), is_escaped_column(isEscape) {}
+};
+
+struct CSVRow {
+    std::vector<CSVColumn> columns;
+    size_t parsed_start;
+    size_t parsed_end;
+
+    std::string debug_string(const char* buffBasePtr, const char* escapeDataPtr) {
+        std::stringstream ss;
+        for (int i = 0; i < columns.size(); i++) {
+            auto& column = columns[i];
+            const char* basePtr = column.is_escaped_column ? escapeDataPtr : buffBasePtr;
+            if (i != columns.size() - 1) {
+                ss << std::string(basePtr + column.start_pos, column.length) << "|";
+            } else {
+                ss << std::string(basePtr + column.start_pos, column.length) << std::endl;
+            }
+        }
+        return ss.str();
+    }
+};
+
+struct CSVParseOptions {
+    std::string row_delimiter;
+    std::string column_delimiter;
+    int64_t skip_header;
+    bool trim_space;
+    char escape;
+    char enclose;
+    CSVParseOptions(const std::string row_delimiter_, const std::string column_delimiter_, int64_t skip_header_ = 0,
+                    bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
+        row_delimiter = row_delimiter_;
+        column_delimiter = column_delimiter_;
+        skip_header = skip_header_;
+        trim_space = trim_space_;
+        escape = escape_;
+        enclose = enclose_;
+    }
+    CSVParseOptions() {
+        row_delimiter = '\n';
+        column_delimiter = ',';
+        skip_header = false;
+        trim_space = false;
+        escape = 0;
+        enclose = 0;
+    }
 };
 
 class CSVReader {
@@ -83,38 +166,57 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const std::string& row_delimiter, const std::string& column_separator)
-            : _row_delimiter(row_delimiter),
-              _column_separator(column_separator),
-              _storage(kMinBufferSize),
-              _buff(_storage.data(), _storage.size()) {
-        _row_delimiter_length = row_delimiter.size();
-        _column_separator_length = column_separator.size();
+    CSVReader(const CSVParseOptions& parse_options, const size_t bufferSize = kMinBufferSize)
+            : _parse_options(parse_options), _storage(bufferSize), _buff(_storage.data(), _storage.size()) {
+        _row_delimiter_length = parse_options.row_delimiter.size();
+        _column_delimiter_length = parse_options.column_delimiter.size();
     }
 
     virtual ~CSVReader() = default;
 
     Status next_record(Record* record);
 
+    Status next_record(CSVRow& row);
+
+    Status more_rows();
+
     void set_limit(size_t limit) { _limit = limit; }
 
     void split_record(const Record& record, Fields* fields) const;
 
+    bool is_row_delimiter(bool expandBuffer);
+
+    bool is_column_delimiter(bool expandBuffer);
+
+    Status readMore(bool expandBuffer);
+
+    Status buffInit();
+
+    char* buffBasePtr();
+
+    char* escapeDataPtr();
+
+    // For benchmark, we need to separate io from parsing.
+    Status init_buff() { return _fill_buffer(); }
+
 protected:
-    std::string _row_delimiter;
-    std::string _column_separator;
+    CSVParseOptions _parse_options;
     size_t _row_delimiter_length;
-    size_t _column_separator_length;
+    size_t _column_delimiter_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
-
+    raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
+    std::queue<CSVRow> _csv_buff;
+    std::unordered_set<size_t> _escape_pos;
+    std::vector<CSVColumn> _columns;
 
 private:
     Status _expand_buffer();
+    Status _expand_buffer_loosely();
 
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

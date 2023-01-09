@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -294,8 +295,29 @@ public class MaterializedViewRewriter {
                 compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
         Map<ColumnRefOperator, ScalarOperator> queryExprMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
-        ColumnRefSet mvRefSets = new ColumnRefSet(rewriteContext.getMvRefFactory().getColumnRefToColumns().keySet());
-        mvRefSets.except(rewriteContext.getQueryColumnSet());
+        Set<ColumnRefOperator> refSet = rewriteContext.getMvRefFactory().getColumnRefToColumns().keySet();
+        ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        Set<ColumnRefOperator> rewrittens = Sets.newHashSet();
+        for (ColumnRefOperator columnRefOperator : refSet) {
+            ScalarOperator rewritten = columnRewriter.rewriteViewToQueryWithViewEc(columnRefOperator);
+            rewrittens.add((ColumnRefOperator) rewritten);
+        }
+        ColumnRefSet mvRefSets = new ColumnRefSet(rewrittens);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getQueryExpression());
+        List<ColumnRefOperator> scanOutputColumns = Lists.newArrayList();
+        for (LogicalScanOperator scanOperator : scanOperators) {
+            scanOutputColumns.addAll(scanOperator.getOutputColumns());
+        }
+        // should exclude the columns that are both in query scan output columns and mv ref set, which are valid columns
+        // left columns are only in mv scan output columns
+        // if the columns used in compensation predicates exist in the mvRefSets, but not in the scanOutputColumns, it means
+        // the predicate can not be rewritten.
+        // for example:
+        //  predicate: empid:1 < 10
+        //  query scan output columsn: name: 2, salary: 3
+        //  mvRefSets: empid:1, name: 2, salary: 3
+        // the predicate empid:1 < 10 can not be rewritten
+        mvRefSets.except(scanOutputColumns);
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
             equalPredicates = rewriteScalarOperatorToTarget(otherPredicates, queryExprMap, rewriteContext, mvRefSets, true);
         }
@@ -622,6 +644,10 @@ public class MaterializedViewRewriter {
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
         for (ScalarOperator expr : exprsToRewrites) {
             ScalarOperator rewritten = replaceExprWithTarget(expr, reversedViewProjection, outputMapping);
+            if (expr.isVariable() && expr == rewritten) {
+                // it means it can not be rewritten  by target
+                return Lists.newArrayList();
+            }
             if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
                 return Lists.newArrayList();

@@ -16,7 +16,7 @@
 
 #include "common/object_pool.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status ColumnOrPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     return _evaluate(column, selection, from, to);
@@ -68,4 +68,4 @@ Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeI
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

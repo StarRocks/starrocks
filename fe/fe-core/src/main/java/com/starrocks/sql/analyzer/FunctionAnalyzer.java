@@ -251,12 +251,6 @@ public class FunctionAnalyzer {
             throw new SemanticException(
                     fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql());
         }
-        if (fnName.getFunction().equals(FunctionSet.SUM_DISTINCT)
-                && ((!arg.getType().isNumericType() && !arg.getType().isNull() && !(arg instanceof NullLiteral)) ||
-                !arg.getType().canApplyToNumeric())) {
-            throw new SemanticException(
-                    "SUM_DISTINCT requires a numeric parameter: " + functionCallExpr.toSql());
-        }
 
         if ((fnName.getFunction().equals(FunctionSet.MIN)
                 || fnName.getFunction().equals(FunctionSet.MAX)

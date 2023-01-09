@@ -26,9 +26,9 @@
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Column;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
@@ -53,15 +53,15 @@ public:
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) = 0;
+    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
 
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
-    virtual Status get_dict_values(vectorized::Column* column) { return _reader->get_dict_values(column); }
+    virtual Status get_dict_values(Column* column) { return _reader->get_dict_values(column); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
         return _reader->get_dict_values(dict_codes, column);
     }
 
@@ -72,8 +72,7 @@ public:
 protected:
     virtual bool page_selected(size_t num_values);
 
-    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
-                     vectorized::Column* dst);
+    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
 
     void update_read_context(size_t records_read);
 
@@ -84,9 +83,9 @@ protected:
 
 private:
     Status _next_selected_page(size_t records_to_read, ColumnContentType content_type, size_t* records_to_skip,
-                               vectorized::Column* dst);
+                               Column* dst);
 
-    Status _lazy_load_page_rows(size_t batch_size, ColumnContentType content_type, vectorized::Column* dst);
+    Status _lazy_load_page_rows(size_t batch_size, ColumnContentType content_type, Column* dst);
 };
 
 } // namespace starrocks::parquet

@@ -54,13 +54,13 @@ This is the core idea of the HLL algorithm. Please refer to the [HyperLogLog pap
 
 ### How to use HyperLogLog
 
-1. To use HyperLogLog de-duplication, you need to set the target indicator column type to ‘HLL’ and the aggregation function to `HLL_UNION` in the table creation statement.
+1. To use HyperLogLog de-duplication, you need to set the target indicator column type to `HLL` and the aggregation function to `HLL_UNION` in the table creation statement.
 2. Currently, only the aggregation model supports HLL as indicator column type.
 3. When using `count distinct` on columns of the HLL type, StarRocks will automatically convert it to the `HLL_UNION_AGG` calculation.
 
 #### Example
 
-First, create a table with **HLL** columns, where uv is an aggregated column, the column type is `HLL`, and the aggregation function is `HLL_UNION`
+First, create a table with **HLL** columns, where uv is an aggregated column, the column type is `HLL`, and the aggregation function is [HLL_UNION](../sql-reference/sql-functions/aggregate-functions/hll_union.md).
 
 ~~~sql
 CREATE TABLE test(
@@ -115,8 +115,8 @@ LOAD LABEL test_db.label
 
 Querying data
 
-* The HLL column does not allow direct query of its original value, use the function `HLL_UNION_AGG` to query
-* To find the total uv
+* The HLL column does not allow direct query of its original value, use the function [HLL_UNION_AGG](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) to query.
+* To find the total uv,
 
 `SELECT HLL_UNION_AGG(uv) FROM test;`
 
@@ -124,7 +124,7 @@ This statement is equivalent to
 
 `SELECT COUNT(DISTINCT uv) FROM test;`
 
-* Query for uv of everyday
+* Query uv of everyday
 
 `SELECT COUNT(DISTINCT uv) FROM test GROUP BY ID;`
 
@@ -136,4 +136,4 @@ Bitmap only supports TINYINT, SMALLINT, INT, and BIGINT. Note that LARGEINT is n
 
 For common columns, users can use the NDV function for approximate de-duplication. This function returns an approximate aggregation of COUNT(DISTINCT col) results, and the underlying implementation converts the data storage type to the HyperLogLog type for calculation. The NDV function consumes a lot of resources  when calculating and is therefore  not well suited for high concurrency scenarios.
 
-If you wish to perform user behavior analysis, you may consider IntersectCount or custom UDAF.
+If you want to perform user behavior analysis, you may consider IntersectCount or custom UDAF.

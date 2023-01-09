@@ -17,10 +17,10 @@
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct HistogramDispatcher {
     template <LogicalType pt>
@@ -43,4 +43,4 @@ void AggregateFuncResolver::register_utility() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

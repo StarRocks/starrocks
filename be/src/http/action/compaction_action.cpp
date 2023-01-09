@@ -50,6 +50,8 @@
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
+#include "storage/compaction_manager.h"
+#include "storage/compaction_task.h"
 #include "storage/cumulative_compaction.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -160,34 +162,68 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-        vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
+        if (config::enable_size_tiered_compaction_strategy) {
+            if (tablet->need_compaction()) {
+                auto compaction_task = tablet->create_compaction_task();
+                if (compaction_task != nullptr) {
+                    compaction_task->set_task_id(
+                            StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
+                    compaction_task->start();
+                    if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
+                        return Status::InternalError(fmt::format("Failed to base compaction tablet={} err={}",
+                                                                 tablet->full_name(),
+                                                                 tablet->last_cumu_compaction_failure_status()));
+                    }
+                }
+            }
+        } else {
+            CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
 
-        Status res = cumulative_compaction.compact();
-        if (!res.ok()) {
-            if (!res.is_mem_limit_exceeded()) {
-                tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+            Status res = cumulative_compaction.compact();
+            if (!res.ok()) {
+                if (!res.is_mem_limit_exceeded()) {
+                    tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+                }
+                if (!res.is_not_found()) {
+                    StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+                    LOG(WARNING) << "Fail to vectorized compact tablet=" << tablet->full_name()
+                                 << ", err=" << res.to_string();
+                }
+                return res;
             }
-            if (!res.is_not_found()) {
-                StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
-                LOG(WARNING) << "Fail to vectorized compact table=" << tablet->full_name()
-                             << ", err=" << res.to_string();
-            }
-            return res;
         }
         tablet->set_last_cumu_compaction_failure_time(0);
     } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
         StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-        vectorized::BaseCompaction base_compaction(mem_tracker, tablet);
-
-        Status res = base_compaction.compact();
-        if (!res.ok()) {
-            tablet->set_last_base_compaction_failure_time(UnixMillis());
-            if (!res.is_not_found()) {
-                StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
-                LOG(WARNING) << "failed to init vectorized base compaction. res=" << res.to_string()
-                             << ", table=" << tablet->full_name();
+        if (config::enable_size_tiered_compaction_strategy) {
+            if (tablet->force_base_compaction()) {
+                auto compaction_task = tablet->create_compaction_task();
+                if (compaction_task != nullptr) {
+                    compaction_task->set_task_id(
+                            StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
+                    compaction_task->start();
+                    if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
+                        return Status::InternalError(fmt::format("Failed to base compaction tablet={} task_id={}",
+                                                                 tablet->full_name(), compaction_task->task_id()));
+                    }
+                }
+            } else {
+                return Status::InternalError(
+                        fmt::format("Failed to base compaction tablet={} no need to do", tablet->full_name()));
             }
-            return res;
+        } else {
+            BaseCompaction base_compaction(mem_tracker, tablet);
+
+            Status res = base_compaction.compact();
+            if (!res.ok()) {
+                tablet->set_last_base_compaction_failure_time(UnixMillis());
+                if (!res.is_not_found()) {
+                    StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+                    LOG(WARNING) << "failed to init vectorized base compaction. res=" << res.to_string()
+                                 << ", tablet=" << tablet->full_name();
+                }
+                return res;
+            }
         }
 
         tablet->set_last_base_compaction_failure_time(0);
@@ -285,6 +321,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
 }
 
 void CompactionAction::handle(HttpRequest* req) {
+    LOG(INFO) << req->debug_string();
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     std::string json_result;
 

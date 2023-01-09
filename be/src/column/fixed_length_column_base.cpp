@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
@@ -24,7 +24,7 @@
 #include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
@@ -352,4 +352,4 @@ template class FixedLengthColumnBase<DateValue>;
 template class FixedLengthColumnBase<DecimalV2Value>;
 template class FixedLengthColumnBase<TimestampValue>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

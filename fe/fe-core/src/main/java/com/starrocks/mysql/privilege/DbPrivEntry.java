@@ -110,17 +110,17 @@ public class DbPrivEntry extends PrivEntry {
         }
 
         DbPrivEntry otherEntry = (DbPrivEntry) other;
-        int res = origHost.compareTo(otherEntry.origHost);
+        int res = otherEntry.origHost.compareTo(origHost);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        res = origDb.compareTo(otherEntry.origDb);
+        res = otherEntry.origDb.compareTo(origDb);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        return -realOrigUser.compareTo(otherEntry.realOrigUser);
+        return otherEntry.realOrigUser.compareTo(realOrigUser);
     }
 
     @Override

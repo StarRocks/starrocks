@@ -31,7 +31,7 @@
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
                                     const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
@@ -45,7 +45,7 @@ template <typename T>
 struct DecimalVectorBatchSelector {
     using Type = std::conditional_t<
             std::is_same_v<T, int64_t>, orc::Decimal64VectorBatch,
-            std::conditional_t<std::is_same_v<T, starrocks::vectorized::int128_t>, orc::Decimal128VectorBatch, void>>;
+            std::conditional_t<std::is_same_v<T, starrocks::int128_t>, orc::Decimal128VectorBatch, void>>;
 };
 
 class FunctionsMap {
@@ -68,4 +68,4 @@ private:
 
 const FillColumnFunction& find_fill_func(LogicalType type, bool nullable);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

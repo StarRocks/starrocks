@@ -21,10 +21,7 @@ namespace starrocks {
 
 class EsPredicate;
 class ESScanReader;
-
-namespace vectorized {
 class ScrollParser;
-}
 
 namespace connector {
 
@@ -32,7 +29,7 @@ class ESConnector final : public Connector {
 public:
     ~ESConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::ES; }
@@ -45,11 +42,11 @@ class ESDataSourceProvider final : public DataSourceProvider {
 public:
     ~ESDataSourceProvider() override = default;
     friend class ESDataSource;
-    ESDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    ESDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const TEsScanNode _es_scan_node;
 };
 
@@ -60,7 +57,7 @@ public:
     ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -94,7 +91,7 @@ private:
     int64_t _cpu_time_ns = 0;
 
     ESScanReader* _es_reader = nullptr;
-    std::unique_ptr<vectorized::ScrollParser> _es_scroll_parser;
+    std::unique_ptr<ScrollParser> _es_scroll_parser;
 
     RuntimeProfile::Counter* _read_counter = nullptr;
     RuntimeProfile::Counter* _read_timer = nullptr;

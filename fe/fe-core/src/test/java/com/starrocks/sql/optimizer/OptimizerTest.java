@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -32,16 +33,22 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.task.RewriteTreeTask;
+import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
@@ -94,6 +101,23 @@ public class OptimizerTest {
         PseudoCluster.getInstance().shutdown(true);
     }
 
+    private static class TimeoutRule extends Rule {
+
+        protected TimeoutRule(RuleType type, Pattern pattern) {
+            super(type, pattern);
+        }
+
+        @Override
+        public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+
     @Test
     public void testOptimizer() throws Exception {
         Optimizer optimizer = new Optimizer();
@@ -130,6 +154,22 @@ public class OptimizerTest {
         OptExpression expr1 = optimizer1.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
+
+        // test timeout
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
+        TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
+        // just give a valid RuleType
+        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_FILTER_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
+        OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
+        optimizer1.getContext().getTaskScheduler().pushTask(
+                new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
+        try {
+            optimizer1.getContext().getTaskScheduler().executeTasks(rootTaskContext);
+        } catch (Exception e) {
+            e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase");
+        } finally {
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
+        }
     }
 
     private MaterializedView getMv(String dbName, String mvName) {

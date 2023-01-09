@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"];
 [partition_desc]
-[distribution_desc]
+distribution_desc
 [rollup_index]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
@@ -54,7 +54,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
 - CHAR[(length)]: Fixed length string. Range：1 ~ 255. Default value: 1.
 - VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
-- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value.The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by hll_union_agg、Hll_cardinality、hll_hash.
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
 **agg_type**：aggregation type. If not specified, this column is key column.
@@ -78,7 +78,7 @@ This aggregation type applies ONLY to the aggregation model whose key_desc type 
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- **DEFAULT (<expr>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
 ### index_definition
 
@@ -248,19 +248,30 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 
 ### distribution_des
 
-Hash bucketing
-
 Syntax:
 
 ```SQL
-`DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`
+DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ```
 
-Note:
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
 
-Please use specified key columns for Hash bucketing. The default bucket number is 10.
+- high cardinality column such as ID
+- column that often used as a filter in queries
 
-It is recommended to use Hash bucketing method.
+But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
+
+- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
+- If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
+
+If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns but three bucketing columns at most. For more information about , pleaese see [choose bucketing columns](../../../table_design/Data_distribution.md).
+
+**Precautions**:
+
+- **When a table is created, you must specify the bucketing columns**.
+- The values of bucketing columns cannot be updated.
+- Bucketing columns cannot be modified after they are specified.
+- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
 ### PROPERTIES
 
@@ -315,17 +326,16 @@ PROPERTIES (
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
-dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default value: true.
+**`PROPERTIES`**:
 
-dynamic_partition.time_unit: It is used to specify the time unit for adding partitions dynamically. Time unit could be DAY, WEEK, MONTH.
-
-dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default value: integer.Min_VAULE.
-
-dynamic_partition.end: It is used to specify the how many partitions will be created in advance. The value must be more than 0.
-
-dynamic_partition.prefix: It is used to specify the prefix of the created partition. For instance, if the prefix is p, the partition will be named p20200108 automatically.
-
-dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
+| parameter                   | required | description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| dynamic_partition.enable    | No       | enables dynamic partitioning. Valid values are `TRUE` and `FALSE`. The default value is `TRUE`. |
+| dynamic_partition.time_unit | Yes      | the time granularity for dynamically created  partitions. It is a required parameter. Valid values are `DAY`, `WEEK`, and `MONTH`.The time granularity determines the suffix format for dynamically created partitions.<br/>  - If the value is `DAY`,  the suffix format for dynamically created partitions is yyyyMMdd. An example partition name suffix is `20200321`.<br/>  - If the value is `WEEK`, the suffix format for dynamically created partitions is yyyy_ww, for example `2020_13` for the 13th week of 2020.<br/>  - If the value is `MONTH`, the suffix format for dynamically created partitions is yyyyMM, for example `202003`. |
+| dynamic_partition.start     | No       | the starting offset of dynamic partitioning. The value of this parameter must be a negative integer. The partitions before this offset will be deleted based on the current day, week, or month which is determined by the value of the parameter `dynamic_partition.time_unit`. The default value is `Integer.MIN_VALUE`, namely, -2147483648, which means that the history partitions will not be deleted. |
+| dynamic_partition.end       | Yes      | the end offset of dynamic partitioning. The value of this parameter must be a positive integer. The partitions from the current day, week, or month to the end offset will be created in advance. |
+| dynamic_partition.prefix    | No       | the prefix added to the names of dynamic partitions. The default value is `p`. |
+| dynamic_partition.buckets   | No       | the number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word BUCKETS or automatically set by StarRocks. |
 
 - [Preview] You can set a data compression algorithm when creating a table.
 
@@ -511,7 +521,7 @@ PROPERTIES
 )
 ```
 
-- Create a table that contain HLL columns.
+- Create a table that contains HLL columns.
 
 ```SQL
 CREATE TABLE example_db.example_table

@@ -20,7 +20,7 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -40,7 +40,7 @@ extern "C" JNIEnv* getJNIEnv(void);
     jobject new##CLAZZ(TYPE value);  \
     TYPE val##TYPE(jobject obj);
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class DirectByteBuffer;
 class AggBatchCallStub;
 class BatchEvaluateStub;
@@ -521,4 +521,4 @@ struct JavaUDAFContext {
 // Check whether java runtime can work
 Status detect_java_runtime();
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

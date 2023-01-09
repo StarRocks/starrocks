@@ -25,17 +25,17 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "util/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkHelperTest : public testing::Test {
 public:
     void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
                            int32_t length, bool is_nullable);
-    vectorized::VectorizedSchemaPtr gen_v_schema(bool is_nullable);
+    VectorizedSchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
     void check_column(Column* column, LogicalType type, size_t row_size);
@@ -117,8 +117,8 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
     column->set_aggregation("NONE");
 }
 
-vectorized::VectorizedSchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
-    vectorized::VectorizedFields fields;
+VectorizedSchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
+    VectorizedFields fields;
     fields.emplace_back(std::make_shared<VectorizedField>(0, "c0", get_type_info(TYPE_TINYINT), is_nullable));
     fields.emplace_back(std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_SMALLINT), is_nullable));
     fields.emplace_back(std::make_shared<VectorizedField>(2, "c2", get_type_info(TYPE_INT), is_nullable));
@@ -318,4 +318,4 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_FALSE(accumulator.reach_limit());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

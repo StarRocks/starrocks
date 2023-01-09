@@ -83,6 +83,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -106,7 +107,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -471,8 +471,8 @@ public class EditLog {
                     if (version > FeConstants.meta_version) {
                         throw new JournalInconsistentException(
                                 "invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                + "please update FeConstants.meta_version bigger or equal to " + version +
-                                " and restart.");
+                                        + "please update FeConstants.meta_version bigger or equal to " + version +
+                                        " and restart.");
                     }
                     MetaContext.get().setMetaVersion(version);
                     break;
@@ -593,12 +593,20 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    Database.replayCreateFunctionLog(function);
+                    if (function.getFunctionName().isGlobalFunction()) {
+                        GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+                    } else {
+                        Database.replayCreateFunctionLog(function);
+                    }
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    Database.replayDropFunctionLog(function);
+                    if (function.getName().isGlobalFunction()) {
+                        GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayDropFunction(function);
+                    } else {
+                        Database.replayDropFunctionLog(function);
+                    }
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
@@ -868,16 +876,10 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
-                case OperationType.OP_ADD_UNUSED_SHARD: {
-                    ShardInfo shardInfo = (ShardInfo) journal.getData();
-                    globalStateMgr.getShardManager().getShardDeleter().replayAddUnusedShard(shardInfo);
+                case OperationType.OP_ADD_UNUSED_SHARD:
+                case OperationType.OP_DELETE_UNUSED_SHARD:
+                    // Deprecated: Nothing to do
                     break;
-                }
-                case OperationType.OP_DELETE_UNUSED_SHARD: {
-                    ShardInfo shardInfo = (ShardInfo) journal.getData();
-                    globalStateMgr.getShardManager().getShardDeleter().replayDeleteUnusedShard(shardInfo);
-                    break;
-                }
                 case OperationType.OP_STARMGR: {
                     StarMgrJournal j = (StarMgrJournal) journal.getData();
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
@@ -929,6 +931,11 @@ public class EditLog {
                     globalStateMgr.replayAuthUpgrade(info);
                     break;
                 }
+                case OperationType.OP_MV_JOB_STATE: {
+                    MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
+                    MVManager.getInstance().replay(job);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -938,7 +945,8 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            JournalInconsistentException exception = new JournalInconsistentException("failed to load journal type " + opCode);
+            JournalInconsistentException exception =
+                    new JournalInconsistentException("failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1130,7 +1138,6 @@ public class EditLog {
     public void logRecoverTable(RecoverInfo info) {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
-
 
     public void logDropRollup(DropInfo info) {
         logEdit(OperationType.OP_DROP_ROLLUP, info);
@@ -1570,14 +1577,6 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
-    public void logAddUnusedShard(Set<Long> shardIds) {
-        logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
-    }
-
-    public void logDeleteUnusedShard(Set<Long> shardIds) {
-        logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
-    }
-
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);
     }
@@ -1641,6 +1640,14 @@ public class EditLog {
         logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
+    public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
+    }
+
+    public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
+    }
+
     public void logMVJobState(MVMaintenanceJob job) {
         logEdit(OperationType.OP_MV_JOB_STATE, job);
     }
@@ -1648,4 +1655,5 @@ public class EditLog {
     public void logMVEpochChange(MVEpoch epoch) {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
+
 }

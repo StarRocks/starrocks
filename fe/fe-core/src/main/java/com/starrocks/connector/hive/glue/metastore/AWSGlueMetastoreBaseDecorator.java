@@ -25,9 +25,11 @@ import com.amazonaws.services.glue.model.Table;
 import com.amazonaws.services.glue.model.TableInput;
 import com.amazonaws.services.glue.model.UserDefinedFunction;
 import com.amazonaws.services.glue.model.UserDefinedFunctionInput;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.thrift.TException;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -145,4 +147,15 @@ public class AWSGlueMetastoreBaseDecorator implements AWSGlueMetastore {
         awsGlueMetastore.updateUserDefinedFunction(dbName, functionName, functionInput);
     }
 
+    @Override
+    public List<ColumnStatisticsObj> getTableColumnStatistics(String dbName, String tableName, List<String> colNames) {
+        return awsGlueMetastore.getTableColumnStatistics(dbName, tableName, colNames);
+    }
+
+    @Override
+    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatistics(String dbName, String tableName,
+                                                                               List<String> partitionNames,
+                                                                               List<String> colNames) {
+        return awsGlueMetastore.getPartitionColumnStatistics(dbName, tableName, partitionNames, colNames);
+    }
 }

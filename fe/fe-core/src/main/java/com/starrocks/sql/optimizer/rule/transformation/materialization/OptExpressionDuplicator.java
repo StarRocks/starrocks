@@ -109,7 +109,6 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator key = entry.getValue();
                 ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key, k -> {
                     ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    columnMapping.put(k, newColumnRef);
                     return newColumnRef;
                 });
                 columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),

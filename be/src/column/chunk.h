@@ -28,7 +28,6 @@
 
 namespace starrocks {
 class ChunkPB;
-namespace vectorized {
 
 class DatumTuple;
 class ChunkExtraData;
@@ -341,5 +340,4 @@ inline ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) {
     return _columns[_tuple_id_to_index[tuple_id]];
 }
 
-} // namespace vectorized
 } // namespace starrocks

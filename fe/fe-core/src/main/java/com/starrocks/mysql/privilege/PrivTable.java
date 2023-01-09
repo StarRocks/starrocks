@@ -64,11 +64,11 @@ public abstract class PrivTable implements Writable {
     protected Map<UserIdentity, List<PrivEntry>> map = new TreeMap<>(new Comparator<UserIdentity>() {
         @Override
         public int compare(UserIdentity o1, UserIdentity o2) {
-            int compareByHost = o1.getHost().compareTo(o2.getHost());
+            int compareByHost = o2.getHost().compareTo(o1.getHost());
             if (compareByHost != 0) {
-                return - compareByHost;
+                return compareByHost;
             }
-            return - o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
+            return o2.getQualifiedUser().compareTo(o1.getQualifiedUser());
         }
     });
 
