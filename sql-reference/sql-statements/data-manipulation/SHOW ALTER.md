@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM db_name];
+SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM db_name]
 ```
 
 ## 参数说明

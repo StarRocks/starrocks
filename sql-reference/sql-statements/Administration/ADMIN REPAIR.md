@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)];
+ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)]
 ```
 
 说明：

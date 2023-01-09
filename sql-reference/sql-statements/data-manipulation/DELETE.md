@@ -11,7 +11,7 @@
 ```SQL
 DELETE FROM table_name [PARTITION partition_name]
 WHERE
-column_name1 op { value | value_list } [ AND column_name2 op { value | value_list } ...];
+column_name1 op { value | value_list } [ AND column_name2 op { value | value_list } ...]
 ```
 
 ### 参数说明

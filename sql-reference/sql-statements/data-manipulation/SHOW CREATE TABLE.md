@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW CREATE TABLE [db_name.]table_name;
+SHOW CREATE TABLE [db_name.]table_name
 ```
 
 ## 参数说明

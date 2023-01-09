@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW ROLES;
+SHOW ROLES
 ```
 
 ## 返回结果说明

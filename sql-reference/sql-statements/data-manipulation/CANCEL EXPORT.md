@@ -11,7 +11,7 @@
 ```SQL
 CANCEL EXPORT
 [FROM db_name]
-WHERE QUERYID = "query_id";
+WHERE QUERYID = "query_id"
 ```
 
 ## 参数说明

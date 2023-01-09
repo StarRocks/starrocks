@@ -10,7 +10,7 @@
 
 ```sql
 ADMIN SET REPLICA STATUS
-PROPERTIES ("key" = "value", ...);
+PROPERTIES ("key" = "value", ...)
 ```
 
 目前支持如下属性：

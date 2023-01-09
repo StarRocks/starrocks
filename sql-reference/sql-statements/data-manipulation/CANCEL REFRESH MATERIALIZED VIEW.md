@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name;
+CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name
 ```
 
 ## 参数说明

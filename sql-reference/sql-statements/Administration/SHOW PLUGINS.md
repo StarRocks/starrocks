@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW PLUGINS;
+SHOW PLUGINS
 ```
 
 该命令会展示所有用户安装的和系统内置的插件。

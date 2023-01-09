@@ -10,7 +10,7 @@ ALTER TABLE 语法格式如下：
 
 ```SQL
 ALTER TABLE [database.]table
-alter_clause1[, alter_clause2, ...];
+alter_clause1[, alter_clause2, ...]
 ```
 
 其中 **alter_clause** 分为 partition、rollup、schema change、rename、index 和 swap 六种操作，不同操作的应用场景为：

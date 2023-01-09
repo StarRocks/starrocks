@@ -12,7 +12,7 @@
 ## 语法
 
 ```SQL
-CREATE ROLE role_name;
+CREATE ROLE <role_name>
 ```
 
 ## 参数说明

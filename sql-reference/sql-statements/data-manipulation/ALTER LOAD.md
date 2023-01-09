@@ -15,7 +15,7 @@ ALTER LOAD FOR <label_name>
 properties
 (
     'priority'='{LOWEST | LOW | NORMAL | HIGH | HIGHEST}'
-);
+)
 ```
 
 ## 参数说明

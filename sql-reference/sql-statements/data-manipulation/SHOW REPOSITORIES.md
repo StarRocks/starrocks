@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW REPOSITORIES;
+SHOW REPOSITORIES
 ```
 
 ## 返回

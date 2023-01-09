@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-DROP RESOURCE GROUP resource_group_name;
+DROP RESOURCE GROUP <resource_group_name>
 ```
 
 ## 参数说明

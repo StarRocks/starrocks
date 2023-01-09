@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP resource_group_name };
+SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP resource_group_name }
 ```
 
 ## 参数说明

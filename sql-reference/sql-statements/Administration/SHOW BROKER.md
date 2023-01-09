@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW BROKER;
+SHOW BROKER
 ```
 
 命令返回结果说明：

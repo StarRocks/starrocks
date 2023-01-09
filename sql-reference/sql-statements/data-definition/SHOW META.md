@@ -11,7 +11,7 @@
 #### 语法
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE predicate]
 ```
 
 该语句返回如下列。

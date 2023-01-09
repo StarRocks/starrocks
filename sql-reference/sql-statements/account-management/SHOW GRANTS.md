@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW [ALL] GRANTS [FOR user_identity];
+SHOW [ALL] GRANTS [FOR user_identity]
 ```
 
 说明：

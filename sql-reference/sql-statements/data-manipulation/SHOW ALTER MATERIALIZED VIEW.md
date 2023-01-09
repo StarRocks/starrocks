@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW ALTER MATERIALIZED VIEW [FROM db_name];
+SHOW ALTER MATERIALIZED VIEW [FROM db_name]
 ```
 
 ## 参数

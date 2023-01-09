@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 ```
 
 说明：

@@ -5,7 +5,7 @@ SHOW FILE 语句用于查看保存在数据库中的文件的信息。
 ## 语法
 
 ```SQL
-SHOW FILE [FROM database];
+SHOW FILE [FROM database]
 ```
 
 语句返回的信息如下：

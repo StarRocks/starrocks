@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern'];
+SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern']
 ```
 
 参数说明：

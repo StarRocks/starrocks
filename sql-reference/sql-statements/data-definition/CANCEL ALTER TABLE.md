@@ -14,13 +14,13 @@
 - 取消表结构变更操作。
 
     ```SQL
-    CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name;
+    CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name
     ```
 
 - 取消 rollup 索引变更操作。
 
     ```SQL
-    CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name;
+    CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name
     ```
 
 ## 参数说明

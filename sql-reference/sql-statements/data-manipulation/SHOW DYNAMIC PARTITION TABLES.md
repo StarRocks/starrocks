@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW DYNAMIC PARTITION TABLES [FROM db_name];
+SHOW DYNAMIC PARTITION TABLES [FROM <db_name>]
 ```
 
 ## 示例

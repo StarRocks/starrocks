@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-DROP INDEX index_name ON [db_name.]table_name;
+DROP INDEX index_name ON [db_name.]table_name
 ```
 
 ## 参数说明

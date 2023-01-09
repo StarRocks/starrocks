@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)];
+TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
 ```
 
 说明：

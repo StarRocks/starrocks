@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW FULL COLUMNS FROM tbl;
+SHOW FULL COLUMNS FROM <tbl_name>
 ```
 
 ## 示例
