@@ -128,10 +128,6 @@ public class OutFileClause implements ParseNode {
     }
 
     private void analyzeProperties() throws AnalysisException {
-        if (properties == null || properties.isEmpty()) {
-            return;
-        }
-
         setBrokerProperties();
         if (brokerDesc == null) {
             return;

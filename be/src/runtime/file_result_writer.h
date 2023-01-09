@@ -48,7 +48,6 @@ class RuntimeProfile;
 class WritableFile;
 
 struct ResultFileOptions {
-    bool is_local_file;
     std::string file_path;
     TFileFormatType::type file_format;
     std::string column_separator;
@@ -67,17 +66,14 @@ struct ResultFileOptions {
         row_delimiter = t_opt.__isset.row_delimiter ? t_opt.row_delimiter : "\n";
         max_file_size_bytes = t_opt.__isset.max_file_size_bytes ? t_opt.max_file_size_bytes : max_file_size_bytes;
 
-        is_local_file = true;
         if (t_opt.__isset.broker_addresses) {
             broker_addresses = t_opt.broker_addresses;
-            is_local_file = false;
         }
         if (t_opt.__isset.hdfs_write_buffer_size_kb) {
             write_buffer_size_kb = t_opt.hdfs_write_buffer_size_kb;
         }
         if (t_opt.__isset.hdfs_properties) {
             hdfs_properties = t_opt.hdfs_properties;
-            is_local_file = false;
         }
         if (t_opt.__isset.use_broker) {
             use_broker = t_opt.use_broker;

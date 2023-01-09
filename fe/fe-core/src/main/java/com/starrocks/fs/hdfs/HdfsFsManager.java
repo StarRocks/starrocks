@@ -554,9 +554,15 @@ public class HdfsFsManager {
                 if (cloudConfiguration != null) {
                     cloudConfiguration.applyToConfiguration(conf);
                 } else {
-                    conf.set(FS_S3A_ACCESS_KEY, accessKey);
-                    conf.set(FS_S3A_SECRET_KEY, secretKey);
-                    conf.set(FS_S3A_ENDPOINT, endpoint);
+                    if (!accessKey.isEmpty()) {
+                        conf.set(FS_S3A_ACCESS_KEY, accessKey);
+                    }
+                    if (!secretKey.isEmpty()) {
+                        conf.set(FS_S3A_SECRET_KEY, secretKey);
+                    }
+                    if (!endpoint.isEmpty()) {
+                        conf.set(FS_S3A_ENDPOINT, endpoint);
+                    }
                     // Only set ssl for origin logic
                     conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                     if (awsCredProvider != null) {
@@ -633,9 +639,15 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                conf.set(FS_KS3_ACCESS_KEY, accessKey);
-                conf.set(FS_KS3_SECRET_KEY, secretKey);
-                conf.set(FS_KS3_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_KS3_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_KS3_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_KS3_ENDPOINT, endpoint);
+                }
                 conf.set(FS_KS3_IMPL, "com.ksyun.kmr.hadoop.fs.ks3.Ks3FileSystem");
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_KS3_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
@@ -706,9 +718,15 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                conf.set(FS_OBS_ACCESS_KEY, accessKey);
-                conf.set(FS_OBS_SECRET_KEY, secretKey);
-                conf.set(FS_OBS_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_OBS_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_OBS_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_OBS_ENDPOINT, endpoint);
+                }
                 conf.set(FS_OBS_IMPL, "org.apache.hadoop.fs.obs.OBSFileSystem");
                 conf.set(FS_OBS_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_OBS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
@@ -777,9 +795,17 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                conf.set(FS_OSS_ACCESS_KEY, accessKey);
-                conf.set(FS_OSS_SECRET_KEY, secretKey);
-                conf.set(FS_OSS_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_OSS_ACCESS_KEY, accessKey);
+                }
+
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_OSS_SECRET_KEY, secretKey);
+                }
+
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_OSS_ENDPOINT, endpoint);
+                }
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_OSS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
@@ -842,9 +868,16 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                conf.set(FS_COS_ACCESS_KEY, accessKey);
-                conf.set(FS_COS_SECRET_KEY, secretKey);
-                conf.set(FS_COS_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_COS_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_COS_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_COS_ENDPOINT, endpoint);
+                }
+
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_COS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);

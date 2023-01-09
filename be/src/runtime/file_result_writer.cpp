@@ -42,7 +42,6 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_posix.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
@@ -78,16 +77,12 @@ void FileResultWriter::_init_profile() {
 
 Status FileResultWriter::_create_fs() {
     if (_fs == nullptr) {
-        if (_file_opts->is_local_file) {
-            _fs = new_fs_posix();
+        if (_file_opts->use_broker) {
+            _fs = std::make_unique<BrokerFileSystem>(*_file_opts->broker_addresses.begin(),
+                                                     _file_opts->broker_properties,
+                                                     config::broker_write_timeout_seconds * 1000);
         } else {
-            if (_file_opts->use_broker) {
-                _fs = std::make_unique<BrokerFileSystem>(*_file_opts->broker_addresses.begin(),
-                                                         _file_opts->broker_properties,
-                                                         config::broker_write_timeout_seconds * 1000);
-            } else {
-                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
-            }
+            ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
         }
     }
     if (_fs == nullptr) {

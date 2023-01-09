@@ -80,6 +80,8 @@ public class AnalyzeSingleTest {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
+
+        analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\" FORMAT AS CSV");
     }
 
     @Test
