@@ -165,10 +165,10 @@ CURL_SOURCE=curl-7.79.0
 CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
 
 # RE2
-RE2_DOWNLOAD="https://github.com/google/re2/archive/2017-05-01.tar.gz"
-RE2_NAME=re2-2017-05-01.tar.gz
-RE2_SOURCE=re2-2017-05-01
-RE2_MD5SUM="4aa65a0b22edacb7ddcd7e4aec038dcf"
+RE2_DOWNLOAD="https://github.com/google/re2/archive/refs/tags/2022-12-01.tar.gz"
+RE2_NAME=re2-2022-12-01.tar.gz
+RE2_SOURCE=re2-2022-12-01
+RE2_MD5SUM="f25d7b06a3e7747ecbb2f12d48be61cd"
 
 # boost
 BOOST_DOWNLOAD="https://boostorg.jfrog.io/artifactory/main/release/1.80.0/source/boost_1_80_0.tar.gz"
