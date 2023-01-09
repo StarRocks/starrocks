@@ -339,9 +339,9 @@ public class InformationSchemaDataSource {
             case LAKE:
             case ELASTICSEARCH:
             case JDBC:
+            case OLAP_EXTERNAL:
                 return "EXTERNAL TABLE";
             case OLAP:
-            case OLAP_EXTERNAL:
                 return "BASE TABLE";
             case MATERIALIZED_VIEW:
             case VIEW:
