@@ -1247,6 +1247,8 @@ public class PrivilegeCheckerV2Test {
 
         sql = "show authentication for test2";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        sql = "show all authentication";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
         PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show authentication", ctx), ctx);
 
