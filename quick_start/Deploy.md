@@ -179,6 +179,7 @@ ReplayedJournalId: 1303
 1 row in set (0.02 sec)
 ```
 
+* 当 **Role** 为 **LEADER** 时，当前 FE 节点为选举出的主节点。
 * 当 **Role** 为 **FOLLOWER** 时，当前节点是一个能参与选主的 FE 节点。
 * 当 **IsMaster** 为 **true** 时，当前 FE 节点为主节点 (Leader FE)。
 
