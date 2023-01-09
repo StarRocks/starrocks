@@ -20,7 +20,6 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -31,9 +30,6 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AstVisitor;
 import io.delta.standalone.expressions.And;
@@ -50,7 +46,17 @@ import io.delta.standalone.expressions.LessThanOrEqual;
 import io.delta.standalone.expressions.Literal;
 import io.delta.standalone.expressions.Not;
 import io.delta.standalone.expressions.Or;
+import io.delta.standalone.types.BooleanType;
+import io.delta.standalone.types.ByteType;
+import io.delta.standalone.types.DataType;
+import io.delta.standalone.types.DateType;
+import io.delta.standalone.types.DoubleType;
+import io.delta.standalone.types.FloatType;
+import io.delta.standalone.types.IntegerType;
+import io.delta.standalone.types.LongType;
+import io.delta.standalone.types.StringType;
 import io.delta.standalone.types.StructType;
+import io.delta.standalone.types.TimestampType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -119,7 +125,7 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
             return null;
         }
         Column column = tableSchema.column(columnName);
-        Literal literal = getLiteral(node.getChild(1));
+        Literal literal = getLiteral(node.getChild(1), column.dataType());
         if (literal == null) {
             return null;
         }
@@ -151,7 +157,7 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
         List<Expr> valuesExprList = node.getListChildren();
         List<Literal> literalValues = new ArrayList<>(valuesExprList.size());
         for (Expr valueExpr : valuesExprList) {
-            Literal value = getLiteral(valueExpr);
+            Literal value = getLiteral(valueExpr, column.dataType());
             if (value == null) {
                 return null;
             }
@@ -164,46 +170,37 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
         }
     }
 
-    private static Literal getLiteral(Expr expr) {
+    private static Literal getLiteral(Expr expr, DataType dataType) {
         if (!(expr instanceof LiteralExpr)) {
             return null;
         }
 
         LiteralExpr literalExpr = (LiteralExpr) expr;
-        switch (literalExpr.getType().getPrimitiveType()) {
-            case BOOLEAN:
-                return Literal.of(((BoolLiteral) literalExpr).getValue());
-            case TINYINT:
-            case SMALLINT:
-                return Literal.of((short) ((IntLiteral) literalExpr).getValue());
-            case INT:
-                return Literal.of((int) ((IntLiteral) literalExpr).getValue());
-            case BIGINT:
-                return Literal.of(((IntLiteral) literalExpr).getValue());
-            case FLOAT:
-                return Literal.of((float) ((FloatLiteral) literalExpr).getValue());
-            case DOUBLE:
-                return Literal.of(((FloatLiteral) literalExpr).getValue());
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-                return Literal.of(((DecimalLiteral) literalExpr).getValue());
-            case HLL:
-            case VARCHAR:
-            case CHAR:
-                return Literal.of(((StringLiteral) literalExpr).getUnescapedValue());
-            case DATE:
-                try {
-                    return Literal.of((Date) TimeUtils.parseDate(literalExpr.getStringValue(), PrimitiveType.DATE));
-                } catch (AnalysisException e) {
-                    LOG.error("Failed to convert {} to date type", literalExpr);
-                    throw new StarRocksConnectorException("Failed to convert %s to date type", literalExpr);
-                }
-            case DATETIME:
-                return Literal.of(Timestamp.valueOf(((DateLiteral) literalExpr).toLocalDateTime()));
-            default:
-                return null;
+        if (dataType instanceof BooleanType) {
+            try {
+                return Literal.of(new BoolLiteral(literalExpr.getStringValue()).getValue());
+            } catch (Exception e) {
+                LOG.error("Failed to convert {} to boolean type", literalExpr);
+                throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalExpr);
+            }
+        } else if (dataType instanceof ByteType) {
+            return Literal.of((byte) ((IntLiteral) literalExpr).getValue());
+        } else if (dataType instanceof IntegerType) {
+            return Literal.of((int) ((IntLiteral) literalExpr).getValue());
+        } else if (dataType instanceof LongType) {
+            return Literal.of(((IntLiteral) literalExpr).getValue());
+        } else if (dataType instanceof FloatType) {
+            return Literal.of((float) ((FloatLiteral) literalExpr).getValue());
+        } else if (dataType instanceof DoubleType) {
+            return Literal.of(((FloatLiteral) literalExpr).getValue());
+        } else if (dataType instanceof StringType) {
+            return Literal.of(((StringLiteral) literalExpr).getUnescapedValue());
+        } else if (dataType instanceof DateType) {
+            return Literal.of(Date.valueOf(literalExpr.getStringValue()));
+        } else if (dataType instanceof TimestampType) {
+            return Literal.of(Timestamp.valueOf(((DateLiteral) literalExpr).toLocalDateTime()));
+        } else {
+            return null;
         }
     }
 
