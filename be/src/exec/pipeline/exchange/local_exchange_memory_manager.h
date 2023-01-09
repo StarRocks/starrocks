@@ -47,7 +47,6 @@ public:
 
 private:
     int64_t _max_memory_bytes;
-    // an estimated value for partitioned shuffle, as it reconstructs chunks.
     std::atomic<int64_t> _memory_bytes{0};
 };
 } // namespace starrocks::pipeline
