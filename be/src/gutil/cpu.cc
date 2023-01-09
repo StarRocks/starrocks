@@ -216,11 +216,6 @@ void CPU::Initialize() {
             has_non_stop_time_stamp_counter_ = true;
         }
     }
-    // https://gcc.gnu.org/onlinedocs/gcc/x86-Built-in-Functions.html
-    __builtin_cpu_init();
-    if (__builtin_cpu_supports("avx512f")) {
-        has_avx512f_ = true;
-    }
 #elif defined(ARCH_CPU_ARM_FAMILY)
 #if (defined(OS_ANDROID) || defined(OS_LINUX))
     cpu_brand_ = *CpuInfoBrand();
