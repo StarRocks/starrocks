@@ -689,4 +689,47 @@ public class SubqueryTest extends PlanTestBase {
                 "     numNodes=0\n" +
                 "     limit: 2");
     }
+
+    @Test
+    public void testCorrelatedPredicateRewrite_1() throws Exception {
+        String sql = "select v1 from t0 where v1 = 1 or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "7:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 8: v4\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
+        assertContains(plan, "13:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1), count(9: v4)\n" +
+                "  |  group by: 10: v4\n" +
+                "  |  \n" +
+                "  12:Project\n" +
+                "  |  <slot 9> : 4: v4\n" +
+                "  |  <slot 10> : 4: v4\n" +
+                "  |  \n" +
+                "  11:EXCHANGE");
+    }
+
+    @Test
+    public void testCorrelatedPredicateRewrite_2() throws Exception {
+        String sql = "select v1 from t0 where v1 in (select v5 from t1 where v1 = v5 and v4 = 3) " +
+                "or v2 in (select v4 from t1 where v2 = v4 and v5 = 1)";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "24:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 12: v4\n" +
+                "  |  \n" +
+                "  23:EXCHANGE");
+        assertContains(plan, "30:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1), count(13: v4)\n" +
+                "  |  group by: 14: v4\n" +
+                "  |  \n" +
+                "  29:Project\n" +
+                "  |  <slot 13> : 8: v4\n" +
+                "  |  <slot 14> : 8: v4\n" +
+                "  |  \n" +
+                "  28:EXCHANGE");
+    }
 }
