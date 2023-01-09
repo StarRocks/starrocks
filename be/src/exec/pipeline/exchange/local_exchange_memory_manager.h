@@ -23,29 +23,28 @@ namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
 class LocalExchangeMemoryManager {
 public:
-    LocalExchangeMemoryManager(size_t max_input_dop) {
-        size_t res = max_input_dop * get_memory_limit_per_driver();
-        const size_t MAX_MEM_LIMIT = 128 * 1024 * 1024 * 1024UL; // 128GB limit
-        _max_memory_bytes = (res > MAX_MEM_LIMIT || res <= 0) ? MAX_MEM_LIMIT : res;
-    }
-
-    void update_memory_usage(size_t memory_bytes) { _memory_bytes += memory_bytes; }
-
-    size_t get_memory_limit_per_driver() {
-        size_t limit_bytes = 128 * 1024 * 1024UL; // 128 MB
+    // default value 128MB and 128GB
+    LocalExchangeMemoryManager(size_t max_input_dop)
+            : _max_memory_bytes_per_driver(128 * 1024 * 1024UL), _max_memory_bytes(128 * 1024 * 1024 * 1024UL) {
         if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
-            limit_bytes = config::local_exchange_buffer_mem_limit_per_driver;
+            _max_memory_bytes_per_driver = config::local_exchange_buffer_mem_limit_per_driver;
         } else {
             LOG(WARNING) << "invalid config::local_exchange_buffer_mem_limit_per_driver "
                          << config::local_exchange_buffer_mem_limit_per_driver;
         }
-        return limit_bytes;
+        size_t res = max_input_dop * _max_memory_bytes_per_driver;
+        _max_memory_bytes = (res > _max_memory_bytes || res <= 0) ? _max_memory_bytes : res;
     }
+
+    void update_memory_usage(size_t memory_bytes) { _memory_bytes += memory_bytes; }
+
+    size_t get_memory_limit_per_driver() const { return _max_memory_bytes_per_driver; }
 
     bool is_full() const { return _memory_bytes >= _max_memory_bytes; }
 
 private:
     size_t _max_memory_bytes;
+    size_t _max_memory_bytes_per_driver;
     std::atomic<size_t> _memory_bytes{0};
 };
 } // namespace starrocks::pipeline

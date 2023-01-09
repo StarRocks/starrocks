@@ -52,6 +52,11 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
 
 bool LocalExchangeSourceOperator::is_finished() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
+    if (_full_chunk_queue.empty() && !_partition_rows_num) {
+        if (UNLIKELY(_local_memory_usage != 0)) {
+            throw std::runtime_error("_local_memory_usage should be 0 as there is no rows left.");
+        }
+    }
 
     return _is_finished && _full_chunk_queue.empty() && !_partition_rows_num;
 }
@@ -131,7 +136,6 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
     }
-
     return chunk;
 }
 
