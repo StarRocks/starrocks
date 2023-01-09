@@ -37,4 +37,12 @@ public class DropWarehouseStmt extends DdlStmt {
         return visitor.visitDropWarehouseStatement(this, context);
     }
 
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("DROP WAREHOUSE ");
+        sb.append("\'" + warehouseName + "\'");
+        return sb.toString();
+    }
+
 }
