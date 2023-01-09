@@ -41,12 +41,13 @@ import com.starrocks.common.Reference;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
-import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,30 +63,6 @@ public class SimpleSchedulerTest {
 
     @Before
     public void setUp() {
-        new Expectations() {
-            {
-                editLog.logAddBackend((Backend) any);
-                minTimes = 0;
-
-                editLog.logDropBackend((Backend) any);
-                minTimes = 0;
-
-                editLog.logBackendStateChange((Backend) any);
-                minTimes = 0;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
     }
 
     // Comment out these code temporatily.
@@ -213,5 +190,117 @@ public class SimpleSchedulerTest {
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
+    }
+
+    @Test
+    public void testEmptyBackendList() throws InterruptedException {
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getBackendHost(null, idRef);
+        Assert.assertNull(address);
+
+        ImmutableMap.Builder<Long, Backend> builder = ImmutableMap.builder();
+        address = SimpleScheduler.getBackendHost(builder.build(), idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testEmptyComputeNodeList() {
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getComputeNodeHost(null, idRef);
+        Assert.assertNull(address);
+
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        address = SimpleScheduler.getComputeNodeHost(builder.build(), idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testNoAliveBackend() {
+        ImmutableMap.Builder<Long, Backend> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            Backend backend = new Backend(i, "address" + i, 0);
+            backend.setAlive(false);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, Backend> backends = builder.build();
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testNoAliveComputeNode() {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            ComputeNode node = new ComputeNode(i, "address" + i, 0);
+            node.setAlive(false);
+            builder.put(node.getId(), node);
+        }
+        ImmutableMap<Long, ComputeNode> nodes = builder.build();
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testChooseBackendConcurrently() throws InterruptedException {
+        ImmutableMap.Builder<Long, Backend> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            Backend backend = new Backend(i, "address" + i, 0);
+            backend.setAlive(i == 0);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, Backend> backends = builder.build();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            Thread t = new Thread(() -> {
+                for (int i1 = 0; i1 < 50; i1++) {
+                    Reference<Long> idRef = new Reference<>();
+                    TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
+                    Assert.assertNotNull(address);
+                    Assert.assertEquals("address0", address.hostname);
+                }
+            });
+            threads.add(t);
+        }
+
+        for (Thread t : threads) {
+            t.start();
+        }
+
+        for (Thread t : threads) {
+            t.join();
+        }
+    }
+
+    @Test
+    public void testChooseComputeNodeConcurrently() throws InterruptedException {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            ComputeNode backend = new ComputeNode(i, "address" + i, 0);
+            backend.setAlive(i == 0);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, ComputeNode> nodes = builder.build();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            Thread t = new Thread(() -> {
+                for (int i1 = 0; i1 < 50; i1++) {
+                    Reference<Long> idRef = new Reference<>();
+                    TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
+                    Assert.assertNotNull(address);
+                    Assert.assertEquals("address0", address.hostname);
+                }
+            });
+            threads.add(t);
+        }
+
+        for (Thread t : threads) {
+            t.start();
+        }
+
+        for (Thread t : threads) {
+            t.join();
+        }
     }
 }
