@@ -336,11 +336,17 @@ public class ShowExecutor {
             List<List<String>> userAuthInfos = Lists.newArrayList();
 
             Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
-            if (showAuthenticationStmt.getUserIdent() == null) {
+            if (showAuthenticationStmt.isAll()) {
                 authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
             } else {
-                UserAuthenticationInfo userAuthenticationInfo =
-                        authenticationManager.getUserAuthenticationInfoByUserIdentity(showAuthenticationStmt.getUserIdent());
+                UserAuthenticationInfo userAuthenticationInfo;
+                if (showAuthenticationStmt.getUserIdent() == null) {
+                    userAuthenticationInfo = authenticationManager
+                            .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
+                } else {
+                    userAuthenticationInfo =
+                            authenticationManager.getUserAuthenticationInfoByUserIdentity(showAuthenticationStmt.getUserIdent());
+                }
                 authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
             }
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
@@ -354,8 +360,20 @@ public class ShowExecutor {
 
             resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
         } else {
-            List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getAuthenticationInfo(
-                    showAuthenticationStmt.getUserIdent());
+            List<List<String>> rows;
+            if (showAuthenticationStmt.isAll()) {
+                rows = GlobalStateMgr.getCurrentState().getAuth()
+                        .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
+            } else {
+                if (showAuthenticationStmt.getUserIdent() == null) {
+                    rows = GlobalStateMgr.getCurrentState().getAuth()
+                            .getAuthenticationInfo(connectContext.getCurrentUserIdentity());
+                } else {
+                    rows = GlobalStateMgr.getCurrentState().getAuth()
+                            .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
+                }
+            }
+
             resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
         }
     }
