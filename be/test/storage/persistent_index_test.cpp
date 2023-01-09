@@ -62,7 +62,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
     size_t get_num_found = 0;
     ASSERT_TRUE(idx->get(key_slices.data(), get_values.data(), &get_not_found, &get_num_found, idxes).ok());
     ASSERT_EQ(keys.size(), get_num_found);
-    ASSERT_EQ(get_not_found.key_idxes.size(), 0);
+    ASSERT_EQ(get_not_found.size(), 0);
     for (int i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
@@ -101,7 +101,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
                         .ok());
     ASSERT_EQ(erase_num_found, (N + 2) / 3);
     // N+2 not found
-    ASSERT_EQ(erase_not_found.key_idxes.size(), 1);
+    ASSERT_EQ(erase_not_found.size(), 1);
 
     // test upsert
     vector<Key> upsert_keys(N, 0);
@@ -130,7 +130,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
                             &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
-    ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
+    ASSERT_EQ(upsert_not_found.size(), expect_not_found);
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
@@ -158,7 +158,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
     size_t get_num_found = 0;
     ASSERT_TRUE(idx->get(key_slices.data(), get_values.data(), &get_not_found, &get_num_found, idxes).ok());
     ASSERT_EQ(keys.size(), get_num_found);
-    ASSERT_EQ(get_not_found.key_idxes.size(), 0);
+    ASSERT_EQ(get_not_found.size(), 0);
     for (int i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
@@ -196,7 +196,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
                         .ok());
     ASSERT_EQ(erase_num_found, (N + 2) / 3);
     // N+2 not found
-    ASSERT_EQ(erase_not_found.key_idxes.size(), 1);
+    ASSERT_EQ(erase_not_found.size(), 1);
 
     // test upsert
     vector<Key> upsert_keys(N);
@@ -225,7 +225,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
                             &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
-    ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
+    ASSERT_EQ(upsert_not_found.size(), expect_not_found);
 }
 
 static std::string gen_random_string_of_random_length(size_t floor, size_t ceil) {
@@ -268,7 +268,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
     size_t get_num_found = 0;
     ASSERT_TRUE(idx->get(key_slices.data(), get_values.data(), &get_not_found, &get_num_found, idxes).ok());
     ASSERT_EQ(keys.size(), get_num_found);
-    ASSERT_EQ(get_not_found.key_idxes.size(), 0);
+    ASSERT_EQ(get_not_found.size(), 0);
     for (int i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
@@ -313,7 +313,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
                         .ok());
     ASSERT_EQ(erase_num_found, N / 2);
     // N+2 not found
-    ASSERT_EQ(erase_not_found.key_idxes.size(), 1);
+    ASSERT_EQ(erase_not_found.size(), 1);
 
     // test upsert
     vector<Key> upsert_keys(N);
@@ -1022,7 +1022,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(idx->insert(key_slices.data(), values.data(), idxes).ok());
 
     auto writer = std::make_unique<ImmutableIndexWriter>();
-    ASSERT_TRUE(writer->init(".", EditVersion(1, 1)).ok());
+    ASSERT_TRUE(writer->init("./index.l1.1.1", EditVersion(1, 1), false).ok());
 
     auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage((sizeof(Key) + 8) * N);
     auto nbucket = MutableIndex::estimate_nbucket(sizeof(Key), N, nshard, npage_hint);
@@ -1040,18 +1040,18 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     auto& idx_loaded = st_load.value();
     KeysInfo keys_info;
     for (size_t i = 0; i < N; i++) {
-        keys_info.key_idxes.emplace_back(i);
         uint64_t h = key_index_hash(&keys[i], sizeof(Key));
-        keys_info.hashes.emplace_back(h);
+        keys_info.key_infos.emplace_back(i, h);
     }
     vector<IndexValue> get_values(N);
-    size_t num_found = 0;
-    auto st_get = idx_loaded->get(N, key_slices.data(), keys_info, get_values.data(), &num_found, sizeof(Key));
+    //size_t num_found = 0;
+    KeysInfo found_keys_info;
+    auto st_get = idx_loaded->get(N, key_slices.data(), keys_info, get_values.data(), &found_keys_info, sizeof(Key));
     if (!st_get.ok()) {
         LOG(WARNING) << st_get;
     }
     ASSERT_TRUE(st_get.ok());
-    ASSERT_EQ(N, num_found);
+    ASSERT_EQ(N, found_keys_info.size());
     for (size_t i = 0; i < N; i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
@@ -1084,14 +1084,14 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_varlen_to_immutable) {
         values[i] = i;
         keys_slice[i] = Slice(keys[i].data(), keys[i].size());
     }
-    auto flush_st = index.test_flush_varlen_to_immutable_index(kPersistentIndexDir, version, N, keys_slice.data(),
-                                                               values.data());
+    std::string l1_file_path = kPersistentIndexDir + "/index.l1.1.0";
+    auto flush_st =
+            index.test_flush_varlen_to_immutable_index(l1_file_path, version, N, keys_slice.data(), values.data());
     if (!flush_st.ok()) {
         LOG(WARNING) << flush_st;
     }
     ASSERT_TRUE(flush_st.ok());
 
-    std::string l1_file_path = kPersistentIndexDir + "/index.l1.1.0";
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(l1_file_path));
     auto st_load = ImmutableIndex::load(std::move(rf));
     if (!st_load.ok()) {
@@ -1101,18 +1101,17 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_varlen_to_immutable) {
     auto& idx_loaded = st_load.value();
     KeysInfo keys_info;
     for (size_t i = 0; i < N; i++) {
-        keys_info.key_idxes.emplace_back(i);
         uint64_t h = key_index_hash(keys[i].data(), keys[i].size());
-        keys_info.hashes.emplace_back(h);
+        keys_info.key_infos.emplace_back(i, h);
     }
     vector<IndexValue> get_values(N);
-    size_t num_found = 0;
-    auto st_get = idx_loaded->get(N, keys_slice.data(), keys_info, get_values.data(), &num_found, 0);
+    KeysInfo found_keys_info;
+    auto st_get = idx_loaded->get(N, keys_slice.data(), keys_info, get_values.data(), &found_keys_info, 0);
     if (!st_get.ok()) {
         LOG(WARNING) << st_get;
     }
     ASSERT_TRUE(st_get.ok());
-    ASSERT_EQ(N, num_found);
+    ASSERT_EQ(N, found_keys_info.size());
     for (size_t i = 0; i < N; i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
@@ -1492,6 +1491,120 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
         }
         ASSERT_TRUE(find_target >= target);
     }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
+    config::l0_max_mem_usage = 1048576;
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l1_advance";
+    const std::string kIndexFile = "./PersistentIndexTest_test_flush_l1_advance/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 500000;
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    {
+        EditVersion version(0, 0);
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(1, 0)));
+        const int N = 100000;
+        for (int i = 0; i < 5; i++) {
+            vector<Key> keys(N);
+            vector<Slice> key_slices;
+            vector<IndexValue> values;
+            key_slices.reserve(N);
+            for (int j = 0; j < N; j++) {
+                keys[j] = "test_varlen_" + std::to_string(i * N + j);
+                values.emplace_back(i * N + j);
+                key_slices.emplace_back(keys[j]);
+            }
+            ASSERT_OK(index.insert(N, key_slices.data(), values.data(), false));
+            std::vector<IndexValue> get_values(N);
+            ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
+            for (int j = 0; j < N; j++) {
+                ASSERT_EQ(values[j], get_values[j]);
+            }
+        }
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+    }
+
+    {
+        // reload persistent index
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_OK(index.load(index_meta));
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
+        for (int i = 0; i < N; i++) {
+            if (values[i].get_value() != get_values[i].get_value()) {
+                LOG(INFO) << "values[" << i << "] is " << values[i].get_value() << ", get_values[" << i << "] is "
+                          << get_values[i].get_value();
+            }
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+
+    {
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(2, 0)));
+        const int N = 100000;
+        for (int i = 0; i < 5; i++) {
+            vector<IndexValue> values;
+            key_slices.reserve(N);
+            for (int j = 0; j < N; j++) {
+                values.emplace_back(i * j);
+            }
+            std::vector<IndexValue> old_values(N);
+            ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+            std::vector<IndexValue> get_values(N);
+            ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
+            for (int j = 0; j < N; j++) {
+                ASSERT_EQ(values[j], get_values[j]);
+            }
+        }
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+    }
+
+    {
+        // reload persistent index
+        const int N = 100000;
+        PersistentIndex index(kPersistentIndexDir);
+        ASSERT_OK(index.load(index_meta));
+        std::vector<IndexValue> get_values(N);
+        ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(values[i].get_value() * 4, get_values[i].get_value());
+        }
+    }
+
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 

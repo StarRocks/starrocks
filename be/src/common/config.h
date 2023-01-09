@@ -900,6 +900,8 @@ CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(max_tmp_l1_num, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

@@ -60,9 +60,15 @@ static_assert(sizeof(IndexValue) == kIndexValueSize);
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
-    std::vector<uint32_t> key_idxes;
-    std::vector<uint64_t> hashes;
-    size_t size() const { return key_idxes.size(); }
+    std::vector<std::pair<uint32_t, uint64_t>> key_infos;
+    size_t size() const { return key_infos.size(); }
+
+    void set_difference(KeysInfo& input) {
+        std::vector<std::pair<uint32_t, uint64_t>> infos;
+        std::set_difference(key_infos.begin(), key_infos.end(), input.key_infos.begin(), input.key_infos.end(),
+                            std::back_inserter(infos), [](auto& a, auto& b) { return a.first < b.first; });
+        key_infos.swap(infos);
+    }
 };
 
 struct KVRef {
@@ -171,11 +177,9 @@ public:
 
     virtual void reserve(size_t size) = 0;
 
+    virtual void clear() = 0;
+
     virtual size_t memory_usage() = 0;
-
-    virtual void update_overlap_info(size_t overlap_size, size_t overlap_usage) = 0;
-
-    virtual size_t overlap_size() = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -285,7 +289,7 @@ public:
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys,
                                                          const std::vector<size_t>& idxes);
 
-    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version);
+    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -294,8 +298,7 @@ public:
 
     size_t memory_usage();
 
-    Status update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys, const IndexValue* values,
-                               const KeysInfo& keys_info, bool erase);
+    void clear();
 
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
@@ -328,7 +331,7 @@ public:
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
     // |key_size|: the key size of keys array
-    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size) const;
 
     // batch check key existence
@@ -351,6 +354,29 @@ public:
         }
     }
 
+    void destroy() {
+        if (_file != nullptr) {
+            FileSystem::Default()->delete_file(_file->filename());
+            _file.reset();
+        }
+    }
+
+    size_t total_usage() {
+        size_t usage = 0;
+        for (const auto& shard : _shards) {
+            usage += shard.data_size;
+        }
+        return usage;
+    }
+
+    size_t total_size() {
+        size_t size = 0;
+        for (const auto& shard : _shards) {
+            size += shard.size;
+        }
+        return size;
+    }
+
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
 
 private:
@@ -370,15 +396,15 @@ private:
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                IndexValue* values, size_t* num_found,
+                                IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                IndexValue* values, size_t* num_found,
+                                IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values,
-                         size_t* num_found) const;
+                         KeysInfo* found_keys_info) const;
 
     Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
                                             std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -411,7 +437,7 @@ class ImmutableIndexWriter {
 public:
     ~ImmutableIndexWriter();
 
-    Status init(const string& dir, const EditVersion& version);
+    Status init(const string& idx_file_path, const EditVersion& version, bool sync_on_close);
 
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
     Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
@@ -419,6 +445,8 @@ public:
     Status write_shard_as_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
 
     Status finish();
+
+    size_t total_kv_size() { return _total_kv_size; }
 
 private:
     EditVersion _version;
@@ -536,6 +564,8 @@ public:
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
+    Status flush_advance();
+
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
     Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
@@ -546,11 +576,18 @@ private:
 
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
+    bool _need_flush_advance();
+    bool _need_merge_advance();
+    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
+    Status _delete_tmp_index_file();
 
     Status _flush_l0();
 
+    Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
+                                      size_t total_usage, size_t total_size);
+    Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
@@ -564,15 +601,22 @@ private:
     Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const VectorizedSchema& pkey_schema,
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
 
+    Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
+                                     std::map<size_t, KeysInfo>& keys_info_by_key_size);
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
     size_t _size = 0;
+    size_t _usage = 0;
     EditVersion _version;
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
-    std::unique_ptr<ImmutableIndex> _l1;
+    // add all l1 into vector
+    std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
+    std::vector<int> _l1_merged_num;
+    bool _has_l1 = false;
     std::shared_ptr<FileSystem> _fs;
 
     bool _dump_snapshot = false;
