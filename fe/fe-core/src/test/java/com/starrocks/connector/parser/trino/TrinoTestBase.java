@@ -275,6 +275,19 @@ public class TrinoTestBase {
         return getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
     }
 
+    public String getExplain(String sql) throws Exception {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        StatementBase statementBase = statements.get(0);
+
+        ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+
+        return execPlan.getExplainString(statementBase.getExplainLevel());
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));

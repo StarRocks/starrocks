@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.parser.trino;
 
+import org.apache.commons.lang3.StringUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -448,5 +450,46 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (t0 a join t0 b using(v1)) , t1";
         assertPlanContains(sql, "equal join conjunct: 1: v1 = 4: v1");
+    }
+
+    @Test
+    public void testExplain() throws Exception {
+        String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "SCAN [t1] => [8:auto_fill_col]\n" +
+                "                    Estimates: {row: 1, cpu: 2.00, memory: 0.00, network: 0.00, cost: 1.00}\n" +
+                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
+                "                    8:auto_fill_col := 1"));
+
+        sql = "explain select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "2:Project\n" +
+                        "  |  <slot 8> : 1\n" +
+                        "  |  \n" +
+                        "  1:OlapScanNode\n" +
+                        "     TABLE: t1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=0/1"));
+
+        sql = "explain (Type DISTRIBUTED)select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "5:Project\n" +
+                        "  |  output columns:\n" +
+                        "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                        "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |  cardinality: 1\n" +
+                        "  |  \n" +
+                        "  4:NESTLOOP JOIN"));
+
+        sql = "explain (Type io)select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "5:Project\n" +
+                        "  |  output columns:\n" +
+                        "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                        "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |  cardinality: 1\n" +
+                        "  |  column statistics: \n" +
+                        "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                        "  |  * v2-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 }
