@@ -58,6 +58,9 @@ struct ResultFileOptions {
     int write_buffer_size_kb;
     THdfsProperties hdfs_properties;
     bool use_broker;
+    int64_t max_row_group_bytes;
+    bool use_dictory;
+    TParquetCompressionType::type compression_type;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -80,6 +83,15 @@ struct ResultFileOptions {
         }
         if (t_opt.__isset.broker_properties) {
             broker_properties = t_opt.broker_properties;
+        }
+        if (t_opt.__isset.parquet_max_group_bytes) {
+            max_row_group_bytes = t_opt.parquet_max_group_bytes;
+        }
+        if (t_opt.__isset.use_dictory) {
+            use_dictory = t_opt.use_dictory;
+        }
+        if (t_opt.__isset.compression_type) {
+            compression_type = t_opt.compression_type;
         }
     }
     ~ResultFileOptions() = default;

@@ -20,7 +20,7 @@
 namespace starrocks {
 
 ColumnRef::ColumnRef(const TExprNode& node)
-        : Expr(node, true), _column_id(node.slot_ref.slot_id), _tuple_id(node.slot_ref.tuple_id) {}
+        : Expr(node, true), _column_id(node.slot_ref.slot_id), _tuple_id(node.slot_ref.tuple_id), _col_name(node.slot_ref.name) {}
 
 ColumnRef::ColumnRef(const SlotDescriptor* desc) : Expr(desc->type(), true), _column_id(desc->id()) {}
 

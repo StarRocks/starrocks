@@ -162,6 +162,7 @@ struct TTupleIsNullPredicate {
 struct TSlotRef {
   1: required Types.TSlotId slot_id
   2: required Types.TTupleId tuple_id
+  3: optional string name
 }
 
 struct TPlaceHolder {

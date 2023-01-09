@@ -59,6 +59,17 @@ enum TResultSinkType {
     VARIABLE
 }
 
+enum TParquetCompressionType {
+    SNAPPY,
+    GZIP,
+    BROTLI,
+    ZSTD,
+    LZ4,
+    LZO,
+    BZ2,
+    UNCOMPRESSED,
+}
+
 struct TResultFileSinkOptions {
     1: required string file_path
     2: required PlanNodes.TFileFormatType file_format
@@ -73,7 +84,10 @@ struct TResultFileSinkOptions {
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     9: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    10: optional PlanNodes.THdfsProperties hdfs_properties 
+    10: optional PlanNodes.THdfsProperties hdfs_properties
+    11: optional i64 parquet_max_group_bytes
+    12: optional TParquetCompressionType compression_type
+    13: optional bool use_dictory
 }
 
 struct TMemoryScratchSink {

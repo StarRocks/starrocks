@@ -39,6 +39,7 @@
 #include "column/chunk.h"
 #include "exec/local_file_writer.h"
 #include "exec/plain_text_builder.h"
+#include "exec/parquet_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
@@ -103,6 +104,11 @@ Status FileResultWriter::_create_file_writer() {
         _file_builder = std::make_unique<PlainTextBuilder>(
                 PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter},
                 std::move(writable_file), _output_expr_ctxs);
+        break;
+    case TFileFormatType::FORMAT_PARQUET:
+        _file_builder = std::make_unique<ParquetBuilder>(
+                std::move(writable_file), _output_expr_ctxs,
+                ParquetBuilderOptions{_file_opts->compression_type, _file_opts->use_dictory, _file_opts->max_row_group_bytes});
         break;
     default:
         return Status::InternalError(strings::Substitute("unsupported file format: $0", _file_opts->file_format));
