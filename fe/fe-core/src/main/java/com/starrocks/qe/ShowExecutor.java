@@ -613,8 +613,10 @@ public class ShowExecutor {
         // support show full tables from `external_catalog.database`
         if (dbName.contains(".")) {
             List<String> catalogAndDb = Splitter.on('.').trimResults().splitToList(dbName);
-            catalogName = catalogAndDb.get(0);
-            dbName = catalogAndDb.get(1);
+            if (catalogAndDb.size() == 2) {
+                catalogName = catalogAndDb.get(0);
+                dbName = catalogAndDb.get(1);
+            }
         }
         Database db = metadataMgr.getDb(catalogName, dbName);
 

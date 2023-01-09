@@ -5447,9 +5447,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // support query `external_catalog.database`
             if (pendingDbName.contains(".")) {
                 List<String> catalogAndDb = Splitter.on('.').trimResults().splitToList(pendingDbName);
-                String catalogName = catalogAndDb.get(0);
-                String dbName = catalogAndDb.get(1);
-                return new TableName(catalogName, dbName, qualifiedName.getParts().get(1));
+                if (catalogAndDb.size() == 2) {
+                    String catalogName = catalogAndDb.get(0);
+                    String dbName = catalogAndDb.get(1);
+                    return new TableName(catalogName, dbName, qualifiedName.getParts().get(1));
+                }
             }
             return new TableName(null, qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
         } else if (parts.size() == 1) {
