@@ -30,6 +30,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
@@ -299,10 +300,12 @@ public class MVMaintenanceJob implements Writable {
     }
 
     /**
-     * FIXME(murphy) get real backend address for job topology
      * Deploy job on BE executors
      */
     private void deployTasks() throws Exception {
+        QeProcessorImpl.QueryInfo queryInfo = QeProcessorImpl.QueryInfo.fromMVJob(getView().getMvId(), connectContext);
+        QeProcessorImpl.INSTANCE.registerQuery(connectContext.getExecutionId(), queryInfo);
+
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
             long taskId = task.getTaskId();
@@ -353,6 +356,8 @@ public class MVMaintenanceJob implements Writable {
     }
 
     private void stopTasks() throws Exception {
+        QeProcessorImpl.INSTANCE.unregisterQuery(connectContext.getExecutionId());
+
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
             LOG.info("stopTasks: {}", task);

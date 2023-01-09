@@ -93,13 +93,11 @@ public class MVManager {
     }
 
     public void replay(MVMaintenanceJob job) throws IOException {
-        Preconditions.checkState(jobMap.isEmpty());
-
         try {
             jobMap.put(job.getView().getMvId(), job);
             LOG.info("replay MV maintenance jobs: {}", job);
-        } catch (Exception ignored) {
-            LOG.warn("Replay MV maintenannce job failed: {}", job);
+        } catch (Exception e) {
+            LOG.warn("Replay MV maintenance job failed: {} {}", job, e);
         }
     }
 
