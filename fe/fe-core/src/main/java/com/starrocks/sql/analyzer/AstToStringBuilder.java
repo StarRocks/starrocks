@@ -165,7 +165,6 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
-<<<<<<< HEAD
         public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
@@ -173,7 +172,10 @@ public class AstToStringBuilder {
             sb.append(" PROPERTIES (");
             sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
             sb.append(")");
-=======
+
+            return sb.toString();
+        }
+
         public String visitCreateRepositoryStatement(CreateRepositoryStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE REPOSITORY ").append(stmt.getName());
@@ -184,7 +186,6 @@ public class AstToStringBuilder {
             sb.append(" PROPERTIES (");
             sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
             sb.append(" )");
->>>>>>> 7596a4a0b (fix: remove sensative info from create repo audit)
             return sb.toString();
         }
 
