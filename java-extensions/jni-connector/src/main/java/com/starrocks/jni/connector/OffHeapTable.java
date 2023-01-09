@@ -72,13 +72,11 @@ package com.starrocks.jni.connector;
 
 public class OffHeapTable {
     public OffHeapColumnVector[] vectors;
-    public ColumnType[] types;
     public OffHeapColumnVector meta;
     public int numRows;
     public boolean[] released;
 
     public OffHeapTable(ColumnType[] types, int capacity) {
-        this.types = types;
         this.vectors = new OffHeapColumnVector[types.length];
         this.released = new boolean[types.length];
         int metaSize = 0;
@@ -92,40 +90,7 @@ public class OffHeapTable {
     }
 
     public void appendData(int fieldId, ColumnValue o) {
-        OffHeapColumnVector column = vectors[fieldId];
-        if (o == null) {
-            column.appendNull();
-            return;
-        }
-
-        ColumnType.TypeValue type = types[fieldId].getTypeValue();
-        switch (type) {
-            case BOOLEAN:
-                column.appendBoolean(o.getBoolean());
-                break;
-            case SHORT:
-                column.appendShort(o.getShort());
-                break;
-            case INT:
-                column.appendInt(o.getInt());
-                break;
-            case FLOAT:
-                column.appendFloat(o.getFloat());
-                break;
-            case LONG:
-                column.appendLong(o.getLong());
-                break;
-            case DOUBLE:
-                column.appendDouble(o.getDouble());
-                break;
-            case STRING:
-            case DATE:
-            case DECIMAL:
-                column.appendString(o.getString());
-                break;
-            default:
-                throw new RuntimeException("Unsupported type: " + type);
-        }
+        vectors[fieldId].appendValue(o);
     }
 
     public void releaseOffHeapColumnVector(int fieldId) {
@@ -145,62 +110,19 @@ public class OffHeapTable {
 
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
-        for (int i = 0; i < types.length; i++) {
-            OffHeapColumnVector column = vectors[i];
-            if (types[i].isArray()) {
-                meta.appendLong(column.nullsNativeAddress());
-                meta.appendLong(column.arrayOffsetNativeAddress());
-                meta.appendLong(column.arrayDataNativeAddress());
-            } else {
-                meta.appendLong(column.nullsNativeAddress());
-                meta.appendLong(column.valuesNativeAddress());
-            }
+        for (OffHeapColumnVector v : vectors) {
+            v.updateMeta(meta);
         }
         return meta.valuesNativeAddress();
     }
 
-    /**
-     * For test only
-     */
-    public void show(int limit) {
+    public void print(int rowLimit) {
         StringBuilder sb = new StringBuilder();
         sb.append("OffHeapTable: numRows = " + numRows + "\n");
-        for (int i = 0; i < limit && i < numRows; i++) {
+        for (int i = 0; i < rowLimit && i < numRows; i++) {
             sb.append("row" + i + ": [");
-            for (int fieldId = 0; fieldId < types.length; fieldId++) {
-                OffHeapColumnVector column = vectors[fieldId];
-                if (column.isNullAt(i)) {
-                    sb.append("NULL").append(", ");
-                    continue;
-                }
-                ColumnType.TypeValue type = types[fieldId].getTypeValue();
-                switch (type) {
-                    case BOOLEAN:
-                        sb.append(column.getBoolean(i)).append(", ");
-                        break;
-                    case SHORT:
-                        sb.append(column.getShort(i)).append(", ");
-                        break;
-                    case INT:
-                        sb.append(column.getInt(i)).append(", ");
-                        break;
-                    case FLOAT:
-                        sb.append(column.getFloat(i)).append(", ");
-                        break;
-                    case LONG:
-                        sb.append(column.getLong(i)).append(", ");
-                        break;
-                    case DOUBLE:
-                        sb.append(column.getDouble(i)).append(", ");
-                        break;
-                    case STRING:
-                    case DATE:
-                    case DECIMAL:
-                        sb.append(column.getUTF8String(i)).append(", ");
-                        break;
-                    default:
-                        throw new RuntimeException("Unhandled " + type);
-                }
+            for (OffHeapColumnVector v : vectors) {
+                v.dump(sb, i);
             }
             sb.append("]\n");
         }

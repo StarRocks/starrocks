@@ -73,11 +73,6 @@ public class OffHeapColumnVector {
         reset();
     }
 
-    public static boolean isArray(ColumnType.TypeValue type) {
-        return type == ColumnType.TypeValue.STRING || type == ColumnType.TypeValue.DATE ||
-                type == ColumnType.TypeValue.DECIMAL;
-    }
-
     public long nullsNativeAddress() {
         return nulls;
     }
@@ -335,5 +330,97 @@ public class OffHeapColumnVector {
 
     private int getArrayOffset(int rowId) {
         return Platform.getInt(null, offsetData + 4L * rowId);
+    }
+
+    public void updateMeta(OffHeapColumnVector meta) {
+        if (type.isArray()) {
+            if (type.getTypeValue() == ColumnType.TypeValue.ARRAY) {
+                meta.appendLong(nullsNativeAddress());
+                meta.appendLong(arrayOffsetNativeAddress());
+                meta.childColumns[0].updateMeta(meta);
+            } else {
+                meta.appendLong(nullsNativeAddress());
+                meta.appendLong(arrayOffsetNativeAddress());
+                meta.appendLong(arrayDataNativeAddress());
+            }
+        } else {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(valuesNativeAddress());
+        }
+    }
+
+    public void dump(StringBuilder sb, int i) {
+        if (isNullAt(i)) {
+            sb.append("NULL").append(", ");
+            return;
+        }
+
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case BOOLEAN:
+                sb.append(getBoolean(i));
+                break;
+            case SHORT:
+                sb.append(getShort(i));
+                break;
+            case INT:
+                sb.append(getInt(i));
+                break;
+            case FLOAT:
+                sb.append(getFloat(i));
+                break;
+            case LONG:
+                sb.append(getLong(i));
+                break;
+            case DOUBLE:
+                sb.append(getDouble(i));
+                break;
+            case STRING:
+            case DATE:
+            case DECIMAL:
+                sb.append(getUTF8String(i));
+                break;
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        sb.append(",");
+        return;
+    }
+
+    public void appendValue(ColumnValue o) {
+        if (o == null) {
+            appendNull();
+            return;
+        }
+
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case BOOLEAN:
+                appendBoolean(o.getBoolean());
+                break;
+            case SHORT:
+                appendShort(o.getShort());
+                break;
+            case INT:
+                appendInt(o.getInt());
+                break;
+            case FLOAT:
+                appendFloat(o.getFloat());
+                break;
+            case LONG:
+                appendLong(o.getLong());
+                break;
+            case DOUBLE:
+                appendDouble(o.getDouble());
+                break;
+            case STRING:
+            case DATE:
+            case DECIMAL:
+                appendString(o.getString());
+                break;
+            default:
+                throw new RuntimeException("Unknown typeValueValu: " + typeValue);
+        }
+        return;
     }
 }

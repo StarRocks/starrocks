@@ -75,7 +75,7 @@ TBLPROPERTIES (
             if (table.getNumRows() == 0) {
                 break;
             }
-            table.show(10);
+            table.print(10);
             table.close();
         }
         scanner.close();
