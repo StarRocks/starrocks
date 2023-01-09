@@ -53,7 +53,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_manager;
 };
 
-class LinkedSchemaChangeTest : public SchemaChangeTest {
+class LinkedSchemaChangeTest : public SchemaChangeTest, public testing::WithParamInterface<KeysType>  {
 public:
     LinkedSchemaChangeTest() : SchemaChangeTest(kTestGroupPath) {
         // base tablet
@@ -68,7 +68,7 @@ public:
         auto base_schema = _base_tablet_metadata->mutable_schema();
         base_schema->set_id(next_id());
         base_schema->set_num_short_key_columns(1);
-        base_schema->set_keys_type(DUP_KEYS);
+        base_schema->set_keys_type(GetParam());
         base_schema->set_num_rows_per_row_block(65535);
         auto c0_id = next_id();
         auto c1_id = next_id();
@@ -86,6 +86,7 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
+            c1->set_aggregation("MAX");
             c1->set_is_nullable(false);
         }
 
@@ -105,7 +106,7 @@ public:
         auto new_schema = _new_tablet_metadata->mutable_schema();
         new_schema->set_id(next_id());
         new_schema->set_num_short_key_columns(1);
-        new_schema->set_keys_type(DUP_KEYS);
+        new_schema->set_keys_type(GetParam());
         new_schema->set_num_rows_per_row_block(65535);
         // c0 c1 id should be same as base tablet schema
         {
@@ -122,6 +123,7 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
+            c1->set_aggregation("MAX");
             c1->set_is_nullable(false);
         }
         {
@@ -131,6 +133,7 @@ public:
             c2->set_type("INT");
             c2->set_is_key(false);
             c2->set_is_nullable(false);
+            c2->set_aggregation("MIN");
             c2->set_default_value("10");
         }
 
@@ -163,24 +166,16 @@ protected:
     int64_t _partition_id = 100;
 };
 
-TEST_F(LinkedSchemaChangeTest, test_add_column) {
+TEST_P(LinkedSchemaChangeTest, test_add_column) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
-    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
     auto c0 = Int32Column::create();
     auto c1 = Int32Column::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
-    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
     VChunk chunk0({c0, c1}, _base_schema);
-    VChunk chunk1({c2, c3}, _base_schema);
 
     auto indexes = std::vector<uint32_t>(k0.size());
     for (int i = 0; i < k0.size(); i++) {
@@ -206,7 +201,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
@@ -238,6 +233,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
     auto chunk = ChunkHelper::new_chunk(*_new_schema, 1024);
 
     CHECK_OK(reader->get_next(chunk.get()));
+    ASSERT_EQ(k0.size(), chunk->num_rows());
     for (int i = 0, sz = k0.size(); i < sz; i++) {
         EXPECT_EQ(k0[i], chunk->get(i)[0].get_int32());
         EXPECT_EQ(v0[i], chunk->get(i)[1].get_int32());
@@ -245,17 +241,23 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
     }
     chunk->reset();
 
-    CHECK_OK(reader->get_next(chunk.get()));
-    for (int i = 0, sz = k1.size(); i < sz; i++) {
-        EXPECT_EQ(k1[i], chunk->get(i)[0].get_int32());
-        EXPECT_EQ(v1[i], chunk->get(i)[1].get_int32());
-        EXPECT_EQ(10, chunk->get(i)[2].get_int32());
+    if (GetParam() == DUP_KEYS) {
+        CHECK_OK(reader->get_next(chunk.get()));
+        ASSERT_EQ(k0.size(), chunk->num_rows());
+        for (int i = 0, sz = k0.size(); i < sz; i++) {
+            EXPECT_EQ(k0[i], chunk->get(i)[0].get_int32());
+            EXPECT_EQ(v0[i], chunk->get(i)[1].get_int32());
+            EXPECT_EQ(10, chunk->get(i)[2].get_int32());
+        }
+        chunk->reset();
     }
-    chunk->reset();
 
     auto st = reader->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
 }
+
+INSTANTIATE_TEST_SUITE_P(LinkedSchemaChangeTest, LinkedSchemaChangeTest,
+                         ::testing::Values(DUP_KEYS, UNIQUE_KEYS, AGG_KEYS, PRIMARY_KEYS));
 
 class DirectSchemaChangeTest : public SchemaChangeTest {
 public:

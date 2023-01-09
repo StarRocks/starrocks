@@ -580,17 +580,10 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
 
 static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
     for (const auto& rowset : op_schema_change.rowsets()) {
-        if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
-            auto new_rowset = metadata->add_rowsets();
-            new_rowset->CopyFrom(rowset);
-            new_rowset->set_id(metadata->next_rowset_id());
-            if (new_rowset->num_rows() > 0) {
-                metadata->set_next_rowset_id(metadata->next_rowset_id() + new_rowset->segments_size());
-            } else {
-                // delete
-                metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
-            }
-        }
+        auto new_rowset = metadata->add_rowsets();
+        new_rowset->CopyFrom(rowset);
+        new_rowset->set_id(metadata->next_rowset_id());
+        metadata->set_next_rowset_id(metadata->next_rowset_id() + std::max(1, new_rowset->segments_size()));
     }
     if (op_schema_change.has_delvec_meta()) {
         metadata->mutable_delvec_meta()->CopyFrom(op_schema_change.delvec_meta());
@@ -618,7 +611,7 @@ Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metad
     if (log.has_op_write()) {
         RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), tablet, metadata, builder, base_version));
     }
-    if(log.has_op_schema_change()) {
+    if (log.has_op_schema_change()) {
         RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change(), metadata));
     }
     return Status::OK();
@@ -693,6 +686,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
         }
     }
 
+    // TODO: primary key
     // Apply vtxn logs for schema change
     // Should firstly apply schema change txn log, then apply txn version logs,
     // because the rowsets in txn log are older.
