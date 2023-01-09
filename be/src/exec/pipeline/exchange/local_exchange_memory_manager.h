@@ -23,9 +23,7 @@ namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
 class LocalExchangeMemoryManager {
 public:
-    // default value 128MB and 128GB
-    LocalExchangeMemoryManager(size_t max_input_dop)
-            : _max_memory_usage_per_driver(128 * 1024 * 1024UL), _max_memory_usage(128 * 1024 * 1024 * 1024UL) {
+    LocalExchangeMemoryManager(size_t max_input_dop) {
         if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
             _max_memory_usage_per_driver = config::local_exchange_buffer_mem_limit_per_driver;
         } else {
@@ -43,8 +41,8 @@ public:
     bool is_full() const { return _memory_usage >= _max_memory_usage; }
 
 private:
-    size_t _max_memory_usage;
-    size_t _max_memory_usage_per_driver;
+    size_t _max_memory_usage = 128 * 1024 * 1024 * 1024UL; // 128GB
+    size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL; // 128MB
     std::atomic<size_t> _memory_usage{0};
 };
 } // namespace starrocks::pipeline
