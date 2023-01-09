@@ -202,7 +202,16 @@ ANALYTIC ({8: sum(4: v1)=sum(4: v1)} [7: expr] [3: v3 ASC NULLS FIRST] RANGE BET
 [sql]
 select * from (select v2,v3,row_number() over(partition by v3 order by v3) as s from t0) t where v2 =1;
 [result]
-PREDICATE 2: v2 = 1
+ANALYTIC ({4: row_number()=row_number()} [3: v3] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    TOP-N (order by [[3: v3 ASC NULLS FIRST]])
+        EXCHANGE SHUFFLE[3]
+            SCAN (columns[2: v2, 3: v3] predicate[2: v2 = 1])
+[end]
+
+[sql]
+select * from (select v2,v3,row_number() over(partition by v3 order by v3) as s from t0) t where v3 =1;
+[result]
+PREDICATE 3: v3 = 1
     ANALYTIC ({4: row_number()=row_number()} [3: v3] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
         TOP-N (order by [[3: v3 ASC NULLS FIRST]])
             EXCHANGE SHUFFLE[3]
@@ -210,21 +219,13 @@ PREDICATE 2: v2 = 1
 [end]
 
 [sql]
-select * from (select v2,v3,row_number() over(partition by v3 order by v3) as s from t0) t where v3 =1;
-[result]
-ANALYTIC ({4: row_number()=row_number()} [3: v3] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    TOP-N (order by [[3: v3 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[3]
-            SCAN (columns[2: v2, 3: v3] predicate[3: v3 = 1])
-[end]
-
-[sql]
 select * from (select v2,v3,row_number() over(partition by v3,v2 order by v3) as s from t0) t where v2 =v3;
 [result]
-ANALYTIC ({4: row_number()=row_number()} [3: v3, 2: v2] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-    TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
-        EXCHANGE SHUFFLE[3, 2]
-            SCAN (columns[2: v2, 3: v3] predicate[2: v2 = 3: v3])
+PREDICATE 2: v2 = 3: v3
+    ANALYTIC ({4: row_number()=row_number()} [3: v3, 2: v2] [3: v3 ASC NULLS FIRST] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        TOP-N (order by [[3: v3 ASC NULLS FIRST, 2: v2 ASC NULLS FIRST]])
+            EXCHANGE SHUFFLE[3, 2]
+                SCAN (columns[2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
