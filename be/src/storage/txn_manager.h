@@ -130,6 +130,10 @@ public:
     void get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_ids,
                                  std::map<TabletInfo, RowsetSharedPtr>* tablet_infos);
 
+    size_t get_txn_related_tablets_include_finished(
+            const TTransactionId transaction_id, TPartitionId partition_id,
+            std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>>* tablet_infos);
+
     void get_all_related_tablets(std::set<TabletInfo>* tablet_infos);
 
     // just check if the txn exists

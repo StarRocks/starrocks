@@ -45,6 +45,7 @@
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
@@ -491,6 +492,38 @@ void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TP
         // publish version should failed
         tablet_infos->emplace(tablet_info, load_info.second.rowset);
     }
+}
+
+size_t TxnManager::get_txn_related_tablets_include_finished(
+        const TTransactionId transaction_id, TPartitionId partition_id,
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>>* tablet_infos) {
+    // get tablets in this transaction
+    pair<int64_t, int64_t> key(partition_id, transaction_id);
+    std::shared_lock txn_rdlock(_get_txn_map_lock(transaction_id));
+    txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
+    auto it = txn_tablet_map.find(key);
+    if (it != txn_tablet_map.end()) {
+        std::map<TabletInfo, TabletTxnInfo>& load_info_map = it->second;
+
+        // each tablet
+        for (auto& load_info : load_info_map) {
+            const TabletInfo& tablet_info = load_info.first;
+            // must not check rowset == null here, because if rowset == null
+            // publish version should failed
+            tablet_infos->emplace(tablet_info, std::make_pair(load_info.second.rowset, true));
+        }
+    }
+    size_t already_finish_tablet_cnt = 0;
+    // if transaction is finish, still return tablet_infos with empty rowset ptr
+    std::vector<TabletInfo> all_tablet_infos;
+    StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_id, all_tablet_infos);
+    for (const auto& info : all_tablet_infos) {
+        if (tablet_infos->count(info) == 0) {
+            tablet_infos->emplace(info, std::make_pair(nullptr, false));
+            already_finish_tablet_cnt++;
+        }
+    }
+    return already_finish_tablet_cnt;
 }
 
 void TxnManager::get_all_related_tablets(std::set<TabletInfo>* tablet_infos) {

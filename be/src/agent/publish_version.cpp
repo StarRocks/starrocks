@@ -46,6 +46,8 @@ struct TabletPublishVersionTask {
     // max continuous version after publish is done
     // or 0 which means tablet not found or publish task cannot be submitted
     int64_t max_continuous_version{0};
+    // already finished
+    bool already_finished{false};
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
@@ -61,9 +63,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
 
     size_t num_partition = publish_version_req.partition_version_infos.size();
     size_t num_tablet = 0;
-    std::vector<std::map<TabletInfo, RowsetSharedPtr>> partitions(num_partition);
+    size_t already_finish_tablet_cnt = 0;
+    std::vector<std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>>> partitions(num_partition);
     for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
-        StorageEngine::instance()->txn_manager()->get_txn_related_tablets(
+        already_finish_tablet_cnt += StorageEngine::instance()->txn_manager()->get_txn_related_tablets_include_finished(
                 transaction_id, publish_version_req.partition_version_infos[i].partition_id, &partitions[i]);
         num_tablet += partitions[i].size();
     }
@@ -78,7 +81,12 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             task.partition_id = publish_version_req.partition_version_infos[i].partition_id;
             task.tablet_id = itr.first.tablet_id;
             task.version = publish_version_req.partition_version_infos[i].version;
-            task.rowset = std::move(itr.second);
+            if (itr.second.second) {
+                task.rowset = std::move(itr.second.first);
+                task.already_finished = false;
+            } else {
+                task.already_finished = true;
+            }
         }
     }
     std::mutex affected_dirs_lock;
@@ -93,18 +101,23 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 tablet_span->SetAttribute("txn_id", transaction_id);
                 tablet_span->SetAttribute("tablet_id", task.tablet_id);
                 tablet_span->SetAttribute("version", task.version);
-                if (!task.rowset) {
-                    task.st = Status::NotFound(
-                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
-                    return;
-                }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
                 if (!tablet) {
                     // tablet may get dropped, it's ok to ignore this situation
                     LOG(WARNING) << fmt::format(
                             "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}", task.tablet_id,
                             task.version, task.txn_id);
+                    return;
+                }
+                if (task.already_finished) {
+                    task.max_continuous_version = tablet->max_continuous_version();
+                    task.st = Status::OK();
+                    return;
+                }
+                if (!task.rowset) {
+                    task.st = Status::NotFound(
+                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
+                    LOG(WARNING) << task.st;
                     return;
                 }
                 {
@@ -176,12 +189,14 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     g_publish_latency << publish_latency;
     if (st.ok()) {
         LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " #partition:" << num_partition
-                  << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms";
+                  << " #tablet:" << tablet_tasks.size() << " #already_finish_tablet:" << already_finish_tablet_cnt
+                  << " time:" << publish_latency << "ms";
     } else {
         StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
         LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " #partition:" << num_partition
-                     << " #tablet:" << tablet_tasks.size() << " error_tablets(" << error_tablet_ids.size()
-                     << "):" << JoinInts(error_tablet_ids, ",") << " time:" << publish_latency << "ms";
+                     << " #tablet:" << tablet_tasks.size() << " #already_finish_tablet:" << already_finish_tablet_cnt
+                     << " error_tablets(" << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",")
+                     << " time:" << publish_latency << "ms";
     }
 }
 
