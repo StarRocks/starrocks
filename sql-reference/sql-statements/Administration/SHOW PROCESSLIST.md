@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW [FULL] PROCESSLIST;
+SHOW [FULL] PROCESSLIST
 ```
 
 ## 参数说明

@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-UNINSTALL PLUGIN plugin_name;
+UNINSTALL PLUGIN plugin_name
 ```
 
 plugin_name 可以通过 `SHOW PLUGINS;` 命令查看。

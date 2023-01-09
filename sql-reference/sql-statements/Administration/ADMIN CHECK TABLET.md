@@ -8,7 +8,7 @@
 
 ```sql
 ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...)
-PROPERTIES("type" = "...");
+PROPERTIES("type" = "...")
 ```
 
 说明：

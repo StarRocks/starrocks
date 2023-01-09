@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW CATALOGS;
+SHOW CATALOGS
 ```
 
 ## 返回结果说明

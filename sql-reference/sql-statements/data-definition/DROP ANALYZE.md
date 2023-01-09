@@ -9,7 +9,7 @@
 ## 语法
 
 ```SQL
-DROP ANALYZE <ID>;
+DROP ANALYZE <ID>
 ```
 
 可以通过 SHOW ANALYZE JOB 查看任务的 ID。

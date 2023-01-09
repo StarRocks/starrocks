@@ -9,7 +9,7 @@
 ## 语法
 
 ```sql
-DROP RESOURCE 'resource_name';
+DROP RESOURCE 'resource_name'
 ```
 
 ## 示例

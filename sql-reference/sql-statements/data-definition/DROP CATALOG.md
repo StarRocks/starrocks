@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-DROP CATALOG catalog_name;
+DROP CATALOG catalog_name
 ```
 
 ## 参数说明

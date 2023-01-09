@@ -14,7 +14,7 @@ CANCEL LOAD 是一个异步操作，执行后可使用 [SHOW LOAD](../data-manip
 ```SQL
 CANCEL LOAD
 [FROM db_name]
-WHERE LABEL = "label_name";
+WHERE LABEL = "label_name"
 ```
 
 ## 参数说明

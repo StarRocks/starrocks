@@ -11,7 +11,7 @@
 ## 语法
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name;
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 ```
 
 ## 参数

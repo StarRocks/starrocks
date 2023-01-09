@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-KILL ANALYZE <ID>;
+KILL ANALYZE <ID>
 ```
 
 手动采集任务的任务 ID 可以在 SHOW ANALYZE STATUS 中查看。自定义自动采集任务的任务 ID 可以在 SHOW ANALYZE JOB 中查看。

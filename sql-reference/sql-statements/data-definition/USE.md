@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-USE [<catalog_name>.]<db_name>;
+USE [<catalog_name>.]<db_name>
 ```
 
 ## 参数说明

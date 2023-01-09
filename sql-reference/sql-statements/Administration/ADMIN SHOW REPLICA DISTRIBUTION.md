@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
+ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)]
 ```
 
 说明：

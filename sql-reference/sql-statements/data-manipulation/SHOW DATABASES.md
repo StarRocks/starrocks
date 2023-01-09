@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW DATABASES [FROM catalog_name];
+SHOW DATABASES [FROM <catalog_name>]
 ```
 
 ## 参数说明

@@ -11,19 +11,19 @@
 单位为 B/K/KB/M/MB/G/GB/T/TB/P/PB。
 
 ```sql
-ALTER DATABASE db_name SET DATA QUOTA quota;
+ALTER DATABASE <db_name> SET DATA QUOTA <quota>
 ```
 
 ### 重命名数据库
 
 ```sql
-ALTER DATABASE db_name RENAME new_db_name;
+ALTER DATABASE <db_name> RENAME <new_db_name>
 ```
 
 ### 设置数据库的副本数量配额
 
 ```sql
-ALTER DATABASE db_name SET REPLICA QUOTA quota;
+ALTER DATABASE db_name SET REPLICA QUOTA <quota>
 ```
 
 说明：

@@ -16,7 +16,7 @@ EXPORT TABLE table_name
 [(column_name[, ...])]
 TO export_path
 [opt_properties]
-broker;
+WITH BROKER
 ```
 
 ## 参数说明

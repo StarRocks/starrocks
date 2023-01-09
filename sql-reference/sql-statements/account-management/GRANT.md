@@ -13,7 +13,7 @@
 - 将数据库和表的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
 
     ```SQL
-    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'};
+    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}
     ```
 
 - 将资源的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。

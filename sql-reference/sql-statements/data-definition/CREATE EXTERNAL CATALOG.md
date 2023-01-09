@@ -13,8 +13,8 @@
 ## 语法
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
-PROPERTIES ("key"="value", ...);
+CREATE EXTERNAL CATALOG <catalog_name>
+PROPERTIES ("key"="value", ...)
 ```
 
 ## 参数说明

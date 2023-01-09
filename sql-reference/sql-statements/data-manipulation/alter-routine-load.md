@@ -11,7 +11,7 @@ ALTER ROUTINE LOAD FOR [db.]job_name
 [load_properties]
 [job_properties]
 FROM data_source
-[data_source_properties];
+[data_source_properties]
 ```
 
 1. **[db.] job_name**

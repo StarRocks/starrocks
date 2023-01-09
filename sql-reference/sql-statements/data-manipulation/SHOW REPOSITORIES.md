@@ -8,8 +8,8 @@
 
 ## 语法
 
-```sql
-SHOW REPOSITORIES;
+```SQL
+SHOW REPOSITORIES
 ```
 
 ```plain text

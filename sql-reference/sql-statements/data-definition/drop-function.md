@@ -9,7 +9,7 @@
 ## 语法
 
 ```sql
-DROP FUNCTION <function_name>(arg_type [, ...]);
+DROP FUNCTION <function_name>(arg_type [, ...])
 ```
 
 参数说明：

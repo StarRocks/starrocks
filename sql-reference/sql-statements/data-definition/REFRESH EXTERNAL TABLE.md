@@ -21,8 +21,8 @@
 - 外部表
 
     ```SQL
-    REFRESH EXTERNAL TABLE table_name 
-    [PARTITION ('partition_name', ...)];
+    REFRESH EXTERNAL TABLE <table_name>
+    [PARTITION ('partition_name', ...)]
     ```
 
     | **参数**       | **必选** | **说明**                                                     |
@@ -33,8 +33,8 @@
 - External catalog
 
     ```SQL
-    REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
-    [PARTITION ('partition_name', ...)];
+    REFRESH EXTERNAL TABLE [external_catalog.][db_name.]<table_name>
+    [PARTITION ('partition_name', ...)]
     ```
 
     | **参数**         | **必选** | **说明**                                                     |

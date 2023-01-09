@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-EXECUTE AS user WITH NO REVERT;
+EXECUTE AS user WITH NO REVERT
 ```
 
 ## 参数说明

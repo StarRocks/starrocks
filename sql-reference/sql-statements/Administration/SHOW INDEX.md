@@ -7,13 +7,13 @@
 ## 语法
 
 ```SQL
-SHOW INDEX[ES] FROM [db_name.]table_name [FROM db_name];
+SHOW INDEX[ES] FROM [db_name.]table_name [FROM db_name]
 ```
 
 或
 
 ```SQL
-SHOW KEY[S] FROM [db_name.]table_name [FROM db_name];
+SHOW KEY[S] FROM [db_name.]table_name [FROM db_name]
 ```
 
 ## 参数说明

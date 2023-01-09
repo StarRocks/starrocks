@@ -7,7 +7,7 @@ DROP FILE 语句用于删除保存在数据库中的文件。使用该语句删�
 ```SQL
 DROP FILE "file_name" [FROM database]
 
-[properties];
+[properties]
 ```
 
 ## 参数说明

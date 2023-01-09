@@ -13,7 +13,7 @@
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 ```
 
 #### 参数说明

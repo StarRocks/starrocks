@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
+DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
 ```
 
 说明：
