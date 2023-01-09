@@ -174,6 +174,8 @@ void CPU::Initialize() {
                    (cpu_info[2] & 0x08000000) != 0 /* OSXSAVE */ && (xgetbv(0) & 6) == 6 /* XSAVE enabled by kernel */;
         has_aesni_ = (cpu_info[2] & 0x02000000) != 0;
         has_avx2_ = has_avx_ && (cpu_info7[1] & 0x00000020) != 0;
+        has_avx512f_ = has_avx2_ && (cpu_info7[1] & 0x00010000) != 0;
+        has_avx512bw_ = has_avx2_ && (cpu_info7[1] & 0x40000000) != 0;
     }
     // Get the brand string of the cpu.
     __cpuid(cpu_info, 0x80000000);
