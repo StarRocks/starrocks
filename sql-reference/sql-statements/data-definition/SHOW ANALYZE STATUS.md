@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW ANALYZE STATUS [LIKE | WHERE predicate];
+SHOW ANALYZE STATUS [LIKE | WHERE predicate]
 ```
 
 您可以使用 `Like 或 Where` 来筛选需要返回的信息。

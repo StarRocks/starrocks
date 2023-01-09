@@ -11,7 +11,7 @@ SHOW TABLET
 [FROM [db_name.]table_name | tablet_id] [partiton(partition_name_1, partition_name_1)]
 [where [version=1] [and backendid=10000] [and state="NORMAL|ROLLUP|CLONE|DECOMMISSION"]]
 [order by order_column]
-[limit [offset,]size];
+[limit [offset,]size]
 ```
 
 `show tablet` 命令支持按照按照以下字段进行过滤：partition，index name，version，backendid，

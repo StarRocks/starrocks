@@ -12,13 +12,13 @@
 
 ```SQL
 -- 定期采集所有数据库的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property])
 
 -- 定期采集指定数据库下所有表的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property])
 
 -- 定期采集指定表、列的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property])
 ```
 
 ## 参数说明

@@ -10,11 +10,11 @@ StarRocks 架构简洁，整个系统的核心只有 FE（Frontend）、BE（Bac
 
 FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。每个 FE 节点都会在内存保留一份完整的元数据，这样每个 FE 节点都能够提供无差别的服务。
 
-FE 根据配置会有两种角色：Follower 和 Observer。Follower 会通过类 Paxos 的 Berkeley DB Java Edition（BDBJE）协议选举出一个 Leader。三者区别如下：
+FE 有三种角色：Leader FE，Follower FE 和 Observer FE。Follower 会通过类 Paxos 的 Berkeley DB Java Edition（BDBJE）协议自动选举出一个 Leader。三者区别如下：
 
 - Leader
-  - 提供元数据读写服务。只有 Leader 节点会对元数据进行写操作，Follower 和 Observer 只有读取权限。Follower 和 Observer 将元数据写入请求路由到 Leader 节点，Leader 更新完数据后，会通过 BDB JE 同步给 Follower 和 Observer。必须有半数以上的 Follower 节点同步成功才算作元数据写入成功。
-  - Leader 从 Follower 中选出，进行选主需要集群中有半数以上的 Follower 节点存活。如果 Leader 节点失败，Follower 会发起新一轮选举。
+  - Leader 从 Follower 中自动选出，进行选主需要集群中有半数以上的 Follower 节点存活。如果 Leader 节点失败，Follower 会发起新一轮选举。
+  - Leader FE 提供元数据读写服务。只有 Leader 节点会对元数据进行写操作，Follower 和 Observer 只有读取权限。Follower 和 Observer 将元数据写入请求路由到 Leader 节点，Leader 更新完数据后，会通过 BDB JE 同步给 Follower 和 Observer。必须有半数以上的 Follower 节点同步成功才算作元数据写入成功。
 
 - Follower
   - 只有元数据读取权限，无写入权限。通过回放 Leader 的元数据日志来异步同步数据。
@@ -22,7 +22,7 @@ FE 根据配置会有两种角色：Follower 和 Observer。Follower 会通过�
 
 - Observer
   - 主要用于扩展集群的查询并发能力，可选部署。
-  - 不参与选主，不会增加集群选主压力。
+  - 不参与选主，不会增加集群的选主压力。
   - 通过回放 Leader 的元数据日志来异步同步数据。
 
 ### BE

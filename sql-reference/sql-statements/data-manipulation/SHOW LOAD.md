@@ -16,7 +16,7 @@ SHOW LOAD [ FROM db_name ]
          [ [AND] TYPE = { "BROKER" | "SPARK" | "INSERT" } ]
 ]
 [ ORDER BY field_name [ ASC | DESC ] ]
-[ LIMIT { [offset, ] limit | limit OFFSET offset } ];
+[ LIMIT { [offset, ] limit | limit OFFSET offset } ]
 ```
 
 > **说明**

@@ -10,7 +10,7 @@
 CREATE VIEW [IF NOT EXISTS]
 [db_name.]view_name
 (column1[ COMMENT "col comment"][, column2, ...])
-AS query_stmt;
+AS query_stmt
 ```
 
 说明：

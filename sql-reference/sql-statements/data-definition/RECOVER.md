@@ -9,7 +9,7 @@
 ### 恢复 database
 
 ```sql
-RECOVER DATABASE db_name;
+RECOVER DATABASE <db_name>
 ```
 
 ### 恢复 table

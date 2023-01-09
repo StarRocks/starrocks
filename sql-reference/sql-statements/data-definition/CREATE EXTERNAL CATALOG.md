@@ -15,7 +15,7 @@
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
-PROPERTIES ("key"="value", ...);
+PROPERTIES ("key"="value", ...)
 ```
 
 ## 参数说明

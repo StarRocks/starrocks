@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW DATA [FROM db_name[.table_name]];
+SHOW DATA [FROM <db_name>[.<table_name>]]
 ```
 
 说明：

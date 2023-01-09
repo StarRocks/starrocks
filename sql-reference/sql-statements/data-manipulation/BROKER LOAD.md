@@ -13,7 +13,7 @@ LOAD LABEL [<database_name>.]<label_name>
 )
 WITH BROKER
 [broker_properties]
-[opt_properties];
+[opt_properties]
 ```
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](/sql-reference/sql-statements/keywords.md)。

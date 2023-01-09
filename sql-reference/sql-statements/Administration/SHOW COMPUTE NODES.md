@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW COMPUTE NODES;
+SHOW COMPUTE NODES
 ```
 
 命令返回结果说明：

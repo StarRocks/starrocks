@@ -8,7 +8,7 @@
 
 ```sql
 ADMIN SHOW REPLICA STATUS FROM [db_name.]tbl_name [PARTITION (p1, ...)]
-[WHERE STATUS [!]= "replica_status"];
+[WHERE STATUS [!]= "replica_status"]
 ```
 
 说明：

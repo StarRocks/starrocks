@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW FRONTENDS;
+SHOW FRONTENDS
 ```
 
 命令返回结果说明：

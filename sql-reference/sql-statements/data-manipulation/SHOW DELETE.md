@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-SHOW DELETE [FROM db_name];
+SHOW DELETE [FROM <db_name>]
 ```
 
 ## 示例

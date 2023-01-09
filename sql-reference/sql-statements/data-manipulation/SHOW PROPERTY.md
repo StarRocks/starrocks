@@ -8,7 +8,7 @@
 ## 语法
 
 ```SQL
-SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections'];
+SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections']
 ```
 
 ## 参数说明

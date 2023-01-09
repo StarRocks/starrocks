@@ -26,7 +26,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 [partition_expression]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
-AS (query);
+AS (query)
 ```
 
 ## 参数
