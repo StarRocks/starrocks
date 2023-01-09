@@ -11,7 +11,7 @@
 ## 语法
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("key" = "value");
+ADMIN SET FRONTEND CONFIG ("key" = "value")
 ```
 
 ## 示例

@@ -6,8 +6,8 @@
 
 ## 语法
 
-```sql
-DROP MATERIALIZED VIEW [IF EXISTS] [db_name.]mv_name;
+```SQL
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 ```
 
 ## 参数

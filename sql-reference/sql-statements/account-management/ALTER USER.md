@@ -8,7 +8,7 @@ ALTER USER 命令用于更改用户信息。
 
 ```SQL
 -- 命令
-ALTER USER user_identity [auth_option];
+ALTER USER user_identity [auth_option]
 
 -- 参数说明
 user_identity:'user_name'@'host'

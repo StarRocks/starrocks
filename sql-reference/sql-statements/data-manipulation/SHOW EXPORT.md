@@ -15,7 +15,7 @@ WHERE
 [STATE = ["PENDING"|"EXPORTING"|"FINISHED"|"CANCELLED"]]
 ]
 [ORDER BY ...]
-[LIMIT limit];
+[LIMIT limit]
 ```
 
 说明：

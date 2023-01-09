@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW BACKENDS;
+SHOW BACKENDS
 ```
 
 ## 返回信息说明

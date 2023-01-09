@@ -8,15 +8,15 @@
 
 - 撤销某用户或某角色对数据库和表的指定权限。当撤销某角色的指定权限时，该角色必须存在。
 
-```SQL
-REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'};
-```
+    ```SQL
+    REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'}
+    ```
 
 - 撤销某用户或某角色对资源的指定权限。当撤销某角色的指定权限时，该角色必须存在。
 
-```SQL
-REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'};
-```
+    ```SQL
+    REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'}
+    ```
 
 ## 参数说明
 

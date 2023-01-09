@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT''];
+CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 ```
 
 ## 参数说明

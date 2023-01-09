@@ -17,7 +17,7 @@ EXPORT TABLE table_name
 [PARTITION (p1[,p2])]
 TO export_path
 [opt_properties]
-broker;
+WITH BROKER
 ```
 
 1. table_name

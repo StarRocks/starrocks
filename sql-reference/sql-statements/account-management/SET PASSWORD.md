@@ -8,7 +8,7 @@ SET PASSWORD 命令可以用于修改一个用户的登录密码。
 
 ```SQL
 SET PASSWORD [FOR user_identity] =
-[PASSWORD('plain password')]|['hashed password'];
+[PASSWORD('plain password')]|['hashed password']
 ```
 
 如果 `[FOR user_identity]` 字段不存在，那么修改当前用户的密码。

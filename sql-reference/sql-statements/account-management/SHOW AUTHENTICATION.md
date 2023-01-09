@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW [ALL] AUTHENTICATION;
+SHOW [ALL] AUTHENTICATION
 ```
 
 ## 参数说明

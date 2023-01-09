@@ -16,7 +16,7 @@
 
 ```sql
 CREATE MATERIALIZED VIEW [MV name] as [query]
-[PROPERTIES ("key" = "value")];
+[PROPERTIES ("key" = "value")]
 ```
 
 ## 参数

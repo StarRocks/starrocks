@@ -8,8 +8,8 @@
 
 ```SQL
 -- 命令
-CREATE USER user_identity [auth_option] 
-[DEFAULT ROLE 'role_name'];
+CREATE USER <user_identity> [auth_option] 
+[DEFAULT ROLE 'role_name']
 
 -- 参数说明
 user_identity:'user_name'@'host'

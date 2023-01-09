@@ -7,8 +7,8 @@
 ## 语法
 
 ```sql
-ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
-PROPERTIES("type" = "...");
+ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...)
+PROPERTIES("type" = "...")
 ```
 
 说明：

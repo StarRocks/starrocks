@@ -9,7 +9,7 @@
 ## 语法
 
 ```SQL
-SET PROPERTY [FOR 'user'] 'max_user_connections' = 'value';
+SET PROPERTY [FOR 'user'] 'max_user_connections' = 'value'
 ```
 
 ## 参数说明

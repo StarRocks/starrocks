@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW CREATE VIEW [db_name.]view_name;
+SHOW CREATE VIEW [<db_name>.]<view_name>
 ```
 
 ## 参数说明

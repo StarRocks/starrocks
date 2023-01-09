@@ -9,7 +9,7 @@
 ## 语法
 
 ```sql
-DROP VIEW [IF EXISTS] [db_name.]view_name;
+DROP VIEW [IF EXISTS] [db_name.]view_name
 ```
 
 ## 示例

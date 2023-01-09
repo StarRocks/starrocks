@@ -7,5 +7,5 @@
 ## 语法
 
 ```sql
-SHOW TABLES;
+SHOW TABLES
 ```

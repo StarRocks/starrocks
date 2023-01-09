@@ -12,7 +12,7 @@
 ## 语法
 
 ```SQL
-DROP ROLE role_name;
+DROP ROLE <role_name>
 ```
 
 ## 参数说明

@@ -11,25 +11,25 @@
 - 添加 Follower FE。添加后，可使用 `SHOW PROC '/frontends'\G;` 命令查看新增 FE 的状态。
 
    ```SQL
-    ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"[, ...];
+    ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"[, ...]
     ```
 
 - 删除 Follower FE。
 
     ```SQL
-    ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"[, ...];
+    ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"[, ...]
     ```
 
 - 添加 Observer FE。添加后，可通过 `SHOW PROC '/frontends'\G;` 命令查看新增 FE 的状态。
 
     ```SQL
-    ALTER SYSTEM ADD OBSERVER "host:edit_log_port"[, ...];
+    ALTER SYSTEM ADD OBSERVER "host:edit_log_port"[, ...]
     ```
 
 - 删除 Observer FE。
 
     ```SQL
-    ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...];
+    ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...]
     ```
 
      参数说明如下：
@@ -43,19 +43,19 @@
 - 添加 BE。 添加后，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 查看新增 BE 的状态。
 
     ```SQL
-    ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[, ...];
+    ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[, ...]
     ```
 
 - 删除 BE。如果有表是单副本且该表的部分 tablet 分布在要删除的 BE 上，则不允许删除该 BE。
 
     ```SQL
-    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, ...];
+    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, ...]
     ```
 
 - 下线 BE。
 
     ```SQL
-    ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_service_port"[, ...];
+    ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_service_port"[, ...]
     ```
 
     下线前，该 BE 上的数据会迁移到其他 BE 上，过程中不影响数据导入和查询。下线 BE 为异步操作，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 语句查看是否下线成功，如下线成功，该 BE 不会在 SHOW BACKENDS 返回的信息中显示。您可以手动撤销下线操作，详情参见 [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md)。
@@ -71,7 +71,7 @@
 - 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)。
 
     ```SQL
-    ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...];
+    ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...]
     ```
 
     在一条 SQL 语句中，如同时添加多个 Broker（一个 `host:port` 为一个 Broker），那么这些 Broker 共用同一个 `broker_name`。添加后，可通过 [SHOW BROKER](../Administration/SHOW%20BROKER.md) 语句查看 Broker 的详细信息。
@@ -81,13 +81,13 @@
   - 删除 `broker_name` 下的一个或多个 Broker。
 
       ```SQL
-      ALTER SYSTEM DROP BROKER broker_name "host:broker_ipc_port"[, ...];
+      ALTER SYSTEM DROP BROKER broker_name "host:broker_ipc_port"[, ...]
       ```
 
   - 删除所有名为 `broker_name` 下的 Broker。
 
       ```SQL
-      ALTER SYSTEM DROP ALL BROKER broker_name;
+      ALTER SYSTEM DROP ALL BROKER broker_name
       ```
 
      参数说明如下：
