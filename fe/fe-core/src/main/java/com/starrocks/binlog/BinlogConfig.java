@@ -65,7 +65,7 @@ public class BinlogConfig implements Writable {
 
     public void buildFromProperties(Map<String, String> properties) {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)) {
-            binlogTtlSecond = Long.parseLong(properties.get(
+            configVersion = Long.parseLong(properties.get(
                     PropertyAnalyzer.PROPERTIES_BINLOG_VERSION));
 
         }
