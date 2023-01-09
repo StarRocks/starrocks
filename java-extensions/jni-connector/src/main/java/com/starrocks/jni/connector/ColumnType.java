@@ -167,16 +167,20 @@ public class ColumnType {
         parse(scanner);
     }
 
+    public boolean isString() {
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL;
+    }
+
     public boolean isArray() {
-        switch (typeValue) {
-            case STRING:
-            case DATE:
-            case DECIMAL:
-            case ARRAY:
-                return true;
-            default:
-                return false;
-        }
+        return typeValue == TypeValue.ARRAY;
+    }
+
+    public boolean isMap() {
+        return typeValue == TypeValue.MAP;
+    }
+
+    public boolean isStruct() {
+        return typeValue == TypeValue.STRUCT;
     }
 
     public int computeColumnSize() {

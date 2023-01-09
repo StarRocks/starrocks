@@ -61,7 +61,7 @@ TBLPROPERTIES (
         params.put("data_file_length", "436081");
         params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
         params.put("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
-        params.put("required_fields", "a");
+        params.put("required_fields", "a,b");
         return params;
     }
 

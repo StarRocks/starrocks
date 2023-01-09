@@ -49,10 +49,7 @@ public class ColumnVector {
      */
     private int numNulls;
 
-    /**
-     * Default size of each array length value. This grows as necessary.
-     */
-    private static final int DEFAULT_ARRAY_LENGTH = 4;
+    private static final int DEFAULT_STRING_LENGTH = 4;
 
     /**
      * Current write cursor (row index) when appending data.
@@ -69,7 +66,6 @@ public class ColumnVector {
         this.offsetData = 0;
 
         reserveInternal(capacity);
-        reserveChildColumn();
         reset();
     }
 
@@ -133,24 +129,26 @@ public class ColumnVector {
         int typeSize = type.getPrimitiveTypeValueSize();
         if (typeSize != -1) {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
-        } else if (type.isArray()) {
+        } else if (type.isString() || type.isArray() || type.isMap()) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+
+            if (type.isString()) {
+                int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+                this.childColumns = new ColumnVector[1];
+                this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
+            }
+
+        } else if (type.isStruct()) {
+            for (ColumnVector c : childColumns) {
+                c.reserveInternal(newCapacity);
+            }
         } else {
             throw new RuntimeException("Unhandled " + type);
         }
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
-    }
-
-    private void reserveChildColumn() {
-        if (type.isArray()) {
-            int childCapacity = capacity;
-            childCapacity *= DEFAULT_ARRAY_LENGTH;
-            this.childColumns = new ColumnVector[1];
-            this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
-        }
     }
 
     private void reset() {
@@ -309,11 +307,11 @@ public class ColumnVector {
     private int appendByteArray(byte[] value, int offset, int length) {
         int copiedOffset = arrayData().appendBytes(length, value, offset);
         reserve(elementsAppended + 1);
-        putArray(elementsAppended, copiedOffset, length);
+        putOffset(elementsAppended, copiedOffset, length);
         return elementsAppended++;
     }
 
-    private void putArray(int rowId, int offset, int length) {
+    private void putOffset(int rowId, int offset, int length) {
         Platform.putInt(null, offsetData + 4L * rowId, offset);
         Platform.putInt(null, offsetData + 4L * (rowId + 1), offset + length);
     }
