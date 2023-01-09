@@ -112,6 +112,8 @@ private:
     bool has_popcnt_{false};
     bool has_avx_{false};
     bool has_avx2_{false};
+    bool has_avx512f_{false};
+    bool has_avx512bw_{false};
     bool has_aesni_{false};
     bool has_avx512f_{false};
     bool has_non_stop_time_stamp_counter_{false};
