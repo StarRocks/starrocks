@@ -71,21 +71,21 @@ package com.starrocks.jni.connector;
 // @formatter:on
 
 public class OffHeapTable {
-    public OffHeapColumnVector[] vectors;
-    public OffHeapColumnVector meta;
+    public ColumnVector[] vectors;
+    public ColumnVector meta;
     public int numRows;
     public boolean[] released;
 
     public OffHeapTable(ColumnType[] types, int capacity) {
-        this.vectors = new OffHeapColumnVector[types.length];
+        this.vectors = new ColumnVector[types.length];
         this.released = new boolean[types.length];
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
-            vectors[i] = new OffHeapColumnVector(capacity, types[i]);
+            vectors[i] = new ColumnVector(capacity, types[i]);
             metaSize += types[i].computeColumnSize();
             released[i] = false;
         }
-        this.meta = new OffHeapColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
+        this.meta = new ColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
         this.numRows = 0;
     }
 
@@ -110,7 +110,7 @@ public class OffHeapTable {
 
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
-        for (OffHeapColumnVector v : vectors) {
+        for (ColumnVector v : vectors) {
             v.updateMeta(meta);
         }
         return meta.valuesNativeAddress();
@@ -121,7 +121,7 @@ public class OffHeapTable {
         sb.append("OffHeapTable: numRows = " + numRows + "\n");
         for (int i = 0; i < rowLimit && i < numRows; i++) {
             sb.append("row" + i + ": [");
-            for (OffHeapColumnVector v : vectors) {
+            for (ColumnVector v : vectors) {
                 v.dump(sb, i);
             }
             sb.append("]\n");

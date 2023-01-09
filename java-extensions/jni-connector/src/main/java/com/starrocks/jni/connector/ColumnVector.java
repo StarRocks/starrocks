@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
  * Reference to Apache Spark with some customization
  * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
-public class OffHeapColumnVector {
+public class ColumnVector {
 
     private long nulls;
     private long data;
@@ -59,9 +59,9 @@ public class OffHeapColumnVector {
      */
     protected int elementsAppended;
 
-    private OffHeapColumnVector[] childColumns;
+    private ColumnVector[] childColumns;
 
-    public OffHeapColumnVector(int capacity, ColumnType type) {
+    public ColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
         this.nulls = 0;
@@ -148,14 +148,14 @@ public class OffHeapColumnVector {
         if (type.isArray()) {
             int childCapacity = capacity;
             childCapacity *= DEFAULT_ARRAY_LENGTH;
-            this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
+            this.childColumns = new ColumnVector[1];
+            this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
         }
     }
 
     private void reset() {
         if (childColumns != null) {
-            for (OffHeapColumnVector c : childColumns) {
+            for (ColumnVector c : childColumns) {
                 c.reset();
             }
         }
@@ -166,7 +166,7 @@ public class OffHeapColumnVector {
         }
     }
 
-    private OffHeapColumnVector arrayData() {
+    private ColumnVector arrayData() {
         return childColumns[0];
     }
 
@@ -332,7 +332,7 @@ public class OffHeapColumnVector {
         return Platform.getInt(null, offsetData + 4L * rowId);
     }
 
-    public void updateMeta(OffHeapColumnVector meta) {
+    public void updateMeta(ColumnVector meta) {
         if (type.isArray()) {
             if (type.getTypeValue() == ColumnType.TypeValue.ARRAY) {
                 meta.appendLong(nullsNativeAddress());
