@@ -67,4 +67,9 @@ public class CreateRepositoryStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateRepositoryStatement(this, context);
     }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
+    }
 }

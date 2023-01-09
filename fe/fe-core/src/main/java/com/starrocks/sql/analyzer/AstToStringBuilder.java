@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -164,6 +165,7 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+<<<<<<< HEAD
         public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
@@ -171,6 +173,18 @@ public class AstToStringBuilder {
             sb.append(" PROPERTIES (");
             sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
             sb.append(")");
+=======
+        public String visitCreateRepositoryStatement(CreateRepositoryStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE REPOSITORY ").append(stmt.getName());
+            sb.append(" WITH BROKER ").append(stmt.getBrokerName());
+            sb.append(" ON LOCATION \"").append(stmt.getLocation()).append("\"");
+
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(" )");
+>>>>>>> 7596a4a0b (fix: remove sensative info from create repo audit)
             return sb.toString();
         }
 
