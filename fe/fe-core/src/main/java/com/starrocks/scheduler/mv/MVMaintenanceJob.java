@@ -45,6 +45,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -236,17 +237,19 @@ public class MVMaintenanceJob implements Writable {
      * Build physical fragments for the maintenance plan
      */
     void buildPhysicalTopology() throws Exception {
-        Preconditions.checkState(plan.getTopFragment().getSink() instanceof OlapTableSink, "Must be table sink");
-        ConnectContext context = queryCoordinator.getConnectContext();
-        context.getSessionVariable().setPreferComputeNode(false);
-        context.getSessionVariable().setUseComputeNodes(0);
-        OlapTableSink dataSink = (OlapTableSink) plan.getFragments().get(0).getSink();
-        // NOTE use a fake transaction id, the real one would be generated when epoch started
-        long fakeTransactionId = 1;
-        long dbId = getView().getDbId();
-        long timeout = context.getSessionVariable().getQueryTimeoutS();
-        dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
-        dataSink.complete();
+        if (CollectionUtils.isNotEmpty(plan.getFragments()) &&
+                plan.getTopFragment().getSink() instanceof OlapTableSink) {
+            ConnectContext context = queryCoordinator.getConnectContext();
+            context.getSessionVariable().setPreferComputeNode(false);
+            context.getSessionVariable().setUseComputeNodes(0);
+            OlapTableSink dataSink = (OlapTableSink) plan.getFragments().get(0).getSink();
+            // NOTE use a fake transaction id, the real one would be generated when epoch started
+            long fakeTransactionId = 1;
+            long dbId = getView().getDbId();
+            long timeout = context.getSessionVariable().getQueryTimeoutS();
+            dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
+            dataSink.complete();
+        }
         queryCoordinator.prepareExec();
 
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
