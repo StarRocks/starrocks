@@ -14,15 +14,15 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.jni.connector.ColumnType;
+import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.jni.connector.TypeMapping;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.ArrayWritable;
@@ -53,6 +53,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
     private final String[] requiredFields;
+    private final String[] nestedFields;
     private final String instantTime;
     private final String[] deltaFilePaths;
     private final String dataFilePath;
@@ -73,6 +74,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.hiveColumnNames = params.get("hive_column_names");
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
+        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
             this.deltaFilePaths = new String[0];
@@ -104,7 +106,7 @@ public class HudiSliceScanner extends ConnectorScanner {
                 hiveColumnNameToType.put(hiveColumnNames[i], hiveColumnTypes[i]);
             }
 
-            String[] requiredTypes = new String[requiredFields.length];
+            ColumnType[] requiredTypes = new ColumnType[requiredFields.length];
             StringBuilder columnIdBuilder = new StringBuilder();
             boolean isFirst = true;
             for (int i = 0; i < requiredFields.length; i++) {
@@ -112,18 +114,17 @@ public class HudiSliceScanner extends ConnectorScanner {
                     columnIdBuilder.append(",");
                 }
                 columnIdBuilder.append(hiveColumnNameToIndex.get(requiredFields[i]));
-                String typeStr = hiveColumnNameToType.get(requiredFields[i]);
-                // convert decimal(x,y) to decimal
-                if (typeStr.startsWith("decimal")) {
-                    typeStr = "decimal";
-                }
-                requiredTypes[i] = typeStr;
+                String type = hiveColumnNameToType.get(requiredFields[i]);
+                requiredTypes[i] = new ColumnType(type);
                 isFirst = false;
             }
-            initOffHeapTableWriter(requiredTypes, fetchSize, TypeMapping.hiveTypeMappings);
+            initOffHeapTableWriter(requiredTypes, fetchSize);
 
             properties.setProperty("hive.io.file.readcolumn.ids", columnIdBuilder.toString());
             properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
+            if (this.nestedFields.length > 0) {
+                properties.setProperty("hive.io.file.readNestedColumn.paths ", String.join(",", this.nestedFields));
+            }
             properties.setProperty("columns", this.hiveColumnNames);
             properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
             properties.setProperty("serialization.lib", this.serde);
@@ -185,8 +186,7 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         scanData(i, null);
                     } else {
-                        Object fieldValue =
-                                ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData, true);
                         scanData(i, fieldValue);
                     }
                 }

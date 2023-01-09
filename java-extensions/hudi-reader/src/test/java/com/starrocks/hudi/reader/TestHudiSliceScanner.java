@@ -8,48 +8,10 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
 public class TestHudiSliceScanner {
-
-    public class LocalHudiScanner extends HudiSliceScanner {
-        public Map<Integer, ArrayList<Object>> buffer;
-
-        LocalHudiScanner(int chunkSize, Map<String, String> params) {
-            super(chunkSize, params);
-            buffer = new HashMap<>();
-        }
-
-        @Override
-        public void scanData(int index, Object data) {
-            if (!buffer.containsKey(index)) {
-                buffer.put(index, new ArrayList<Object>());
-            }
-            buffer.get(index).add(data);
-        }
-
-        public String dumpBuffer() {
-            StringBuffer sb = new StringBuffer();
-            sb.append("{\n");
-            buffer.forEach((k, values) -> {
-                String columnName = getRequiredField(k);
-                sb.append("column = " + columnName + ", datta = [");
-                int i = 0;
-                for (Object obj : values) {
-                    if (i != 0) {
-                        sb.append(", ");
-                    }
-                    sb.append(obj.toString());
-                    i += 1;
-                }
-                sb.append("]\n");
-            });
-            sb.append("}");
-            return sb.toString();
-        }
-    }
 
     @Before
     public void setUp() {
@@ -99,32 +61,12 @@ TBLPROPERTIES (
         params.put("data_file_length", "436081");
         params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
         params.put("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
-        params.put("required_fields", "a,b");
+        params.put("required_fields", "a");
         return params;
     }
 
-    @Test
-    public void doScanTest0() throws IOException {
-        Map<String, String> params = createScanTestParams();
-        LocalHudiScanner scanner = new LocalHudiScanner(4096, params);
-
-        System.out.println(scanner.toString());
-        scanner.open();
-        while (true) {
-            int numRows = scanner.getNext();
-            if (numRows == 0) {
-                break;
-            }
-        }
-        System.out.println(scanner.dumpBuffer());
-        scanner.close();
-    }
-
-    @Test
-    public void doScanTest1() throws IOException {
-        Map<String, String> params = createScanTestParams();
+    void runScanOnParams(Map<String, String> params) throws IOException {
         HudiSliceScanner scanner = new HudiSliceScanner(4096, params);
-
         System.out.println(scanner.toString());
         scanner.open();
         while (true) {
@@ -134,7 +76,22 @@ TBLPROPERTIES (
                 break;
             }
             table.show(10);
+            table.close();
         }
         scanner.close();
+    }
+
+    @Test
+    public void doScanTestOnPrimitiveType() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void doScanTestOnComplextType() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.a,e.b");
+        runScanOnParams(params);
     }
 }

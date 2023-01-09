@@ -102,7 +102,7 @@ public final class Platform {
     }
 
     public static void disableUnsafeMemoryTracker() {
-        isUsingUnsafeMemoryTracker = true;
+        isUsingUnsafeMemoryTracker = false;
     }
 
     public static void freeMemory(long address) {

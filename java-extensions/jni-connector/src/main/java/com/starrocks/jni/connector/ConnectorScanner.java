@@ -15,7 +15,6 @@
 package com.starrocks.jni.connector;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * The parent class of JNI scanner, developers need to inherit this class and implement the following methods:
@@ -27,7 +26,7 @@ import java.util.Map;
  * 1. int: the chunk size
  * 2. Map<String, String>: the custom parameters
  * <p>
- * {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} need be called to initialize
+ * {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], int)} need be called to initialize
  * {@link ConnectorScanner#tableSize} and {@link ConnectorScanner#types}
  * before calling {@link ConnectorScanner#getNext()} (maybe in constructor or {@link ConnectorScanner#open()})
  * <p>
@@ -44,12 +43,12 @@ import java.util.Map;
  */
 public abstract class ConnectorScanner {
     private OffHeapTable offHeapTable;
-    private OffHeapColumnVector.OffHeapColumnType[] types;
+    private ColumnType[] types;
     private int tableSize;
 
     /**
      * Initialize the reader with parameters passed by the class constructor and allocate necessary resources.
-     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} method here
+     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], int)} method here
      * to allocate memory spaces.
      */
     public abstract void open() throws IOException;
@@ -63,7 +62,7 @@ public abstract class ConnectorScanner {
      * Scan original data and save it to off-heap table.
      *
      * @return The number of rows scanned.
-     * The specific implementation needs to call the {@link ConnectorScanner#scanData(int, Object)} method
+     * The specific implementation needs to call the {@link ConnectorScanner#appendData(int, Object)} method
      * to save data to off-heap table.
      * The number of rows scanned must less than or equal to {@link ConnectorScanner#tableSize}
      */
@@ -74,19 +73,13 @@ public abstract class ConnectorScanner {
      *
      * @param requiredTypes column types
      * @param fetchSize     number of rows
-     * @param typeMappings  mappings of requiredTypes from {@link String}
-     *                      to {@link com.starrocks.jni.connector.OffHeapColumnVector.OffHeapColumnType}
      */
-    protected void initOffHeapTableWriter(String[] requiredTypes, int fetchSize,
-                                          Map<String, OffHeapColumnVector.OffHeapColumnType> typeMappings) {
+    protected void initOffHeapTableWriter(ColumnType[] requiredTypes, int fetchSize) {
         this.tableSize = fetchSize;
-        this.types = new OffHeapColumnVector.OffHeapColumnType[requiredTypes.length];
-        for (int i = 0; i < requiredTypes.length; i++) {
-            types[i] = typeMappings.get(requiredTypes[i]);
-        }
+        this.types = requiredTypes;
     }
 
-    protected void scanData(int index, Object value) {
+    protected void scanData(int index, ColumnValue value) {
         offHeapTable.appendData(index, value);
     }
 

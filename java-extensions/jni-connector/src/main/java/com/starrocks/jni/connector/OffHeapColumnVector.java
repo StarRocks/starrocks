@@ -23,18 +23,6 @@ import java.nio.charset.StandardCharsets;
  * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
 public class OffHeapColumnVector {
-    public enum OffHeapColumnType {
-        BYTE,
-        BOOLEAN,
-        SHORT,
-        INT,
-        FLOAT,
-        LONG,
-        DOUBLE,
-        STRING,
-        DATE,
-        DECIMAL
-    }
 
     private long nulls;
     private long data;
@@ -44,7 +32,7 @@ public class OffHeapColumnVector {
 
     private int capacity;
 
-    private OffHeapColumnType type;
+    private ColumnType.TypeValue type;
 
     /**
      * Upper limit for the maximum capacity for this column.
@@ -73,7 +61,7 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
-    public OffHeapColumnVector(int capacity, OffHeapColumnType type) {
+    public OffHeapColumnVector(int capacity, ColumnType.TypeValue type) {
         this.capacity = capacity;
         this.type = type;
         this.nulls = 0;
@@ -85,8 +73,8 @@ public class OffHeapColumnVector {
         reset();
     }
 
-    public static boolean isArray(OffHeapColumnType type) {
-        return type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL;
+    public static boolean isArray(ColumnType.TypeValue type) {
+        return type == ColumnType.TypeValue.STRING || type == ColumnType.TypeValue.DATE || type == ColumnType.TypeValue.DECIMAL;
     }
 
     public long nullsNativeAddress() {
@@ -146,13 +134,13 @@ public class OffHeapColumnVector {
 
     private void reserveInternal(int newCapacity) {
         int oldCapacity = (nulls == 0L) ? 0 : capacity;
-        if (type == OffHeapColumnType.BOOLEAN || type == OffHeapColumnType.BYTE) {
+        if (type == ColumnType.TypeValue.BOOLEAN || type == ColumnType.TypeValue.BYTE) {
             this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
-        } else if (type == OffHeapColumnType.SHORT) {
+        } else if (type == ColumnType.TypeValue.SHORT) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 2L, newCapacity * 2L);
-        } else if (type == OffHeapColumnType.INT || type == OffHeapColumnType.FLOAT) {
+        } else if (type == ColumnType.TypeValue.INT || type == ColumnType.TypeValue.FLOAT) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
-        } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
+        } else if (type == ColumnType.TypeValue.LONG || type == ColumnType.TypeValue.DOUBLE) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
         } else if (isArray(type)) {
             this.offsetData =
@@ -170,7 +158,7 @@ public class OffHeapColumnVector {
             int childCapacity = capacity;
             childCapacity *= DEFAULT_ARRAY_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, OffHeapColumnType.BYTE);
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, ColumnType.TypeValue.BYTE);
         }
     }
 

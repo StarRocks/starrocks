@@ -72,12 +72,12 @@ package com.starrocks.jni.connector;
 
 public class OffHeapTable {
     public OffHeapColumnVector[] vectors;
-    public OffHeapColumnVector.OffHeapColumnType[] types;
+    public ColumnType[] types;
     public OffHeapColumnVector meta;
     public int numRows;
     public boolean[] released;
 
-    public OffHeapTable(OffHeapColumnVector.OffHeapColumnType[] types, int capacity) {
+    public OffHeapTable(ColumnType[] types, int capacity) {
         this.types = types;
         this.vectors = new OffHeapColumnVector[types.length];
         this.released = new boolean[types.length];
@@ -91,41 +91,41 @@ public class OffHeapTable {
             }
             released[i] = false;
         }
-        this.meta = new OffHeapColumnVector(metaSize, OffHeapColumnVector.OffHeapColumnType.LONG);
+        this.meta = new OffHeapColumnVector(metaSize, ColumnType.TypeValue.LONG);
         this.numRows = 0;
     }
 
-    public void appendData(int fieldId, Object o) {
+    public void appendData(int fieldId, ColumnValue o) {
         OffHeapColumnVector column = vectors[fieldId];
         if (o == null) {
             column.appendNull();
             return;
         }
 
-        OffHeapColumnVector.OffHeapColumnType type = types[fieldId];
+        ColumnType.TypeValue type = types[fieldId];
         switch (type) {
             case BOOLEAN:
-                column.appendBoolean((boolean) o);
+                column.appendBoolean(o.getBoolean());
                 break;
             case SHORT:
-                column.appendShort((short) o);
+                column.appendShort(o.getShort());
                 break;
             case INT:
-                column.appendInt((int) o);
+                column.appendInt(o.getInt());
                 break;
             case FLOAT:
-                column.appendFloat((float) o);
+                column.appendFloat(o.getFloat());
                 break;
             case LONG:
-                column.appendLong((long) o);
+                column.appendLong(o.getLong());
                 break;
             case DOUBLE:
-                column.appendDouble((double) o);
+                column.appendDouble(o.getDouble());
                 break;
             case STRING:
             case DATE:
             case DECIMAL:
-                column.appendString(o.toString());
+                column.appendString(o.getString());
                 break;
             default:
                 throw new RuntimeException("Unsupported type: " + type);
@@ -150,7 +150,7 @@ public class OffHeapTable {
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
         for (int i = 0; i < types.length; i++) {
-            OffHeapColumnVector.OffHeapColumnType type = types[i];
+            ColumnType.TypeValue type = types[i];
             OffHeapColumnVector column = vectors[i];
             if (OffHeapColumnVector.isArray(type)) {
                 meta.appendLong(column.nullsNativeAddress());
@@ -169,15 +169,16 @@ public class OffHeapTable {
      */
     public void show(int limit) {
         StringBuilder sb = new StringBuilder();
-        System.out.println("numRows = " + numRows);
+        sb.append("OffHeapTable: numRows = " + numRows + "\n");
         for (int i = 0; i < limit && i < numRows; i++) {
+            sb.append("row" + i + ": [");
             for (int fieldId = 0; fieldId < types.length; fieldId++) {
                 OffHeapColumnVector column = vectors[fieldId];
                 if (column.isNullAt(i)) {
                     sb.append("NULL").append(", ");
                     continue;
                 }
-                OffHeapColumnVector.OffHeapColumnType type = types[fieldId];
+                ColumnType.TypeValue type = types[fieldId];
                 switch (type) {
                     case BOOLEAN:
                         sb.append(column.getBoolean(i)).append(", ");
@@ -206,9 +207,9 @@ public class OffHeapTable {
                         throw new RuntimeException("Unhandled " + type);
                 }
             }
-            sb.append("\n");
+            sb.append("]\n");
         }
-        System.out.println(sb);
+        System.out.print(sb);
     }
 
     public void close() {
