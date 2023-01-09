@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
@@ -235,6 +236,17 @@ public class MVMaintenanceJob implements Writable {
      * Build physical fragments for the maintenance plan
      */
     void buildPhysicalTopology() throws Exception {
+        Preconditions.checkState(plan.getTopFragment().getSink() instanceof OlapTableSink, "Must be table sink");
+        ConnectContext context = queryCoordinator.getConnectContext();
+        context.getSessionVariable().setPreferComputeNode(false);
+        context.getSessionVariable().setUseComputeNodes(0);
+        OlapTableSink dataSink = (OlapTableSink) plan.getFragments().get(0).getSink();
+        // NOTE use a fake transaction id, the real one would be generated when epoch started
+        long fakeTransactionId = 1;
+        long dbId = getView().getDbId();
+        long timeout = context.getSessionVariable().getQueryTimeoutS();
+        dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
+        dataSink.complete();
         queryCoordinator.prepareExec();
 
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
