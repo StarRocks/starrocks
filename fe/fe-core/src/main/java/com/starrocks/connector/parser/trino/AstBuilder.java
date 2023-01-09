@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -88,6 +89,8 @@ import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
+import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.ExplainType;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
 import io.trino.sql.tree.FrameBound;
@@ -197,6 +200,29 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
         return node.map(value -> process(value, context)).orElse(null);
+    }
+
+    @Override
+    protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
+
+        Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
+                map(type -> (ExplainType) type).findFirst();
+        if (explainType.isPresent()) {
+            ExplainType.Type type = explainType.get().getType();
+            if (type == ExplainType.Type.LOGICAL)  {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+            } else if (type == ExplainType.Type.DISTRIBUTED) {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+            } else if (type == ExplainType.Type.IO) {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+            } else {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+            }
+        } else {
+            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+        }
+        return queryStatement;
     }
 
     @Override
