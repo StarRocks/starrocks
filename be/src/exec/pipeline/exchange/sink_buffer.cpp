@@ -80,8 +80,8 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     if (_is_finishing) {
         return Status::OK();
     }
-    if (request.attachment_physical_bytes > 0) {
-        _bytes_enqueued += request.attachment_physical_bytes;
+    if (!request.attachment.empty()) {
+        _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
     }
     {
@@ -316,8 +316,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
         request.params->set_sequence(++_request_seqs[instance_id.lo]);
 
-        if (request.attachment_physical_bytes > 0) {
-            _bytes_sent += request.attachment_physical_bytes;
+        if (!request.attachment.empty()) {
+            _bytes_sent += request.attachment.size();
             _request_sent++;
         }
 

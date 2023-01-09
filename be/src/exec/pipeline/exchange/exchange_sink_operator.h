@@ -81,7 +81,7 @@ public:
 
     // Return the physical bytes of attachment.
     int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment,
-                                      bool copy);
+                                      bool copy = true);
 
 private:
     bool _is_large_chunk(size_t sz) const {

@@ -145,6 +145,19 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     auto* req = const_cast<PTransmitChunkParams*>(request);
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
+    Status st;
+    st.to_protobuf(response->mutable_status());
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to " << msg;
+        }
+        if (done != nullptr) {
+            // NOTE: only when done is not null, we can set response status
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
+        VLOG_ROW << msg << " cost time = " << MonotonicNanos() - begin_ts;
+    });
     if (cntl->request_attachment().size() > 0) {
         butil::IOBuf& io_buf = cntl->request_attachment();
         size_t offset = 0;
@@ -153,30 +166,20 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
             if (UNLIKELY(io_buf.size() < chunk->data_size())) {
                 auto msg = fmt::format("iobuf's size {} < {}", io_buf.size(), chunk->data_size());
                 LOG(WARNING) << msg;
-                throw std::runtime_error(msg);
+                st = Status::InternalError(msg);
             }
             // Note the ref memory is freed after closure is called.
             auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
             if (UNLIKELY(size != chunk->data_size())) {
                 auto msg = fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
                 LOG(WARNING) << msg;
-                throw std::runtime_error(msg);
+                st = Status::InternalError(msg);
             }
             offset += chunk->data_size();
         }
     }
-    Status st;
-    st.to_protobuf(response->mutable_status());
+
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
-    if (!st.ok()) {
-        LOG(WARNING) << "failed to " << msg;
-    }
-    if (done != nullptr) {
-        // NOTE: only when done is not null, we can set response status
-        st.to_protobuf(response->mutable_status());
-        done->Run();
-    }
-    VLOG_ROW << msg << " cost time = " << MonotonicNanos() - begin_ts;
 }
 
 template <typename T>
