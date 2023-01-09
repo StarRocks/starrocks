@@ -84,14 +84,10 @@ public class OffHeapTable {
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
             vectors[i] = new OffHeapColumnVector(capacity, types[i]);
-            if (OffHeapColumnVector.isArray(types[i])) {
-                metaSize += 3;
-            } else {
-                metaSize += 2;
-            }
+            metaSize += types[i].computeColumnSize();
             released[i] = false;
         }
-        this.meta = new OffHeapColumnVector(metaSize, ColumnType.TypeValue.LONG);
+        this.meta = new OffHeapColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
         this.numRows = 0;
     }
 
@@ -102,7 +98,7 @@ public class OffHeapTable {
             return;
         }
 
-        ColumnType.TypeValue type = types[fieldId];
+        ColumnType.TypeValue type = types[fieldId].getTypeValue();
         switch (type) {
             case BOOLEAN:
                 column.appendBoolean(o.getBoolean());
@@ -150,9 +146,8 @@ public class OffHeapTable {
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
         for (int i = 0; i < types.length; i++) {
-            ColumnType.TypeValue type = types[i];
             OffHeapColumnVector column = vectors[i];
-            if (OffHeapColumnVector.isArray(type)) {
+            if (types[i].isArray()) {
                 meta.appendLong(column.nullsNativeAddress());
                 meta.appendLong(column.arrayOffsetNativeAddress());
                 meta.appendLong(column.arrayDataNativeAddress());
@@ -178,7 +173,7 @@ public class OffHeapTable {
                     sb.append("NULL").append(", ");
                     continue;
                 }
-                ColumnType.TypeValue type = types[fieldId];
+                ColumnType.TypeValue type = types[fieldId].getTypeValue();
                 switch (type) {
                     case BOOLEAN:
                         sb.append(column.getBoolean(i)).append(", ");

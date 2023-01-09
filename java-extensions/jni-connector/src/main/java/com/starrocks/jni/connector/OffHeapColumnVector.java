@@ -32,7 +32,7 @@ public class OffHeapColumnVector {
 
     private int capacity;
 
-    private ColumnType.TypeValue type;
+    private ColumnType type;
 
     /**
      * Upper limit for the maximum capacity for this column.
@@ -61,7 +61,7 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
-    public OffHeapColumnVector(int capacity, ColumnType.TypeValue type) {
+    public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
         this.nulls = 0;
@@ -74,7 +74,8 @@ public class OffHeapColumnVector {
     }
 
     public static boolean isArray(ColumnType.TypeValue type) {
-        return type == ColumnType.TypeValue.STRING || type == ColumnType.TypeValue.DATE || type == ColumnType.TypeValue.DECIMAL;
+        return type == ColumnType.TypeValue.STRING || type == ColumnType.TypeValue.DATE ||
+                type == ColumnType.TypeValue.DECIMAL;
     }
 
     public long nullsNativeAddress() {
@@ -134,15 +135,10 @@ public class OffHeapColumnVector {
 
     private void reserveInternal(int newCapacity) {
         int oldCapacity = (nulls == 0L) ? 0 : capacity;
-        if (type == ColumnType.TypeValue.BOOLEAN || type == ColumnType.TypeValue.BYTE) {
-            this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
-        } else if (type == ColumnType.TypeValue.SHORT) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 2L, newCapacity * 2L);
-        } else if (type == ColumnType.TypeValue.INT || type == ColumnType.TypeValue.FLOAT) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
-        } else if (type == ColumnType.TypeValue.LONG || type == ColumnType.TypeValue.DOUBLE) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (isArray(type)) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        if (typeSize != -1) {
+            this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
+        } else if (type.isArray()) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
@@ -154,11 +150,11 @@ public class OffHeapColumnVector {
     }
 
     private void reserveChildColumn() {
-        if (isArray(type)) {
+        if (type.isArray()) {
             int childCapacity = capacity;
             childCapacity *= DEFAULT_ARRAY_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, ColumnType.TypeValue.BYTE);
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
         }
     }
 
