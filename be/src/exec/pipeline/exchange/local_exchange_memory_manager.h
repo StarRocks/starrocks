@@ -41,7 +41,7 @@ public:
     bool is_full() const { return _memory_usage >= _max_memory_usage; }
 
 private:
-    size_t _max_memory_usage = 128 * 1024 * 1024 * 1024UL; // 128GB
+    size_t _max_memory_usage = 128 * 1024 * 1024 * 1024UL;     // 128GB
     size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL; // 128MB
     std::atomic<size_t> _memory_usage{0};
 };
