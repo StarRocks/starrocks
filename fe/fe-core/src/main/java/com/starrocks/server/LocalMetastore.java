@@ -1966,21 +1966,24 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void processColocationProperties(String colocateGroup, Database db, OlapTable olapTable, boolean expectLakeTable)
             throws DdlException {
-        if (!Strings.isNullOrEmpty(colocateGroup)) {
-            if (olapTable.isLakeTable() != expectLakeTable) {
-                return;
-            }
-            String fullGroupName = db.getId() + "_" + colocateGroup;
-            ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-            if (groupSchema != null) {
-                // group already exist, check if this table can be added to this group
-                groupSchema.checkColocateSchema(olapTable);
-            }
-            // add table to this group, if group does not exist, create a new one
-            colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
-                    null /* generate group id inside */, false /* isReplay */);
-            olapTable.setColocateGroup(colocateGroup);
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            return;
         }
+
+        if (olapTable.isLakeTable() != expectLakeTable) {
+            return;
+        }
+
+        String fullGroupName = db.getId() + "_" + colocateGroup;
+        ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+        if (groupSchema != null) {
+            // group already exist, check if this table can be added to this group
+            groupSchema.checkColocateSchema(olapTable);
+        }
+        // add table to this group, if group does not exist, create a new one
+        colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
+                null /* generate group id inside */, false /* isReplay */);
+        olapTable.setColocateGroup(colocateGroup);
     }
 
     // Create olap|lake table and related base index synchronously.

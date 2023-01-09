@@ -194,6 +194,12 @@ public class ColocateTableIndex implements Writable {
                 group2Schema.put(groupId, groupSchema);
             }
 
+            if (groupAlreadyExist) {
+                if (tbl.isLakeTable() != lakeGroups.contains(groupId)) {
+                    throw new DdlException("Table type mismatch with colocate group type.");
+                }
+            }
+
             if (tbl.isLakeTable()) {
                 if (!isReplay) { // leader create or update meta group
                     List<Long> shardGroupIds = tbl.getShardGroupIds();
