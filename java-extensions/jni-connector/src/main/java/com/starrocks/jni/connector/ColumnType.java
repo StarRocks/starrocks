@@ -39,7 +39,7 @@ public class ColumnType {
 
     TypeValue typeValue;
     List<String> childNames = new ArrayList<>();
-    List<ColumnType> childTypeValues = new ArrayList<>();
+    List<ColumnType> childTypes = new ArrayList<>();
 
     private final static Map<String, TypeValue> primitiveTypeValueMapping = new HashMap<>();
     private final static Map<TypeValue, Integer> primitiveTypeValueSize = new HashMap<>();
@@ -74,14 +74,17 @@ public class ColumnType {
             offset = 0;
         }
 
-        int indexOf(char ch) {
-            return s.indexOf(ch, offset);
+        int indexOf(char ch0, char ch1, char ch2) {
+            for (int i = offset; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == ch0 || c == ch1 || c == ch2) {
+                    return i;
+                }
+            }
+            return s.length();
         }
 
         String substr(int end) {
-            if (end == -1) {
-                end = s.length();
-            }
             return s.substring(offset, end);
         }
 
@@ -100,30 +103,30 @@ public class ColumnType {
 
     private void parseArray(List<ColumnType> childTypeValues, StringScanner scanner) {
         while (scanner.peek() != '>') {
-            scanner.next();
+            scanner.next(); // '<', or ','
             ColumnType x = new ColumnType();
-            x.parse(scanner, ',');
+            x.parse(scanner);
             childTypeValues.add(x);
         }
-        scanner.next();
+        scanner.next(); // '>'
     }
 
     private void parseStruct(List<String> childNames, List<ColumnType> childTypeValues, StringScanner scanner) {
         while (scanner.peek() != '>') {
-            scanner.next();
-            int p = scanner.indexOf(':');
+            scanner.next(); // '<' or ','
+            int p = scanner.indexOf(':', ':', ':');
             String name = scanner.substr(p);
             scanner.moveTo(p + 1);
             childNames.add(name);
             ColumnType x = new ColumnType();
-            x.parse(scanner, ',');
+            x.parse(scanner);
             childTypeValues.add(x);
         }
-        scanner.next();
+        scanner.next(); // '>'
     }
 
-    private void parse(StringScanner scanner, char sep) {
-        int p = scanner.indexOf(sep);
+    private void parse(StringScanner scanner) {
+        int p = scanner.indexOf('<', ',', '>');
         String t = scanner.substr(p);
         scanner.moveTo(p);
 
@@ -131,13 +134,15 @@ public class ColumnType {
         if (t.equals("array")) {
             // array<TYPE>
             typeValue = TypeValue.ARRAY;
-            parseArray(childTypeValues, scanner);
+            parseArray(childTypes, scanner);
         } else if (t.equals("map")) {
             // map<TYPE1,TYPE2>
-            parseArray(childTypeValues, scanner);
+            typeValue = TypeValue.MAP;
+            parseArray(childTypes, scanner);
         } else if (t.equals("struct")) {
             // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
-            parseStruct(childNames, childTypeValues, scanner);
+            typeValue = TypeValue.STRUCT;
+            parseStruct(childNames, childTypes, scanner);
         } else {
             // convert decimal(x,y) to decimal
             if (t.startsWith("decimal")) {
@@ -159,7 +164,7 @@ public class ColumnType {
 
     public ColumnType(String type) {
         StringScanner scanner = new StringScanner(type);
-        parse(scanner, '<');
+        parse(scanner);
     }
 
     public boolean isArray() {
@@ -178,16 +183,16 @@ public class ColumnType {
         switch (typeValue) {
             case ARRAY: {
                 // [ null | offset | data ]
-                return 2 + childTypeValues.get(0).computeColumnSize();
+                return 2 + childTypes.get(0).computeColumnSize();
             }
             case MAP: {
                 // [ null | offset | key | value ]
-                return 2 + childTypeValues.get(0).computeColumnSize() + childTypeValues.get(1).computeColumnSize();
+                return 2 + childTypes.get(0).computeColumnSize() + childTypes.get(1).computeColumnSize();
             }
             case STRUCT: {
                 // [null | c0 | c1 .. ]
                 int res = 1;
-                for (ColumnType t : childTypeValues) {
+                for (ColumnType t : childTypes) {
                     res += t.computeColumnSize();
                 }
                 return res;
@@ -208,5 +213,13 @@ public class ColumnType {
 
     public int getPrimitiveTypeValueSize() {
         return primitiveTypeValueSize.getOrDefault(typeValue, -1);
+    }
+
+    public List<String> getChildNames() {
+        return childNames;
+    }
+
+    public List<ColumnType> getChildTypes() {
+        return childTypes;
     }
 }
