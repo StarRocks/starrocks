@@ -712,7 +712,6 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
-            row.add(currentWarehouse);
             // Command
             row.add(command.toString());
             // connection start Time
@@ -734,6 +733,7 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
+            row.add(currentWarehouse);
             return row;
         }
     }
