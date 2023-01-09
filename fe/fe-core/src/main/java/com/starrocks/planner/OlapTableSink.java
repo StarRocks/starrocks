@@ -111,7 +111,7 @@ public class OlapTableSink extends DataSink {
     private OlapTable dstTable;
     private final TupleDescriptor tupleDescriptor;
     // specified partition ids. this list should not be empty and should contains all related partition ids
-    private final List<Long> partitionIds;
+    private List<Long> partitionIds;
 
     // set after init called
     private TDataSink tDataSink;
@@ -517,6 +517,10 @@ public class OlapTableSink extends DataSink {
 
     public void setDstTable(OlapTable table) {
         this.dstTable = table;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
     }
 
     public TupleDescriptor getTupleDescriptor() {

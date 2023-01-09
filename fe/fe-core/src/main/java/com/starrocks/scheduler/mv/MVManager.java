@@ -137,6 +137,7 @@ public class MVManager {
             PlanFragment sinkFragment = execPlan.getTopFragment();
             OlapTableSink tableSink = (OlapTableSink) sinkFragment.getSink();
             tableSink.setDstTable(view);
+            tableSink.setPartitionIds(view.getAllPartitionIds());
 
             // Create the job but not execute it
             MVMaintenanceJob job = new MVMaintenanceJob(view);
