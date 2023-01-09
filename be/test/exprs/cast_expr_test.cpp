@@ -25,7 +25,6 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "types/logical_type.h"
 #include "util/json.h"
@@ -1878,6 +1877,27 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
     return ptr->debug_item(0);
 }
 
+TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::ARRAY;
+    types_list.push_back(type_array);
+
+    TTypeNode type_scalar;
+    TScalarType scalar_type;
+    scalar_type.__set_type(field_type);
+    scalar_type.__set_precision(0);
+    scalar_type.__set_scale(0);
+    scalar_type.__set_len(0);
+    type_scalar.__set_scalar_type(scalar_type);
+    types_list.push_back(type_scalar);
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
 static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     auto type_desc = gen_array_type_desc(to_thrift(element_type));
     return cast_string_to_array(cast_expr, type_desc, str);
@@ -2020,6 +2040,17 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([{"a": 1},{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
     EXPECT_EQ(R"([null,{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
+}
+
+TEST_F(VectorizedCastExprTest, unsupported_test) {
+    // can't cast arry<array<int>> to array<bool> rather than crash
+    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
+    expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
+    expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    ASSERT_TRUE(expr == nullptr);
 }
 
 } // namespace starrocks

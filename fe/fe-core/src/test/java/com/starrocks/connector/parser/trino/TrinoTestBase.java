@@ -262,11 +262,30 @@ public class TrinoTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("create table test_array(c0 INT, " +
+                "c1 array<varchar(65533)>, " +
+                "c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+
         connectContext.getSessionVariable().setSqlDialect("trino");
     }
 
     public String getFragmentPlan(String sql) throws Exception {
         return getPlanAndFragment(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
+    }
+
+    public String getExplain(String sql) throws Exception {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        StatementBase statementBase = statements.get(0);
+
+        ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+
+        return execPlan.getExplainString(statementBase.getExplainLevel());
     }
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)

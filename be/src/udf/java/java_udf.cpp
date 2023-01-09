@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "fmt/core.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"

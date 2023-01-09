@@ -24,8 +24,8 @@
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 

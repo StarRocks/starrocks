@@ -26,6 +26,7 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -53,6 +54,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -64,6 +66,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -72,6 +75,7 @@ import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
+import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BooleanLiteral;
@@ -85,6 +89,8 @@ import io.trino.sql.tree.DereferenceExpression;
 import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
+import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.ExplainType;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
 import io.trino.sql.tree.FrameBound;
@@ -119,6 +125,7 @@ import io.trino.sql.tree.SingleColumn;
 import io.trino.sql.tree.SortItem;
 import io.trino.sql.tree.StringLiteral;
 import io.trino.sql.tree.SubqueryExpression;
+import io.trino.sql.tree.SubscriptExpression;
 import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.Union;
@@ -130,6 +137,7 @@ import io.trino.sql.tree.WindowSpecification;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
@@ -192,6 +200,29 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
         return node.map(value -> process(value, context)).orElse(null);
+    }
+
+    @Override
+    protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
+
+        Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
+                map(type -> (ExplainType) type).findFirst();
+        if (explainType.isPresent()) {
+            ExplainType.Type type = explainType.get().getType();
+            if (type == ExplainType.Type.LOGICAL)  {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+            } else if (type == ExplainType.Type.DISTRIBUTED) {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+            } else if (type == ExplainType.Type.IO) {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+            } else {
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+            }
+        } else {
+            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+        }
+        return queryStatement;
     }
 
     @Override
@@ -420,6 +451,24 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             return new SelectListItem(qualifiedNameToTableName(target.getQualifiedName()));
         }
         return new SelectListItem(null);
+    }
+
+    @Override
+    protected ParseNode visitArrayConstructor(ArrayConstructor node, ParseTreeContext context) {
+        List<Expr> exprs;
+        if (node.getValues() != null) {
+            exprs = visit(node.getValues(), context, Expr.class);
+        } else {
+            exprs = Collections.emptyList();
+        }
+        return new ArrayExpr(null, exprs);
+    }
+
+    @Override
+    protected ParseNode visitSubscriptExpression(SubscriptExpression node, ParseTreeContext context) {
+        Expr value = (Expr) visit(node.getBase(), context);
+        Expr index = (Expr) visit(node.getIndex(), context);
+        return new CollectionElementExpr(value, index);
     }
 
     @Override

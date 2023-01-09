@@ -18,7 +18,7 @@
 #include "column/nullable_column.h"
 #include "formats/json/binary_column.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

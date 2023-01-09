@@ -20,7 +20,7 @@
 #include "column/type_traits.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 

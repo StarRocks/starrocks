@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
-    array_type_info.cpp
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp

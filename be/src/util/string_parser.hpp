@@ -45,7 +45,7 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/decimal_types.h"
 
 namespace starrocks {
