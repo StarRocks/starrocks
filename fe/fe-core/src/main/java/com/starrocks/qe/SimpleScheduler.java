@@ -73,6 +73,7 @@ public class SimpleScheduler {
         updateBlacklistThread.start();
     }
 
+    @Nullable
     public static TNetworkAddress getHost(long backendId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, Backend> backends,
@@ -148,21 +149,16 @@ public class SimpleScheduler {
 
     @Nullable
     private static <T extends ComputeNode> T chooseNode(ImmutableList<T> nodes, AtomicLong nextId) {
-        int index = (int) (nextId.getAndIncrement() % nodes.size());
-        T node = nodes.get(index);
-        if (node != null && node.isAlive() && !blacklistBackends.containsKey(node.getId())) {
-            return node;
+        long id = nextId.getAndIncrement();
+        for (int i = 0; i < nodes.size(); i++) {
+            T node = nodes.get((int) (id % nodes.size()));
+            if (node != null && node.isAlive() && !blacklistBackends.containsKey(node.getId())) {
+                nextId.addAndGet(i); // skip failed nodes
+                return node;
+            }
+            id++;
         }
-
-        // slow path
-        List<T> aliveNodes = nodes.stream()
-                .filter(e -> e != null && e.isAlive() && !blacklistBackends.containsKey(e.getId()))
-                .collect(Collectors.toList());
-        if (aliveNodes.isEmpty()) {
-            return null;
-        }
-        index = (int) (nextId.getAndIncrement() % aliveNodes.size());
-        return aliveNodes.get(index);
+        return null;
     }
 
     public static void addToBlacklist(Long backendID) {
