@@ -419,7 +419,7 @@ public class StmtExecutor {
                 context.getState().setIsQuery(true);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist) {
+                if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
                     String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
 
                     // If this sql is in blacklist, show message.
