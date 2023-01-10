@@ -34,7 +34,9 @@
 
   </div>
 StarRocks is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
-It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.<br>
+It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br>
+
+Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/introduction_to_starrocks )
 
 <br>
  <p align="center">
