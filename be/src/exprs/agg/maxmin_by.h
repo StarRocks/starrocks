@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
+#include "types/logical_type.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
