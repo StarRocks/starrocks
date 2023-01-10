@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -94,6 +95,7 @@ public class MVMaintenanceJob implements Writable {
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
     private transient AtomicReference<JobState> state = new AtomicReference<>();
+    private transient JobPrepareStage prepareStage = JobPrepareStage.INIT;
     private transient AtomicBoolean inSchedule = new AtomicBoolean(false);
     private transient MaterializedView view;
     private transient ConnectContext connectContext;
@@ -180,6 +182,8 @@ public class MVMaintenanceJob implements Writable {
                     prepare();
                     break;
                 case PREPARING:
+                    checkPrepared();
+                    break;
                 case PAUSED:
                 case FAILED:
                     Preconditions.checkState(false, "should not be scheduled");
@@ -221,14 +225,39 @@ public class MVMaintenanceJob implements Writable {
 
             buildPhysicalTopology();
 
+            prepareStage = JobPrepareStage.DEPLOY_JOB;
             deployTasks();
 
-            this.state.set(JobState.RUN_EPOCH);
+            prepareStage = JobPrepareStage.ENABLE_BINLOG;
+            if (!checkPrepared()) {
+                return;
+            }
             LOG.info("MV maintenance job prepared: {}", this.view.getName());
         } catch (Exception e) {
             this.state.set(JobState.FAILED);
             throw e;
         }
+    }
+
+    /**
+     * Check if the preparation of job has been finished
+     */
+    public boolean checkPrepared() {
+        Preconditions.checkState(this.state.get().equals(JobState.PREPARING));
+        if (prepareStage.equals(JobPrepareStage.ENABLE_BINLOG)) {
+            BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+            for (MaterializedView.BaseTableInfo base : view.getBaseTableInfos()) {
+                boolean binlogReady = binlogManager.isBinlogAvailable(base.getDbId(), base.getTableId());
+                if (!binlogReady) {
+                    LOG.warn("binlog of table still not ready: {}", base.getTableName());
+                    return false;
+                }
+            }
+            LOG.info("MV maintenance job binlog prepared: {}", this.view.getName());
+        }
+
+        this.state.set(JobState.RUN_EPOCH);
+        return true;
     }
 
     void buildContext() {
@@ -559,6 +588,12 @@ public class MVMaintenanceJob implements Writable {
 
         // Failed the whole job, needs to be destroyed
         FAILED
+    }
+
+    public enum JobPrepareStage {
+        INIT,
+        DEPLOY_JOB,
+        ENABLE_BINLOG,
     }
 
 }

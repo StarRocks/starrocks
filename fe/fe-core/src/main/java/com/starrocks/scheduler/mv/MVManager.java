@@ -75,8 +75,6 @@ public class MVManager {
      * Reload jobs from meta store
      */
     public long reload(DataInputStream input, long checksum) throws IOException {
-        Preconditions.checkState(jobMap.isEmpty());
-
         try {
             String str = Text.readString(input);
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
@@ -105,7 +103,7 @@ public class MVManager {
             return false;
         }
         if (!job.getState().equals(MVMaintenanceJob.JobState.STOPPED)) {
-            jobMap.put(job.getView().getMvId(), job);
+            jobMap.putIfAbsent(job.getView().getMvId(), job);
             LOG.info("Restore MV maintenance jobs: {}", job);
             return true;
         }
