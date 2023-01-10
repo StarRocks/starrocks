@@ -113,10 +113,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     }
 
     char errstr[512];
-    serdes_conf_t *sconf = serdes_conf_new(NULL, 0,
-                                    "schema.registry.url", ctx->kafka_info->confluent_schema_registry_url.c_str(),
-                                    NULL);
-    serdes_t *serdes = serdes_new(sconf, errstr, sizeof(errstr));
+    serdes_conf_t* sconf = serdes_conf_new(NULL, 0, "schema.registry.url",
+                                           ctx->kafka_info->confluent_schema_registry_url.c_str(), NULL);
+    serdes_t* serdes = serdes_new(sconf, errstr, sizeof(errstr));
     if (!serdes) {
         LOG(ERROR) << "failed to create serdes handle: " << errstr;
         return Status::InternalError("failed to create serdes handle");
@@ -230,15 +229,14 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 Status st = Status::OK();
                 if (ctx->format == TFileFormatType::FORMAT_AVRO_CONFLUENT) {
                     avro_value_t avro;
-                    serdes_schema_t *schema;
-                    serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema,
-                                                            msg->payload(), msg->len(),
-                                                            errstr, sizeof(errstr));
+                    serdes_schema_t* schema;
+                    serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
+                                                               errstr, sizeof(errstr));
                     if (err) {
                         LOG(ERROR) << "serdes deserialize avro failed: " << errstr;
                         return Status::InternalError("serdes deserialize avro failed");
                     }
-                    char *as_json;
+                    char* as_json;
                     if (avro_value_to_json(&avro, 1, &as_json)) {
                         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
                         return Status::InternalError("avro to json failed");
@@ -248,7 +246,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     free(as_json);
                 } else {
                     st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                            static_cast<size_t>(msg->len()), row_delimiter);
+                                                          static_cast<size_t>(msg->len()), row_delimiter);
                 }
                 if (st.ok()) {
                     received_rows++;
