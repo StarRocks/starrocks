@@ -57,20 +57,23 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
   * 使用命令行方式动态修改：
 
     ```shell
-    curl --location-trusted -u username:password http://ip:fe_http_port/api/_set_config?key=value
+    curl --location-trusted -u username:password \
+    'http://<ip>:<fe_http_port>/api/_set_config?key=value'
     ```
 
     示例：
 
     ```plain text
-    curl --location-trusted -u root:root  http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
+    curl --location-trusted -u root:root \
+    'http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true'
     ```
 
 * 动态修改 BE 节点配置项：
   * 使用命令行方式动态修改：
 
     ```plain text
-    curl -XPOST -u username:password http://ip:be_http_port/api/update_config?key=value
+    curl -XPOST -u username:password \
+    'http://<ip>:<be_http_port>/api/update_config?key=value'
 
 > 注意
 >
