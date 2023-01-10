@@ -762,14 +762,13 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             std::vector<OpFactories> pred_operators_list;
             pred_operators_list.push_back(fragment_ctx->pipelines().back()->get_op_factories());
 
-            size_t max_row_count = 0;
+            size_t max_input_dop = 0;
             auto* source_operator =
                     down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
-            max_row_count += source_operator->degree_of_parallelism() * runtime_state->chunk_size();
+            max_input_dop += source_operator->degree_of_parallelism();
 
             auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
-            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(
-                    max_row_count * PipelineBuilderContext::localExchangeBufferChunks());
+            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_input_dop);
             auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
             local_exchange_source->set_runtime_state(runtime_state);

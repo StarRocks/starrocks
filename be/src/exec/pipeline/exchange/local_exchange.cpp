@@ -55,8 +55,10 @@ Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
     _shuffler->local_exchange_shuffle(_shuffle_channel_id, _hash_values, num_rows);
 
     _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
+    _partition_memory_usage.assign(num_partitions, 0);
     for (size_t i = 0; i < num_rows; ++i) {
         _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
+        _partition_memory_usage[_shuffle_channel_id[i]] += chunk->element_memory_usage(i, 1);
     }
     // We make the last item equal with number of rows of this chunk.
     for (int32_t i = 1; i <= num_partitions; ++i) {
@@ -118,7 +120,8 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
             continue;
         }
 
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size));
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
+                                                             partitioner.partition_memory_usage(i)));
     }
     return Status::OK();
 }
