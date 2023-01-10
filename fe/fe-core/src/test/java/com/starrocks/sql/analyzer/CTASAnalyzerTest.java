@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -36,6 +37,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
@@ -70,6 +72,8 @@ public class CTASAnalyzerTest {
         starRocksAssert.withDatabase("ctas").useDatabase("ctas")
                 .withTable("create table test(c1 varchar(10),c2 varchar(10)) DISTRIBUTED BY HASH(c1) " +
                         "BUCKETS 8 PROPERTIES (\"replication_num\" = \"1\" );")
+                .withTable("create table test_notnull(c1 varchar(10) not null, c2 varchar(10) not null) " +
+                        "DISTRIBUTED BY HASH(c1) BUCKETS 8 PROPERTIES (\"replication_num\" = \"1\" );")
                 .withTable("create table test3(c1 varchar(10),c2 varchar(10)) DISTRIBUTED BY HASH(c1) " +
                         "BUCKETS 8 PROPERTIES (\"replication_num\" = \"1\" );")
                 .withTable("CREATE TABLE `lineorder` (\n" +
@@ -385,6 +389,36 @@ public class CTASAnalyzerTest {
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
         Assert.assertTrue(properties2.containsKey("replication_num"));
         Assert.assertEquals(properties2.get("replication_num"), "1");
+    }
 
+    @Test
+    public void testCTASPrimaryKey() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_pk (c1, c2, c3) primary key (c1, c2) DISTRIBUTED BY HASH (c1) BUCKETS 1 \n" +
+                "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
+        CreateTableAsSelectStmt ctasStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        List<ColumnDef> columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
+        Assert.assertFalse(columnDefs.get(0).isAllowNull());
+        Assert.assertFalse(columnDefs.get(1).isAllowNull());
+        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+
+        sql = "create table ctas_pk (Cc1, Cc2, c3) primary key (cC1, `cC2`) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
+                "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
+        ctasStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
+        Assert.assertFalse(columnDefs.get(0).isAllowNull());
+        Assert.assertFalse(columnDefs.get(1).isAllowNull());
+        Assert.assertTrue(columnDefs.get(2).isAllowNull());
+
+        sql = "create table ctas_pk (Cc1, Cc2, c3) DISTRIBUTED BY HASH (Cc1) BUCKETS 1 \n" +
+                "as select t1.c1, t1.c2, t2.c1 as c3 from test_notnull t1 left join test t2 on t1.c2 = t2.c2;";
+        ctasStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
+        Assert.assertTrue(columnDefs.get(0).isAllowNull());
+        Assert.assertTrue(columnDefs.get(1).isAllowNull());
+        Assert.assertTrue(columnDefs.get(2).isAllowNull());
     }
 }

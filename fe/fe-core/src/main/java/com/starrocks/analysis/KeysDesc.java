@@ -41,6 +41,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -70,7 +71,7 @@ public class KeysDesc implements Writable {
     }
 
     public boolean containsCol(String colName) {
-        return keysColumnNames.contains(colName);
+        return keysColumnNames.stream().anyMatch(e -> StringUtils.equalsIgnoreCase(e, colName));
     }
 
     // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
