@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "column/stream_chunk.h"
 
-#include <unordered_set>
-
-#include "agent/agent_common.h"
-#include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/Types_types.h"
+#include "gen_cpp/MVMaintenance_types.h"
 
 namespace starrocks {
 
-class ThreadPoolToken;
-class DataDir;
-
-void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionRequest& publish_version_task,
-                              TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs);
+EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch) {
+    EpochInfo res;
+    res.epoch_id = start_epoch.epoch.epoch_id;
+    res.txn_id = start_epoch.epoch.txn_id;
+    res.max_exec_millis = start_epoch.max_exec_millis;
+    res.max_scan_rows = start_epoch.max_scan_rows;
+    return res;
+}
 
 } // namespace starrocks

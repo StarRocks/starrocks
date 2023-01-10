@@ -967,6 +967,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitions;
     }
 
+    public List<Long> getAllPartitionIds() {
+        return new ArrayList<>(idToPartition.keySet());
+    }
+
     public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         Collections.sort(partitions, new Comparator<Partition>() {

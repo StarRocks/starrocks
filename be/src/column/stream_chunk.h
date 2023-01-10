@@ -26,7 +26,7 @@ using Int8ColumnPtr = Int8Column::Ptr;
 using StreamChunk = Chunk;
 using StreamChunkPtr = std::shared_ptr<StreamChunk>;
 
-class EpochInfo;
+struct EpochInfo;
 using EpochInfoPtr = std::shared_ptr<EpochInfo>;
 
 /**
@@ -55,6 +55,7 @@ struct BinlogOffset {
     int64_t lsn;
 };
 
+class TMVStartEpochTask;
 /**
  * Epoch is an unit of an incremental compute. At the beginning of each incremental compute,
  * an `EpochInfo` will be triggered for each source operator, then the source operator will
@@ -72,7 +73,9 @@ struct EpochInfo {
     // max binlog offset which this epoch will run
     int64_t max_scan_rows;
     // Trigger mode
-    TriggerMode trigger_mode;
+    TriggerMode trigger_mode = PROCESSTIME_OFFSET;
+
+    static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
     std::string debug_string() const {
         std::stringstream ss;

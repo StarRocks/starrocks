@@ -82,6 +82,14 @@ std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
 
 using std::swap;
 
+int64_t curr_report_version() {
+    return g_report_version.load();
+}
+
+int64_t next_report_version() {
+    return ++g_report_version;
+}
+
 template <class AgentTaskRequest>
 TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
         : _env(env), _worker_thread_condition_variable(new std::condition_variable()), _worker_count(worker_count) {
@@ -507,7 +515,10 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_task.task_req, finish_task_request, affected_dirs);
+        finish_task_request.__set_task_type(publish_version_task.task_type);
+        finish_task_request.__set_signature(publish_version_task.signature);
+
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
