@@ -1,6 +1,6 @@
-diff -rupN incubator-brpc-1.3.0.orig/src/bthread/task_group.cpp incubator-brpc-1.3.0/src/bthread/task_group.cpp
---- incubator-brpc-1.3.0.orig/src/bthread/task_group.cpp	2022-12-21 22:05:40.833683261 +0000
-+++ incubator-brpc-1.3.0/src/bthread/task_group.cpp	2022-12-21 22:06:47.413173602 +0000
+diff -rupN brpc-1.3.0.orig/src/bthread/task_group.cpp brpc-1.3.0/src/bthread/task_group.cpp
+--- brpc-1.3.0.orig/src/bthread/task_group.cpp	2022-12-21 22:05:40.833683261 +0000
++++ brpc-1.3.0/src/bthread/task_group.cpp	2022-12-21 22:06:47.413173602 +0000
 @@ -248,6 +248,9 @@ int TaskGroup::init(size_t runqueue_capa
      return 0;
  }

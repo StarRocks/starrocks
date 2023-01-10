@@ -34,7 +34,7 @@ class ThreadPool;
 namespace starrocks::bthreads {
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
-// Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
+// Reference: https://github.com/apache/brpc/blob/master/docs/cn/execution_queue.md
 class ThreadPoolExecutor : public bthread::Executor {
 public:
     constexpr static int64_t kDefaultBusySleepMs = 50;

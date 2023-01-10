@@ -1,6 +1,6 @@
-diff -urN incubator-brpc-0.9.5-origin/CMakeLists.txt incubator-brpc-0.9.5/CMakeLists.txt
---- incubator-brpc-0.9.5-origin/CMakeLists.txt	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/CMakeLists.txt	2021-08-03 19:36:05.563254393 +0800
+diff -urN brpc-0.9.5-origin/CMakeLists.txt brpc-0.9.5/CMakeLists.txt
+--- brpc-0.9.5-origin/CMakeLists.txt	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/CMakeLists.txt	2021-08-03 19:36:05.563254393 +0800
 @@ -89,13 +89,13 @@
  macro(use_cxx11)
  if(CMAKE_VERSION VERSION_LESS "3.1.3")
@@ -39,9 +39,9 @@ diff -urN incubator-brpc-0.9.5-origin/CMakeLists.txt incubator-brpc-0.9.5/CMakeL
      ${LEVELDB_LIB}
      ${PROTOC_LIB}
      ${CMAKE_THREAD_LIBS_INIT}
-diff -urN incubator-brpc-0.9.5-origin/src/bthread/context.cpp incubator-brpc-0.9.5/src/bthread/context.cpp
---- incubator-brpc-0.9.5-origin/src/bthread/context.cpp	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/bthread/context.cpp	2021-08-03 19:27:17.002700292 +0800
+diff -urN brpc-0.9.5-origin/src/bthread/context.cpp brpc-0.9.5/src/bthread/context.cpp
+--- brpc-0.9.5-origin/src/bthread/context.cpp	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/bthread/context.cpp	2021-08-03 19:27:17.002700292 +0800
 @@ -600,3 +600,106 @@
  );
  
@@ -149,9 +149,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/bthread/context.cpp incubator-brpc-0.9
 +);
 +
 +#endif
-diff -urN incubator-brpc-0.9.5-origin/src/bthread/context.h incubator-brpc-0.9.5/src/bthread/context.h
---- incubator-brpc-0.9.5-origin/src/bthread/context.h	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/bthread/context.h	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/bthread/context.h brpc-0.9.5/src/bthread/context.h
+--- brpc-0.9.5-origin/src/bthread/context.h	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/bthread/context.h	2021-08-03 19:27:17.003700327 +0800
 @@ -30,6 +30,9 @@
  	#elif __arm__
  	    #define BTHREAD_CONTEXT_PLATFORM_linux_arm32
@@ -162,9 +162,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/bthread/context.h incubator-brpc-0.9.5
  	#endif
  
      #elif defined(__MINGW32__) || defined (__MINGW64__)
-diff -urN incubator-brpc-0.9.5-origin/src/bthread/processor.h incubator-brpc-0.9.5/src/bthread/processor.h
---- incubator-brpc-0.9.5-origin/src/bthread/processor.h	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/bthread/processor.h	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/bthread/processor.h brpc-0.9.5/src/bthread/processor.h
+--- brpc-0.9.5-origin/src/bthread/processor.h	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/bthread/processor.h	2021-08-03 19:27:17.003700327 +0800
 @@ -20,9 +20,13 @@
  #define BTHREAD_PROCESSOR_H
  
@@ -182,9 +182,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/bthread/processor.h incubator-brpc-0.9
  
  // Compile read-write barrier
  # ifndef barrier
-diff -urN incubator-brpc-0.9.5-origin/src/butil/config.h incubator-brpc-0.9.5/src/butil/config.h
---- incubator-brpc-0.9.5-origin/src/butil/config.h	1970-01-01 08:00:00.000000000 +0800
-+++ incubator-brpc-0.9.5/src/butil/config.h	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/butil/config.h brpc-0.9.5/src/butil/config.h
+--- brpc-0.9.5-origin/src/butil/config.h	1970-01-01 08:00:00.000000000 +0800
++++ brpc-0.9.5/src/butil/config.h	2021-08-03 19:27:17.003700327 +0800
 @@ -0,0 +1,6 @@
 +#ifndef  BUTIL_CONFIG_H
 +#define  BUTIL_CONFIG_H
@@ -192,9 +192,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/butil/config.h incubator-brpc-0.9.5/sr
 +#define BRPC_WITH_GLOG 1
 +
 +#endif  // BUTIL_CONFIG_H
-diff -urN incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-internal.h incubator-brpc-0.9.5/src/butil/third_party/snappy/snappy-internal.h
---- incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-internal.h	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/butil/third_party/snappy/snappy-internal.h	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-internal.h brpc-0.9.5/src/butil/third_party/snappy/snappy-internal.h
+--- brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-internal.h	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/butil/third_party/snappy/snappy-internal.h	2021-08-03 19:27:17.003700327 +0800
 @@ -132,7 +132,7 @@
          matched += 4;
      }
@@ -204,9 +204,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-intern
          int matching_bits = Bits::FindLSBSetNonZero(x);
          matched += matching_bits >> 3;
      } else {
-diff -urN incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-stubs-internal.h incubator-brpc-0.9.5/src/butil/third_party/snappy/snappy-stubs-internal.h
---- incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-stubs-internal.h	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/butil/third_party/snappy/snappy-stubs-internal.h	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-stubs-internal.h brpc-0.9.5/src/butil/third_party/snappy/snappy-stubs-internal.h
+--- brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-stubs-internal.h	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/butil/third_party/snappy/snappy-stubs-internal.h	2021-08-03 19:27:17.003700327 +0800
 @@ -35,6 +35,7 @@
  #include <assert.h>
  #include <stdlib.h>
@@ -246,9 +246,9 @@ diff -urN incubator-brpc-0.9.5-origin/src/butil/third_party/snappy/snappy-stubs-
      memcpy(p, &v, sizeof v);
  }
  
-diff -urN incubator-brpc-0.9.5-origin/src/CMakeLists.txt incubator-brpc-0.9.5/src/CMakeLists.txt
---- incubator-brpc-0.9.5-origin/src/CMakeLists.txt	2018-10-30 12:00:24.000000000 +0800
-+++ incubator-brpc-0.9.5/src/CMakeLists.txt	2021-08-03 19:27:17.003700327 +0800
+diff -urN brpc-0.9.5-origin/src/CMakeLists.txt brpc-0.9.5/src/CMakeLists.txt
+--- brpc-0.9.5-origin/src/CMakeLists.txt	2018-10-30 12:00:24.000000000 +0800
++++ brpc-0.9.5/src/CMakeLists.txt	2021-08-03 19:27:17.003700327 +0800
 @@ -47,11 +47,13 @@
  target_link_libraries(protoc-gen-mcpack brpc-shared)
      
