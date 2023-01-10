@@ -2818,6 +2818,7 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::string result_str;
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
             result.append_null();
@@ -2827,8 +2828,9 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
         auto rpl_value = rpl_viewer.value(row);
         re2::StringPiece rpl_str = re2::StringPiece(rpl_value.get_data(), rpl_value.get_size());
         auto str_value = str_viewer.value(row);
-        std::string result_str(str_value.get_data(), str_value.get_size());
-        re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+        re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
+        result_str.clear();
+        re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
         result.append(Slice(result_str.data(), result_str.size()));
     }
 
