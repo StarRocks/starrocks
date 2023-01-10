@@ -175,7 +175,7 @@ protected:
     // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
     // In this way, the available pthread become less and the scheduling of bthread would be influenced.
     // So, we should execute the function that may use pthread block primitive in a specific thread pool.
-    // More detail: https://github.com/apache/incubator-brpc/blob/master/docs/cn/bthread.md
+    // More detail: https://github.com/apache/brpc/blob/master/docs/cn/bthread.md
 
     // Thread pool for executing task  asynchronously in BRPC call.
     PriorityThreadPool _async_thread_pool;
