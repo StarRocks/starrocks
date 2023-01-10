@@ -45,6 +45,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -104,6 +105,8 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
+import io.trino.sql.tree.IsNotNullPredicate;
+import io.trino.sql.tree.IsNullPredicate;
 import io.trino.sql.tree.Join;
 import io.trino.sql.tree.JoinCriteria;
 import io.trino.sql.tree.JoinOn;
@@ -118,6 +121,7 @@ import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
+import io.trino.sql.tree.Row;
 import io.trino.sql.tree.SearchedCaseExpression;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
@@ -454,6 +458,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitRow(Row node, ParseTreeContext context) {
+        List<Expr> items = visit(node.getItems(), context, Expr.class);
+        return new FunctionCallExpr("row", items);
+    }
+
+    @Override
     protected ParseNode visitArrayConstructor(ArrayConstructor node, ParseTreeContext context) {
         List<Expr> exprs;
         if (node.getValues() != null) {
@@ -576,17 +586,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitDereferenceExpression(DereferenceExpression node, ParseTreeContext context) {
-        ParseNode base = visit(node.getBase(), context);
+        Expr base = (Expr) visit(node.getBase(), context);
 
-        List<String> parts = Lists.newArrayList();
-        SlotRef slotRef = (SlotRef) base;
-        parts.addAll(slotRef.getQualifiedName().getParts());
-
+        String fieldName = "";
         if (node.getField().isPresent()) {
-            String fieldName = node.getField().get().getValue();
-            parts.add(fieldName);
+            fieldName = node.getField().get().getValue();
+
         }
-        return new SlotRef(QualifiedName.of(parts));
+        if (base instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) base;
+            List<String> parts = new ArrayList<>(slotRef.getQualifiedName().getParts());
+            parts.add(fieldName);
+            return new SlotRef(QualifiedName.of(parts));
+        } else {
+            return new SubfieldExpr(base, fieldName);
+        }
     }
 
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807");
@@ -741,6 +755,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     (Expr) visit(node.getValue(), context),
                     (Expr) visit(node.getValueList(), context), false);
         }
+    }
+
+    @Override
+    protected ParseNode visitIsNullPredicate(IsNullPredicate node, ParseTreeContext context) {
+        Expr value = (Expr) visit(node.getValue(), context);
+        return new com.starrocks.analysis.IsNullPredicate(value, false);
+    }
+
+    @Override
+    protected ParseNode visitIsNotNullPredicate(IsNotNullPredicate node, ParseTreeContext context) {
+        Expr value = (Expr) visit(node.getValue(), context);
+        return new com.starrocks.analysis.IsNullPredicate(value, true);
     }
 
     @Override

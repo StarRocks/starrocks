@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
@@ -267,6 +268,21 @@ public class TrinoTestBase {
                 "c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.withTable("create table test_struct(c0 INT, " +
+                "c1 struct<a array<struct<b int>>>," +
+                "c2 struct<a int,b double>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+
+        starRocksAssert.withTable("create table test_map(c0 int, " +
+                "c1 map<int,int>, " +
+                "c2 array<map<int,int>>) " +
+                "engine=olap distributed by hash(c0) buckets 10 " +
+                "properties('replication_num'='1');");
+
+        FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
     }

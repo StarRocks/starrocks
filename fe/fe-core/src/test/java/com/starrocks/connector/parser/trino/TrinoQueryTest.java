@@ -264,6 +264,80 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSelectStruct() throws Exception {
+        String sql = "select c0, c1.a from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : 2: c1.a");
+
+        sql = "select c0, test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c0, test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c0, default_catalog.test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c1.a[10].b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 2: c1.a[10].b");
+
+        sql = "select c2.a, c2.b from test_struct";
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : 3: c2.a\n" +
+                "  |  <slot 5> : 3: c2.b");
+
+        sql = "select c2.a + c2.b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : CAST(3: c2.a AS DOUBLE) + 3: c2.b");
+
+        sql = "select sum(c2.b) from test_struct group by c2.a";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 3: c2.a\n" +
+                "  |  <slot 5> : 3: c2.b");
+    }
+
+    @Test
+    public void testSelectRow() throws Exception {
+        String sql = "select row(1,2)";
+        assertPlanContains(sql, " <slot 2> : row(1, 2)");
+
+        sql = "select row(1.1, 2.2, 3.3)";
+        assertPlanContains(sql, "<slot 2> : row(1.1, 2.2, 3.3)");
+
+        sql = "select row(1, 'xxx', 1.23)";
+        assertPlanContains(sql, "<slot 2> : row(1, 'xxx', 1.23)");
+    }
+
+    @Test
+    public void testSelectMap() throws Exception {
+        String sql = "select c0, c1[1] from test_map";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : 2: c1[1]");
+
+        sql = "select c0 from test_map where c1[1] > 10";
+        assertPlanContains(sql, "PREDICATES: 2: c1[1] > 10");
+
+        sql = "select avg(c1[1]) from test_map where c1[1] is not null";
+        assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(2: c1[1])");
+
+        sql = "select c2[2][1] from test_map";
+        assertPlanContains(sql, "<slot 4> : 3: c2[2][1]");
+    }
+
+    @Test
+    public void testSelectMapFunction() throws Exception {
+        String sql = "select map_keys(c1) from test_map";
+        assertPlanContains(sql, "<slot 4> : map_keys(2: c1)");
+
+        sql = "select map_values(c1) from test_map";
+        assertPlanContains(sql, "<slot 4> : map_values(2: c1)");
+    }
+
+    @Test
     public void testSelectGroupBy() throws Exception {
         String sql = "select v1, count(v2) from t0 group by v1";
         assertPlanContains(sql, "output: count(2: v2)\n" +
