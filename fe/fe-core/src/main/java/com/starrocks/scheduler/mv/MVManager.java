@@ -279,7 +279,7 @@ public class MVManager {
         // TODO: handle exception
         MVMaintenanceTask task = job.getTask(taskId);
         task.updateEpochState(report);
-        job.onReport(request);
+        job.onEpochReport(request);
     }
 
     /**

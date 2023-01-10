@@ -131,7 +131,7 @@ public class MVMaintenanceJob implements Writable {
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
         if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
             LOG.warn("Fail to restore job could table type incorrect: {}", table);
-            this.state.set(JobState.FAILED);
+            this.state = new AtomicReference<>(JobState.FAILED);
             return false;
         }
         this.view = (MaterializedView) table;
@@ -214,7 +214,7 @@ public class MVMaintenanceJob implements Writable {
         }
     }
 
-    public void onReport(TMVMaintenanceTasks request) {
+    public void onEpochReport(TMVMaintenanceTasks request) {
         Preconditions.checkArgument(request.isSetTask_id(), "required");
         Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
 
@@ -234,6 +234,20 @@ public class MVMaintenanceJob implements Writable {
         }
 
         // TODO(murphy) trigger the epoch commit in report event
+    }
+
+    private void startEpochBaseline() {
+        BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+        Map<Long, Map<Long, Long>> versionMap = new HashMap<>();
+        for (MaterializedView.BaseTableInfo base : view.getBaseTableInfos()) {
+            Map<Long, Long> tableVersion = binlogManager.getBinlogAvailableVersion(base.getDbId(), base.getTableId());
+            versionMap.computeIfAbsent(base.getTableId(), key -> tableVersion);
+        }
+        LOG.info("[MV] baseline version map for MV/{}: {}", view, versionMap);
+
+        taskMap.values().forEach(x -> x.enterBaselineStage(versionMap));
+
+        this.state.set(JobState.RUN_EPOCH);
     }
 
     /**
@@ -277,10 +291,16 @@ public class MVMaintenanceJob implements Writable {
                     return false;
                 }
             }
-            LOG.info("MV maintenance job binlog prepared: {}", this.view.getName());
+
+            for (MaterializedView.BaseTableInfo base : view.getBaseTableInfos()) {
+                Map<Long, Long> availableVersionMap =
+                        binlogManager.getBinlogAvailableVersion(base.getDbId(), base.getTableId());
+
+            }
         }
 
-        this.state.set(JobState.RUN_EPOCH);
+        LOG.info("MV maintenance job prepared: {}", this.view.getName());
+        startEpochBaseline();
         return true;
     }
 
@@ -377,6 +397,8 @@ public class MVMaintenanceJob implements Writable {
                 task.addFragmentInstance(tParams.get(i));
             }
         }
+        tasksByBe.values().forEach(MVMaintenanceTask::buildScanRange);
+
         this.taskId2Addr = taskId2Addr;
         this.taskMap = tasksByBe;
     }
