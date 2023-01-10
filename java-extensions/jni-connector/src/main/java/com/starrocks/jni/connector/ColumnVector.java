@@ -541,4 +541,25 @@ public class ColumnVector {
         }
         return;
     }
+
+    public void checkMeta(OffHeapTable.MetaChecker checker) {
+        checker.check(nulls);
+        if (type.isString()) {
+            checker.check(arrayOffsetNativeAddress());
+            checker.check(arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            checker.check(arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+        } else if (type.isMap()) {
+            checker.check(arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+            childColumns[1].checkMeta(checker);
+        } else if (type.isStruct()) {
+            for (ColumnVector c : childColumns) {
+                c.checkMeta(checker);
+            }
+        } else {
+            checker.check(data);
+        }
+    }
 }

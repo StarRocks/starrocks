@@ -132,6 +132,33 @@ public class OffHeapTable {
         System.out.print(sb);
     }
 
+    public static class MetaChecker {
+        private ColumnVector meta;
+        int offset;
+
+        public MetaChecker(ColumnVector meta, int offset) {
+            this.meta = meta;
+            this.offset = offset;
+        }
+
+        public void check(long expected) {
+            if (meta.getLong(offset) != expected) {
+                throw new RuntimeException(
+                        "meta check failed at offset: " + offset + ", act = " + meta.getLong(offset) + ", exp = " +
+                                expected);
+            }
+            offset += 1;
+        }
+    }
+
+    public void checkMeta() {
+        MetaChecker checker = new MetaChecker(meta, 0);
+        checker.check(numRows);
+        for (ColumnVector c : vectors) {
+            c.checkMeta(checker);
+        }
+    }
+
     public void close() {
         for (int i = 0; i < vectors.length; i++) {
             releaseOffHeapColumnVector(i);

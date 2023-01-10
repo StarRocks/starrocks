@@ -76,6 +76,7 @@ TBLPROPERTIES (
                 break;
             }
             table.print(10);
+            table.checkMeta();
             table.close();
         }
         scanner.close();
