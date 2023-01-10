@@ -163,6 +163,34 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
             pair.__set_version(task.max_continuous_version);
         }
     }
+    // return tablet and it's version which have already finished.
+    DCHECK(partitions.size() == publish_version_req.partition_version_infos.size());
+    int already_finished_cnt = 0;
+    for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
+        const auto& partition_version = publish_version_req.partition_version_infos[i];
+        std::vector<TabletInfo> tablet_infos;
+        StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_version.partition_id,
+                                                                              tablet_infos);
+        for (const auto& tablet_info : tablet_infos) {
+            if (partitions[i].count(tablet_info) == 0) {
+                already_finished_cnt++;
+                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_info.tablet_id);
+                if (!tablet) {
+                    // tablet may get dropped, it's ok to ignore this situation
+                    LOG(WARNING) << fmt::format(
+                            "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}",
+                            tablet_info.tablet_id, partition_version.version, transaction_id);
+                } else {
+                    const int64_t max_continuous_version = tablet->max_continuous_version();
+                    if (max_continuous_version > 0) {
+                        auto& pair = tablet_versions.emplace_back();
+                        pair.__set_tablet_id(tablet_info.tablet_id);
+                        pair.__set_version(max_continuous_version);
+                    }
+                }
+            }
+        }
+    }
 
     // TODO: add more information to status, rather than just first error tablet
     st.to_thrift(&finish_task.task_status);
@@ -174,12 +202,14 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     g_publish_latency << publish_latency;
     if (st.ok()) {
         LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " #partition:" << num_partition
-                  << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms";
+                  << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms"
+                  << " #already_finished:" << already_finished_cnt;
     } else {
         StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
         LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " #partition:" << num_partition
                      << " #tablet:" << tablet_tasks.size() << " error_tablets(" << error_tablet_ids.size()
-                     << "):" << JoinInts(error_tablet_ids, ",") << " time:" << publish_latency << "ms";
+                     << "):" << JoinInts(error_tablet_ids, ",") << " time:" << publish_latency << "ms"
+                     << " #already_finished:" << already_finished_cnt;
     }
 }
 
