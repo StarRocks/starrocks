@@ -43,6 +43,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -85,7 +86,6 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
@@ -240,8 +240,6 @@ public class MaterializedViewAnalyzer {
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
 
-            planMVQuery(statement, queryStatement, context);
-
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
@@ -258,6 +256,8 @@ public class MaterializedViewAnalyzer {
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
+
+            planMVQuery(statement, queryStatement, context);
             return null;
         }
 
@@ -315,14 +315,12 @@ public class MaterializedViewAnalyzer {
 
                 // TODO: refine rules for mv plan
                 // TODO: infer state
-                // TODO: infer sink table information
                 // TODO: store the plan in create-mv statement and persist it at executor
-                // TODO: refine the output fragment
-                boolean hasOutputFragment = false;
-                ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
-                        optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
-                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
-                createStmt.setMaintenancePlan(execPlan, columnRefFactory);
+                ExecPlan execPlan =
+                        PlanFragmentBuilder.createPhysicalPlanForMV(ctx, createStmt, optimizedPlan, logicalPlan,
+                                queryRelation, columnRefFactory);
+            } catch (DdlException ex) {
+                throw new RuntimeException(ex);
             } finally {
                 ctx.getSessionVariable().setMVPlanner(false);
             }

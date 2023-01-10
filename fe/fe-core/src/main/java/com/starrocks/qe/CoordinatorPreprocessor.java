@@ -323,6 +323,14 @@ public class CoordinatorPreprocessor {
         return idToComputeNode;
     }
 
+    public TNetworkAddress getBrpcAddress(TNetworkAddress beAddress) {
+        long beId = Preconditions.checkNotNull(addressToBackendID.get(beAddress),
+                "backend not found: " + beAddress);
+        Backend be = Preconditions.checkNotNull(idToBackend.get(beId),
+                "backend not found: " + beId);
+        return be.getBrpcAddress();
+    }
+
     public boolean isHasComputeNode() {
         return hasComputeNode;
     }
@@ -1398,6 +1406,10 @@ public class CoordinatorPreprocessor {
             return backendNum;
         }
 
+        public void setBackendNum(int backendNum) {
+            this.backendNum = backendNum;
+        }
+
         public TNetworkAddress getHost() {
             return host;
         }
@@ -1633,7 +1645,7 @@ public class CoordinatorPreprocessor {
         }
 
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                                      TDescriptorTable descTable, Set<Long> dbIds,
+                                                      TDescriptorTable descTable,
                                                       boolean enablePipelineEngine, int accTabletSinkDop,
                                                       int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();

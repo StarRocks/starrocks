@@ -37,4 +37,5 @@ add_library(Column STATIC
         json_column.cpp
         map_column.cpp
         struct_column.cpp
-        )
+        stream_chunk.cpp
+)

@@ -27,14 +27,22 @@ namespace starrocks {
  */
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
 using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
+
+class TMVStartEpochTask;
+
+struct ScanRangeInfo {
+    std::unordered_map<TUniqueId, NodeId2ScanRanges> instance_scan_range_map;
+
+    static ScanRangeInfo from_start_epoch_start(const TMVStartEpochTask& start_epoch);
+};
+
 class StreamEpochManager {
 public:
     StreamEpochManager() = default;
     ~StreamEpochManager() = default;
 
     // Start the new epoch from input epoch info
-    Status update_epoch(const EpochInfo& epoch_info,
-                        std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges);
+    Status update_epoch(const EpochInfo& epoch_info, const ScanRangeInfo& scan_info);
     Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id, int64_t tablet_id,
                                 BinlogOffset binlog_offset);
 

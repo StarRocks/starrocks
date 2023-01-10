@@ -16,12 +16,33 @@
 
 #include <fmt/format.h>
 
+#include "gen_cpp/MVMaintenance_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+
 namespace starrocks {
 
+ScanRangeInfo ScanRangeInfo::from_start_epoch_start(const TMVStartEpochTask& start_epoch) {
+    ScanRangeInfo res;
+    for (auto& [instance, instance_scan] : start_epoch.per_node_scan_ranges) {
+        auto& instance_scan_info = res.instance_scan_range_map[instance];
+        for (auto& [plan_node, node_scan] : instance_scan) {
+            auto& node_scan_info = instance_scan_info[plan_node];
+            for (const TScanRange& scan_range : node_scan) {
+                DCHECK(scan_range.__isset.binlog_scan_range);
+                auto& binlog = scan_range.binlog_scan_range;
+                auto& scan_info = node_scan_info[binlog.tablet_id];
+                scan_info.tablet_id = binlog.tablet_id;
+                scan_info.tablet_version = binlog.offset.version;
+                scan_info.lsn = binlog.offset.lsn;
+            }
+        }
+    }
+    return res;
+}
+
 // Start the new epoch from input epoch info
-Status StreamEpochManager::update_epoch(
-        const EpochInfo& epoch_info,
-        std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges) {
+Status StreamEpochManager::update_epoch(const EpochInfo& epoch_info, const ScanRangeInfo& scan_info) {
+    auto& fragment_id_to_node_id_scan_ranges = scan_info.instance_scan_range_map;
     std::unique_lock<std::shared_mutex> l(_epoch_lock);
     if (!_fragment_id_to_node_id_scan_ranges.empty() &&
         _fragment_id_to_node_id_scan_ranges.size() != fragment_id_to_node_id_scan_ranges.size()) {

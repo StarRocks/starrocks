@@ -167,7 +167,9 @@ Status StreamPipelineTest::start_epoch(const std::vector<int64_t>& tablet_ids, c
     // step1. update epoch info
     std::unordered_map<TUniqueId, NodeId2ScanRanges> fragment_id_to_node_id_scan_ranges;
     fragment_id_to_node_id_scan_ranges.emplace(_fragment_ctx->fragment_instance_id(), node_id_binlog_offsets);
-    RETURN_IF_ERROR(_query_ctx->stream_epoch_manager()->update_epoch(epoch_info, fragment_id_to_node_id_scan_ranges));
+    ScanRangeInfo scan_info;
+    scan_info.instance_scan_range_map = std::move(fragment_id_to_node_id_scan_ranges);
+    RETURN_IF_ERROR(_query_ctx->stream_epoch_manager()->update_epoch(epoch_info, scan_info));
 
     // step2. reset state
     RETURN_IF_ERROR(_fragment_ctx->reset_epoch());
