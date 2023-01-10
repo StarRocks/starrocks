@@ -15,6 +15,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
@@ -1124,7 +1125,8 @@ public class JoinTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicationJoinWithEmptyNode() throws Exception {
         // check replicate join without exception
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
