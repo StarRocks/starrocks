@@ -187,18 +187,18 @@ public class QueryPlannerTest {
             Assert.assertEquals("( where )", entry.getKey());
         }
 
+        String sql4 = "select k1 as awhere from test.baseall";
+        StatementBase statementBase4 = SqlParser.parse(sql4, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statementBase4);
+        stmtExecutor4.execute();
+        Assert.assertEquals("", connectContext.getState().getErrorMessage());
+
         String sql = "select k1 from test.baseall where k1 > 0";
         StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statementBase);
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
-
-        String sql4 = "select k1 as awhere from test.baseall";
-        StatementBase statementBase4 = SqlParser.parse(sql4, connectContext.getSessionVariable().getSqlMode()).get(0);
-        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statementBase4);
-        stmtExecutor4.execute();
-        Assert.assertEquals("", connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
