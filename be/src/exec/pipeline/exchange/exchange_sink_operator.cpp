@@ -710,8 +710,6 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-static void none_free(void*) {}
-
 // chunk_request should be really copied if it will be sent by many times.
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment, bool copy) {
@@ -729,8 +727,12 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
             chunk->clear_data();
         } else {
             // not copied for various chunk size larger than 2GB limit or not.
-            size_t size = attachment.append_user_data((void*)(chunk->data().c_str()), chunk->data().size(), none_free);
+            size_t size = attachment.append_user_data(
+                    (void*)((static_cast<std::string*>((chunk->release_data())))->c_str()), chunk->data().size(), free);
             attachment_physical_bytes += size;
+            if (!chunk->data().empty()) {
+                throw std::runtime_error("chunk is not empty after released!");
+            }
         }
 
         // If the request is too big, free the memory in order to avoid OOM
