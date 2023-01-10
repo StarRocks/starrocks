@@ -147,7 +147,8 @@ public class LimitTest extends PlanTestBase {
     public void testCountStarWithLimitForOneAggStage() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*) from (select v1 from t0 order by v2 limit 10,20) t;";
-        assertPlanContains(sql, "4:AGGREGATE (update finalize)");
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("4:AGGREGATE (update finalize)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
