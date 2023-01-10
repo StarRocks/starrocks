@@ -1879,7 +1879,7 @@ public class Auth implements Writable {
                     return false;
                 } else {
                     ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[]{
+                            new URL[] {
                                     jarFile.toURL()
                             },
                             getClass().getClassLoader()
