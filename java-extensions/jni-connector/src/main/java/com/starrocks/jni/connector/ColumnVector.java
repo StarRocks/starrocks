@@ -128,23 +128,23 @@ public class ColumnVector {
 
     private void reserveInternal(int newCapacity) {
         int oldCapacity = (nulls == 0L) ? 0 : capacity;
+        long oldOffsetSize = (nulls == 0) ? 0 : (capacity + 1) * 4L;
+        long newOffsetSize = (newCapacity + 1) * 4L;
         int typeSize = type.getPrimitiveTypeValueSize();
         if (typeSize != -1) {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
         } else if (type.isString()) {
-            this.offsetData =
-                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
             this.childColumns = new ColumnVector[1];
             this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
         } else if (type.isArray()) {
-            this.offsetData =
-                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+
             this.childColumns = new ColumnVector[1];
             this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
         } else if (type.isMap()) {
-            this.offsetData =
-                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             this.childColumns = new ColumnVector[2];
             this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
             this.childColumns[1] = new ColumnVector(newCapacity, type.childTypes.get(1));

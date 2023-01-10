@@ -189,11 +189,11 @@ a       b       c       d       e
         runScanOnParams(params);
     }
 
-    //    @Test
-    //    public void case2doScanTestOnStructType3() throws IOException {
-    //        Map<String, String> params = case2CreateScanTestParams();
-    //        params.put("required_fields", "e");
-    //        params.put("nested_fields", "e.c.b.a,e.c.b.b");
-    //        runScanOnParams(params);
-    //    }
+    @Test
+    public void case2doScanTestOnStructType3() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.c.b.a");
+        runScanOnParams(params);
+    }
 }
