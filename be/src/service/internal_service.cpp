@@ -167,6 +167,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 auto msg = fmt::format("iobuf's size {} < {}", io_buf.size(), chunk->data_size());
                 LOG(WARNING) << msg;
                 st = Status::InternalError(msg);
+                return;
             }
             // Note the ref memory is freed after closure is called.
             auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
@@ -174,6 +175,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 auto msg = fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
                 LOG(WARNING) << msg;
                 st = Status::InternalError(msg);
+                return;
             }
             offset += chunk->data_size();
         }
