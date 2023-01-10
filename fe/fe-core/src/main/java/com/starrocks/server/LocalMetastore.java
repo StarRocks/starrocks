@@ -2386,6 +2386,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
+                // if binlog_enable is true when creating table,
+                // then set binlogAvailableVersion without statistics through reportHandler
+                if (olapTable.isHaveBinlogConfig() && olapTable.enableBinlog()) {
+                    Collection<Partition> allPartitions = olapTable.getAllPartitions();
+                    Map<String, String> partitonIdToAvailableVersion = new HashMap<>();
+                    allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(
+                            TableProperty.BINLOG_PARTITION + partition.getId(),
+                            String.valueOf(partition.getVisibleVersion())));
+                    properties.putAll(partitonIdToAvailableVersion);
+
+                    Map<String, String> binlogAvailableVersions = olapTable.buildBinlogAvailableVersion();
+                    olapTable.setBinlogAvailableVersion(binlogAvailableVersions);
+                }
             }
 
             // check database exists again, because database can be dropped when creating table
@@ -4182,7 +4195,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
-                    olapTable.setCurBinlogConfig(tableProperty.getBinlogConfig());
                     if (!olapTable.enableBinlog()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
