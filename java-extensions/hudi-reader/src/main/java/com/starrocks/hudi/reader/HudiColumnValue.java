@@ -98,10 +98,11 @@ public class HudiColumnValue implements ColumnValue {
     }
 
     @Override
-    public void unpackStruct(List<Object> fields, List<ColumnValue> values) {
+    public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
         StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
-        for (int i = 0; i < fields.size(); i++) {
-            StructField sf = (StructField) fields.get(i);
+        List<? extends StructField> fields = inspector.getAllStructFieldRefs();
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            StructField sf = fields.get(structFieldIndex.get(i));
             Object o = inspector.getStructFieldData(fieldData, sf);
             HudiColumnValue cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
             values.add(cv);

@@ -105,6 +105,14 @@ TBLPROPERTIES (
     public void doScanTestOnStructType() throws IOException {
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "e");
+        params.put("nested_fields", "e.a,e.b");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void doScanTestOnPruningStructType() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "e");
         params.put("nested_fields", "e.b");
         runScanOnParams(params);
     }

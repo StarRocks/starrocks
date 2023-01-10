@@ -467,6 +467,18 @@ public class ColumnVector {
                 sb.append("]");
                 break;
             }
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                sb.append("{");
+                for (int c = 0; c < names.size(); c++) {
+                    if (c != 0) {
+                        sb.append(",");
+                    }
+                    childColumns[c].dump(sb, i);
+                }
+                sb.append("}");
+                break;
+            }
             default:
                 throw new RuntimeException("Unknown type value: " + typeValue);
         }
@@ -520,7 +532,7 @@ public class ColumnVector {
             }
             case STRUCT: {
                 List<ColumnValue> values = new ArrayList<>();
-                o.unpackStruct(type.getStructFields(), values);
+                o.unpackStruct(type.getStructFieldIndex(), values);
                 appendStruct(values);
                 break;
             }

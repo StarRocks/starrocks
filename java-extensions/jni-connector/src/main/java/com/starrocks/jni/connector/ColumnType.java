@@ -38,9 +38,9 @@ public class ColumnType {
     }
 
     TypeValue typeValue;
-    List<String> childNames = new ArrayList<>();
-    List<ColumnType> childTypes = new ArrayList<>();
-    List<Object> structFields = new ArrayList<>();
+    List<String> childNames;
+    List<ColumnType> childTypes;
+    List<Integer> structFieldIndex;
 
     private final static Map<String, TypeValue> primitiveTypeValueMapping = new HashMap<>();
     private final static Map<TypeValue, Integer> primitiveTypeValueSize = new HashMap<>();
@@ -135,14 +135,18 @@ public class ColumnType {
         if (t.equals("array")) {
             // array<TYPE>
             typeValue = TypeValue.ARRAY;
+            childTypes = new ArrayList<>();
             parseArray(childTypes, scanner);
         } else if (t.equals("map")) {
             // map<TYPE1,TYPE2>
             typeValue = TypeValue.MAP;
+            childTypes = new ArrayList<>();
             parseArray(childTypes, scanner);
         } else if (t.equals("struct")) {
             // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
             typeValue = TypeValue.STRUCT;
+            childNames = new ArrayList<>();
+            childTypes = new ArrayList<>();
             parseStruct(childNames, childTypes, scanner);
         } else {
             // convert decimal(x,y) to decimal
@@ -228,7 +232,37 @@ public class ColumnType {
         return childTypes;
     }
 
-    public List<Object> getStructFields() {
-        return structFields;
+    public List<Integer> getStructFieldIndex() {
+        return structFieldIndex;
+    }
+
+    public void pruneOnStructSelectedFields(StructSelectedFields ssf) {
+        // make index and prune on this struct.
+        Map<String, Integer> index = new HashMap<>();
+        for (int i = 0; i < childNames.size(); i++) {
+            index.put(childNames.get(i), i);
+        }
+
+        List<String> fields = ssf.getFields();
+        List<String> names = new ArrayList<>();
+        List<ColumnType> types = new ArrayList<>();
+        structFieldIndex = new ArrayList<>();
+        for (String f : fields) {
+            Integer i = index.get(f);
+            structFieldIndex.add(i);
+            types.add(childTypes.get(i));
+            names.add(f);
+        }
+        childNames = names;
+        childTypes = types;
+
+        // prune on sub structs.
+        for (int i = 0; i < childTypes.size(); i++) {
+            ColumnType type = childTypes.get(i);
+            if (type.isStruct()) {
+                StructSelectedFields ssf2 = ssf.findChildren(childNames.get(i));
+                type.pruneOnStructSelectedFields(ssf2);
+            }
+        }
     }
 }
