@@ -16,10 +16,17 @@
 package com.starrocks.server;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DropWarehouseStmt;
+import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -68,7 +75,7 @@ public class WarehouseMgrTest {
     }
 
     @Test
-    public void testLoadWarehouse() throws IOException, DdlException {
+    public void testLoadWarehouse(@Mocked StarOSAgent starOSAgent) throws IOException, DdlException {
         WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists("aaa"));
 
@@ -78,6 +85,33 @@ public class WarehouseMgrTest {
         warehouseMgr.saveWarehouses(out, 0);
         out.flush();
         out.close();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.deleteWorkerGroup(anyLong);
+                result = null;
+                minTimes = 0;
+
+                starOSAgent.createWorkerGroup();
+                result = -1L;
+                minTimes = 0;
+            }
+        };
+
+
+        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING, warehouseMgr.getWarehouse("aaa").getState());
+        warehouseMgr.suspendWarehouse(new SuspendWarehouseStmt("aaa"));
+        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("aaa").getState());
+        warehouseMgr.resumeWarehouse(new ResumeWarehouseStmt("aaa"));
+        Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("aaa").getState());
+        Assert.assertEquals(1, warehouseMgr.getWarehouse("aaa").getClusters().size());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "aaa"));
         Assert.assertFalse(warehouseMgr.warehouseExists("aaa"));

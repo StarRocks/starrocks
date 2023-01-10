@@ -59,7 +59,7 @@ public class Warehouse implements Writable {
 
     private QueryableReentrantReadWriteLock rwLock;
 
-    private enum WarehouseState {
+    public enum WarehouseState {
         INITIALIZING,
         RUNNING,
         SUSPENDED,
