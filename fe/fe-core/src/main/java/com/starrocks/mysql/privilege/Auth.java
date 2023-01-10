@@ -1879,7 +1879,9 @@ public class Auth implements Writable {
                     return false;
                 } else {
                     ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[]{jarFile.toURL()},
+                            new URL[]{
+                                    jarFile.toURL()
+                            },
                             getClass().getClassLoader()
                     );
                     authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
