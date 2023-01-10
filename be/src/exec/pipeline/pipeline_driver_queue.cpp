@@ -51,6 +51,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
         std::lock_guard<std::mutex> lock(_global_mutex);
         _queues[level].put(driver);
         driver->set_in_ready_queue(true);
+        driver->set_in_queue(this);
         _cv.notify_one();
         ++_num_drivers;
     }
@@ -66,6 +67,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
     for (int i = 0; i < drivers.size(); i++) {
         _queues[levels[i]].put(drivers[i]);
         drivers[i]->set_in_ready_queue(true);
+        drivers[i]->set_in_queue(this);
         _cv.notify_one();
     }
     _num_drivers += drivers.size();
@@ -343,6 +345,7 @@ void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
     auto* wg_entity = driver->workgroup()->driver_sched_entity();
     wg_entity->set_in_queue(this);
     wg_entity->queue()->put_back(driver);
+    driver->set_in_queue(this);
 
     if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
         _enqueue_workgroup<from_executor>(wg_entity);
