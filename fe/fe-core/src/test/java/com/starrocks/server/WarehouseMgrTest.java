@@ -16,6 +16,7 @@
 package com.starrocks.server;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DropWarehouseStmt;
@@ -60,7 +61,27 @@ public class WarehouseMgrTest {
     }
 
     @Test
-    public void testReplay() throws Exception {
+    public void testReplay(@Mocked StarOSAgent starOSAgent) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.deleteWorkerGroup(anyLong);
+                result = null;
+                minTimes = 0;
+
+                starOSAgent.createWorkerGroup();
+                result = -1L;
+                minTimes = 0;
+            }
+        };
+
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Map<String, String> properties = new HashMap<>();
         properties.put("min_cluster", "2");
@@ -68,10 +89,21 @@ public class WarehouseMgrTest {
 
         Warehouse warehouse = new Warehouse(10000, "warehouse_1", properties);
         warehouseMgr.replayCreateWarehouse(warehouse);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists("warehouse_1"));
+        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
 
         warehouseMgr.replayDropWarehouse("warehouse_1");
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists("warehouse_1"));
+        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
+
+
+        Map<String, Warehouse> tempMp = new HashMap<>();
+        tempMp.put("warehouse_1", new Warehouse());
+        Deencapsulation.setField(warehouseMgr, "fullNameToWh", tempMp);
+
+        warehouseMgr.replaySuspendWarehouse("warehouse_1");
+        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("warehouse_1").getState());
+
+        warehouseMgr.replayResumeWarehouse("warehouse_1");
+        Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("warehouse_1").getState());
     }
 
     @Test
@@ -111,7 +143,8 @@ public class WarehouseMgrTest {
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("aaa").getState());
         warehouseMgr.resumeWarehouse(new ResumeWarehouseStmt("aaa"));
         Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("aaa").getState());
-        Assert.assertEquals(1, warehouseMgr.getWarehouse("aaa").getClusters().size());
+        Assert.assertEquals(warehouseMgr.getWarehouse("aaa").getMinCluster(),
+                warehouseMgr.getWarehouse("aaa").getClusters().size());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "aaa"));
         Assert.assertFalse(warehouseMgr.warehouseExists("aaa"));
