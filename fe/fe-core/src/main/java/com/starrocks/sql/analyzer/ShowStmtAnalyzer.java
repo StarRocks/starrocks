@@ -198,6 +198,15 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowClusterStatement(ShowClusterStmt node, ConnectContext context) {
+            String warehouseName;
+            if (node.getWhName() != null) {
+                warehouseName = node.getWhName();
+            } else {
+                warehouseName = context.getCurrentWarehouse();
+            }
+            if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, warehouseName);
+            }
             return null;
         }
 
