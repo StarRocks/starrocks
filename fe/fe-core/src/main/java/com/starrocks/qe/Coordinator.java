@@ -621,7 +621,7 @@ public class Coordinator {
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
                             params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
-                                    accTabletSinkDop, tabletSinkTotalDop);
+                                    accTabletSinkDop, tabletSinkTotalDop, false);
                     if (enablePipelineTableSinkDop) {
                         for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {

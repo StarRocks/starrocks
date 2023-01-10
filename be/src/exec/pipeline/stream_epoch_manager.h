@@ -15,8 +15,18 @@
 #pragma once
 
 #include "column/stream_chunk.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
+class ExecEnv;
+class TMVStartEpochTask;
+} // namespace starrocks
+
+namespace starrocks::pipeline {
+
+using FragmentContext = pipeline::FragmentContext;
+using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
+using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
 
 /**
  * `StreamEpochManager` is used to manage the binlog source operators' start or final epoch, and
@@ -27,8 +37,6 @@ namespace starrocks {
  */
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
 using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
-
-class TMVStartEpochTask;
 
 struct ScanRangeInfo {
     std::unordered_map<TUniqueId, NodeId2ScanRanges> instance_scan_range_map;
@@ -42,9 +50,15 @@ public:
     ~StreamEpochManager() = default;
 
     // Start the new epoch from input epoch info
-    Status update_epoch(const EpochInfo& epoch_info, const ScanRangeInfo& scan_info);
+    Status start_epoch(ExecEnv* exec_env, const QueryContext* query_ctx,
+                       const std::vector<FragmentContext*>& fragment_ctxs, const EpochInfo& epoch_info,
+                       const ScanRangeInfo& scan_info);
+    Status prepare(const std::vector<FragmentContext*>& fragment_ctxs);
     Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id, int64_t tablet_id,
                                 BinlogOffset binlog_offset);
+    Status activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id, int64_t expected_num_drivers,
+                                  bool enable_resource_group);
+    Status set_finished(ExecEnv* exec_env, const QueryContext* query_ctx);
 
     const BinlogOffset* get_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id,
                                           int64_t tablet_id) const;
@@ -52,7 +66,8 @@ public:
     const std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges() const;
 
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
-    void set_is_finished(bool v) { _is_finished.store(v, std::memory_order_release); }
+    void count_down_fragment_ctx(RuntimeState* state, FragmentContext* fragment_ctx, size_t val = 1);
+    bool enable_resource_group() const { return _enable_resource_group; }
 
 private:
     const BinlogOffset* _get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,
@@ -63,6 +78,9 @@ private:
     std::atomic_bool _is_finished{false};
     EpochInfo _epoch_info;
     std::unordered_map<TUniqueId, NodeId2ScanRanges> _fragment_id_to_node_id_scan_ranges;
+    std::vector<FragmentContext*> _finished_fragment_ctxs;
+    bool _enable_resource_group;
+    int64_t _num_drivers;
 };
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

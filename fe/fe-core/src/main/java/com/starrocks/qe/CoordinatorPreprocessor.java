@@ -1476,7 +1476,8 @@ public class CoordinatorPreprocessor {
          */
         private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
                                              TNetworkAddress destHost, TDescriptorTable descTable,
-                                             boolean isEnablePipelineEngine, int tabletSinkTotalDop) {
+                                             boolean isEnablePipelineEngine, int tabletSinkTotalDop,
+                                             boolean isEnableStreamPipeline) {
             boolean enablePipelineTableSinkDop = isEnablePipelineEngine && fragment.hasOlapTableSink();
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
@@ -1494,6 +1495,7 @@ public class CoordinatorPreprocessor {
             } else {
                 commonParams.params.setNum_senders(instanceExecParams.size());
             }
+            commonParams.setIs_stream_pipeline(isEnableStreamPipeline);
             commonParams.params.setPer_exch_num_senders(perExchNumSenders);
             if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
                 commonParams.params.setRuntime_filter_params(runtimeFilterParams);
@@ -1647,7 +1649,8 @@ public class CoordinatorPreprocessor {
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                       TDescriptorTable descTable,
                                                       boolean enablePipelineEngine, int accTabletSinkDop,
-                                                      int tabletSinkTotalDop) throws Exception {
+                                                      int tabletSinkTotalDop,
+                                                      boolean isEnableStreamPipeline) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
 
@@ -1666,7 +1669,7 @@ public class CoordinatorPreprocessor {
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
                 toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine,
-                        tabletSinkTotalDop);
+                        tabletSinkTotalDop, isEnableStreamPipeline);
                 toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine,
                         accTabletSinkDop, curTabletSinkDop);
 
@@ -1686,7 +1689,7 @@ public class CoordinatorPreprocessor {
             setBucketSeqToInstanceForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tabletSinkTotalDop);
+            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tabletSinkTotalDop, false);
             fillRequiredFieldsToThrift(commonParams);
 
             List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();

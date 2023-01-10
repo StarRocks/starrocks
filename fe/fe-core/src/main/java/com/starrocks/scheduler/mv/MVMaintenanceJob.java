@@ -287,7 +287,7 @@ public class MVMaintenanceJob implements Writable {
                             .collect(Collectors.toSet());
             List<TExecPlanFragmentParams> tParams =
                     execParams.toThrift(inflightInstanceSet, descTable, enablePipeline, tabletSinkDop,
-                            tabletSinkDop);
+                            tabletSinkDop, true);
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
                 CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
                 // Get brpc address instead of the default address

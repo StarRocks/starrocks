@@ -20,10 +20,10 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_epoch_manager.h"
 
 namespace starrocks::stream {
 

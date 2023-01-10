@@ -416,4 +416,12 @@ std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     }
     return _query_ctx->maintained_query_recv();
 }
+
+Status RuntimeState::reset_epoch() {
+    std::lock_guard<std::mutex> l(_tablet_infos_lock);
+    _tablet_commit_infos.clear();
+    _tablet_fail_infos.clear();
+    return Status::OK();
+}
+
 } // end namespace starrocks
