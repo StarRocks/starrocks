@@ -26,8 +26,12 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
         PartitionChunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, const uint32_t from,
-                       const uint32_t size)
-                : chunk(std::move(chunk)), indexes(std::move(indexes)), from(from), size(size) {}
+                       const uint32_t size, const size_t memory_usage)
+                : chunk(std::move(chunk)),
+                  indexes(std::move(indexes)),
+                  from(from),
+                  size(size),
+                  memory_usage(memory_usage) {}
 
         PartitionChunk(const PartitionChunk&) = delete;
 
@@ -37,6 +41,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         std::shared_ptr<std::vector<uint32_t>> indexes;
         const uint32_t from;
         const uint32_t size;
+        const size_t memory_usage;
     };
 
 public:
@@ -47,7 +52,8 @@ public:
 
     Status add_chunk(ChunkPtr chunk);
 
-    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size);
+    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size,
+                     size_t memory_bytes);
 
     bool has_output() const override;
 
@@ -81,10 +87,15 @@ private:
 
     ChunkPtr _pull_shuffle_chunk(RuntimeState* state);
 
+    bool _local_buffer_almost_full() const {
+        return _local_memory_usage >= _memory_manager->get_memory_limit_per_driver() * 0.8;
+    }
+
     bool _is_finished = false;
     std::queue<ChunkPtr> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
-    int64_t _partition_rows_num = 0;
+    size_t _partition_rows_num = 0;
+    size_t _local_memory_usage = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
