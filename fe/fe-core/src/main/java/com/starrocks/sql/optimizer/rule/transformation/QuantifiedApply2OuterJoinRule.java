@@ -295,6 +295,10 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             }
 
             for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
+                if (inPredicateUsedRefs.contains(columnId)) {
+                    // if inPredicateUsedRefs contains the col, we can skip this col to reduce number of group by cols.
+                    continue;
+                }
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
                 ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
                 distinctConsumeOutputMaps.put(dr, ref);
@@ -340,6 +344,9 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             // CTE count consume
             Map<ColumnRefOperator, ColumnRefOperator> countConsumeOutputMaps = Maps.newHashMap();
 
+            // rewrite cross/left join on-clause by the output cols of one child(the count agg OptExpression) of join
+            Map<ColumnRefOperator, ScalarOperator> countRewriteMap = Maps.newHashMap();
+
             List<ColumnRefOperator> countAggregateGroupBys = Lists.newArrayList();
             List<ColumnRefOperator> countAggregateCounts = Lists.newArrayList();
             Set<ColumnRefOperator> countAggregateGroupBysRefSet = Sets.newHashSet();
@@ -348,7 +355,6 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
                 ColumnRefOperator cr = factory.create(ref, ref.getType(), ref.isNullable());
                 countConsumeOutputMaps.put(cr, ref);
-
                 countAggregateCounts.add(cr);
             }
 
@@ -356,6 +362,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
                 ColumnRefOperator cr = factory.create(ref, ref.getType(), ref.isNullable());
                 countConsumeOutputMaps.put(cr, ref);
+                countRewriteMap.put(ref, cr);
                 countAggregateGroupBys.add(cr);
                 countAggregateGroupBysRefSet.add(ref);
             }
@@ -370,6 +377,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
                 if (!countAggregateGroupBysRefSet.contains(ref)) {
                     ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
                     countConsumeOutputMaps.put(dr, ref);
+                    countRewriteMap.put(ref, dr);
                     countAggregateGroupBys.add(dr);
                     countAggregateGroupBysRefSet.add(ref);
                 }
@@ -378,9 +386,6 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             OptExpression countConsume =
                     OptExpression.create(new LogicalCTEConsumeOperator(cteId, countConsumeOutputMaps));
 
-            // rewrite cross/left join on-clause by cte consume output
-            Map<ColumnRefOperator, ScalarOperator> countRewriteMap = Maps.newHashMap();
-            countConsumeOutputMaps.forEach((k, v) -> countRewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(countRewriteMap);
             countJoinOnPredicate = rewriter.rewrite(correlationPredicate);
 

@@ -552,7 +552,7 @@ syncStatement
     : SYNC
     ;
 
-// ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
+// ------------------------------------------- Cluster Management Statement ---------------------------------------------
 
 alterSystemStatement
     : ALTER SYSTEM alterClause

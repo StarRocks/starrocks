@@ -665,6 +665,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     }
 
     auto rowset = rowset_writer->build().value();
+    rowset->set_schema(&tablet->tablet_schema());
     ASSERT_TRUE(rowset != nullptr);
     ASSERT_EQ(3, rowset->rowset_meta()->num_segments());
     ASSERT_EQ(rows_per_segment * 3, rowset->rowset_meta()->num_rows());

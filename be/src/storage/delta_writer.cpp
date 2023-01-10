@@ -185,6 +185,17 @@ Status DeltaWriter::_init() {
             }
             writer_context.referenced_column_ids.push_back(index);
         }
+        int64_t average_row_size = _tablet->updates()->get_average_row_size();
+        if (average_row_size != 0) {
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        } else {
+            // If tablet is a new created tablet and has no historical data, average_row_size is 0
+            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+            // we will consider it as 16 bytes.
+            average_row_size = _tablet->tablet_schema().estimate_row_size(16);
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        }
+
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
@@ -390,6 +401,7 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    _mem_table->set_write_buffer_row(_memtable_buffer_row);
 }
 
 Status DeltaWriter::commit() {
