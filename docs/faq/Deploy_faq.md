@@ -39,11 +39,7 @@ This error occurs when Setuptools versions installed on multiple frontends (FEs)
 ```Plain%20Text
 yum remove python-setuptools
 
-
-
 rm /usr/lib/python2.7/site-packages/setuptool* -rf
-
-
 
 wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 ```
@@ -68,19 +64,22 @@ ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
 - Shell
 
 ```Plain%20Text
-curl --location-trusted -u username:password http://ip:fe_http_port/api/_set_config?key=value
+curl --location-trusted -u username:password \
+http://<ip>:<fe_http_port/api/_set_config?key=value>
 ```
 
 Example:
 
 ```Plain%20Text
-curl --location-trusted -u root:root  http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
+curl --location-trusted -u root:root \
+http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
 ```
 
 - BE: You can complete the modification for a BE in the following way:
 
 ```Plain%20Text
-curl -XPOST -u username:password http://ip:be_http_port/api/update_config?key=value
+curl -XPOST -u username:password \
+http://<ip>:<be_http_port>/api/update_config?key=value
 ```
 
 > Note: Make sure that the user has permission to log in remotely. If not, you can grant the permission to the user in the following way:
