@@ -324,6 +324,13 @@ Status StreamPipelineDriver::reset_epoch(RuntimeState* runtime_state) {
 }
 
 void StreamPipelineDriver::epoch_finalize(RuntimeState* runtime_state, DriverState state) {
+    int64_t time_spent = 0;
+    DeferOp defer([this, &time_spent]() {
+        _update_driver_acct(0, 0, time_spent);
+        _in_queue->update_statistics(this);
+    });
+    SCOPED_RAW_TIMER(&time_spent);
+
     VLOG_ROW << "[Driver] epoch_finalize, driver=" << this->to_readable_string();
     DCHECK(state == DriverState::EPOCH_FINISH);
     _pipeline->count_down_epoch_finished_driver(runtime_state);
