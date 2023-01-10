@@ -479,7 +479,6 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  194:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
@@ -496,16 +495,39 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  22:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("22:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) " +
-                "OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL " +
-                "THEN TRUE WHEN 25: countNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL\n"));
+                "  |  predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, " +
+                "CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL " +
+                "THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNulls < 24: countRows " +
+                "THEN NULL ELSE FALSE END IS NULL\n"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("20:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 17: c_0_0 = 1: c_0_0\n" +
                 "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
+    }
+
+    @Test
+    public void testCorrelatedPredicateRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+    }
+
+    @Test
+    public void testManyPartitions() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/many_partitions"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:OlapScanNode\n" +
+                "     TABLE: segment_profile\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 11: segment_id = 6259, 12: version = 20221221\n" +
+                "     partitions=17727/17727\n" +
+                "     rollup: segment_profile\n" +
+                "     tabletRatio=88635/88635"));
     }
 }

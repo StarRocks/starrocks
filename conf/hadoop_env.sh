@@ -1,7 +1,15 @@
 # This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 export HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/*
-export HADOOP_USER_NAME=${USER}
+if [ -z "${HADOOP_USER_NAME}" ]
+then
+    if [ -z "${USER}" ]
+    then
+        export HADOOP_USER_NAME=$(id -u -n)
+    else
+        export HADOOP_USER_NAME=${USER}
+    fi
+fi
 
 # the purpose is to use local hadoop configuration first.
 # under HADOOP_CONF_DIR(eg. /etc/ecm/hadoop-conf), there are hadoop/hdfs/hbase conf files.
