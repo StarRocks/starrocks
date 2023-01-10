@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
@@ -23,10 +22,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
 import org.apache.commons.collections.CollectionUtils;
@@ -79,6 +81,7 @@ public class MVManager {
                 for (MVMaintenanceJob job : data.jobList) {
                     long viewId = job.getViewId();
                     MaterializedView view;
+                    job.restore();
                     jobMap.put(job.getView().getMvId(), job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
@@ -90,14 +93,17 @@ public class MVManager {
         return checksum;
     }
 
+    /**
+     * Replay from journal
+     */
     public void replay(MVMaintenanceJob job) throws IOException {
-        Preconditions.checkState(jobMap.isEmpty());
-
         try {
+            job.restore();
             jobMap.put(job.getView().getMvId(), job);
-            LOG.info("replay MV maintenance jobs: {}", job);
-        } catch (Exception ignored) {
-            LOG.warn("Replay MV maintenannce job failed: {}", job);
+            LOG.info("Replay MV maintenance jobs: {}", job);
+        } catch (Exception e) {
+            LOG.warn("Replay MV maintenance job failed: {}", job);
+            LOG.warn(e);
         }
     }
 
@@ -130,6 +136,12 @@ public class MVManager {
             if (jobMap.get(view.getMvId()) != null) {
                 throw new DdlException("MV already existed");
             }
+            // Prepare the table sink for exec-plan
+            ExecPlan execPlan = stmt.getMaintenancePlan();
+            PlanFragment sinkFragment = execPlan.getTopFragment();
+            OlapTableSink tableSink = (OlapTableSink) sinkFragment.getSink();
+            tableSink.setDstTable(view);
+            tableSink.setPartitionIds(view.getAllPartitionIds());
 
             // Create the job but not execute it
             MVMaintenanceJob job = new MVMaintenanceJob(view);
