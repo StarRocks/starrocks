@@ -12,7 +12,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [, index_definition1[, ndex_definition12,]])
 [ENGINE = [olap|mysql|elasticsearch|hive]]
 [key_desc]
-[COMMENT "table comment"];
+[COMMENT "table comment"]
 [partition_desc]
 distribution_desc
 [rollup_index]
