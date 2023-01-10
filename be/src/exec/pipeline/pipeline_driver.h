@@ -361,8 +361,6 @@ public:
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
 protected:
-    inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
-
     PipelineDriver() : _operators(), _query_ctx(nullptr), _fragment_ctx(nullptr), _source_node_id(0), _driver_id(0) {}
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
