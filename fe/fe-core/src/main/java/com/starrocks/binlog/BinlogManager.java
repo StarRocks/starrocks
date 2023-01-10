@@ -71,14 +71,14 @@ public class BinlogManager {
 
     private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<Partition> curPartitions) {
         if (prePartitions.size() != curPartitions.size()) {
-            return false;
+            return true;
         }
         for (Partition partition : curPartitions) {
             if (!prePartitions.contains(partition.getId())) {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     // the caller should not hold the write lock of Database
