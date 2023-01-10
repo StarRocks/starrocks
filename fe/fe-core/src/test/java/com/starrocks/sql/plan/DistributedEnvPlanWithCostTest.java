@@ -676,8 +676,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 11:AGGREGATE (update finalize)");
-        assertContains(plan, "10:Project");
+        assertContains(plan, "12:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(11: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  11:Project\n" +
+                "  |  <slot 11> : 11: count");
     }
 
     @Test

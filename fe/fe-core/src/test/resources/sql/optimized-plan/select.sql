@@ -96,7 +96,7 @@ select count(*) from (select v1 from t0 order by v2 limit 10,20) t
 AGGREGATE ([GLOBAL] aggregate [{4: count=count()}] group by [[]] having [null]
     TOP-N (order by [[2: v2 ASC NULLS FIRST]])
         TOP-N (order by [[2: v2 ASC NULLS FIRST]])
-            SCAN (columns[1: v1, 2: v2] predicate[null])
+            SCAN (columns[2: v2] predicate[null])
 [end]
 
 [sql]

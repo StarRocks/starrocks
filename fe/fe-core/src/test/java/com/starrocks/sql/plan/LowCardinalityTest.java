@@ -1378,7 +1378,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
-                "     Table: test_all_type\n" +
                 "     <id 16> : dict_merge_t1a\n" +
                 "     <id 14> : max_t1c\n" +
                 "     <id 15> : min_t1d");
@@ -1397,8 +1396,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <slot 3> : t1c\n" +
                 "  |  <slot 4> : t1d\n" +
                 "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
+                "  0:MetaScan");
         sql = "select sum(t1c) from test_all_type [_META_] group by t1a";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
@@ -1410,8 +1408,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <slot 1> : t1a\n" +
                 "  |  <slot 3> : t1c\n" +
                 "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
+                "  0:MetaScan");
 
         sql = "select sum(t1a+t1b) from test_all_type [_META_]";
         plan = getFragmentPlan(sql);
@@ -1422,8 +1419,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 11> : CAST(t1a AS DOUBLE) + CAST(t1b AS DOUBLE)\n" +
                 "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
+                "  0:MetaScan");
     }
 
     @Test
