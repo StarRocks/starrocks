@@ -3440,6 +3440,12 @@ public class Coordinator {
                 }
                 recordUsedBackend(execHostPort, backendIdRef.getRef());
 
+                if (LOG.isDebugEnabled() && scanRangeLocations.scan_range.isSetInternal_scan_range()) {
+                    LOG.debug("computeScanRangeAssignment [tablet_id={}] [host={}]",
+                            scanRangeLocations.scan_range.internal_scan_range.tablet_id,
+                            execHostPort);
+                }
+
                 Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
                         assignment, execHostPort, new HashMap<Integer, List<TScanRangeParams>>());
                 List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
