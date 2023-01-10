@@ -1418,6 +1418,8 @@ public class SchemaChangeHandler extends AlterHandler {
         newBinlogConfig.incVersion();
         try {
             GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
+            LOG.info("update binlog config of table {}, the binlog after modified is : {}",
+                    olapTable.getName(), olapTable.getCurBinlogConfig().toString());
         } catch (Exception e) {
             // defensive programming, it normally should not throw an exception,
             // here is just to ensure that a correct result can be returned

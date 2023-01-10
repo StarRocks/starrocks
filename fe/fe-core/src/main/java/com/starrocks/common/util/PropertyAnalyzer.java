@@ -113,7 +113,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_ENABLE = "binlog_enable";
 
-    public static final String PROPERTIES_BINLOG_TTL = "binlog_ttl";
+    public static final String PROPERTIES_BINLOG_TTL = "binlog_ttl_second";
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 

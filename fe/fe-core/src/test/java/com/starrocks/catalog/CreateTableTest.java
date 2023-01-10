@@ -641,7 +641,7 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n," +
                         "\"binlog_max_size\" = \"100\"\n," +
                         "\"binlog_enable\" = \"true\"\n," +
-                        "\"binlog_ttl\" = \"100\"\n" +
+                        "\"binlog_ttl_second\" = \"100\"\n" +
                         ");"
         ));
 

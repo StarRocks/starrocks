@@ -192,7 +192,7 @@ public:
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;
-    }
+    }[]
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 

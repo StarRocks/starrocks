@@ -1303,7 +1303,7 @@ public class ReportHandler extends Daemon {
             }
         }
 
-        LOG.info("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
+        LOG.debug("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
         if (!tabletToBinlogConfig.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig);
