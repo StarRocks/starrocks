@@ -123,7 +123,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             properties.setProperty("hive.io.file.readcolumn.ids", columnIdBuilder.toString());
             properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
             if (this.nestedFields.length > 0) {
-                properties.setProperty("hive.io.file.readNestedColumn.paths ", String.join(",", this.nestedFields));
+                properties.setProperty("hive.io.file.readNestedColumn.paths", String.join(",", this.nestedFields));
             }
             properties.setProperty("columns", this.hiveColumnNames);
             properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
@@ -184,10 +184,10 @@ public class HudiSliceScanner extends ConnectorScanner {
                 for (int i = 0; i < requiredFields.length; i++) {
                     Object fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
                     if (fieldData == null) {
-                        scanData(i, null);
+                        appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData, true);
-                        scanData(i, fieldValue);
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData);
+                        appendData(i, fieldValue);
                     }
                 }
             }

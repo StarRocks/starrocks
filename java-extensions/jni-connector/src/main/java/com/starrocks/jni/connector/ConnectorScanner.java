@@ -79,7 +79,7 @@ public abstract class ConnectorScanner {
         this.types = requiredTypes;
     }
 
-    protected void scanData(int index, ColumnValue value) {
+    protected void appendData(int index, ColumnValue value) {
         offHeapTable.appendData(index, value);
     }
 

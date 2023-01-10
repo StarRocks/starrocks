@@ -88,10 +88,24 @@ TBLPROPERTIES (
     }
 
     @Test
-    public void doScanTestOnComplextType() throws IOException {
+    public void doScanTestOnArrayType() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "c");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void doScanTestOnMapType() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "d");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void doScanTestOnStructType() throws IOException {
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "e");
-        params.put("nested_fields", "e.a,e.b");
+        params.put("nested_fields", "e.b");
         runScanOnParams(params);
     }
 }

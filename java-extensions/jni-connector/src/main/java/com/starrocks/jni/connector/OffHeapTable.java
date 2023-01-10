@@ -121,8 +121,11 @@ public class OffHeapTable {
         sb.append("OffHeapTable: numRows = " + numRows + "\n");
         for (int i = 0; i < rowLimit && i < numRows; i++) {
             sb.append("row" + i + ": [");
-            for (ColumnVector v : vectors) {
-                v.dump(sb, i);
+            for (int j = 0; j < vectors.length; j++) {
+                if (j != 0) {
+                    sb.append(',');
+                }
+                vectors[j].dump(sb, i);
             }
             sb.append("]\n");
         }

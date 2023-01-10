@@ -14,6 +14,8 @@
 
 package com.starrocks.jni.connector;
 
+import java.util.List;
+
 public interface ColumnValue {
     public boolean getBoolean();
 
@@ -28,4 +30,10 @@ public interface ColumnValue {
     public double getDouble();
 
     public String getString();
+
+    public void unpackArray(List<ColumnValue> values);
+
+    public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
+
+    public void unpackStruct(List<ColumnValue> values);
 }

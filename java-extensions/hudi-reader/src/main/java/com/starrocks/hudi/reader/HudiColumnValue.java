@@ -15,27 +15,26 @@
 package com.starrocks.hudi.reader;
 
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+
+import java.util.List;
+import java.util.Map;
 
 public class HudiColumnValue implements ColumnValue {
     private Object fieldData;
     private ObjectInspector fieldInspector;
-    private boolean isPrimitiveType;
 
-    HudiColumnValue(ObjectInspector fieldInspector, Object fieldData, boolean isPrimitiveType) {
+    HudiColumnValue(ObjectInspector fieldInspector, Object fieldData) {
         this.fieldInspector = fieldInspector;
         this.fieldData = fieldData;
-        this.isPrimitiveType = isPrimitiveType;
     }
 
     private Object inspectObject() {
-        if (isPrimitiveType) {
-            return ((PrimitiveObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData);
-        } else {
-            // TODO(yanz):
-            return null;
-        }
+        return ((PrimitiveObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData);
     }
 
     @Override
@@ -71,5 +70,36 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public String getString() {
         return inspectObject().toString();
+    }
+
+    @Override
+    public void unpackArray(List<ColumnValue> values) {
+        ListObjectInspector inspector = (ListObjectInspector) fieldInspector;
+        List items = inspector.getList(fieldData);
+        ObjectInspector itemInspector = inspector.getListElementObjectInspector();
+        for (Object item : items) {
+            HudiColumnValue cv = new HudiColumnValue(itemInspector, item);
+            values.add(cv);
+        }
+    }
+
+    @Override
+    public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        MapObjectInspector inspector = (MapObjectInspector) fieldInspector;
+        ObjectInspector keyObjectInspector = inspector.getMapKeyObjectInspector();
+        ObjectInspector valueObjectInspector = inspector.getMapValueObjectInspector();
+        for (Map.Entry kv : inspector.getMap(fieldData).entrySet()) {
+            HudiColumnValue cv0 = new HudiColumnValue(keyObjectInspector, kv.getKey());
+            HudiColumnValue cv1 = new HudiColumnValue(valueObjectInspector, kv.getValue());
+            keys.add(cv0);
+            values.add(cv1);
+        }
+    }
+
+    @Override
+    public void unpackStruct(List<ColumnValue> values) {
+        StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
+        List<Object> fields = inspector.getStructFieldsDataAsList(fieldData);
+        return;
     }
 }

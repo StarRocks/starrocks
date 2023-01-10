@@ -17,6 +17,8 @@ package com.starrocks.jni.connector;
 import com.starrocks.utils.Platform;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reference to Apache Spark with some customization
@@ -129,17 +131,28 @@ public class ColumnVector {
         int typeSize = type.getPrimitiveTypeValueSize();
         if (typeSize != -1) {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
-        } else if (type.isString() || type.isArray() || type.isMap()) {
+        } else if (type.isString()) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
-
-            if (type.isString()) {
-                int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
-                this.childColumns = new ColumnVector[1];
-                this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
-            }
-
+            int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+            this.childColumns = new ColumnVector[1];
+            this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
+        } else if (type.isArray()) {
+            this.offsetData =
+                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+            this.childColumns = new ColumnVector[1];
+            this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
+        } else if (type.isMap()) {
+            this.offsetData =
+                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+            this.childColumns = new ColumnVector[2];
+            this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
+            this.childColumns[1] = new ColumnVector(newCapacity, type.childTypes.get(1));
         } else if (type.isStruct()) {
+            this.childColumns = new ColumnVector[type.childTypes.size()];
+            for (int i = 0; i < this.childColumns.length; i++) {
+                this.childColumns[i] = new ColumnVector(newCapacity, type.childTypes.get(i));
+            }
             for (ColumnVector c : childColumns) {
                 c.reserveInternal(newCapacity);
             }
@@ -322,7 +335,8 @@ public class ColumnVector {
         }
         int start = getArrayOffset(rowId);
         int end = getArrayOffset(rowId + 1);
-        byte[] bytes = arrayData().getBytes(start, end - start);
+        int size = end - start;
+        byte[] bytes = arrayData().getBytes(start, size);
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
@@ -330,16 +344,53 @@ public class ColumnVector {
         return Platform.getInt(null, offsetData + 4L * rowId);
     }
 
+    private int getArraySize(int rowId) {
+        return getArrayOffset(rowId + 1) - getArrayOffset(rowId);
+    }
+
+    private int appendArray(List<ColumnValue> values) {
+        int size = values.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue v : values) {
+            childColumns[0].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
+    private int appendMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        int size = keys.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue k : keys) {
+            childColumns[0].appendValue(k);
+        }
+        for (ColumnValue v : values) {
+            childColumns[1].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
     public void updateMeta(ColumnVector meta) {
-        if (type.isArray()) {
-            if (type.getTypeValue() == ColumnType.TypeValue.ARRAY) {
-                meta.appendLong(nullsNativeAddress());
-                meta.appendLong(arrayOffsetNativeAddress());
-                meta.childColumns[0].updateMeta(meta);
-            } else {
-                meta.appendLong(nullsNativeAddress());
-                meta.appendLong(arrayOffsetNativeAddress());
-                meta.appendLong(arrayDataNativeAddress());
+        if (type.isString()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            meta.appendLong(arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+        } else if (type.isMap()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+            childColumns[1].updateMeta(meta);
+        } else if (type.isStruct()) {
+            meta.appendLong(nullsNativeAddress());
+            for (ColumnVector c : childColumns) {
+                c.updateMeta(meta);
             }
         } else {
             meta.appendLong(nullsNativeAddress());
@@ -348,6 +399,7 @@ public class ColumnVector {
     }
 
     public void dump(StringBuilder sb, int i) {
+        // TODO(yanz): FIXME
         if (isNullAt(i)) {
             sb.append("NULL").append(", ");
             return;
@@ -378,14 +430,44 @@ public class ColumnVector {
             case DECIMAL:
                 sb.append(getUTF8String(i));
                 break;
+            case ARRAY: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(',');
+                    }
+                    childColumns[0].dump(sb, rowId);
+                }
+                sb.append("]");
+                break;
+            }
+            case MAP: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(",");
+                    }
+                    sb.append("{");
+                    childColumns[0].dump(sb, rowId);
+                    sb.append(":");
+                    childColumns[1].dump(sb, rowId);
+                    sb.append("}");
+                }
+                sb.append("]");
+                break;
+            }
             default:
                 throw new RuntimeException("Unknown type value: " + typeValue);
         }
-        sb.append(",");
         return;
     }
 
     public void appendValue(ColumnValue o) {
+        // TODO(yanz): FIXME.
         if (o == null) {
             appendNull();
             return;
@@ -416,8 +498,25 @@ public class ColumnVector {
             case DECIMAL:
                 appendString(o.getString());
                 break;
+            case ARRAY: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackArray(values);
+                appendArray(values);
+                break;
+            }
+            case MAP: {
+                List<ColumnValue> keys = new ArrayList<>();
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackMap(keys, values);
+                appendMap(keys, values);
+                break;
+            }
+            case STRUCT: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackStruct(values);
+            }
             default:
-                throw new RuntimeException("Unknown typeValueValu: " + typeValue);
+                throw new RuntimeException("Unknown type value: " + typeValue);
         }
         return;
     }
