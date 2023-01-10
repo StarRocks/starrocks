@@ -34,11 +34,6 @@ class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-<<<<<<< HEAD
-=======
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
-class DriverQueue;
->>>>>>> ffd57a84d ([BugFix] Account finalization cost to scheduler (#16454))
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -376,23 +371,14 @@ public:
 
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
-<<<<<<< HEAD
-private:
-=======
-    // Whether the query can be expirable or not.
-    virtual bool is_query_never_expired() { return false; }
-    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
-
 protected:
     PipelineDriver()
             : _operators(),
               _query_ctx(nullptr),
               _fragment_ctx(nullptr),
-              _pipeline(nullptr),
               _source_node_id(0),
               _driver_id(0) {}
 
->>>>>>> ffd57a84d ([BugFix] Account finalization cost to scheduler (#16454))
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
