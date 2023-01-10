@@ -145,7 +145,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             // TODO: Really need this?
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
-            epoch.onCommitted(binlogState);
+            epoch.onCommitted();
         } catch (UserException e) {
             epoch.onFailed();
             // TODO(murphy) handle error

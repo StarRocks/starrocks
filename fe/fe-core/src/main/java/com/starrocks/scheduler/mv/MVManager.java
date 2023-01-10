@@ -262,9 +262,6 @@ public class MVManager {
         LOG.info("onReportEpoch: {}", request);
         Preconditions.checkArgument(request.isSetDb_id(), "required");
         Preconditions.checkArgument(request.isSetMv_id(), "required");
-        Preconditions.checkArgument(request.isSetTask_id(), "required");
-        Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
-
         long dbId = request.getDb_id();
         long mvId = request.getMv_id();
         long taskId = request.getTask_id();
@@ -282,6 +279,7 @@ public class MVManager {
         // TODO: handle exception
         MVMaintenanceTask task = job.getTask(taskId);
         task.updateEpochState(report);
+        job.onReport(request);
     }
 
     /**

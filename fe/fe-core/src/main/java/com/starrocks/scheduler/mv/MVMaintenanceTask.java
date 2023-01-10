@@ -20,6 +20,7 @@ import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TMVEpochStage;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
@@ -55,6 +56,7 @@ public class MVMaintenanceTask {
     private TNetworkAddress beRpcAddr;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
     private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
+    private TMVEpochStage epochStage = TMVEpochStage.BASELINE_RUNNING;
 
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
@@ -174,6 +176,18 @@ public class MVMaintenanceTask {
         });
 
         this.binlogConsumeState = reportTask.getBinlog_consume_state();
+
+        if (epochStage.equals(TMVEpochStage.BASELINE_RUNNING)) {
+            epochStage = TMVEpochStage.BASELINE_FINISHED;
+        }
+    }
+
+    public synchronized TMVEpochStage getEpochStage() {
+        return epochStage;
+    }
+
+    public synchronized void enterIncrementalStage() {
+        this.epochStage = TMVEpochStage.INCREMENTAL;
     }
 
     @Override

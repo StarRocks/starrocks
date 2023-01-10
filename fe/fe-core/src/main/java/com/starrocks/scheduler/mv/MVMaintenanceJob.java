@@ -41,9 +41,11 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TMVEpochStage;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -210,6 +212,28 @@ public class MVMaintenanceJob implements Writable {
         } else {
             throw UnsupportedException.unsupportedException("TODO: implement ");
         }
+    }
+
+    public void onReport(TMVMaintenanceTasks request) {
+        Preconditions.checkArgument(request.isSetTask_id(), "required");
+        Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
+
+        long taskId = request.getTask_id();
+        MVMaintenanceTask task = getTask(taskId);
+        TMVReportEpochTask report = request.getReport_epoch();
+        task.updateEpochState(report);
+
+        if (task.getEpochStage().equals(TMVEpochStage.BASELINE_FINISHED)) {
+            // Check if all tasks could enter the INCREMENTAL stage
+            boolean allFinished =
+                    taskMap.values().stream().allMatch(x -> x.getEpochStage().equals(TMVEpochStage.BASELINE_FINISHED));
+            if (allFinished) {
+                LOG.info("[MV] All task of MV {} finished baseline data, enter incremental stage", view.getName());
+                taskMap.values().forEach(MVMaintenanceTask::enterIncrementalStage);
+            }
+        }
+
+        // TODO(murphy) trigger the epoch commit in report event
     }
 
     /**
