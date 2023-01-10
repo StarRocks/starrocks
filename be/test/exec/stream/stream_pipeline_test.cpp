@@ -84,6 +84,11 @@ Status StreamPipelineTest::prepare() {
             }
         }
     }
+
+    // prepare epoch manager
+    auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
+    stream_epoch_manager->prepare({_fragment_ctx});
+
     return Status::OK();
 }
 
@@ -140,12 +145,8 @@ Status StreamPipelineTest::start_mv(InitiliazeFunc&& init_func) {
 
 void StreamPipelineTest::stop_mv() {
     VLOG_ROW << "StopMV";
-    _query_ctx->stream_epoch_manager()->set_is_finished(true);
-    auto num_activated_drivers =
-            _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) {
-                return driver->query_ctx()->query_id() == _fragment_ctx->query_id();
-            });
-    DCHECK_EQ(num_activated_drivers, _fragment_ctx->num_drivers());
+    auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
+    stream_epoch_manager->set_finished(_exec_env, _query_ctx);
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
 }
 
@@ -164,40 +165,38 @@ Status StreamPipelineTest::start_epoch(const std::vector<int64_t>& tablet_ids, c
     // TODO: WE assume scan node id is zero.
     node_id_binlog_offsets.emplace(0, binlog_offsets);
 
-    // step1. update epoch info
-    std::unordered_map<TUniqueId, NodeId2ScanRanges> fragment_id_to_node_id_scan_ranges;
+    // update epoch info
+    auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
+    std::unordered_map<TUniqueId, pipeline::NodeId2ScanRanges> fragment_id_to_node_id_scan_ranges;
     fragment_id_to_node_id_scan_ranges.emplace(_fragment_ctx->fragment_instance_id(), node_id_binlog_offsets);
-    ScanRangeInfo scan_info;
+    pipeline::ScanRangeInfo scan_info;
     scan_info.instance_scan_range_map = std::move(fragment_id_to_node_id_scan_ranges);
-    RETURN_IF_ERROR(_query_ctx->stream_epoch_manager()->update_epoch(epoch_info, scan_info));
+    // start epoch
+    RETURN_IF_ERROR(stream_epoch_manager->start_epoch(_exec_env, _query_ctx, {_fragment_ctx}, epoch_info, scan_info));
 
-    // step2. reset state
-    RETURN_IF_ERROR(_fragment_ctx->reset_epoch());
-
-    // step3. active driver
-    auto num_activated_drivers =
-            _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) {
-                return driver->query_ctx()->query_id() == _fragment_ctx->query_id();
-            });
-    DCHECK_EQ(num_activated_drivers, _fragment_ctx->num_drivers());
     return Status::OK();
 }
 
 Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info) {
     VLOG_ROW << "WaitUntilEpochEnd: " << epoch_info.debug_string();
-
-    auto is_epoch_finished = [=]() {
-        for (auto& pipeline : _fragment_ctx->pipelines()) {
-            for (auto& driver : pipeline->drivers()) {
-                if (driver->driver_state() != pipeline::DriverState::EPOCH_FINISH) {
-                    VLOG_ROW << "WaitUntilEpochEnd not epoch finished: " << epoch_info.debug_string();
-                    return false;
-                }
-            }
+    auto are_all_drivers_parked_func = [=]() {
+        size_t num_parked_drivers = 0;
+        auto query_id = _fragment_ctx->query_id();
+        if (_fragment_ctx->enable_resource_group()) {
+            num_parked_drivers = _exec_env->wg_driver_executor()->calculate_parked_driver(
+                    [query_id](const pipeline::PipelineDriver* driver) {
+                        return driver->query_ctx()->query_id() == query_id;
+                    });
+        } else {
+            num_parked_drivers = _exec_env->driver_executor()->calculate_parked_driver(
+                    [query_id](const pipeline::PipelineDriver* driver) {
+                        return driver->query_ctx()->query_id() == query_id;
+                    });
         }
-        return true;
+        return num_parked_drivers == _fragment_ctx->num_drivers();
     };
-    while (!is_epoch_finished()) {
+
+    while (!are_all_drivers_parked_func()) {
         sleep(0.1);
     }
     VLOG_ROW << "WaitUntilEpochEnd Done " << epoch_info.debug_string();

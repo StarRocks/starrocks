@@ -192,6 +192,19 @@ size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredica
     return ready_drivers.size();
 }
 
+size_t PipelineDriverPoller::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+    size_t parked_driver_num = 0;
+    auto driver_it = _parked_drivers.begin();
+    while (driver_it != _parked_drivers.end()) {
+        auto driver = *driver_it;
+        if (predicate_func(driver)) {
+            parked_driver_num += 1;
+        }
+        driver_it++;
+    }
+    return parked_driver_num;
+}
+
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
     auto& driver = *driver_it;
     driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
