@@ -609,6 +609,7 @@ public class ExportJob implements Writable {
     public Status releaseSnapshots() {
         switch (exportTable.getType()) {
             case OLAP:
+                return Status.OK;
             case MYSQL:
                 return releaseSnapshotPaths();
             case LAKE:
@@ -899,6 +900,10 @@ public class ExportJob implements Writable {
 
     public boolean exportLakeTable() {
         return exportTable.isLakeTable();
+    }
+
+    public boolean exportOlapTable() {
+        return exportTable.isOlapTable();
     }
 
     public enum JobState {
