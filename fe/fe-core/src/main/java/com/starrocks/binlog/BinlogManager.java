@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -181,6 +182,13 @@ public class BinlogManager {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    /**
+     * Enable the binlog with default configuration
+     */
+    public boolean tryEnableBinlogDefault(Database db, long tableId) {
+        return tryEnableBinlog(db, tableId, Config.binlog_ttl_second, Config.binlog_max_size);
     }
 
     // the caller don't need to hold the db lock

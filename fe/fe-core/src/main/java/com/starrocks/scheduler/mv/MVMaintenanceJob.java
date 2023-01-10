@@ -123,13 +123,18 @@ public class MVMaintenanceJob implements Writable {
     }
 
     // TODO recover the entire job state, include execution plan
-    public void restore() {
+    public boolean restore() {
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
-        Preconditions.checkState(table != null && table.getType().equals(Table.TableType.MATERIALIZED_VIEW));
+        if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
+            LOG.warn("Fail to restore job could table type incorrect: {}", table);
+            this.state.set(JobState.FAILED);
+            return false;
+        }
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
         this.state.set(serializedState);
         this.inSchedule.set(false);
+        return true;
     }
 
     public void setEpoch(MVEpoch epoch) {

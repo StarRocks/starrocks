@@ -16,6 +16,8 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionInfo;
@@ -80,10 +82,7 @@ public class MVManager {
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
             if (CollectionUtils.isNotEmpty(data.jobList)) {
                 for (MVMaintenanceJob job : data.jobList) {
-                    // NOTE: job's view is not serialized, cannot use it directly!
-                    MvId mvId = new MvId(job.getDbId(), job.getViewId());
-                    job.restore();
-                    jobMap.put(mvId, job);
+                    restoreJob(job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
                 LOG.debug("reload MV maintenance job details: {}", str);
@@ -98,16 +97,19 @@ public class MVManager {
      * Replay from journal
      */
     public void replay(MVMaintenanceJob job) throws IOException {
-        try {
-            job.restore();
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(job.getDbId(), job.getViewId());
-            jobMap.put(mvId, job);
-            LOG.info("Replay MV maintenance jobs: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn(e);
+        restoreJob(job);
+    }
+
+    private boolean restoreJob(MVMaintenanceJob job) {
+        if (!job.restore()) {
+            return false;
         }
+        if (!job.getState().equals(MVMaintenanceJob.JobState.STOPPED)) {
+            jobMap.put(job.getView().getMvId(), job);
+            LOG.info("Restore MV maintenance jobs: {}", job);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -167,9 +169,26 @@ public class MVManager {
             MVMaintenanceJob job = new MVMaintenanceJob(view);
             Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
 
+            // Create IMT for operators
             IMTCreator.createIMT(stmt, view);
 
+            // Enable the job of base tables
+            try {
+                BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+                for (MaterializedView.BaseTableInfo baseTable : view.getBaseTableInfos()) {
+                    Database db = baseTable.getDb();
+                    if (!binlogManager.tryEnableBinlogDefault(db, baseTable.getTableId())) {
+                        throw new DdlException(
+                                String.format("enable binlog failed for table: %s", baseTable.getTableName()));
+                    }
+                }
+                LOG.info("Enable binlog of tables {} for MV {}", view.getBaseTableInfos(), view.getName());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
+            // Log the job state
             GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
             LOG.info("create the maintenance job for MV: {}", view.getName());
         } catch (Exception e) {
@@ -204,7 +223,7 @@ public class MVManager {
     /**
      * Stop the maintenance job for MV after dropped
      */
-    public void stopMaintainMV(MaterializedView view) {
+    public void stopMaintainMV(MaterializedView view) throws DdlException {
         if (!view.getRefreshScheme().isIncremental()) {
             return;
         }
@@ -214,6 +233,20 @@ public class MVManager {
             return;
         }
         job.stopJob();
+
+        // Disable the binlog
+        BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+        for (MaterializedView.BaseTableInfo baseTable : view.getBaseTableInfos()) {
+            Database db = baseTable.getDb();
+            if (!binlogManager.tryDisableBinlog(db, baseTable.getTableId())) {
+                throw new DdlException(String.format("Disable binlog for table %s failed", baseTable.getTableName()));
+            }
+        }
+        LOG.info("Disable all binlog for MV {}", view.getBaseTableInfos());
+
+        // Log the job state
+        GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
+
         jobMap.remove(view.getMvId());
         LOG.info("Remove maintenance job for mv: {}", view.getName());
     }
