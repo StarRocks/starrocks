@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import com.starrocks.jni.connector.ColumnType;
+import com.starrocks.jni.connector.StructSelectedFields;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -45,6 +46,23 @@ public class TestColumnType {
     }
 
     @Test
+    public void parseMapType1() {
+        String s = "map<int,struct<a:string,b:array<int>>>";
+        ColumnType t = new ColumnType(s);
+        Assert.assertEquals(t.getTypeValue(), ColumnType.TypeValue.MAP);
+        Assert.assertEquals(t.getChildTypes().size(), 2);
+        Assert.assertEquals(t.getChildTypes().get(0).getTypeValue(), ColumnType.TypeValue.INT);
+        Assert.assertEquals(t.getChildTypes().get(1).getTypeValue(), ColumnType.TypeValue.STRUCT);
+
+        ColumnType c = t.getChildTypes().get(1);
+        Assert.assertEquals(c.getChildTypes().size(), 2);
+        Assert.assertEquals(c.getChildTypes().get(0).getTypeValue(), ColumnType.TypeValue.STRING);
+        ColumnType c2 = c.getChildTypes().get(1);
+        Assert.assertTrue(c2.isArray());
+        Assert.assertEquals(c2.getChildTypes().get(0).getTypeValue(), ColumnType.TypeValue.INT);
+    }
+
+    @Test
     public void parseStructType() {
         String s = "struct<a:int,b:string,c:struct<a:int,b:string,c:array<int>>,d:struct<a:array<string>>>";
         ColumnType t = new ColumnType(s);
@@ -72,6 +90,31 @@ public class TestColumnType {
             ColumnType c2 = c.getChildTypes().get(0);
             Assert.assertEquals(c2.getChildTypes().size(), 1);
             Assert.assertEquals(c2.getChildTypes().get(0).getTypeValue(), ColumnType.TypeValue.STRING);
+        }
+    }
+
+    @Test
+    public void pruneSturctType() {
+        String s = "struct<a:int,b:string,c:struct<a:int,b:string,c:array<int>>,d:struct<a:array<string>>>";
+        ColumnType t = new ColumnType(s);
+        StructSelectedFields ssf = new StructSelectedFields();
+        ssf.addMultipleNestedPath("d.a,c.c");
+
+        t.pruneOnStructSelectedFields(ssf);
+        Assert.assertTrue(t.isStruct());
+        Assert.assertEquals(t.getChildTypes().size(), 2);
+        Assert.assertEquals(String.join(",", t.getChildNames()), "d,c");
+        {
+            ColumnType d = t.getChildTypes().get(0);
+            Assert.assertTrue(d.isStruct());
+            Assert.assertEquals(d.getChildNames().size(), 1);
+        }
+        {
+            ColumnType c = t.getChildTypes().get(1);
+            Assert.assertTrue(c.isStruct());
+            Assert.assertEquals(c.getChildNames().size(), 1);
+            Assert.assertEquals(c.getChildNames().get(0), "c");
+            Assert.assertTrue(c.getChildTypes().get(0).isArray());
         }
     }
 }

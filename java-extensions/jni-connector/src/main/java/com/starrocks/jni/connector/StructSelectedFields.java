@@ -2,10 +2,13 @@ package com.starrocks.jni.connector;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StructSelectedFields {
+    private final Set<String> dedup = new HashSet<>();
     private final List<String> fields = new ArrayList<>();
     private Map<String, StructSelectedFields> children = null;
 
@@ -15,9 +18,18 @@ public class StructSelectedFields {
         addNestedPath(paths, 0);
     }
 
+    public void addMultipleNestedPath(String path) {
+        for (String p : path.split(",")) {
+            addNestedPath(p);
+        }
+    }
+
     public void addNestedPath(String[] paths, int offset) {
         String f = paths[offset];
-        fields.add(f);
+        if (!dedup.contains(f)) {
+            fields.add(f);
+            dedup.add(f);
+        }
         if ((offset + 1) < paths.length) {
             if (children == null) {
                 children = new HashMap<>();
