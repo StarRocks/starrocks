@@ -50,7 +50,9 @@
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/MVMaintenance_types.h"
@@ -63,7 +65,6 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
-#include "runtime/stream_epoch_manager.h"
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
@@ -738,6 +739,14 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
     //     break;
     // }
     case MVTaskType::STOP_MAINTENANCE: {
+        // Find the fragment context for the specific MV job
+        TUniqueId query_id;
+        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
+        if (!existing_query_ctx) {
+            return Status::InternalError(fmt::format("MV Job has been cancelled: {}.", print_id(query_id)));
+        }
+        auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
+        RETURN_IF_ERROR(stream_epoch_manager->set_finished(_exec_env, existing_query_ctx.get()));
         break;
     }
     default:
@@ -757,6 +766,28 @@ Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTa
         RETURN_IF_ERROR(fragment_executor.execute(_exec_env));
     }
 
+    // Prepare EpochManager
+    const TUniqueId& query_id = task.query_id;
+    auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
+    if (!existing_query_ctx) {
+        LOG(WARNING) << "start maintenance failed, query id not found:" << print_id(query_id);
+        return Status::InternalError(fmt::format("MV Job has not been prepared: {}.", print_id(query_id)));
+    }
+    std::vector<pipeline::FragmentContext*> fragment_ctxs;
+    for (auto& fragment : fragments) {
+        auto fragment_instance_id = fragment.params.fragment_instance_id;
+        auto&& fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
+        if (!fragment_ctx) {
+            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
+                         << print_id(fragment_instance_id);
+            return Status::InternalError(
+                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
+        }
+        fragment_ctxs.push_back(fragment_ctx.get());
+    }
+    auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
+    DCHECK(stream_epoch_manager);
+    RETURN_IF_ERROR(stream_epoch_manager->prepare(fragment_ctxs));
     return Status::OK();
 }
 
@@ -765,17 +796,30 @@ Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContext
                                                     const TMVMaintenanceTasks& task) {
     RETURN_IF(!task.__isset.start_epoch, Status::InternalError("must be start_epoch task"));
     auto& start_epoch_task = task.start_epoch;
-    auto epoch_manager = query_ctx->stream_epoch_manager();
+    auto stream_epoch_manager = query_ctx->stream_epoch_manager();
     EpochInfo epoch_info = EpochInfo::from_start_epoch_task(start_epoch_task);
-    ScanRangeInfo scan_info = ScanRangeInfo::from_start_epoch_start(start_epoch_task);
+    pipeline::ScanRangeInfo scan_info = pipeline::ScanRangeInfo::from_start_epoch_start(start_epoch_task);
 
-    return epoch_manager->update_epoch(epoch_info, scan_info);
+    std::vector<pipeline::FragmentContext*> fragment_ctxs;
+    for (auto& [fragment_instance_id, node_to_scan_ranges] : start_epoch_task.per_node_scan_ranges) {
+        // Find the fragment_ctx by fragment_instance_id;
+        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id);
+        if (!fragment_ctx) {
+            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
+                         << print_id(fragment_instance_id);
+            return Status::InternalError(
+                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
+        }
+        fragment_ctxs.push_back(fragment_ctx.get());
+    }
+
+    // Update state in the runtime state.
+    return stream_epoch_manager->start_epoch(_exec_env, query_ctx.get(), fragment_ctxs, epoch_info, scan_info);
 }
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx,
                                                     const TMVMaintenanceTasks& task) {
-    // auto epoch_manager = query_ctx->stream_epoch_manager();
     return Status::NotSupported("TODO");
 }
 

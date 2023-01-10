@@ -158,6 +158,99 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     return rpc_status;
 }
 
+TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryContext* query_ctx,
+                                                                  const std::vector<FragmentContext*>& fragment_ctxs) {
+    TMVMaintenanceTasks params;
+
+    DCHECK(query_ctx);
+    auto* stream_epoch_manager = query_ctx->stream_epoch_manager();
+    DCHECK(stream_epoch_manager);
+
+    // query_id
+    params.__set_query_id(query_ctx->query_id());
+
+    // report_epoch
+    TMVReportEpochTask report_epoch;
+    auto& epoch_info = stream_epoch_manager->epoch_info();
+    TMVEpoch t_epoch;
+    t_epoch.__set_txn_id(epoch_info.txn_id);
+    t_epoch.__set_epoch_id(epoch_info.epoch_id);
+    report_epoch.__set_epoch(t_epoch);
+
+    // commit_infos/fail_infos
+    std::vector<TTabletCommitInfo> total_commit_infos;
+    std::vector<TTabletFailInfo> total_failed_infos;
+    for (auto& fragment_ctx : fragment_ctxs) {
+        auto* runtime_state = fragment_ctx->runtime_state();
+        DCHECK(runtime_state != nullptr);
+        auto commit_infos = runtime_state->tablet_commit_infos();
+        auto failed_infos = runtime_state->tablet_fail_infos();
+        total_commit_infos.insert(total_commit_infos.end(), commit_infos.begin(), commit_infos.end());
+        total_failed_infos.insert(total_failed_infos.end(), failed_infos.begin(), failed_infos.end());
+    }
+    report_epoch.__set_txn_commit_info(total_commit_infos);
+    report_epoch.__set_txn_fail_info(total_failed_infos);
+
+    // binlog_consume_state
+    std::map<TUniqueId, std::map<TPlanNodeId, std::vector<TScanRange>>> binlog_consume_states;
+    auto& fragment_id_to_node_id_scan_ranges = stream_epoch_manager->fragment_id_to_node_id_scan_ranges();
+    DCHECK_EQ(fragment_id_to_node_id_scan_ranges.size(), fragment_ctxs.size());
+    for (auto& [fragment_instance_id, node_id_to_scan_ranges] : fragment_id_to_node_id_scan_ranges) {
+        std::map<TPlanNodeId, std::vector<TScanRange>> node_id_scan_ranges;
+        for (auto& [scan_node_id, scan_ranges] : node_id_to_scan_ranges) {
+            for (auto& [tablet_id, scan_range] : scan_ranges) {
+                TScanRange t_scan_range;
+                t_scan_range.binlog_scan_range.offset.tablet_id = scan_range.tablet_id;
+                t_scan_range.binlog_scan_range.offset.version = scan_range.tablet_version;
+                t_scan_range.binlog_scan_range.offset.lsn = scan_range.lsn;
+                node_id_scan_ranges[scan_node_id].push_back(t_scan_range);
+            }
+        }
+        binlog_consume_states[fragment_instance_id] = node_id_scan_ranges;
+    }
+    report_epoch.__set_binlog_consume_state(binlog_consume_states);
+    params.__set_report_epoch(report_epoch);
+
+    return params;
+}
+
+// including the final status when execution finishes.
+Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
+                                       const TNetworkAddress& fe_addr) {
+    Status fe_status;
+    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
+    if (!fe_status.ok()) {
+        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
+        return fe_status;
+    }
+
+    TMVReportEpochResponse res;
+    Status rpc_status;
+
+    VLOG_ROW << "debug: report_epoch params is " << apache::thrift::ThriftDebugString(params).c_str();
+    try {
+        try {
+            coord->mvReport(res, params);
+        } catch (TTransportException& e) {
+            LOG(WARNING) << "Retrying mvReport: " << e.what();
+            rpc_status = coord.reopen();
+
+            if (!rpc_status.ok()) {
+                return rpc_status;
+            }
+            coord->mvReport(res, params);
+        }
+
+        rpc_status = Status::OK();
+    } catch (TException& e) {
+        std::stringstream msg;
+        msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
+        LOG(WARNING) << msg.str();
+        rpc_status = Status::InternalError(msg.str());
+    }
+    return rpc_status;
+}
+
 ExecStateReporter::ExecStateReporter() {
     auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
                           .set_min_threads(1)
