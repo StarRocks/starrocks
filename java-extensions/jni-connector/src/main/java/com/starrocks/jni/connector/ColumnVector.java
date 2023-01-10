@@ -408,7 +408,7 @@ public class ColumnVector {
     public void dump(StringBuilder sb, int i) {
         // TODO(yanz): FIXME
         if (isNullAt(i)) {
-            sb.append("NULL").append(", ");
+            sb.append("NULL");
             return;
         }
 

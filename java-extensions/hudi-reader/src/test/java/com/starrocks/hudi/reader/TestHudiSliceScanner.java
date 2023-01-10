@@ -24,8 +24,8 @@ public class TestHudiSliceScanner {
     }
 
     /*
-    // to create test hudi mor;
-    CREATE TABLE `test_hudi_mor` (
+
+CREATE TABLE `test_hudi_mor` (
   `uuid` STRING,
   `ts` int,
   `a` int,
@@ -39,10 +39,10 @@ TBLPROPERTIES (
   'preCombineField' = 'ts',
   'type' = 'mor');
 
-  // ingest data with several updates, final result is one row
-  _hoodie_commit_time     _hoodie_commit_seqno    _hoodie_record_key      _hoodie_partition_path  _hoodie_file_name       uuid    ts      a       b       c       d       e
-20230105143305070       20230105143305070_0_10  AA0             64798197-be6a-4eca-9898-0c2ed75b9d65-0  AA0     20      1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
-     */
+spark-sql> select a,b,c,d,e from test_hudi_mor;
+a       b       c       d       e
+1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
+*/
 
     Map<String, String> createScanTestParams() {
         Map<String, String> params = new HashMap<>();
@@ -115,6 +115,62 @@ TBLPROPERTIES (
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.b");
+        runScanOnParams(params);
+    }
+
+        /*
+
+
+CREATE TABLE `test_hudi_mor2` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<array<int>>,
+  `d` map<string, array<int>>,
+  `e` struct<a:array<int>, b:map<string,int>, c:struct<a:array<int>, b:struct<a:int,b:string>>>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+insert into test_hudi_mor2 values('AA0', 10, 0, "hello", array(array(10,20,30), array(40,50,60,70) ), map('key1', array(1,10), 'key2', array(2, 20), 'key3', null), struct(array(10, 20), map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA1', 10, 0, "hello", null, null , struct(null, map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA2', 10, 0, null, array(array(30, 40), array(10,20,30)), null , struct(null, map('key1', 10), struct(array(10, 20), null)));
+
+spark-sql> select a,b,c,d,e from test_hudi_mor2;
+a       b       c       d       e
+0       hello   NULL    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+0       NULL    [[30,40],[10,20,30]]    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":null}}
+0       hello   [[10,20,30],[40,50,60,70]]      {"key1":[1,10],"key2":[2,20],"key3":null}       {"a":[10,20],"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+    */
+
+    Map<String, String> case2CreateScanTestParams() {
+        Map<String, String> params = new HashMap<>();
+        URL resource = TestHudiSliceScanner.class.getResource("/test_hudi_mor2");
+        String basePath = resource.getPath().toString();
+        params.put("base_path", basePath);
+        params.put("data_file_path",
+                basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet");
+        params.put("delta_file_paths", "");
+        params.put("hive_column_names",
+                "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_name,uuid,ts,a,b,c,d,e");
+        params.put("hive_column_types",
+                "string#string#string#string#string#string#int#int#string#array<array<int>>#map<string,array<int>>#struct<a:array<int>,b:map<string,int>,c:struct<a:array<int>,b:struct<a:int,b:string>>>");
+        params.put("instant_time", "20230110185815638");
+        params.put("data_file_length", "438311");
+        params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+        params.put("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+        params.put("required_fields", "a,b");
+        return params;
+    }
+
+    @Test
+    public void case2doScanTestOnStructType() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.c.b.a");
         runScanOnParams(params);
     }
 }
