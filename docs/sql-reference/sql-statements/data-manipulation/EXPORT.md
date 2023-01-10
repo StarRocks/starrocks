@@ -40,15 +40,13 @@ WITH BROKER;
     [PROPERTIES ("key"="value", ...)]
     ```
 
-     The following parameters can be specified:
+    The following parameters can be specified:
 
-    ```plain text
-    column_separator: Specify the exported column separator, defaulting to t. 
-    line_delimiter: Specify the exported line separator, defaulting to\n. 
-    exec_mem_limit: Export the upper limit of memory usage for a single BE node, defaulting to 2GB in bytes.
-    timeout：The time-out for importing jobs, defaulting to 1 day in seconds.
-    include_query_id: Whether the exported file name contains query id, defaulting to true.
-    ```
+    - `column_separator`: specifies the exported column separator, defaulting to `t`.
+    - `line_delimiter`: specifies the exported line separator, defaulting to `\n`.
+    - `exec_mem_limit`: specifies the upper limit of memory usage for export jobs on a single BE node, defaulting to 2 GB in bytes.
+    - `timeout`：specifies the time-out period for export jobs, defaulting to 1 day in seconds.
+    - `include_query_id`: specifies whether the exported file name contains query ID, defaulting to `true`.
 
 5. `WITH BROKER`
 
