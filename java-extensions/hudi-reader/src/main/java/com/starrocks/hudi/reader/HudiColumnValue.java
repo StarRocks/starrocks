@@ -19,6 +19,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 
 import java.util.List;
@@ -97,9 +98,13 @@ public class HudiColumnValue implements ColumnValue {
     }
 
     @Override
-    public void unpackStruct(List<ColumnValue> values) {
+    public void unpackStruct(List<Object> fields, List<ColumnValue> values) {
         StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
-        List<Object> fields = inspector.getStructFieldsDataAsList(fieldData);
-        return;
+        for (int i = 0; i < fields.size(); i++) {
+            StructField sf = (StructField) fields.get(i);
+            Object o = inspector.getStructFieldData(fieldData, sf);
+            HudiColumnValue cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+            values.add(cv);
+        }
     }
 }

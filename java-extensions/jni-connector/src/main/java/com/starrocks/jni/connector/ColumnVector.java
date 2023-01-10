@@ -373,6 +373,13 @@ public class ColumnVector {
         return elementsAppended++;
     }
 
+    private int appendStruct(List<ColumnValue> values) {
+        for (int i = 0; i < childColumns.length; i++) {
+            childColumns[i].appendValue(values.get(i));
+        }
+        return elementsAppended++;
+    }
+
     public void updateMeta(ColumnVector meta) {
         if (type.isString()) {
             meta.appendLong(nullsNativeAddress());
@@ -513,7 +520,9 @@ public class ColumnVector {
             }
             case STRUCT: {
                 List<ColumnValue> values = new ArrayList<>();
-                o.unpackStruct(values);
+                o.unpackStruct(type.getStructFields(), values);
+                appendStruct(values);
+                break;
             }
             default:
                 throw new RuntimeException("Unknown type value: " + typeValue);

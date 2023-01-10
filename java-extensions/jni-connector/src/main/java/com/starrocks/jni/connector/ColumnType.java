@@ -40,6 +40,7 @@ public class ColumnType {
     TypeValue typeValue;
     List<String> childNames = new ArrayList<>();
     List<ColumnType> childTypes = new ArrayList<>();
+    List<Object> structFields = new ArrayList<>();
 
     private final static Map<String, TypeValue> primitiveTypeValueMapping = new HashMap<>();
     private final static Map<TypeValue, Integer> primitiveTypeValueSize = new HashMap<>();
@@ -225,5 +226,9 @@ public class ColumnType {
 
     public List<ColumnType> getChildTypes() {
         return childTypes;
+    }
+
+    public List<Object> getStructFields() {
+        return structFields;
     }
 }

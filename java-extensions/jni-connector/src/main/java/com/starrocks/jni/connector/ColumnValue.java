@@ -35,5 +35,5 @@ public interface ColumnValue {
 
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
 
-    public void unpackStruct(List<ColumnValue> values);
+    public void unpackStruct(List<Object> fields, List<ColumnValue> values);
 }
