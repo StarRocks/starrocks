@@ -20,6 +20,7 @@ import com.google.common.collect.HashBiMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -78,6 +79,8 @@ public class MVMaintenanceJob implements Writable {
     // Persisted state
     @SerializedName("jobId")
     private final long jobId;
+    @SerializedName("dbId")
+    private final long dbId;
     @SerializedName("viewId")
     private final long viewId;
     @SerializedName("state")
@@ -92,7 +95,7 @@ public class MVMaintenanceJob implements Writable {
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
     private transient AtomicReference<JobState> state = new AtomicReference<>();
     private transient AtomicBoolean inSchedule = new AtomicBoolean(false);
-    private final transient MaterializedView view;
+    private transient MaterializedView view;
     private transient ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
     private transient CoordinatorPreprocessor queryCoordinator;
@@ -102,6 +105,7 @@ public class MVMaintenanceJob implements Writable {
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
+        this.dbId = view.getDbId();
         this.viewId = view.getId();
         this.view = view;
         this.epoch = new MVEpoch(view.getId());
@@ -116,6 +120,16 @@ public class MVMaintenanceJob implements Writable {
         job.inSchedule = new AtomicBoolean();
         job.state.set(job.getSerializedState());
         return job;
+    }
+
+    // TODO recover the entire job state, include execution plan
+    public void restore() {
+        Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
+        Preconditions.checkState(table != null && table.getType().equals(Table.TableType.MATERIALIZED_VIEW));
+        this.view = (MaterializedView) table;
+        this.serializedState = JobState.INIT;
+        this.state.set(serializedState);
+        this.inSchedule.set(false);
     }
 
     public void startJob() {

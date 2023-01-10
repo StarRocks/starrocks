@@ -81,6 +81,7 @@ public class MVManager {
                 for (MVMaintenanceJob job : data.jobList) {
                     long viewId = job.getViewId();
                     MaterializedView view;
+                    job.restore();
                     jobMap.put(job.getView().getMvId(), job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
@@ -92,12 +93,17 @@ public class MVManager {
         return checksum;
     }
 
+    /**
+     * Replay from journal
+     */
     public void replay(MVMaintenanceJob job) throws IOException {
         try {
+            job.restore();
             jobMap.put(job.getView().getMvId(), job);
-            LOG.info("replay MV maintenance jobs: {}", job);
+            LOG.info("Replay MV maintenance jobs: {}", job);
         } catch (Exception e) {
-            LOG.warn("Replay MV maintenance job failed: {} {}", job, e);
+            LOG.warn("Replay MV maintenance job failed: {}", job);
+            LOG.warn(e);
         }
     }
 
