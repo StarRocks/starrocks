@@ -79,7 +79,14 @@ public class CTASAnalyzer {
         for (int i = 0; i < allFields.size(); i++) {
             Type type = AnalyzerUtils.transformType(allFields.get(i).getType());
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+<<<<<<< HEAD
                     null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
+=======
+                        null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+            if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
+                columnDef.setAllowNull(false);
+            }
+>>>>>>> 4a67fa067 ([BugFix] only set not null for primary key column (#16431))
             createTableStmt.addColumnDef(columnDef);
             Expr originExpression = allFields.get(i).getOriginExpression();
             if (originExpression instanceof SlotRef) {
