@@ -358,8 +358,9 @@ public class OlapScanNode extends ScanNode {
             } else {
                 replicas = allQueryableReplicas;
             }
-
-            Collections.shuffle(replicas);
+            if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable().isRandomSelectOlapReplicas()) {
+                Collections.shuffle(replicas);
+            }
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {

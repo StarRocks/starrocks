@@ -163,6 +163,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
+    public static final String RANDOM_SELECT_OLAP_REPLICAS = "random_select_olap_replicas";
+
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
@@ -362,6 +364,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
+
+    @VariableMgr.VarAttr(name = RANDOM_SELECT_OLAP_REPLICAS)
+    private boolean randomSelectOlapReplicas = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -795,6 +800,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
+    }
+
+    public boolean isRandomSelectOlapReplicas() {
+        return randomSelectOlapReplicas;
     }
 
     public int getStatisticCollectParallelism() {
