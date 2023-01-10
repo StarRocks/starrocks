@@ -2284,7 +2284,7 @@ public class GlobalStateMgr {
                 }
 
                 // binlog config
-                if (olapTable.isHaveBinlogConfig()) {
+                if (olapTable.containsBinlogConfig()) {
                     // binlog_version
                     BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)

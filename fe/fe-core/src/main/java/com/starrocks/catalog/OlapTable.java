@@ -294,7 +294,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
-    public boolean isHaveBinlogConfig() {
+    public boolean containsBinlogConfig() {
         if (tableProperty == null ||
                 tableProperty.getBinlogConfig() == null ||
                 tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
