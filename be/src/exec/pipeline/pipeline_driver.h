@@ -20,6 +20,16 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+
+namespace query_cache {
+class MultilaneOperator;
+using MultilaneOperatorRawPtr = MultilaneOperator*;
+using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
+} // namespace query_cache
+
+>>>>>>> 5e4c3499d ([BugFix] Account finalization cost to scheduler (#16454))
 namespace pipeline {
 
 class PipelineDriver;
@@ -363,12 +373,7 @@ public:
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
 protected:
-    PipelineDriver()
-            : _operators(),
-              _query_ctx(nullptr),
-              _fragment_ctx(nullptr),
-              _source_node_id(0),
-              _driver_id(0) {}
+    PipelineDriver() : _operators(), _query_ctx(nullptr), _fragment_ctx(nullptr), _source_node_id(0), _driver_id(0) {}
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
