@@ -54,6 +54,8 @@
 
 ### 问题修复
 
+修复了如下问题：
+
 - 修复在 UNION ALL 之上建立的 view 中，当 UNION ALL 输入列有常量 NULL，则 view 的 schema 错误，正常情况下列的类型是 UNION ALL 所有输入列的类型，但实际上是 NULL_TYPE 的问题。[#13917](https://github.com/StarRocks/starrocks/pull/13917)
 - 修复 `SELECT * FROM ...` 和 `SELECT * FROM ... LIMIT ...` 查询结果不一致的问题。[#13585](https://github.com/StarRocks/starrocks/pull/13585)
 - 修复 FE 同步外表 tablet 元数据时可能会覆盖本地 tablet 元数据导致从 Flink 导入数据失败的问题。[#12579](https://github.com/StarRocks/starrocks/pull/12579)
@@ -86,6 +88,8 @@
 
 ### 问题修复
 
+修复了如下问题：
+
 - 修复 HDFS 文件路径带有 `()` 导致查询报错的问题。[#12660](https://github.com/StarRocks/starrocks/pull/12660)
 - 修复子查询带有 LIMIT，并且使用 ORDER BY ... LIMIT ... OFFSET 对结果集进行排序后查询结果错误的问题。[#9698](https://github.com/StarRocks/starrocks/issues/9698)
 - 修复查询 ORC 文件时大小写不敏感的问题。[#12724](https://github.com/StarRocks/starrocks/pull/12724)
@@ -99,6 +103,8 @@
 发布日期： 2022 年 9 月 27 日
 
 ### 问题修复
+
+修复了如下问题：
 
 - 修复查询文件格式为 Textfile 的 Hive 表，结果不准确的问题。[#11546](https://github.com/StarRocks/starrocks/pull/11546)
 - 修复查询 Parquet 格式的文件时不支持查询嵌套的 ARRAY 的问题。[#10983](https://github.com/StarRocks/starrocks/pull/10983)
@@ -124,6 +130,8 @@
 - 优化外表查询机制，在查询 Hive 外表时默认忽略大小写。 [#10187](https://github.com/StarRocks/starrocks/pull/10187)
 
 ### 问题修复
+
+修复了如下问题：
 
 - 修复 Elasticsearch 外表在多个 Shard 下时查询可能意外退出的问题。 [#10369](https://github.com/StarRocks/starrocks/pull/10369)
 - 修复重写子查询为公用表表达式 (CTE) 时报错的问题。 [#10397](https://github.com/StarRocks/starrocks/pull/10397)
@@ -151,7 +159,7 @@
 
 ### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 查询 Elasticsearch 外表时，`limit` 算子下推问题导致返回错误结果。[#9952](https://github.com/StarRocks/starrocks/pull/9952)
 - 使用 `limit` 算子查询 Oracle 外表失败。[#9542](https://github.com/StarRocks/starrocks/pull/9542)

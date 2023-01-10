@@ -14,7 +14,7 @@
 
 ### 问题修复
 
-修复了以下问题：
+修复了如下问题：
 
 - 多表合并 (union) 视图时，如果左深节点存在 NULL 常量，会导致 BE crash。([#13792](https://github.com/StarRocks/starrocks/pull/13792))
 - Parquet 文件和 Hive 表中的列类型不一致时，会导致查询过程中 BE crash。([#8848](https://github.com/StarRocks/starrocks/issues/8848))
@@ -80,7 +80,7 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 
 ### 问题修复
 
-修复了以下问题：
+修复了如下问题：
 
 - 子查询中有 LIMIT 时，`order by...limit...offset...` 结果不准确。（[#9698](https://github.com/StarRocks/starrocks/issues/9698)）
 - 大规模数据的 Partial update 导致 BE crash。([#9809](https://github.com/StarRocks/starrocks/issues/9809))
@@ -129,6 +129,8 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 发布日期： 2022 年 7 月 24 日
 
 ### 问题修复
+
+修复了如下问题：
 
 - 修复资源组删除过程中的错误。[#8036](https://github.com/StarRocks/starrocks/pull/8036)
 - 线程资源不足导致 Thrift server 退出。[#7974](https://github.com/StarRocks/starrocks/pull/7974)
@@ -204,6 +206,8 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 - 导入 CSV 文件时，支持使用多个字符作为行分隔符。
 
 ### 问题修复
+
+修复了如下问题：
 
 - 修复主键模型的表导入数据和 COMMIT 时产生死锁的问题。[#4998](https://github.com/StarRocks/starrocks/pull/4998)
 - 解决 FE（包含 BDBJE）的一系列稳定性问题。[#4428](https://github.com/StarRocks/starrocks/pull/4428)、[#4666](https://github.com/StarRocks/starrocks/pull/4666)、[#2](https://github.com/StarRocks/bdb-je/pull/2)

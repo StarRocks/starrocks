@@ -10,7 +10,7 @@
 
 ### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 主键索引落盘可能导致 BE 崩溃。[#14857](https://github.com/StarRocks/starrocks/pull/14857) [#14819](https://github.com/StarRocks/starrocks/pull/14819)
 - 物化视图表类型不能被`SHOW FULL TABLES` 正确识别。[#13954](https://github.com/StarRocks/starrocks/pull/13954)
@@ -42,7 +42,7 @@
 
 ### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 因自 2.4.0 RC 升级至 2.4.0 导致 BE 崩溃。[#13128](https://github.com/StarRocks/starrocks/pull/13128)
 
@@ -133,7 +133,7 @@
 
 ### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 使用 DESC 查看表结构信息显示的字段类型与创建表指定的字段类型不同。[#7309](https://github.com/StarRocks/starrocks/pull/7309)
 
