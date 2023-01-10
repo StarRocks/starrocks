@@ -192,11 +192,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
-    DeferOp defer([&]() {
-        if (return_status.ok()) {
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
-        }
-    });
+    DeferOp defer([&]() { _update_statistics(total_chunks_moved, total_rows_moved, time_spent); });
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
@@ -398,6 +394,19 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    int64_t time_spent = 0;
+    // The driver may be destructed after finalizing, so use a temporal driver to record
+    // the information about the driver queue and workgroup.
+    PipelineDriver copied_driver;
+    copied_driver.set_workgroup(_workgroup);
+    copied_driver.set_in_queue(_in_queue);
+    copied_driver.set_driver_queue_level(_driver_queue_level);
+    DeferOp defer([&copied_driver, &time_spent]() {
+        copied_driver._update_driver_acct(0, 0, time_spent);
+        copied_driver._in_queue->update_statistics(&copied_driver);
+    });
+    SCOPED_RAW_TIMER(&time_spent);
+
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
     QUERY_TRACE_BEGIN("finalize", _driver_name);
@@ -561,11 +570,14 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     return Status::OK();
 }
 
-void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
-    driver_acct().increment_schedule_times();
+void PipelineDriver::_update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
     driver_acct().update_last_chunks_moved(total_chunks_moved);
     driver_acct().update_accumulated_rows_moved(total_rows_moved);
     driver_acct().update_last_time_spent(time_spent);
+}
+
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    _update_driver_acct(total_chunks_moved, total_rows_moved, time_spent);
 
     // Update statistics of scan operator
     if (ScanOperator* scan = source_scan_operator()) {
@@ -579,6 +591,10 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+}
+
+void PipelineDriver::increment_schedule_times() {
+    driver_acct().increment_schedule_times();
 }
 
 } // namespace starrocks::pipeline
