@@ -173,11 +173,27 @@ a       b       c       d       e
         runScanOnParams(params);
     }
 
+    @Test
+    public void case2doScanTestOnStructType() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.b,e.a");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void case2doScanTestOnStructType2() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.c.a,e.b,e.a");
+        runScanOnParams(params);
+    }
+
     //    @Test
-    //    public void case2doScanTestOnStructType() throws IOException {
+    //    public void case2doScanTestOnStructType3() throws IOException {
     //        Map<String, String> params = case2CreateScanTestParams();
     //        params.put("required_fields", "e");
-    //        params.put("nested_fields", "e.c.b.a");
+    //        params.put("nested_fields", "e.c.b.a,e.c.b.b");
     //        runScanOnParams(params);
     //    }
 }

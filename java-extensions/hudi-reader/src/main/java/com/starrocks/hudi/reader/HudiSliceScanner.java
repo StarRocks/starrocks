@@ -56,6 +56,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final String[] hiveColumnTypes;
     private final String[] requiredFields;
     private Integer[] requiredColumnIds;
+    private ColumnType[] requiredTypes;
     private final String[] nestedFields;
     private final String instantTime;
     private final String[] deltaFilePaths;
@@ -102,7 +103,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         return jobConf;
     }
 
-    private void initOffHeapTable() {
+    private void parseRequiredTypes() {
         String[] hiveColumnNames = this.hiveColumnNames.split(",");
         HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
         HashMap<String, String> hiveColumnNameToType = new HashMap<>();
@@ -111,7 +112,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             hiveColumnNameToType.put(hiveColumnNames[i], hiveColumnTypes[i]);
         }
 
-        ColumnType[] requiredTypes = new ColumnType[requiredFields.length];
+        requiredTypes = new ColumnType[requiredFields.length];
         requiredColumnIds = new Integer[requiredFields.length];
         for (int i = 0; i < requiredFields.length; i++) {
             requiredColumnIds[i] = hiveColumnNameToIndex.get(requiredFields[i]);
@@ -131,7 +132,6 @@ public class HudiSliceScanner extends ConnectorScanner {
                 type.pruneOnStructSelectedFields(ssf2);
             }
         }
-        initOffHeapTableWriter(requiredTypes, fetchSize);
     }
 
     private Properties makeProperties() {
@@ -174,7 +174,8 @@ public class HudiSliceScanner extends ConnectorScanner {
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            initOffHeapTable();
+            parseRequiredTypes();
+            initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             Properties properties = makeProperties();
             JobConf jobConf = makeJobConf(properties);
             initReader(jobConf, properties);

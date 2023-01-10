@@ -72,11 +72,13 @@ package com.starrocks.jni.connector;
 
 public class OffHeapTable {
     public ColumnVector[] vectors;
+    public String[] fields;
     public ColumnVector meta;
     public int numRows;
     public boolean[] released;
 
-    public OffHeapTable(ColumnType[] types, int capacity) {
+    public OffHeapTable(ColumnType[] types, String[] fields, int capacity) {
+        this.fields = fields;
         this.vectors = new ColumnVector[types.length];
         this.released = new boolean[types.length];
         int metaSize = 0;
@@ -125,6 +127,7 @@ public class OffHeapTable {
                 if (j != 0) {
                     sb.append(',');
                 }
+                sb.append(fields[j]).append(':');
                 vectors[j].dump(sb, i);
             }
             sb.append("]\n");

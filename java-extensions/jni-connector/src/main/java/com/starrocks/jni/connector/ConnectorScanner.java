@@ -26,7 +26,7 @@ import java.io.IOException;
  * 1. int: the chunk size
  * 2. Map<String, String>: the custom parameters
  * <p>
- * {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], int)} need be called to initialize
+ * {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], String[], int)} need be called to initialize
  * {@link ConnectorScanner#tableSize} and {@link ConnectorScanner#types}
  * before calling {@link ConnectorScanner#getNext()} (maybe in constructor or {@link ConnectorScanner#open()})
  * <p>
@@ -43,12 +43,13 @@ import java.io.IOException;
  */
 public abstract class ConnectorScanner {
     private OffHeapTable offHeapTable;
+    private String[] fields;
     private ColumnType[] types;
     private int tableSize;
 
     /**
      * Initialize the reader with parameters passed by the class constructor and allocate necessary resources.
-     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], int)} method here
+     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], String[], int)} method here
      * to allocate memory spaces.
      */
     public abstract void open() throws IOException;
@@ -71,12 +72,14 @@ public abstract class ConnectorScanner {
     /**
      * This method need be called before {@link ConnectorScanner#getNext()}
      *
-     * @param requiredTypes column types
-     * @param fetchSize     number of rows
+     * @param requiredTypes  column types
+     * @param requiredFields
+     * @param fetchSize      number of rows
      */
-    protected void initOffHeapTableWriter(ColumnType[] requiredTypes, int fetchSize) {
+    protected void initOffHeapTableWriter(ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {
         this.tableSize = fetchSize;
         this.types = requiredTypes;
+        this.fields = requiredFields;
     }
 
     protected void appendData(int index, ColumnValue value) {
@@ -104,7 +107,7 @@ public abstract class ConnectorScanner {
     }
 
     private void initOffHeapTable() {
-        offHeapTable = new OffHeapTable(types, tableSize);
+        offHeapTable = new OffHeapTable(types, fields, tableSize);
     }
 
     private long finishOffHeapTable(int numRows) {

@@ -474,6 +474,7 @@ public class ColumnVector {
                     if (c != 0) {
                         sb.append(",");
                     }
+                    sb.append(names.get(c)).append(":");
                     childColumns[c].dump(sb, i);
                 }
                 sb.append("}");
