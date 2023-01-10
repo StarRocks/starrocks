@@ -20,27 +20,12 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-<<<<<<< HEAD
-=======
-
-namespace query_cache {
-class MultilaneOperator;
-using MultilaneOperatorRawPtr = MultilaneOperator*;
-using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
-} // namespace query_cache
->>>>>>> ffd57a84d ([BugFix] Account finalization cost to scheduler (#16454))
-
 namespace pipeline {
 
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-<<<<<<< HEAD
-=======
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
-class DriverQueue;
->>>>>>> ffd57a84d ([BugFix] Account finalization cost to scheduler (#16454))
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -375,25 +360,11 @@ public:
     inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
-<<<<<<< HEAD
-private:
-=======
+protected:
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
-    // Whether the query can be expirable or not.
-    virtual bool is_query_never_expired() { return false; }
-    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
+    PipelineDriver() : _operators(), _query_ctx(nullptr), _fragment_ctx(nullptr), _source_node_id(0), _driver_id(0) {}
 
-protected:
-    PipelineDriver()
-            : _operators(),
-              _query_ctx(nullptr),
-              _fragment_ctx(nullptr),
-              _pipeline(nullptr),
-              _source_node_id(0),
-              _driver_id(0) {}
-
->>>>>>> ffd57a84d ([BugFix] Account finalization cost to scheduler (#16454))
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
