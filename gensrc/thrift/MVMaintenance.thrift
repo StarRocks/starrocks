@@ -33,6 +33,11 @@ enum MVTaskType {
     REPORT_EPOCH,
 }
 
+enum MVEpochStage {
+    BASELINE,
+    INCREMENTAL,
+}
+
 struct TMVMaintenanceStartTask {
     1: optional list<InternalService.TExecPlanFragmentParams> fragments;
 }
@@ -45,6 +50,7 @@ struct TMVEpoch {
     2: optional i64 epoch_id
     3: optional Types.TTimestamp start_ts
     4: optional Types.TTimestamp commit_ts
+    5: optional MVEpochStage epoch_stage
 }
 
 struct TMVStartEpochTask {
