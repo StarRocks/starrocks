@@ -18,6 +18,7 @@
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "gen_cpp/MVMaintenance_types.h"
 
 namespace starrocks {
 
@@ -92,15 +93,11 @@ struct EpochInfo {
     int64_t max_scan_rows;
     // Trigger mode
     TriggerMode trigger_mode = PROCESSTIME_OFFSET;
-
+    TMVEpochStage::type epoch_stage = TMVEpochStage::BASELINE;
+    
     static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
-    std::string debug_string() const {
-        std::stringstream ss;
-        ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
-           << ", trigger_mode=" << (int)(trigger_mode);
-        return ss.str();
-    }
+    std::string debug_string() const;
 };
 
 /**

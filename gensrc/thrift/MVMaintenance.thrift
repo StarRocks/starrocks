@@ -33,8 +33,9 @@ enum MVTaskType {
     REPORT_EPOCH,
 }
 
-enum MVEpochStage {
-    BASELINE,
+enum TMVEpochStage {
+    BASELINE_RUNNING,
+    BASELINE_FINISHED,
     INCREMENTAL,
 }
 
@@ -50,7 +51,7 @@ struct TMVEpoch {
     2: optional i64 epoch_id
     3: optional Types.TTimestamp start_ts
     4: optional Types.TTimestamp commit_ts
-    5: optional MVEpochStage epoch_stage
+    5: optional TMVEpochStage epoch_stage
 }
 
 struct TMVStartEpochTask {
