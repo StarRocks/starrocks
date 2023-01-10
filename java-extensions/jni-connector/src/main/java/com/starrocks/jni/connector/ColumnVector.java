@@ -488,12 +488,20 @@ public class ColumnVector {
 
     public void appendValue(ColumnValue o) {
         // TODO(yanz): FIXME.
+        ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
+            // NOTE(yan): for struct need to fill
+            if (type.isStruct()) {
+                List<ColumnValue> values = new ArrayList<>();
+                for (int i = 0; i < type.childTypes.size(); i++) {
+                    values.add(null);
+                }
+                appendStruct(values);
+            }
             return;
         }
 
-        ColumnType.TypeValue typeValue = type.getTypeValue();
         switch (typeValue) {
             case BOOLEAN:
                 appendBoolean(o.getBoolean());
