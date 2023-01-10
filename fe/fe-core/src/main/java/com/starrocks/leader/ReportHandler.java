@@ -1283,7 +1283,7 @@ public class ReportHandler extends Daemon {
                         tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
                                 olapTable.getCurBinlogConfig()));
                     } else if (beBinlogConfigVersion == feBinlogConfigVersion) {
-                        if (olapTable.enableBinlog() && olapTable.getBinlogAvailableVersion().size() == 0) {
+                        if (olapTable.isHaveBinlogConfig() && olapTable.getBinlogAvailableVersion().size() == 0) {
                             // not to check here is that the function may need to get the write db lock
                             needToCheck = true;
                         }
