@@ -34,16 +34,11 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.bouncycastle.util.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
