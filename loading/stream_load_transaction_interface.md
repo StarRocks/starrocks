@@ -369,4 +369,3 @@ curl -H "label:<label_name>" -H "db:<database_name>"
       "Message": ""
   }
   ```
-  
