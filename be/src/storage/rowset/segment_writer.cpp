@@ -135,7 +135,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_zone_map = column.is_key() || (_tablet_schema->keys_type() == KeysType::DUP_KEYS &&
                                                  column.type() != FieldType::OLAP_FIELD_TYPE_CHAR &&
                                                  column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_JSON);
+                                                 column.type() != FieldType::OLAP_FIELD_TYPE_JSON &&
+                                                 column.type() != FieldType::OLAP_FIELD_TYPE_OBJECT &&
+                                                 column.type() != FieldType::OLAP_FIELD_TYPE_HLL &&
+                                                 column.type() != FieldType::OLAP_FIELD_TYPE_PERCENTILE);
         if (column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
