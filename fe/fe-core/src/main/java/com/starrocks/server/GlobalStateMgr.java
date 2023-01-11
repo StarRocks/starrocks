@@ -2284,6 +2284,31 @@ public class GlobalStateMgr {
                     sb.append(olapTable.enableReplicatedStorage()).append("\"");
                 }
 
+                // binlog config
+                if (olapTable.containsBinlogConfig()) {
+                    // binlog_version
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getVersion()).append("\"");
+                    // binlog_enable
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogEnable()).append("\"");
+                    // binlog_ttl
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogTtlSecond()).append("\"");
+                    // binlog_max_size
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
+                }
+
                 // write quorum
                 if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)

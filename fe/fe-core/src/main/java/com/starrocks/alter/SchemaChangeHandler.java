@@ -1356,7 +1356,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 return false;
             }
             partitions.addAll(olapTable.getPartitions());
-            if (!olapTable.isHaveBinlogConfig()) {
+            if (!olapTable.containsBinlogConfig()) {
                 newBinlogConfig = new BinlogConfig();
                 hasChanged = true;
             } else {
