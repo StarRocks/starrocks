@@ -29,7 +29,6 @@ class ObjectPool;
 class Expr;
 class ExprContext;
 
-
 namespace in_const_pred_detail {
 template <LogicalType Type, typename Enable = void>
 struct PHashSet {
