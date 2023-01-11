@@ -74,7 +74,7 @@ void GeneralTabletWriter::close() {
 }
 
 Status GeneralTabletWriter::reset_segment_writer() {
-    CHECK(_schema != nullptr);
+    DCHECK(_schema != nullptr);
     auto name = random_segment_filename();
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;

@@ -28,6 +28,10 @@ namespace starrocks {
 
 namespace lake {
 
+Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
+    return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
+}
+
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                                  Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {

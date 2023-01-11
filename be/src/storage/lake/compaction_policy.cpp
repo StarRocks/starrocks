@@ -81,8 +81,6 @@ private:
     static const size_t kCompactionResultBytesThreashold = 1000000000;
     static const size_t kCompactionResultRowsThreashold = 10000000;
 
-    double calc_compaction_score(const RowsetStat& stats);
-
 private:
     TabletPtr _tablet;
 };

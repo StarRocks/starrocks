@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
@@ -32,6 +33,18 @@ class TxnLogPB_OpWrite;
 class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
+class UpdateManager;
+
+class LakeDelvecLoader : public DelvecLoader {
+public:
+    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder)
+            : _update_mgr(update_mgr), _pk_builder(pk_builder) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    UpdateManager* _update_mgr = nullptr;
+    const MetaFileBuilder* _pk_builder = nullptr;
+};
 
 class UpdateManager {
 public:
