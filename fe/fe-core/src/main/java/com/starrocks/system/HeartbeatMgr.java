@@ -193,10 +193,26 @@ public class HeartbeatMgr extends MasterDaemon {
                     boolean isChanged = be.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
+<<<<<<< HEAD
                         ClientPool.backendPool.clearPool(new TNetworkAddress(be.getHost(), be.getBePort()));
                         if (!isReplay) {
                             Catalog.getCurrentCatalog().getGlobalTransactionMgr()
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
+=======
+                        ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
+                        if (!isReplay && !computeNode.isAlive()) {
+                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                    .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
+                        }
+                    } else {
+                        if (Config.integrate_starmgr && !isReplay) {
+                            // addWorker
+                            int starletPort = computeNode.getStarletPort();
+                            if (starletPort != 0) {
+                                String workerAddr = computeNode.getHost() + ":" + starletPort;
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
+                            }
+>>>>>>> 5adfd0800 ([Enhancement] Optimize the cleanup operation of node downtime to avoid the unexpected failure of a single heartbeat and cause the transaction to be aborted (#16386))
                         }
                     }
                     return isChanged;
