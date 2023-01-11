@@ -44,11 +44,17 @@
 
 namespace starrocks {
 
+namespace lake {
+class TabletManager;
+}
+
 class LakeTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriter = lake::AsyncDeltaWriter;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                       MemTracker* mem_tracker);
+
     ~LakeTabletsChannel() override;
 
     DISALLOW_COPY_AND_MOVE(LakeTabletsChannel);
@@ -126,6 +132,7 @@ private:
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
+    lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
 
@@ -154,9 +161,11 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
+LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+                                       const TabletsChannelKey& key, MemTracker* mem_tracker)
         : TabletsChannel(),
           _load_channel(load_channel),
+          _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {}
@@ -365,7 +374,8 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        auto writer = AsyncDeltaWriter::create(tablet.tablet_id(), _txn_id, tablet.partition_id(), slots, _mem_tracker);
+        auto writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
+                                               slots, _mem_tracker);
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
@@ -437,9 +447,9 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                         MemTracker* mem_tracker) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, key, mem_tracker);
+std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+                                                         const TabletsChannelKey& key, MemTracker* mem_tracker) {
+    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker);
 }
 
 } // namespace starrocks
