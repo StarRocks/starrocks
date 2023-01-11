@@ -61,6 +61,7 @@ struct ResultFileOptions {
     int64_t max_row_group_bytes;
     bool use_dictory;
     TParquetCompressionType::type compression_type;
+    TParquetSchema parquet_schema;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -92,6 +93,9 @@ struct ResultFileOptions {
         }
         if (t_opt.__isset.compression_type) {
             compression_type = t_opt.compression_type;
+        }
+        if (t_opt.__isset.parquet_schema) {
+            parquet_schema = t_opt.parquet_schema;
         }
     }
     ~ResultFileOptions() = default;

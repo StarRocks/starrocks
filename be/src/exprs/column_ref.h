@@ -36,8 +36,6 @@ public:
 
     void set_tuple_id(TupleId tuple_id) { _tuple_id = tuple_id; }
 
-    std::string col_name() const { return _col_name; }
-
     // FixMe(kks): currenly, join runtime filter need this method
     // we should find a way remove this method
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override;
@@ -61,8 +59,6 @@ private:
     SlotId _column_id;
 
     TupleId _tuple_id = 0; // used for desc this slot from
-
-    std::string _col_name;
 };
 
 } // namespace starrocks

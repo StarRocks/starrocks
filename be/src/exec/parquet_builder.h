@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <arrow/buffer.h>
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
@@ -44,6 +43,7 @@ struct ParquetBuilderOptions {
     TParquetCompressionType::type compression_type;
     bool use_dictionary;
     int64_t row_group_max_size;
+    TParquetSchema parquet_schema;
 };
 
 class ParquetOutputStream : public arrow::io::OutputStream {
@@ -67,10 +67,10 @@ private:
 class ParquetBuildHelper {
 public:
     static void build_file_data_type(parquet::Type::type& parquet_data_type,
-                                const LogicalType& column_data_type);
+                                const TParquetColumnType::type& column_data_type);
 
-    static void build_parquet_repetition_type(
-            parquet::Repetition::type& parquet_repetition_type, const bool is_nullable);
+    static void build_repetition_type(parquet::Repetition::type& parquet_repetition_type,
+                                      const TParquetRepetitionType::type&) ;
 
     static void build_compression_type(parquet::WriterProperties::Builder& builder,
                                        const TParquetCompressionType::type& compression_type);
@@ -93,7 +93,7 @@ public:
 
 private:
     void _init_properties(const ParquetBuilderOptions& options);
-    Status _init_schema();
+    Status _init_schema(const TParquetSchema&);
     void _generate_rg_writer();
     void _rg_writer_close();
     size_t _get_rg_written_bytes();
@@ -108,11 +108,11 @@ private:
     ::parquet::RowGroupWriter* _rg_writer = nullptr;
     std::vector<int64_t> _buffered_values_estimate;
     int64_t _row_group_max_size;
-    int64_t _cur_written_rows;
+    int64_t _cur_written_rows{0};
     bool _is_async;
     std::atomic<bool> _rg_writer_closing = false;
     std::atomic<bool> _closed = false;
-    int64_t _total_row_group_writen_bytes;
+    int64_t _total_row_group_writen_bytes{0};
 };
 
 } // namespace starrocks

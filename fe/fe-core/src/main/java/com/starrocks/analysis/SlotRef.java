@@ -323,11 +323,9 @@ public class SlotRef extends Expr {
         if (desc != null) {
             if (desc.getParent() != null) {
                 msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
-                msg.slot_ref.setName(desc.getColumn().getName());
             } else {
                 // tuple id is meaningless here
                 msg.slot_ref = new TSlotRef(desc.getId().asInt(), 0);
-                msg.slot_ref.setName(desc.getColumn().getName());
             }
         } else {
             // slot id and tuple id are meaningless here

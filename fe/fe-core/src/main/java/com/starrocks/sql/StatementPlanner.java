@@ -163,6 +163,6 @@ public class StatementPlanner {
         }
 
         ResultSink resultSink = (ResultSink) topFragment.getSink();
-        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
+        resultSink.setOutfileInfo(queryStmt, plan.getOutputExprs());
     }
 }

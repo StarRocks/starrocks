@@ -29,7 +29,6 @@
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
-
 namespace starrocks {
 
 ParquetOutputStream::ParquetOutputStream(std::unique_ptr<WritableFile> writable_file)
@@ -97,7 +96,7 @@ ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
 
 Status ParquetBuilder::init(const ParquetBuilderOptions& options) {
     _init_properties(options);
-    Status st = _init_schema();
+    Status st = _init_schema(options.parquet_schema);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to init parquet schema: " << st;
     }
@@ -116,65 +115,52 @@ void ParquetBuilder::_init_properties(const ParquetBuilderOptions& options) {
     _properties = builder.build();
 }
 
-Status ParquetBuilder::_init_schema() {
+Status ParquetBuilder::_init_schema(const TParquetSchema& schema) {
     ::parquet::schema::NodeVector fields;
-    for (auto _output_expr_ctx : _output_expr_ctxs) {
+    for (const auto& column : schema.columns) {
         ::parquet::Repetition::type parquet_repetition_type;
         ::parquet::Type::type parquet_data_type;
-        auto root = _output_expr_ctx->root();
-        if (!root->is_slotref()) {
-            return Status::InternalError("Not slot ref column");
-        }
-        auto column_ref = ((ColumnRef*)root);
-        ParquetBuildHelper::build_file_data_type(parquet_data_type, column_ref->type().type);
-        ParquetBuildHelper::build_parquet_repetition_type(parquet_repetition_type, column_ref->is_nullable());
-        ::parquet::schema::NodePtr nodePtr = ::parquet::schema::PrimitiveNode::Make(column_ref->col_name(),
+        ParquetBuildHelper::build_file_data_type(parquet_data_type, column.type);
+        ParquetBuildHelper::build_repetition_type(parquet_repetition_type, column.repetition_type);
+        ::parquet::schema::NodePtr nodePtr = ::parquet::schema::PrimitiveNode::Make(column.name,
                                                                                     parquet_repetition_type,
                                                                                     parquet_data_type);
         fields.push_back(nodePtr);
     }
+
     _schema = std::static_pointer_cast<::parquet::schema::GroupNode>(
             ::parquet::schema::GroupNode::Make("schema", ::parquet::Repetition::REQUIRED, fields));
     return Status::OK();
 }
 
 void ParquetBuildHelper::build_file_data_type(parquet::Type::type& parquet_data_type,
-                                              const LogicalType& column_data_type) {
+                                              const TParquetColumnType::type& column_data_type) {
     switch (column_data_type) {
-        case TYPE_BOOLEAN: {
+        case TParquetColumnType::BOOLEAN: {
             parquet_data_type = parquet::Type::BOOLEAN;
             break;
         }
-        case TYPE_TINYINT:
-        case TYPE_SMALLINT:
-        case TYPE_INT: {
+        case TParquetColumnType::INT32: {
             parquet_data_type = parquet::Type::INT32;
             break;
         }
-        case TYPE_BIGINT:
-        case TYPE_DATE:
-        case TYPE_DATETIME: {
+        case TParquetColumnType::INT64: {
             parquet_data_type = parquet::Type::INT64;
             break;
         }
-        case TYPE_LARGEINT: {
+        case TParquetColumnType::INT96: {
             parquet_data_type = parquet::Type::INT96;
             break;
         }
-        case TYPE_FLOAT: {
+        case TParquetColumnType::FLOAT: {
             parquet_data_type = parquet::Type::FLOAT;
             break;
         }
-        case TYPE_DOUBLE: {
+        case TParquetColumnType::DOUBLE: {
             parquet_data_type = parquet::Type::DOUBLE;
             break;
         }
-        case TYPE_CHAR:
-        case TYPE_VARCHAR:
-        case TYPE_DECIMAL:
-        case TYPE_DECIMAL32:
-        case TYPE_DECIMAL64:
-        case TYPE_DECIMALV2: {
+        case TParquetColumnType::BYTE_ARRAY: {
             parquet_data_type = parquet::Type::BYTE_ARRAY;
             break;
         }
@@ -184,10 +170,25 @@ void ParquetBuildHelper::build_file_data_type(parquet::Type::type& parquet_data_
     }
 }
 
-void ParquetBuildHelper::build_parquet_repetition_type(
+void ParquetBuildHelper::build_repetition_type(
         parquet::Repetition::type& parquet_repetition_type,
-        const bool is_nullable) {
-    parquet_repetition_type = is_nullable ? parquet::Repetition::OPTIONAL : parquet::Repetition::REQUIRED;
+        const TParquetRepetitionType::type& column_repetition_type) {
+    switch (column_repetition_type) {
+        case TParquetRepetitionType::REQUIRED: {
+            parquet_repetition_type = parquet::Repetition::REQUIRED;
+            break;
+        }
+        case TParquetRepetitionType::REPEATED: {
+            parquet_repetition_type = parquet::Repetition::REPEATED;
+            break;
+        }
+        case TParquetRepetitionType::OPTIONAL: {
+            parquet_repetition_type = parquet::Repetition::OPTIONAL;
+            break;
+        }
+        default:
+            parquet_repetition_type = parquet::Repetition::UNDEFINED;
+    }
 }
 
 void ParquetBuildHelper::build_compression_type(
@@ -340,11 +341,15 @@ void ParquetBuilder::_rg_writer_close() {
 
 std::size_t ParquetBuilder::file_size() {
     DCHECK(_output_stream != nullptr);
+    if (_rg_writer_closing || _rg_writer == nullptr) {
+        return 0;
+    }
+
     return _total_row_group_writen_bytes + _get_rg_written_bytes();
 }
 
 Status ParquetBuilder::finish() {
-    if (_file_writer == nullptr) {
+    if (_closed) {
         return Status::OK();
     }
 
@@ -357,6 +362,7 @@ Status ParquetBuilder::finish() {
     if (st != ::arrow::Status::OK()) {
         return Status::InternalError("Close file failed!");
     }
+
     _closed.store(true);
     return Status::OK();
 }

@@ -70,6 +70,34 @@ enum TParquetCompressionType {
     UNCOMPRESSED,
 }
 
+enum TParquetColumnType {
+    BOOLEAN,
+    INT32,
+    INT64,
+    INT96,
+    BYTE_ARRAY,
+    FLOAT,
+    DOUBLE,
+    FIXED_LEN_BYTE_ARRAY,
+}
+
+enum TParquetRepetitionType {
+    REQUIRED,
+    OPTIONAL,
+    REPEATED,
+}
+
+struct TParquetColumn {
+    1: required string name;
+    2: optional TParquetColumnType type;
+    3: optional TParquetRepetitionType repetition_type
+    4: optional i64 id;
+}
+
+struct TParquetSchema {
+    1: required list<TParquetColumn> columns;
+}
+
 struct TResultFileSinkOptions {
     1: required string file_path
     2: required PlanNodes.TFileFormatType file_format
@@ -88,6 +116,7 @@ struct TResultFileSinkOptions {
     11: optional i64 parquet_max_group_bytes
     12: optional TParquetCompressionType compression_type
     13: optional bool use_dictory
+    14: optional TParquetSchema parquet_schema
 }
 
 struct TMemoryScratchSink {
