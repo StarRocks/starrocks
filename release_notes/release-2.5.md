@@ -10,7 +10,8 @@
 
 - 扫描时列的对应关系错误，导致查询多个 information_schema 表时 JOIN 操作异常。[# 13276](https://github.com/StarRocks/starrocks/issues/13279)
 - BE 在停止一段时间后重启，因 tablet 落后触发增量克隆，从而短时间内提交大量数据版本，导致元数据膨胀。[# 15844](https://github.com/StarRocks/starrocks/issues/15844)
-- Primary Key 表在删除部分 tablet 时，因部分过期 rowset 被引用而无法释放，导致检查失败。[# 15959](https://github.com/StarRocks/starrocks/pull/15959)
+- Primary Key 表在删除部分 tablet 时，因部分过期 rowset 仍被引用无法释放，导致 tablet 删除失败。[# 15959](https://github.com/StarRocks/starrocks/pull/15959)
+
 - 若干空指针问题导致 Drop MATERIALIZED VIEW 请求报错 "Unknown Error"。 [# 15906](https://github.com/StarRocks/starrocks/issues/15906) [# 15911](https://github.com/StarRocks/starrocks/pull/15911)
 
 ## 2.5.0 RC 02
