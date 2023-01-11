@@ -20,16 +20,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-<<<<<<< HEAD
-=======
-
-namespace query_cache {
-class MultilaneOperator;
-using MultilaneOperatorRawPtr = MultilaneOperator*;
-using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
-} // namespace query_cache
-
->>>>>>> 5e4c3499d ([BugFix] Account finalization cost to scheduler (#16454))
 namespace pipeline {
 
 class PipelineDriver;
