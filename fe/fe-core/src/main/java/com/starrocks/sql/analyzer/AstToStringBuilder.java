@@ -42,6 +42,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -133,6 +134,16 @@ public class AstToStringBuilder {
         }
 
         @Override
+        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(")");
+            return sb.toString();
+        }
+
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
