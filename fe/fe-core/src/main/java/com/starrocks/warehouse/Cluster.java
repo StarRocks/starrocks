@@ -43,9 +43,9 @@ public class Cluster  implements Writable {
     }
 
     // set the associated worker group id when resizing
-    public void setWorkerGroupId(long id) {
+    /*    public void setWorkerGroupId(long id) {
         this.workerGroupId = id;
-    }
+    }*/
 
     public long getWorkerGroupId() {
         return workerGroupId;
@@ -61,12 +61,12 @@ public class Cluster  implements Writable {
     public int getPendingSqls() {
         return 1;
     }
-    public int setRunningSqls(int val) {
+    /*    public int setRunningSqls(int val) {
         return 1;
     }
     public int addAndGetRunningSqls(int delta) {
         return 1;
-    }
+    }*/
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
