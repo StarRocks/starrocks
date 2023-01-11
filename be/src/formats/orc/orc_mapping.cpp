@@ -237,8 +237,17 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
 Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                              const orc::Type& orc_type, const bool case_sensitive) {
     DCHECK(origin_type.is_complex_type());
+<<<<<<< HEAD
     if (origin_type.type == PrimitiveType::TYPE_STRUCT) {
         DCHECK(orc_type.getKind() == orc::TypeKind::STRUCT);
+=======
+    if (origin_type.type == LogicalType::TYPE_STRUCT) {
+        if (orc_type.getKind() != orc::TypeKind::STRUCT) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is STRUCT, actual type is $0, ",
+                    orc_type.toString()));
+        }
+>>>>>>> c1fc441b0 ([BugFix] BE crash when ingesting nested array from orc (#16371))
 
         std::unordered_map<std::string, size_t> tmp_orc_fieldname_2_pos;
         for (size_t i = 0; i < orc_type.getSubtypeCount(); i++) {
@@ -270,8 +279,17 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             }
             mapping->add_mapping(index, need_add_column_id, need_add_child_mapping);
         }
+<<<<<<< HEAD
     } else if (origin_type.type == PrimitiveType::TYPE_ARRAY) {
         DCHECK(orc_type.getKind() == orc::TypeKind::LIST);
+=======
+    } else if (origin_type.type == LogicalType::TYPE_ARRAY) {
+        if (orc_type.getKind() != orc::TypeKind::LIST) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is LIST, actual type is $0, ",
+                    orc_type.toString()));
+        }
+>>>>>>> c1fc441b0 ([BugFix] BE crash when ingesting nested array from orc (#16371))
         const orc::Type& orc_child_type = *orc_type.getSubtype(0);
         const TypeDescriptor& origin_child_type = origin_type.children[0];
         // Check Array's element can be converted
@@ -287,8 +305,17 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         }
 
         mapping->add_mapping(0, need_add_column_id, need_add_child_mapping);
+<<<<<<< HEAD
     } else if (origin_type.type == PrimitiveType::TYPE_MAP) {
         DCHECK(orc_type.getKind() == orc::TypeKind::MAP);
+=======
+    } else if (origin_type.type == LogicalType::TYPE_MAP) {
+        if (orc_type.getKind() != orc::TypeKind::MAP) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is MAP, actual type is $0, ",
+                    orc_type.toString()));
+        }
+>>>>>>> c1fc441b0 ([BugFix] BE crash when ingesting nested array from orc (#16371))
 
         // Check Map's key can be converted
         RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
