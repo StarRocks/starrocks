@@ -21,6 +21,7 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+
 namespace query_cache {
 class MultilaneOperator;
 using MultilaneOperatorRawPtr = MultilaneOperator*;
@@ -180,6 +181,8 @@ public:
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
+
+    void increment_schedule_times();
 
     void set_driver_state(DriverState state) {
         if (state == _state) {
@@ -359,6 +362,7 @@ public:
     const workgroup::WorkGroup* workgroup() const;
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
+    void set_in_queue(DriverQueue* in_queue) { _in_queue = in_queue; }
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
@@ -367,7 +371,9 @@ public:
 
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
-private:
+protected:
+    PipelineDriver() : _operators(), _query_ctx(nullptr), _fragment_ctx(nullptr), _source_node_id(0), _driver_id(0) {}
+
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
@@ -383,6 +389,7 @@ private:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
+    void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_overhead_timer();
 
@@ -416,6 +423,7 @@ private:
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    DriverQueue* _in_queue = nullptr;
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
