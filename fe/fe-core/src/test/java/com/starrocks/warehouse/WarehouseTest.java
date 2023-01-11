@@ -32,7 +32,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ClusterTest {
+public class WarehouseTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
