@@ -50,6 +50,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
@@ -171,7 +172,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -553,8 +553,8 @@ public class GlobalStateMgr {
         this(false);
     }
 
-    // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCheckpointCatalog) {
+    // if isCkptGlobalState is true, it means that we should not collect thread pool metric
+    private GlobalStateMgr(boolean isCkptGlobalState) {
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -603,19 +603,19 @@ public class GlobalStateMgr {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
         this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
-                        Config.desired_max_waiting_jobs, !isCheckpointCatalog);
+                        Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                 Config.async_load_task_pool_size,
-                Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
+                Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -676,7 +676,7 @@ public class GlobalStateMgr {
 
     public static GlobalStateMgr getCurrentState() {
         if (isCheckpointThread()) {
-            // only checkpoint thread it self will goes here.
+            // only checkpoint thread itself will go here.
             // so no need to care about the thread safe.
             if (CHECKPOINT == null) {
                 CHECKPOINT = new GlobalStateMgr(true);
@@ -1101,7 +1101,7 @@ public class GlobalStateMgr {
 
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
-            // start other daemon threads that should running on all FE
+            // start other daemon threads that should run on all FEs
             startNonLeaderDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
 
@@ -1620,7 +1620,6 @@ public class GlobalStateMgr {
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
-
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3061,6 +3060,7 @@ public class GlobalStateMgr {
                                 TTabletMetaType metaType) {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
+
     public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
         localMetastore.modifyBinlogMeta(db, table, binlogConfig);
     }
@@ -3129,7 +3129,6 @@ public class GlobalStateMgr {
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {

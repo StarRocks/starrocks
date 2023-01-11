@@ -40,6 +40,7 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -75,7 +76,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -911,6 +911,11 @@ public class EditLog {
                             info.getUserIdentity(), info.getAuthenticationInfo());
                     break;
                 }
+                case OperationType.OP_UPDATE_USER_PROP_V2: {
+                    UserPropertyInfo info = (UserPropertyInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayUpdateUserProperty(info);
+                    break;
+                }
                 case OperationType.OP_DROP_USER_V2: {
                     UserIdentity userIdentity = (UserIdentity) journal.getData();
                     globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
@@ -926,7 +931,7 @@ public class EditLog {
                     globalStateMgr.getPrivilegeManager().replayDropRole(info);
                     break;
                 }
-                case OperationType.OP_AUTH_UPGRDE_V2: {
+                case OperationType.OP_AUTH_UPGRADE_V2: {
                     AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
                     globalStateMgr.replayAuthUpgrade(info);
                     break;
@@ -1598,6 +1603,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 
+    public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
+        logEdit(OperationType.OP_UPDATE_USER_PROP_V2, propertyInfo);
+    }
+
     public void logDropUser(UserIdentity userIdentity) {
         logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
     }
@@ -1637,7 +1646,7 @@ public class EditLog {
     }
 
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
-        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
+        logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
