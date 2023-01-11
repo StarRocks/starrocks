@@ -54,6 +54,8 @@ struct BinlogOffset {
     int64_t tablet_id;
     int64_t tablet_version;
     int64_t lsn;
+
+    std::string debug_string() const;
 };
 
 class TMVMaintenanceTasks;

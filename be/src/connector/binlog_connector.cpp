@@ -14,6 +14,7 @@
 
 #include "connector/binlog_connector.h"
 
+#include "exec/connector_scan_node.h"
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "runtime/descriptors.h"
@@ -34,13 +35,14 @@ BinlogDataSourceProvider::BinlogDataSourceProvider(ConnectorScanNode* scan_node,
         : _scan_node(scan_node), _binlog_scan_node(plan_node.stream_scan_node.binlog_scan) {}
 
 DataSourcePtr BinlogDataSourceProvider::create_data_source(const TScanRange& scan_range) {
-    return std::make_unique<BinlogDataSource>(this, scan_range);
+    return std::make_unique<BinlogDataSource>(this, scan_range, _scan_node->id());
 }
 
 // ================================
 
-BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
-        : _provider(provider), _scan_range(scan_range.binlog_scan_range) {}
+BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range,
+                                   int64_t plan_node_id)
+        : _provider(provider), _scan_range(scan_range.binlog_scan_range), _plan_node_id(plan_node_id) {}
 
 Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
@@ -55,7 +57,16 @@ Status BinlogDataSource::open(RuntimeState* state) {
             << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
 
     if (_is_baseline) {
-        Version version(0, _scan_range.offset.version);
+        // Reader scan rangej from epoch manager, instead of plan node
+        int64_t tablet_id = _tablet->tablet_id();
+        auto& instance_id = state->fragment_instance_id();
+        auto* binlog_offset = em->get_binlog_offset(instance_id, _plan_node_id, tablet_id);
+        if (!binlog_offset) {
+            return Status::InternalError(fmt::format("binlog scan range found: instance_id={} plan_node={} tablet={}",
+                                                     print_id(instance_id), _plan_node_id, tablet_id));
+        }
+        Version version(0, binlog_offset->tablet_version);
+
         _tablet_reader = std::make_shared<TabletReader>(_tablet, version, _binlog_read_schema);
         _reader_params.is_pipeline = true;
         _reader_params.reader_type = READER_QUERY;
