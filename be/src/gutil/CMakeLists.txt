@@ -65,12 +65,6 @@ set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-depre
 #  glog
 #  protobuf)
 
-#if (NOT APPLE)
-#  set(GUTIL_LIBS
-#    ${GUTIL_LIBS}
-#    rt) # clock_gettime() requires -lrt
-#endif()
-
 #ADD_EXPORTABLE_LIBRARY(gutil
 #  SRCS ${GUTIL_SRCS}
 #  DEPS ${GUTIL_LIBS}
