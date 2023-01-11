@@ -151,9 +151,7 @@ public:
     // Close the file writer
     Status close(bool append_file_meta);
 
-    bool closed() {
-        return _writer_state == CLOSED;
-    }
+    bool closed() { return _writer_state == CLOSED; }
 
     // Actual file size currently, including the data committed
     // and pending to commit
