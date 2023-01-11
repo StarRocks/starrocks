@@ -77,8 +77,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_materialized_view|TRUE|是否允许创建物化视图。|
 |enable_decimal_v3|TRUE|是否开启 Decimal V3。|
 |enable_sql_blacklist|FALSE|是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。|
-|dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。|
-|dynamic_partition_enable|TRUE|是否开启动态分区功能。|
+|dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。如果有新数据生成，会自动生成分区。|
+|dynamic_partition_enable|TRUE|是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。|
 |max_partitions_in_one_batch|4096|批量创建分区时，分区数目的最大值。|
 |max_query_retry_time|2|FE 上查询重试的次数。|
 |max_create_table_timeout_second|600|建表最大超时时间，单位为秒。|
