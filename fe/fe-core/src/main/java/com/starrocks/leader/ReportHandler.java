@@ -810,8 +810,8 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletTruncated(tabletId));
-                invertedIndex.eraseTabletTruncated(tabletId);
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                invertedIndex.eraseTabletForceDelete(tabletId);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;
