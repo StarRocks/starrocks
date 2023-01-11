@@ -28,6 +28,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,6 +84,19 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         if (rangePartitionDesc != null) {
             rangePartitionDesc.analyze(columnDefs, otherProperties);
+        }
+
+        SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+
+        boolean hasExprAnalyze = false;
+        for (ColumnDef columnDef : columnDefs) {
+            if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName()))  {
+                PartitionExprAnalyzer.analyzePartitionExpr(this.expr, columnDef.getType());
+                hasExprAnalyze = true;
+            }
+        }
+        if (!hasExprAnalyze) {
+            throw new AnalysisException("Partition expr without analyzed.");
         }
     }
 

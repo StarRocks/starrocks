@@ -2180,6 +2180,7 @@ public class GlobalStateMgr {
                 partitionId = Lists.newArrayList();
             }
             if (partitionInfo.getType() == PartitionType.RANGE
+                    || partitionInfo.getType() == PartitionType.EXPR_RANGE
                     || partitionInfo.getType() == PartitionType.LIST) {
                 sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
             }

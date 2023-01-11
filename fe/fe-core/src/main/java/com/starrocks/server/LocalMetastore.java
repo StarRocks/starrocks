@@ -918,7 +918,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
-        if (partitionType != PartitionType.RANGE && partitionType != PartitionType.LIST) {
+        if (partitionType != PartitionType.RANGE && partitionType != PartitionType.EXPR_RANGE &&
+                partitionType != PartitionType.LIST) {
             throw new DdlException("Only support adding partition to range/list partitioned table");
         }
     }
@@ -1279,7 +1280,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                  List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
-        if (partitionType == PartitionType.RANGE) {
+        if (partitionType == PartitionType.RANGE || partitionType == PartitionType.EXPR_RANGE) {
             addRangePartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
                     existPartitionNameSet);
         } else if (partitionType == PartitionType.LIST) {
@@ -2339,6 +2340,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
                 } else if (partitionInfo.getType() == PartitionType.RANGE
+                        || partitionInfo.getType() == PartitionType.EXPR_RANGE
                         || partitionInfo.getType() == PartitionType.LIST) {
                     try {
                         // just for remove entries in stmt.getProperties(),
