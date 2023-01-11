@@ -93,8 +93,8 @@ struct EpochInfo {
     int64_t max_scan_rows;
     // Trigger mode
     TriggerMode trigger_mode = PROCESSTIME_OFFSET;
-    TMVEpochStage::type epoch_stage = TMVEpochStage::BASELINE;
-    
+    TMVEpochStage::type epoch_stage = TMVEpochStage::BASELINE_RUNNING;
+
     static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
     std::string debug_string() const;

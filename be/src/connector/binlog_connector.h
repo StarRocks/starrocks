@@ -20,6 +20,8 @@
 #include "connector/connector.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "storage/tablet.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 
 namespace starrocks::connector {
 
@@ -83,6 +85,9 @@ private:
     TabletSharedPtr _tablet;
     // TODO this will be used by BinlogReader
     VectorizedSchema _binlog_read_schema;
+    bool _is_baseline;
+    TabletReaderParams _reader_params;
+    std::shared_ptr<TabletReader> _tablet_reader;
 
     int64_t _rows_read_number = 0;
     int64_t _bytes_read = 0;
