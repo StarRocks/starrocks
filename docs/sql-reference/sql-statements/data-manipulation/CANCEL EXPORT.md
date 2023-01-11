@@ -11,7 +11,7 @@ The CANCEL EXPORT statement requires that you have at least one of the following
 ```SQL
 CANCEL EXPORT
 [FROM db_name]
-WHERE QUERYID = "query_id";
+WHERE QUERYID = "query_id"
 ```
 
 ## Parameters

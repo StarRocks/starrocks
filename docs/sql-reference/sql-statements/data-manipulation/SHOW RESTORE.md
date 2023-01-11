@@ -11,7 +11,7 @@ Views the last RESTORE task in a specified database. For more information, see [
 ## Syntax
 
 ```SQL
-SHOW RESTORE [FROM db_name]
+SHOW RESTORE [FROM <db_name>]
 ```
 
 ## Parameters
