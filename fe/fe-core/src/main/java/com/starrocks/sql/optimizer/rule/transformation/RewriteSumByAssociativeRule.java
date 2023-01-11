@@ -46,6 +46,8 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
+// For aggregate functions like `sum(expr + const)`, we can rewrite it to `sum(expr) + const * count()`
+// to reduce the overhead of a project calculation.
 public class RewriteSumByAssociativeRule extends TransformationRule {
     public RewriteSumByAssociativeRule() {
         super(RuleType.TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
@@ -61,13 +63,25 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        // pre-project->agg->post-project
+        // let's use sum(id_int +1) as an example, suppose id_int is INT
+        /*
+         * Before
+         *
+         * LogicalProjectOperator {projection=[28: sum]}
+         * ->  LogicalAggregation {type=GLOBAL ,aggregations={28: sum=sum(27: expr)} ,groupKeys=[]}
+         *   ->  LogicalProjectOperator {projection=[add(cast(1: id_int as bigint(20)), 1)]}
+         *
+         * After
+         *
+         * LogicalProjectOperator {projection=[add(30: sum, multiply(31: count, 1))]
+         * ->  LogicalAggregation {type=GLOBAL ,aggregations={30: sum=sum(29: id_int), 31: count=count()} ,groupKeys=[]}
+         *   ->  LogicalProjectOperator {projection=[add(cast(1: id_int as bigint(20)), 1), 1: id_int]}
+         */
         LogicalProjectOperator postAggProjectOperator = (LogicalProjectOperator) input.getOp();
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
         LogicalProjectOperator preAggProjectOperator =
                 (LogicalProjectOperator) input.getInputs().get(0).getInputs().get(0).getOp();
 
-        // sum(expr + const) -> sum(expr) + const * count(expr)
         ColumnRefSet requiredColumns = context.getTaskContext().getRequiredColumns();
 
         Map<ColumnRefOperator, ScalarOperator> newPreAggProjections = Maps.newHashMap();
@@ -81,6 +95,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 newPostAggProjections
                 );
 
+        // try to rewrite aggregate function top-down
         for (Map.Entry<ColumnRefOperator, ScalarOperator> postAggProjection :
                 postAggProjectOperator.getColumnRefMap().entrySet()) {
             ColumnRefOperator columnRefOperator = postAggProjection.getKey();
@@ -90,7 +105,6 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         }
 
         if (rewriteSumVisitor.newAggregations.isEmpty()) {
-            // nothing to rewrite
             return Lists.newArrayList();
         }
 
@@ -130,7 +144,6 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         public Map<ColumnRefOperator, ScalarOperator> newPreAggProjections;
 
         public Map<ColumnRefOperator, CallOperator> reservedAggregations;
-        public Map<ColumnRefOperator, ScalarOperator> reservedPreAggProjections;
 
         private Map<ScalarOperator, ColumnRefOperator> commonArguments;
 
@@ -146,7 +159,6 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             this.newAggregations = Maps.newHashMap();
             this.newPreAggProjections = newPreAggProjections;
             this.reservedAggregations = Maps.newHashMap();
-            this.reservedPreAggProjections = Maps.newHashMap();
             this.commonArguments = Maps.newHashMap();
         }
 
@@ -184,12 +196,13 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
         private ScalarOperator createNewAggFunction(ScalarOperator arg0, ScalarOperator arg1, Type returnType) {
             if (arg0.isConstant()) {
+                // generate count() * arg0
+
                 AggregateFunction countFunction = AggregateFunction.createBuiltin(
                         FunctionSet.COUNT, Lists.newArrayList(arg1.getType()), Type.BIGINT, Type.BIGINT,
                         false, true, true);
 
-                // if arg1 is nullable, we should use count(arg1),
-                // otherwise, just use count()
+                // if arg1 is nullable, we use count(arg1), otherwise use count()
                 List<ScalarOperator> countArguments = Lists.newArrayList();
                 if (arg1.isNullable()) {
                     countArguments.add(arg1);
@@ -201,8 +214,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                         newAggFunction, newAggFunction.getType(), true);
                 newAggregations.put(newAggRef, newAggFunction);
 
-                // for decimal type, should give a correct precision and scale
-                // for others, just convert?
+                // cast countOperator and constOperator to target type
                 ScalarOperator countOperator = null;
                 ScalarOperator constOperator = null;
                 PrimitiveType primitiveType = returnType.getPrimitiveType();
@@ -213,20 +225,25 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 newAggRef, false);
                         int precision = ((ScalarType) arg0.getType()).getScalarPrecision();
                         int scale = ((ScalarType) arg0.getType()).getScalarScale();
-                        constOperator = ConstantOperator.createDecimal(new BigDecimal(arg0.toString()),
-                                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale));
+                        Type constType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(constType) :
+                                ConstantOperator.createDecimal(new BigDecimal(arg0.toString()), constType);
                         break;
                     case DOUBLE:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = ConstantOperator.createDouble(((ConstantOperator) arg0).getDouble());
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.DOUBLE) :
+                                ConstantOperator.createDouble(((ConstantOperator) arg0).getDouble());
                         break;
                     case LARGEINT:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = ConstantOperator.createLargeInt(new BigInteger(arg0.toString()));
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.LARGEINT) :
+                                ConstantOperator.createLargeInt(new BigInteger(arg0.toString()));
                         break;
                     case BIGINT:
+                        // count() always return BIGINT, no need to cast
                         countOperator = newAggRef;
-                        constOperator = ConstantOperator.createBigint(Long.parseLong(arg0.toString()));
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.BIGINT) :
+                                ConstantOperator.createBigint(Long.parseLong(arg0.toString()));
                         break;
                     default:
                         Preconditions.checkState(false, "unexpected sum function result type");
@@ -236,10 +253,17 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 countOperator, constOperator));
                 return newMultiply;
             } else {
+                // generate sum(arg0)
+
                 ColumnRefOperator newColumnRef;
+
                 if (arg0.isColumnRef() && oldPreAggProjections.containsKey(arg0)) {
+                    // if arg0 is a ColumnRef and exists in the oldPreAggProjections,
+                    // we don't need to create a new ColumnRef
                     newColumnRef = (ColumnRefOperator) arg0;
                 } else if (commonArguments.containsKey(arg0)) {
+                    // if arg0 has been created by the previous rewriting,
+                    // we don't need to create a new ColumnRef
                     newColumnRef = commonArguments.get(arg0);
                 } else {
                     newColumnRef = columnRefFactory.create(arg0, arg0.getType(), arg0.isNullable());
@@ -249,7 +273,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
                 Type sumFunctionType = returnType;
                 if (returnType.isDecimalV3()) {
-                    // for decimal type, we should keep result's scale same as the input's scale
+                    // for decimal type, we should keep the result's scale same as the input's scale
                     int argScale = ((ScalarType) arg0.getType()).getScalarScale();
                     sumFunctionType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, argScale);
                 }
@@ -281,11 +305,17 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                         ScalarOperator aggColumnExpr = oldPreAggProjections.get(aggColumnRef);
                         if (aggColumnExpr.getOpType() == OperatorType.CALL) {
                             CallOperator callOperator = (CallOperator) aggColumnExpr;
-                            if (callOperator.getFnName().equals("add")) {
+                            String functionName = callOperator.getFnName();
+                            if (functionName.equals("add") || functionName.equals("subtract")) {
                                 List<ScalarOperator> arguments = callOperator.getArguments();
                                 Preconditions.checkState(arguments.size() == 2);
-                                // there is at least one const in add expr
+                                // there is at least one constant in arguments
                                 if (arguments.get(0).isConstant() || arguments.get(1).isConstant()) {
+                                    // sometimes expr need to be cast before evaluating ADD/SUB operation.
+                                    // for example, suppose the type of expr is SMALLINT,
+                                    // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
+                                    // but this cast is not needed in the sum function after rewriting,
+                                    // we can remove it and get sum(expr) + count() * 1
                                     ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
                                     ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
 
@@ -294,16 +324,15 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                     ScalarOperator agg1 = createNewAggFunction(
                                             newArg1, newArg0, aggFunction.getType());
 
-                                    CallOperator newAdd = new CallOperator("add",
+                                    CallOperator newOperator = new CallOperator(functionName,
                                             aggFunction.getType(), Lists.newArrayList(agg0, agg1));
-                                    return newAdd;
+                                    return newOperator;
                                 }
                             }
                         }
                     }
                 }
                 reservedAggregations.put(op, oldAggregations.get(op));
-                reservedPreAggProjections.put(op, op);
             }
             return op;
         }
