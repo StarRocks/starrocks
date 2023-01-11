@@ -18,25 +18,34 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.warehouse.Cluster;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
-public class OpWarehouseLog implements Writable {
-
+public class ResumeWarehouseLog implements Writable {
     @SerializedName(value = "name")
     private String name;
 
     @SerializedName(value = "id")
     private long id;
 
+    @SerializedName(value = "clusters")
+    private Map<Long, Cluster> clusters;
+
     String getWhName() {
         return name;
     }
 
-    public OpWarehouseLog(String name) {
+    public ResumeWarehouseLog(String name, Map<Long, Cluster> clusters) {
         this.name = name;
+        this.clusters = clusters;
+    }
+
+    public Map<Long, Cluster> getClusters() {
+        return clusters;
     }
 
     @Override
@@ -44,9 +53,7 @@ public class OpWarehouseLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static OpWarehouseLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), OpWarehouseLog.class);
+    public static ResumeWarehouseLog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), ResumeWarehouseLog.class);
     }
-
 }
-

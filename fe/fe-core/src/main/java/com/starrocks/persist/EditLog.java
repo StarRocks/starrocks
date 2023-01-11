@@ -156,14 +156,14 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayAddCluster(log);
                     break;
                 }
                 case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayRemoveCluster(log);
                     break;
@@ -184,11 +184,11 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_RESUME_WH: {
-                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    // long whId = log.getId();
+                    ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
                     String warehouseName = log.getWhName();
+                    Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayResumeWarehouse(warehouseName);
+                    warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
                     break;
                 }
                 case OperationType.OP_DROP_WH: {
@@ -1103,8 +1103,8 @@ public class EditLog {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
     }
 
-    public void logCreateWh(Warehouse wh) {
-        logEdit(OperationType.OP_CREATE_WH, wh);
+    public void logCreateWarehouse(Warehouse warehouse) {
+        logEdit(OperationType.OP_CREATE_WH, warehouse);
     }
 
     public void logAddCluster(AlterWhClusterOplog log) {
@@ -1119,15 +1119,15 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
     }
 
-    public void logSuspendWh(OpWarehouseLog log) {
+    public void logSuspendWarehouse(OpWarehouseLog log) {
         logEdit(OperationType.OP_SUSPEND_WH, log);
     }
 
-    public void logResumeWh(OpWarehouseLog log) {
+    public void logResumeWarehouse(ResumeWarehouseLog log) {
         logEdit(OperationType.OP_RESUME_WH, log);
     }
 
-    public void logDropWh(OpWarehouseLog log) {
+    public void logDropWarehouse(OpWarehouseLog log) {
         logEdit(OperationType.OP_DROP_WH, log);
     }
 

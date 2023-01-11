@@ -76,7 +76,7 @@ public class WarehouseMgrTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }
@@ -90,6 +90,8 @@ public class WarehouseMgrTest {
         Warehouse warehouse = new Warehouse(10000, "warehouse_1", properties);
         warehouseMgr.replayCreateWarehouse(warehouse);
         Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
+        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING,
+                warehouseMgr.getWarehouse("warehouse_1").getState());
 
         warehouseMgr.replayDropWarehouse("warehouse_1");
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
@@ -102,7 +104,7 @@ public class WarehouseMgrTest {
         warehouseMgr.replaySuspendWarehouse("warehouse_1");
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("warehouse_1").getState());
 
-        warehouseMgr.replayResumeWarehouse("warehouse_1");
+        warehouseMgr.replayResumeWarehouse("warehouse_1", null);
         Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("warehouse_1").getState());
     }
 
@@ -115,6 +117,7 @@ public class WarehouseMgrTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
         warehouseMgr.saveWarehouses(out, 0);
+
         out.flush();
         out.close();
 
@@ -131,7 +134,7 @@ public class WarehouseMgrTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }

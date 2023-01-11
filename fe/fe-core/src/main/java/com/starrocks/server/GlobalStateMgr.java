@@ -3141,6 +3141,8 @@ public class GlobalStateMgr {
 
     // Change current warehouse of this session.
     public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+        // for debug
+        LOG.info("enter changeWarehouse");
         if (!warehouseMgr.warehouseExists(newWarehouseName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
         }

@@ -15,47 +15,84 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.WarehouseManager;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterWarehouseStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.ShowClusterStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ShowClusterStmtTest {
-    private ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
+    private static ConnectContext ctx;
 
-    @Before
-    public void setUp() throws Exception {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        AnalyzeTestUtil.init();
+        String createWarehouse = "CREATE WAREHOUSE testWh";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createWarehouse);
+        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+        starRocksAssert = new StarRocksAssert();
+
+        ctx = new ConnectContext(null);
     }
 
     @Test
-    public void testNormal(@Mocked WarehouseManager warehouseMgr) throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCurrentWarehouse("testWh");
+    public void testNormal(@Mocked StarOSAgent starOSAgent) throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+        };
 
         new Expectations() {
             {
-                warehouseMgr.warehouseExists("testWh");
-                result = true;
+                starOSAgent.createWorkerGroup(anyString);
+                result = -1L;
                 minTimes = 0;
             }
         };
 
-        ShowClusterStmt  stmt = new ShowClusterStmt("testWh");
+        AlterWarehouseStmt addClusterStmt = (AlterWarehouseStmt)
+                UtFrameUtils.parseStmtWithNewParser("alter warehouse testWh add cluster", ctx);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().alterWarehouse(addClusterStmt);
 
+        ShowClusterStmt stmt = new ShowClusterStmt("testWh");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testWh", stmt.getWhName());
         Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
+
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        ShowResultSetMetaData metaData = resultSet.getMetaData();
+        Assert.assertEquals("ClusterId", metaData.getColumn(0).getName());
+        Assert.assertEquals("Pending", metaData.getColumn(1).getName());
+        Assert.assertEquals("Running", metaData.getColumn(2).getName());
     }
 
     @Test(expected = SemanticException.class)
-    public void testNoDb() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
+    public void testNoWh() throws Exception {
         ShowClusterStmt stmt = new ShowClusterStmt("");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");

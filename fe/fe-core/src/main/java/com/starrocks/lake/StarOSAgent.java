@@ -45,7 +45,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -400,24 +399,6 @@ public class StarOSAgent {
         throw new UserException("Failed to get primary backend. shard id: " + shardId);
     }
 
-    // Mocked
-    public TNetworkAddress getPrimaryBackendAddrByShard(long shardId) throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId);
-
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            for (ReplicaInfo replicaInfo : replicas) {
-                if (replicaInfo.getReplicaRole() == ReplicaRole.PRIMARY) {
-                    WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
-                    String workerAddr = workerInfo.getIpPort();
-                    String host = workerAddr.split(":")[0];
-                    int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                    return new TNetworkAddress(host, bePort);
-                }
-            }
-        }
-        throw new UserException("Failed to get primary backend addr. shard id: " + shardId);
-    }
-
     public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
@@ -490,5 +471,16 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to update meta group. error: " + e.getMessage());
         }
+    }
+
+    // Mocked
+    public long createWorkerGroup(String size) throws DdlException {
+        return GlobalStateMgr.getCurrentState().getNextId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+    }
+
+    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
     }
 }

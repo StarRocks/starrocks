@@ -78,7 +78,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWhStmt;
+import com.starrocks.sql.ast.ShowWarehouseStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -192,7 +192,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowWarehousesStatement(ShowWhStmt node, ConnectContext context) {
+        public Void visitShowWarehousesStatement(ShowWarehouseStmt node, ConnectContext context) {
             return null;
         }
 

@@ -75,7 +75,7 @@ public class Warehouse implements Writable {
 
     // properties
     @SerializedName(value = "size")
-    private String size = "${default_size}";
+    private String size = "S";
     @SerializedName(value = "minCluster")
     private int minCluster = 1;
     @SerializedName(value = "maxCluster")
@@ -139,6 +139,10 @@ public class Warehouse implements Writable {
         return name;
     }
 
+    public void setState(WarehouseState state) {
+        this.state = state;
+    }
+
     public WarehouseState getState() {
         return state;
     }
@@ -169,21 +173,23 @@ public class Warehouse implements Writable {
     // and others...
 
     public long getTotalRunningSqls() {
-        return 1L;
+        return -1L;
     }
 
     public int getTotalPendingSqls() {
-        return 1;
+        return -1;
     }
 
-    public int setPendingSqls(int val) {
-        return 1;
+    public void setPendingSqls(int val) {
     }
 
     public int addAndGetPendingSqls(int delta) {
         return 1;
     }
 
+    public void setClusters(Map<Long, Cluster> clusters) {
+        this.clusters = clusters;
+    }
 
     public Map<Long, Cluster> getClusters() {
         return clusters;
@@ -197,7 +203,7 @@ public class Warehouse implements Writable {
         return procNode.fetchResult().getRows();
     }
 
-    public void suspendSelf(boolean isReplay) {
+    public void suspendSelf(boolean isReplay) throws DdlException {
         writeLock();
         try {
             this.state = WarehouseState.SUSPENDED;
@@ -210,21 +216,17 @@ public class Warehouse implements Writable {
         }
     }
 
-    public void resumeSelf(boolean isReplay) {
+    public void resumeSelf() throws DdlException {
         writeLock();
         try {
-            Map<Long, Cluster> clusterMap = new HashMap<>();
-            if (!isReplay) {
-                clusterMap = applyComputeNodes();
-            }
+            clusters = applyComputeNodes();
             this.state = WarehouseState.RUNNING;
-            clusters = clusterMap;
         } finally {
             writeUnLock();
         }
     }
 
-    public void dropSelf() {
+    public void dropSelf() throws DdlException {
         readLock();
         try {
             releaseComputeNodes();
@@ -233,7 +235,7 @@ public class Warehouse implements Writable {
         }
     }
 
-    private void releaseComputeNodes() {
+    private void releaseComputeNodes() throws DdlException {
         for (Cluster cluster : clusters.values()) {
             long workerGroupId = cluster.getWorkerGroupId();
             GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
@@ -242,10 +244,10 @@ public class Warehouse implements Writable {
         }
     }
 
-    private Map<Long, Cluster> applyComputeNodes() {
+    private Map<Long, Cluster> applyComputeNodes() throws DdlException {
         Map<Long, Cluster> newClusters = new HashMap<>();
         for (int i = 0; i < minCluster; i++) {
-            long groupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup();
+            long groupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup(this.size);
             Cluster cluster = new Cluster(GlobalStateMgr.getCurrentState().getNextId(), groupId);
             newClusters.put(cluster.getId(), cluster);
             // for debug
@@ -261,6 +263,7 @@ public class Warehouse implements Writable {
                 long workerGroupId = cluster.getWorkerGroupId();
                 GlobalStateMgr.getCurrentStarOSAgent().modifyWorkerGroup(workerGroupId, size);
 
+                this.state = WarehouseState.SCALING;
                 // for debug
                 LOG.info("modify cluster {} size", cluster.getId());
             }
@@ -273,7 +276,10 @@ public class Warehouse implements Writable {
         writeLock();
         try {
             if (clusters.size() < maxCluster) {
-                long workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup();
+                long workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup(this.size);
+                // for debug
+                LOG.info("add cluster, worker group id is {}", workerGroupId);
+
                 long clusterId = GlobalStateMgr.getCurrentState().getNextId();
                 Cluster cluster = new Cluster(clusterId, workerGroupId);
                 clusters.put(clusterId, cluster);
@@ -338,8 +344,6 @@ public class Warehouse implements Writable {
             writeUnLock();
         }
     }
-
-    public void resume() {}
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(this.getFullName(),

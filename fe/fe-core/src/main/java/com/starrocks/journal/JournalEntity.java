@@ -109,6 +109,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -204,9 +205,13 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_SUSPEND_WH:
-            case OperationType.OP_RESUME_WH:
             case OperationType.OP_DROP_WH: {
                 data = OpWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESUME_WH: {
+                data = ResumeWarehouseLog.read(in);
                 isRead = true;
                 break;
             }

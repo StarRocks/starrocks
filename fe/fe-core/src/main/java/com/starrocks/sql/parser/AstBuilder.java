@@ -334,8 +334,8 @@ import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarehouseStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
-import com.starrocks.sql.ast.ShowWhStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -1406,7 +1406,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowWhStmt(pattern, where);
+        return new ShowWarehouseStmt(pattern, where);
     }
 
     @Override

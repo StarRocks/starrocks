@@ -15,12 +15,12 @@
 package com.starrocks.sql.ast;
 
 public class DropWarehouseStmt extends DdlStmt {
-    private final boolean ifNotExists;
+    private final boolean ifExists;
     private final String warehouseName;
 
-    public DropWarehouseStmt(boolean ifNotExists,
+    public DropWarehouseStmt(boolean ifExists,
                              String warehouseName) {
-        this.ifNotExists = ifNotExists;
+        this.ifExists = ifExists;
         this.warehouseName = warehouseName;
     }
 
@@ -29,7 +29,7 @@ public class DropWarehouseStmt extends DdlStmt {
     }
 
     public boolean isSetIfNotExists() {
-        return ifNotExists;
+        return ifExists;
     }
 
     @Override

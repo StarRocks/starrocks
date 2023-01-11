@@ -77,7 +77,7 @@ public class WarehouseTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }
@@ -92,14 +92,23 @@ public class WarehouseTest {
         );
 
         ExceptionChecker.expectThrowsNoException(
-                () -> modifyWarehouseProperty("alter warehouse test  set(\"size\"=\"medium\");")
+                () -> removeCluster("alter warehouse test remove cluster")
         );
 
+        ExceptionChecker.expectThrowsNoException(
+                () -> modifyWarehouseProperty("alter warehouse test  set(\"size\"=\"medium\");")
+        );
         Assert.assertEquals("medium",
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse("test").getSize());
 
         ExceptionChecker.expectThrowsNoException(
-                () -> removeCluster("alter warehouse test remove cluster")
+                () -> modifyWarehouseProperty("alter warehouse test set(\"min_cluster\"=\"2\");")
         );
+        Assert.assertEquals(2, GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse("test").getMinCluster());
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> modifyWarehouseProperty("alter warehouse test set(\"max_cluster\"=\"4\");")
+        );
+        Assert.assertEquals(4, GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse("test").getMaxCluster());
     }
 }

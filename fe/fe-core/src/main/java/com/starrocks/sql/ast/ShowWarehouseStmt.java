@@ -21,7 +21,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 // Show warehouse statement.
-public class ShowWhStmt extends ShowStmt {
+public class ShowWarehouseStmt extends ShowStmt {
     private static final String WH_COL = "Warehouse";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -37,11 +37,11 @@ public class ShowWhStmt extends ShowStmt {
     private final String pattern;
     private Expr where;
 
-    public ShowWhStmt(String pattern) {
+    public ShowWarehouseStmt(String pattern) {
         this.pattern = pattern;
     }
 
-    public ShowWhStmt(String pattern, Expr where) {
+    public ShowWarehouseStmt(String pattern, Expr where) {
         this.pattern = pattern;
         this.where = where;
     }

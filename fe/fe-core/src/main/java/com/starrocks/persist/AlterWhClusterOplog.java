@@ -29,9 +29,9 @@ public class AlterWhClusterOplog implements Writable {
     private String warehouseName;
 
     @SerializedName(value = "cluster")
-    Cluster cluster;
+    private Cluster cluster;
 
-    public String getWhName() {
+    public String getWarehouseName() {
         return warehouseName;
     }
 

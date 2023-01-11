@@ -175,7 +175,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWhStmt;
+import com.starrocks.sql.ast.ShowWarehouseStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -227,7 +227,7 @@ public class ShowExecutor {
             handleShowProc();
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
-        } else if (stmt instanceof ShowWhStmt) {
+        } else if (stmt instanceof ShowWarehouseStmt) {
             handleShowWarehouses();
         } else if (stmt instanceof ShowClusterStmt) {
             handleShowCluster();
@@ -1957,33 +1957,11 @@ public class ShowExecutor {
 
     // show warehouse statement
     private void handleShowWarehouses() {
-        ShowWhStmt showStmt = (ShowWhStmt) stmt;
+        ShowWarehouseStmt showStmt = (ShowWarehouseStmt) stmt;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        // TODO: support 'like '
-        /*
-        PatternMatcher matcher = null;
-        if (showStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.WAREHOUSE.getCaseSensibility());
-        }
-        Set<String> whNameSet = Sets.newTreeSet();
-        for (String whName : whNames) {
-            // Filter whName
-            if (matcher != null && !matcher.match(whName)) {
-                continue;
-            }
-
-            whNameSet.add(whName);
-        }
-
-        for (String whName : whNameSet) {
-            rows.add(Lists.newArrayList(whName));
-        }*/
-
-
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 

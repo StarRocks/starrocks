@@ -17,6 +17,7 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
+import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -29,12 +30,14 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.OpWarehouseLog;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,21 +73,6 @@ public class WarehouseManager implements Writable {
             .add("total_running")
             .build();
 
-    private void readLock() {
-        this.rwLock.readLock().lock();
-    }
-    private void readUnlock() {
-        this.rwLock.readLock().unlock();
-    }
-
-    private void writeLock() {
-        this.rwLock.writeLock().lock();
-    }
-
-    private void writeUnLock() {
-        this.rwLock.writeLock().unlock();
-    }
-
     public WarehouseManager() {
     }
 
@@ -93,11 +81,8 @@ public class WarehouseManager implements Writable {
     }
 
     public boolean warehouseExists(String warehouseName) {
-        readLock();
-        try {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.containsKey(warehouseName);
-        } finally {
-            readUnlock();
         }
     }
 
@@ -106,159 +91,150 @@ public class WarehouseManager implements Writable {
         createWarehouse(stmt.getFullWhName(), stmt.getProperties());
     }
 
-    public void createWarehouse(String whName, Map<String, String> properties) {
-        readLock();
-        try {
-            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
-        } finally {
-            readUnlock();
-        }
+    public void createWarehouse(String warehouseName, Map<String, String> properties) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(!fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' already exists", warehouseName);
 
-        writeLock();
-        try {
-            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             long id = GlobalStateMgr.getCurrentState().getNextId();
-            Warehouse wh = new Warehouse(id, whName, properties);
+            Warehouse wh = new Warehouse(id, warehouseName, properties);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateWh(wh);
-            LOG.info("createWarehouse whName = " + whName + ", id = " + id);
-        } finally {
-            writeUnLock();
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
+            LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id);
         }
     }
 
     public void replayCreateWarehouse(Warehouse warehouse) {
         String whName = warehouse.getFullName();
-        readLock();
-        try {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
-        } finally {
-            readUnlock();
-        }
-
-        writeLock();
-        try {
             fullNameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
             warehouse.setExist(true);
-        } finally {
-            writeUnLock();
         }
     }
 
+    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
+        String warehouseName = stmt.getFullWhName();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
 
-    public void suspendWarehouse(SuspendWarehouseStmt stmt) {
-        String whName = stmt.getFullWhName();
-        readLock();
-        Warehouse warehouse = fullNameToWh.get(whName);
-        readUnlock();
-        warehouse.suspendSelf(false);
-        OpWarehouseLog log = new OpWarehouseLog(whName);
-        GlobalStateMgr.getCurrentState().getEditLog().logSuspendWh(log);
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            warehouse.suspendSelf(false);
+            OpWarehouseLog log = new OpWarehouseLog(warehouseName);
+            GlobalStateMgr.getCurrentState().getEditLog().logSuspendWarehouse(log);
+        }
     }
 
-    public void replaySuspendWarehouse(String whName) {
-        readLock();
-        Warehouse wh = fullNameToWh.get(whName);
-        readUnlock();
-        wh.suspendSelf(true);
+    public void replaySuspendWarehouse(String warehouseName) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            warehouse.suspendSelf(true);
+        }
     }
 
-    public void resumeWarehouse(ResumeWarehouseStmt stmt) {
-        String whName = stmt.getFullWhName();
-        readLock();
-        Warehouse warehouse = fullNameToWh.get(whName);
-        readUnlock();
-        warehouse.resumeSelf(false);
-        OpWarehouseLog log = new OpWarehouseLog(whName);
-        GlobalStateMgr.getCurrentState().getEditLog().logResumeWh(log);
+    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
+        String warehouseName = stmt.getFullWhName();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            warehouse.resumeSelf();
+            ResumeWarehouseLog log = new ResumeWarehouseLog(warehouseName, warehouse.getClusters());
+            GlobalStateMgr.getCurrentState().getEditLog().logResumeWarehouse(log);
+        }
     }
 
-    public void replayResumeWarehouse(String whName) {
-        readLock();
-        Warehouse wh = fullNameToWh.get(whName);
-        readUnlock();
-        wh.resumeSelf(true);
+    public void replayResumeWarehouse(String warehouseName, Map<Long, Cluster> clusters) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            warehouse.setClusters(clusters);
+            warehouse.setState(Warehouse.WarehouseState.RUNNING);
+        }
     }
 
-    public void dropWarehouse(DropWarehouseStmt stmt) {
-        String whName = stmt.getFullWhName();
-        writeLock();
-        try {
-            Warehouse warehouse = fullNameToWh.get(whName);
-            fullNameToWh.remove(whName);
+    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
+        String warehouseName = stmt.getFullWhName();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            fullNameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
             warehouse.dropSelf();
 
-            OpWarehouseLog log = new OpWarehouseLog(whName);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropWh(log);
-        } finally {
-            writeUnLock();
+            OpWarehouseLog log = new OpWarehouseLog(warehouseName);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropWarehouse(log);
         }
     }
 
-    public void replayDropWarehouse(String whName) {
-        writeLock();
-        try {
-            Warehouse warehouse = fullNameToWh.get(whName);
-            fullNameToWh.remove(whName);
+    public void replayDropWarehouse(String warehouseName) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(!fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' already exists", warehouseName);
+
+            Warehouse warehouse = fullNameToWh.get(warehouseName);
+            fullNameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
-        } finally {
-            writeUnLock();
         }
     }
 
     public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
-        if (stmt.getOpType() == AlterWarehouseStmt.OpType.ADD_CLUSTER) {
-            // add cluster
-            addCluster(stmt.getFullWhName());
-        } else if (stmt.getOpType() == AlterWarehouseStmt.OpType.REMOVE_CLUSTER) {
-            // remove cluster
-            removeCluster(stmt.getFullWhName());
-        } else {
-            // modify some property
-            Map<String, String> properties = stmt.getProperties();
-            modifyProperty(stmt.getFullWhName(), properties);
+        String warehouseName = stmt.getFullWhName();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
+            if (stmt.getOpType() == AlterWarehouseStmt.OpType.ADD_CLUSTER) {
+                // add cluster
+                addCluster(stmt.getFullWhName());
+            } else if (stmt.getOpType() == AlterWarehouseStmt.OpType.REMOVE_CLUSTER) {
+                // remove cluster
+                removeCluster(stmt.getFullWhName());
+            } else {
+                // modify some property
+                Map<String, String> properties = stmt.getProperties();
+                modifyProperty(stmt.getFullWhName(), properties);
+            }
         }
     }
 
     private void addCluster(String warehouseName) throws DdlException {
-        if (fullNameToWh.containsKey(warehouseName)) {
-            Warehouse wh = fullNameToWh.get(warehouseName);
-            wh.addCluster();
-        }
+        Warehouse wh = fullNameToWh.get(warehouseName);
+        wh.addCluster();
     }
 
     private void removeCluster(String warehouseName) throws DdlException {
-        if (fullNameToWh.containsKey(warehouseName)) {
-            Warehouse wh = fullNameToWh.get(warehouseName);
-            wh.removeCluster();
-        }
+        Warehouse wh = fullNameToWh.get(warehouseName);
+        wh.removeCluster();
     }
 
     private void modifyProperty(String warehouseName, Map<String, String> properties) throws DdlException {
         boolean isChanged = false;
-        if (fullNameToWh.containsKey(warehouseName)) {
-            Warehouse wh = fullNameToWh.get(warehouseName);
-            if (properties != null) {
-                if (properties.get("size") != null) {
-                    wh.setSize(properties.get("size"));
-                    // 调用modify worker group进行资源调整
-                    wh.modifyCluterSize();
-                    isChanged = true;
-                }
+        Warehouse wh = fullNameToWh.get(warehouseName);
+        if (properties != null) {
+            if (properties.get("size") != null) {
+                wh.setSize(properties.get("size"));
+                wh.modifyCluterSize();
+                isChanged = true;
+            }
 
-                if (properties.get("min_cluster") != null) {
-                    wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
-                    isChanged = true;
-                }
+            if (properties.get("min_cluster") != null) {
+                wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
+                isChanged = true;
+            }
 
-                if (properties.get("max_cluster") != null) {
-                    wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
-                    isChanged = true;
-                }
+            if (properties.get("max_cluster") != null) {
+                wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
+                isChanged = true;
             }
         }
 
@@ -272,20 +248,23 @@ public class WarehouseManager implements Writable {
 
     public void replayModifyProperty(String warehouseName, Map<String, String> properties) {
         Warehouse wh = fullNameToWh.get(warehouseName);
-        if (properties != null) {
-            if (properties.get("size") != null) {
-                wh.setSize(properties.get("size"));
-            }
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (properties != null) {
+                if (properties.get("size") != null) {
+                    wh.setSize(properties.get("size"));
+                }
 
-            if (properties.get("min_cluster") != null) {
-                wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
-            }
+                if (properties.get("min_cluster") != null) {
+                    wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
+                }
 
-            if (properties.get("max_cluster") != null) {
-                wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
+                if (properties.get("max_cluster") != null) {
+                    wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
+                }
             }
+            LOG.info("replay alter warehouse properties {}, warehouse name: {}", properties, warehouseName);
         }
-        LOG.info("replay alter warehouse properties {}, warehouse name: {}", properties, warehouseName);
+
     }
 
     // warehouse meta persistence api
@@ -302,8 +281,9 @@ public class WarehouseManager implements Writable {
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
                 if (data.fullNameToWh != null && data.idToWh != null) {
-                    this.fullNameToWh = data.fullNameToWh;
-                    this.idToWh = data.idToWh;
+                    for (Warehouse warehouse : data.fullNameToWh.values()) {
+                        replayCreateWarehouse(warehouse);
+                    }
                 }
                 warehouseCount = data.fullNameToWh.size();
             }
@@ -314,9 +294,6 @@ public class WarehouseManager implements Writable {
         }
         return checksum;
     }
-
-    public void replayDropWarehouse() {}
-    public void replayAlterWarehouse() {}
 
     public List<List<String>> getWarehousesInfo() {
         return procNode.fetchResult().getRows();
@@ -329,7 +306,6 @@ public class WarehouseManager implements Writable {
     }
 
     public class WarehouseProcNode implements ProcDirInterface {
-
         @Override
         public boolean register(String name, ProcNodeInterface node) {
             return false;
@@ -347,8 +323,7 @@ public class WarehouseManager implements Writable {
         public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
-            readLock();
-            try {
+            try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
                 for (Map.Entry<String, Warehouse> entry : fullNameToWh.entrySet()) {
                     Warehouse warehouse = entry.getValue();
                     if (warehouse == null) {
@@ -356,8 +331,6 @@ public class WarehouseManager implements Writable {
                     }
                     warehouse.getProcNodeData(result);
                 }
-            } finally {
-                readUnlock();
             }
             return result;
         }

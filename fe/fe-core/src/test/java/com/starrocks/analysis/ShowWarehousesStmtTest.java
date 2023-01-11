@@ -25,7 +25,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
-import com.starrocks.sql.ast.ShowWhStmt;
+import com.starrocks.sql.ast.ShowWarehouseStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
@@ -58,12 +58,12 @@ public class ShowWarehousesStmtTest {
     public void testShowWarehousesParserAndAnalyzer() {
         String sql_1 = "SHOW WAREHOUSES";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof ShowWhStmt);
+        Assert.assertTrue(stmt instanceof ShowWarehouseStmt);
     }
 
     @Test
     public void testShowWarehousesNormal() throws AnalysisException, DdlException {
-        ShowWhStmt stmt = new ShowWhStmt(null, null);
+        ShowWarehouseStmt stmt = new ShowWarehouseStmt(null, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
@@ -74,6 +74,6 @@ public class ShowWarehousesStmtTest {
         Assert.assertEquals("max_cluster", metaData.getColumn(4).getName());
         Assert.assertEquals("cluster_count", metaData.getColumn(5).getName());
         Assert.assertEquals("INITIALIZING", resultSet.getResultRows().get(0).get(1).toString());
-        Assert.assertEquals("${default_size}", resultSet.getResultRows().get(0).get(2).toString());
+        Assert.assertEquals("S", resultSet.getResultRows().get(0).get(2).toString());
     }
 }

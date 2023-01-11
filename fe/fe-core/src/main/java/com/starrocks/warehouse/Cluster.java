@@ -56,10 +56,10 @@ public class Cluster  implements Writable {
     }
 
     public int getRunningSqls() {
-        return 1;
+        return -1;
     }
     public int getPendingSqls() {
-        return 1;
+        return -1;
     }
     /*    public int setRunningSqls(int val) {
         return 1;
