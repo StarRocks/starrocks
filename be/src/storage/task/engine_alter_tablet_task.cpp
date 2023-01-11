@@ -60,7 +60,7 @@ Status EngineAlterTabletTask::execute() {
 
     Status res;
     if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        lake::SchemaChangeHandler handler;
+        lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
         res = handler.process_alter_tablet(_alter_tablet_req);
     } else {
         SchemaChangeHandler handler;

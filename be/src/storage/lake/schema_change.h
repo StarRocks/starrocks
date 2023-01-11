@@ -22,12 +22,16 @@
 
 namespace starrocks::lake {
 
+class TabletManager;
+
 class SchemaChangeHandler {
 public:
-    SchemaChangeHandler() = default;
+    explicit SchemaChangeHandler(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
+
+    DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
 
 private:
     struct SchemaChangeParams {
@@ -42,6 +46,8 @@ private:
 
     Status do_process_alter_tablet(const TAlterTabletReqV2& request);
     Status convert_historical_rowsets(const SchemaChangeParams& sc_params, TxnLogPB_OpSchemaChange* op_schema_change);
+
+    TabletManager* _tablet_manager;
 };
 
 } // namespace starrocks::lake

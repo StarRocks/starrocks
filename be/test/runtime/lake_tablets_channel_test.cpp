@@ -61,13 +61,11 @@ public:
     LakeTabletsChannelTest() {
         _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
-
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        _tablet_manager->prune_metacache();
-
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
+
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
@@ -188,7 +186,6 @@ public:
 
 protected:
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -203,7 +200,7 @@ protected:
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
                                                       std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
-        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, _load_channel->mem_tracker());
+        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
     }
 
     void TearDown() override {
@@ -217,7 +214,6 @@ protected:
         tablet.delete_txn_log(kTxnId);
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
         tablet.delete_txn_log(kTxnId);
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
@@ -258,9 +254,10 @@ protected:
 
     int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
-    lake::TabletManager* _tablet_manager;
     std::unique_ptr<lake::FixedLocationProvider> _location_provider;
+    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::TabletManager> _tablet_manager;
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;

@@ -68,17 +68,20 @@ private:
 
 class DeltaWriterImpl {
 public:
-    explicit DeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _tablet_id(tablet_id),
+            : _tablet_manager(tablet_manager),
+              _tablet_id(tablet_id),
               _txn_id(txn_id),
               _partition_id(partition_id),
               _mem_tracker(mem_tracker),
               _slots(slots),
               _schema_initialized(false) {}
 
-    explicit DeltaWriterImpl(int64_t tablet_id, int64_t max_buffer_size, MemTracker* mem_tracker)
-            : _tablet_id(tablet_id),
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
+                             MemTracker* mem_tracker)
+            : _tablet_manager(tablet_manager),
+              _tablet_id(tablet_id),
               _txn_id(-1),
               _partition_id(-1),
               _mem_tracker(mem_tracker),
@@ -118,6 +121,7 @@ public:
 private:
     Status reset_memtable();
 
+    TabletManager* _tablet_manager;
     const int64_t _tablet_id;
     const int64_t _txn_id;
     const int64_t _partition_id;
@@ -146,7 +150,7 @@ private:
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_tablet_schema == nullptr) {
         DCHECK(_tablet_writer == nullptr);
-        ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
+        ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -267,7 +271,7 @@ Status DeltaWriterImpl::finish() {
 
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
@@ -372,13 +376,16 @@ Status DeltaWriter::flush_async() {
     return _impl->flush_async();
 }
 
-std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                                                 const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker));
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
+                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+                                                 MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(
+            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker));
 }
 
-std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t max_buffer_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_id, max_buffer_size, mem_tracker));
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                 int64_t max_buffer_size, MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, max_buffer_size, mem_tracker));
 }
 
 } // namespace starrocks::lake
