@@ -918,8 +918,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
-        if (partitionType != PartitionType.RANGE && partitionType != PartitionType.EXPR_RANGE &&
-                partitionType != PartitionType.LIST) {
+        if (!partitionInfo.isRangePartition() && partitionType != PartitionType.LIST) {
             throw new DdlException("Only support adding partition to range/list partitioned table");
         }
     }
@@ -1280,7 +1279,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                  List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
-        if (partitionType == PartitionType.RANGE || partitionType == PartitionType.EXPR_RANGE) {
+        if (partitionInfo.isRangePartition()) {
             addRangePartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
                     existPartitionNameSet);
         } else if (partitionType == PartitionType.LIST) {
@@ -1433,7 +1432,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
-            } else if (partitionType == PartitionType.RANGE) {
+            } else if (partitionInfo.isRangePartition()) {
                 ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(
                         info.asRangePartitionPersistInfo());
             } else {
@@ -1479,7 +1478,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.addPartition(partition);
             }
 
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.isRangePartition()) {
                 ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
                         info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
                         info.isInMemory());
@@ -1531,7 +1530,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.getType() != PartitionType.RANGE) {
+        if (!partitionInfo.isRangePartition()) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
 
@@ -2339,9 +2338,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     Partition partition = createPartition(db, olapTable, partitionId, tableName, version, tabletIdSet);
                     buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
-                } else if (partitionInfo.getType() == PartitionType.RANGE
-                        || partitionInfo.getType() == PartitionType.EXPR_RANGE
-                        || partitionInfo.getType() == PartitionType.LIST) {
+                } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
@@ -3608,8 +3605,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         int limit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        PartitionType partitionType = partitionInfo.getType();
-        if (limit == INVALID || partitionType != PartitionType.RANGE) {
+        if (limit == INVALID || !partitionInfo.isRangePartition()) {
             executeRefreshMvTask(dbName, materializedView, new ExecuteOption(priority));
         } else {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
@@ -3746,7 +3742,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Table[" + olapTable.getName() + "] is under " + olapTable.getState());
         }
 
-        if (olapTable.getPartitionInfo().getType() != PartitionType.RANGE) {
+        if (!olapTable.getPartitionInfo().isRangePartition()) {
             throw new DdlException("Table[" + olapTable.getName() + "] is single partitioned. "
                     + "no need to rename partition name.");
         }
@@ -3899,7 +3895,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         String defaultReplicationNumName = "default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             throw new DdlException(
                     "This is a range partitioned table, you should specify partitions with MODIFY PARTITION clause." +
                             " If you want to set default replication number, please use '" + defaultReplicationNumName +
