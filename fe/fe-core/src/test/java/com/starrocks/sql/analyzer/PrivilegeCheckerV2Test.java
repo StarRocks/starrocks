@@ -32,6 +32,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.PrivilegeManager;
@@ -46,6 +47,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
@@ -2323,5 +2325,35 @@ public class PrivilegeCheckerV2Test {
         } finally {
             Config.enable_udf = false;
         }
+    }
+
+    @Test
+    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException {
+        ctxToTestUser();
+        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("Password", resultSet.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("[['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
+
+        stmt = new ShowAuthenticationStmt(null, true);
+        executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
+                        "['test2'@'%', No, " +
+                        "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
+
+        stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
+        executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
     }
 }

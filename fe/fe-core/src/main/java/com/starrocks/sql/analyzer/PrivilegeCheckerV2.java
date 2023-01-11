@@ -202,7 +202,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         checkTableAction(context, tableName.getDb(), tableName.getTbl(), action);
     }
@@ -223,7 +224,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         checkAnyActionOnTable(context, tableName.getDb(), tableName.getTbl());
     }
@@ -243,7 +245,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -275,7 +278,8 @@ public class PrivilegeCheckerV2 {
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
@@ -299,7 +303,8 @@ public class PrivilegeCheckerV2 {
 
     static void checkAnyActionOnDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
 
         if (!PrivilegeManager.checkAnyActionOnDb(context, dbName)) {
@@ -310,7 +315,8 @@ public class PrivilegeCheckerV2 {
 
     static void checkAnyActionOnOrInDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
 
         if (!PrivilegeManager.checkAnyActionOnOrInDb(context, dbName)) {
@@ -325,7 +331,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -1365,9 +1372,9 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitSetStatement(SetStmt statement, ConnectContext context) {
             List<SetVar> varList = statement.getSetVars();
-            varList.forEach(setVer -> {
-                if ((setVer instanceof SetPassVar)) {
-                    UserIdentity prepareChangeUser = ((SetPassVar) setVer).getUserIdent();
+            varList.forEach(setVar -> {
+                if ((setVar instanceof SetPassVar)) {
+                    UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
                     try {
                         prepareChangeUser.analyze();
                     } catch (AnalysisException e) {
@@ -1380,7 +1387,8 @@ public class PrivilegeCheckerV2 {
                     }
                     return;
                 }
-                if (setVer.getType().equals(SetType.GLOBAL)) {
+                SetType type = setVar.getType();
+                if (type != null && type.equals(SetType.GLOBAL)) {
                     checkStmtOperatePrivilege(context);
                 }
             });

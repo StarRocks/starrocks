@@ -44,6 +44,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -1663,14 +1664,16 @@ public class AlterTest {
 
     @Test
     public void testRenameDb() throws Exception {
-        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
-        auth.createUser(createUserStmt);
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        authenticationManager.createUser(createUserStmt);
 
-        String sql = "grant ALTER_PRIV on test to testuser";
-        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+        String sql = "grant ALTER on database test to testuser";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
         testUser.analyze();

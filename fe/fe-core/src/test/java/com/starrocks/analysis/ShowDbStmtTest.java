@@ -24,7 +24,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowExecutor;
@@ -32,17 +31,13 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-
 public class ShowDbStmtTest {
-
-    private static StarRocksAssert starRocksAssert;
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
 
@@ -67,9 +62,6 @@ public class ShowDbStmtTest {
             }
         };
 
-        // mock auth
-        Auth auth = AccessTestUtil.fetchAdminAccess();
-
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
@@ -81,10 +73,6 @@ public class ShowDbStmtTest {
                 globalStateMgr.getDb("testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
 
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;

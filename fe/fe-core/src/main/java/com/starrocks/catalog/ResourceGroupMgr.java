@@ -25,6 +25,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -160,6 +161,9 @@ public class ResourceGroupMgr implements Writable {
             try {
                 List<String> roleNameList = ctx.getGlobalStateMgr().getPrivilegeManager()
                         .getRoleNamesByUser(ctx.getCurrentUserIdentity());
+                roleNameList =
+                        roleNameList.stream().filter(r -> !PrivilegeManager.BUILT_IN_ROLE_NAMES.contains(r))
+                                .collect(Collectors.toList());
                 if (roleNameList.isEmpty()) {
                     return null;
                 } else {
