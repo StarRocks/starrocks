@@ -37,6 +37,14 @@ public abstract class ScalarOperator implements Cloneable {
         return true;
     }
 
+    public boolean isConstantNull() {
+        if (!(this instanceof ConstantOperator)) {
+            return false;
+        }
+        ConstantOperator constant = this.cast();
+        return constant.isNull();
+    }
+
     public abstract boolean isNullable();
 
     public OperatorType getOpType() {
