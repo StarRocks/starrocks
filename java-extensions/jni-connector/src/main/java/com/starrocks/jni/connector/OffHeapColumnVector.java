@@ -137,7 +137,8 @@ public class OffHeapColumnVector {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data", ColumnType.TypeValue.BYTE));
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                    ColumnType.TypeValue.BYTE));
         } else if (type.isArray()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
 

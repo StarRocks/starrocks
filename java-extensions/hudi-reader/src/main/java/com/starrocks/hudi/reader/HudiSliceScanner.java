@@ -154,7 +154,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         String realtimePath = dataFileLenth != -1 ? dataFilePath : deltaFilePaths[0];
         long realtimeLength = dataFileLenth != -1 ? dataFileLenth : 0;
         Path path = new Path(realtimePath);
-        FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[]{""});
+        FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
         List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
         FileSplit hudiSplit =
                 new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());

@@ -93,7 +93,8 @@ public class HudiColumnValue implements ColumnValue {
         ObjectInspector keyObjectInspector = inspector.getMapKeyObjectInspector();
         ObjectInspector valueObjectInspector = inspector.getMapValueObjectInspector();
         for (Map.Entry kv : inspector.getMap(fieldData).entrySet()) {
-            HudiColumnValue cv0 = null, cv1 = null;
+            HudiColumnValue cv0 = null;
+            HudiColumnValue cv1 = null;
             if (kv.getKey() != null) {
                 cv0 = new HudiColumnValue(keyObjectInspector, kv.getKey());
             }

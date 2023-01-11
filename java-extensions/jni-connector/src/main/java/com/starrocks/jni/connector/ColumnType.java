@@ -43,28 +43,28 @@ public class ColumnType {
     List<ColumnType> childTypes;
     List<Integer> structFieldIndex;
 
-    private final static Map<String, TypeValue> primitiveTypeValueMapping = new HashMap<>();
-    private final static Map<TypeValue, Integer> primitiveTypeValueSize = new HashMap<>();
+    private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
+    private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
 
     static {
-        primitiveTypeValueMapping.put("byte", TypeValue.BYTE);
-        primitiveTypeValueMapping.put("bool", TypeValue.BOOLEAN);
-        primitiveTypeValueMapping.put("short", TypeValue.SHORT);
-        primitiveTypeValueMapping.put("int", TypeValue.INT);
-        primitiveTypeValueMapping.put("float", TypeValue.FLOAT);
-        primitiveTypeValueMapping.put("bigint", TypeValue.LONG);
-        primitiveTypeValueMapping.put("double", TypeValue.DOUBLE);
-        primitiveTypeValueMapping.put("string", TypeValue.STRING);
-        primitiveTypeValueMapping.put("date", TypeValue.DATE);
-        primitiveTypeValueMapping.put("decimal", TypeValue.DECIMAL);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("bool", TypeValue.BOOLEAN);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
 
-        primitiveTypeValueSize.put(TypeValue.BYTE, 1);
-        primitiveTypeValueSize.put(TypeValue.BOOLEAN, 1);
-        primitiveTypeValueSize.put(TypeValue.SHORT, 2);
-        primitiveTypeValueSize.put(TypeValue.INT, 4);
-        primitiveTypeValueSize.put(TypeValue.FLOAT, 4);
-        primitiveTypeValueSize.put(TypeValue.LONG, 8);
-        primitiveTypeValueSize.put(TypeValue.DOUBLE, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.SHORT, 2);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.INT, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.FLOAT, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.LONG, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DOUBLE, 8);
     }
 
     @Override
@@ -164,7 +164,7 @@ public class ColumnType {
             if (t.startsWith("decimal")) {
                 t = "decimal";
             }
-            typeValue = primitiveTypeValueMapping.getOrDefault(t, null);
+            typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
         }
         if (typeValue == null) {
             throw new RuntimeException("Unknown type: " + t);
@@ -235,7 +235,7 @@ public class ColumnType {
     }
 
     public int getPrimitiveTypeValueSize() {
-        return primitiveTypeValueSize.getOrDefault(typeValue, -1);
+        return PRIMITIVE_TYPE_VALUE_SIZE.getOrDefault(typeValue, -1);
     }
 
     public List<String> getChildNames() {
