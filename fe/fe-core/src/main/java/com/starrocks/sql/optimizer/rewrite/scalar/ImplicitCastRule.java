@@ -127,7 +127,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type type2 = rightChild.getType();
 
         // For a query like: select 'a' <=> NULL, we should cast Constant Null to the type of the other side
-        if (predicate.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ_FOR_NULL) {
+        if (predicate.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ_FOR_NULL &&
+                (leftChild.isConstantNull() || rightChild.isConstantNull())) {
             if (leftChild.isConstantNull()) {
                 predicate.setChild(0, ConstantOperator.createNull(type2));
             }
