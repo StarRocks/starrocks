@@ -105,7 +105,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     // csv properties
     public static final String TRIMSPACE = "trimspace";
-    public static final String SKIPHEADER = "skipheader";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
@@ -144,7 +143,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.PARTIAL_UPDATE)
             .add(LoadStmt.MERGE_CONDITION)
             .add(TRIMSPACE)
-            .add(SKIPHEADER)
             .add(ENCLOSE)
             .add(ESCAPE)
             .build();
@@ -200,12 +198,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     private boolean trimspace = false;
-
-    public long getSkipheader() {
-        return skipheader;
-    }
-
-    private long skipheader = 0;
 
     public byte getEnclose() {
         return enclose;
@@ -521,7 +513,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
             trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
-            skipheader = Long.valueOf(jobProperties.getOrDefault(SKIPHEADER, "0"));
             enclose = (byte) jobProperties.getOrDefault(ENCLOSE, "0").charAt(0);
             escape = (byte) jobProperties.getOrDefault(ESCAPE, "0").charAt(0);
         }

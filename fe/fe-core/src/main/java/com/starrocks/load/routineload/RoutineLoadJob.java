@@ -213,12 +213,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected boolean trimspace = false;
 
-    public long getSkipheader() {
-        return skipheader;
-    }
-
-    protected long skipheader = 0;
-
     public byte getEnclose() {
         return enclose;
     }
@@ -336,7 +330,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(PROPS_JSONPATHS, "");
             jobProperties.put(PROPS_JSONROOT, "");
             this.trimspace = stmt.isTrimspace();
-            this.skipheader = stmt.getSkipheader();
             this.enclose = stmt.getEnclose();
             this.escape = stmt.getEscape();
         } else if (stmt.getFormat().equals("json")) {
