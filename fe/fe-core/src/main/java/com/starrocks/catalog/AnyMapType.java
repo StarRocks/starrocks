@@ -16,6 +16,11 @@ package com.starrocks.catalog;
 
 public class AnyMapType extends PseudoType {
     @Override
+    public boolean equals(Object obj) {
+        return obj instanceof AnyMapType;
+    }
+
+    @Override
     public boolean matchesType(Type t) {
         return t instanceof AnyMapType || t instanceof AnyElementType || t.isMapType();
     }
