@@ -1962,28 +1962,6 @@ public class ShowExecutor {
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        // TODO: support 'like '
-        /*
-        PatternMatcher matcher = null;
-        if (showStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.WAREHOUSE.getCaseSensibility());
-        }
-        Set<String> whNameSet = Sets.newTreeSet();
-        for (String whName : whNames) {
-            // Filter whName
-            if (matcher != null && !matcher.match(whName)) {
-                continue;
-            }
-
-            whNameSet.add(whName);
-        }
-
-        for (String whName : whNameSet) {
-            rows.add(Lists.newArrayList(whName));
-        }*/
-
-
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 

@@ -115,6 +115,7 @@ public class WarehouseMgrTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
         warehouseMgr.saveWarehouses(out, 0);
+
         out.flush();
         out.close();
 
