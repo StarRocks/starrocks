@@ -57,11 +57,11 @@ size_t AggrAutoContext::get_continuous_limit() {
     return continuous_limit;
 }
 
-bool AggrAutoContext::high_reduction(const size_t agg_count, const size_t chunk_size) {
+bool AggrAutoContext::is_high_reduction(const size_t agg_count, const size_t chunk_size) {
     return agg_count >= HighReduction * chunk_size;
 }
 
-bool AggrAutoContext::low_reduction(const size_t agg_count, const size_t chunk_size) {
+bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chunk_size) {
     return agg_count <= LowReduction * chunk_size;
 }
 

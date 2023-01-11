@@ -149,8 +149,8 @@ struct AggrAutoContext {
     std::string get_auto_state_string(const AggrAutoState& state);
     size_t get_continuous_limit();
     void update_continuous_limit();
-    bool high_reduction(const size_t agg_count, const size_t chunk_size);
-    bool low_reduction(const size_t agg_count, const size_t chunk_size);
+    bool is_high_reduction(const size_t agg_count, const size_t chunk_size);
+    bool is_low_reduction(const size_t agg_count, const size_t chunk_size);
     size_t init_preagg_count = 0;
     size_t adjust_count = 0;
     size_t pass_through_count = 0;

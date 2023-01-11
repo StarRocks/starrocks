@@ -182,7 +182,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
         }
 
         size_t agg_count = SIMD::count_zero(_aggregator->streaming_selection());
-        if (_auto_context.adjust_count < continuous_limit && _auto_context.low_reduction(agg_count, chunk_size)) {
+        if (_auto_context.adjust_count < continuous_limit && _auto_context.is_low_reduction(agg_count, chunk_size)) {
             RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
             _auto_context.pass_through_count++;
             _auto_context.preagg_count = 0;
@@ -196,7 +196,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             }
 
         } else if (_auto_context.adjust_count < continuous_limit &&
-                   _auto_context.high_reduction(agg_count, chunk_size) &&
+                   _auto_context.is_high_reduction(agg_count, chunk_size) &&
                    allocated_bytes < AggrAutoContext::MaxHtSize) {
             RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk_size));
 
