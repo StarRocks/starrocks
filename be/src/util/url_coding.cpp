@@ -20,72 +20,8 @@
 #include <cmath>
 #include <exception>
 #include <memory>
-#include <sstream>
 
 namespace starrocks {
-
-static inline void url_encode(const char* in, int in_len, std::string* out) {
-    (*out).reserve(in_len);
-    std::stringstream ss;
-
-    for (int i = 0; i < in_len; ++i) {
-        const char ch = in[i];
-
-        // Escape the character iff a) we are in Hive-compat mode and the
-        // character is in the Hive whitelist or b) we are not in
-        // Hive-compat mode, and the character is not alphanumeric or one
-        // of the four commonly excluded characters.
-        ss << ch;
-    }
-
-    (*out) = ss.str();
-}
-
-void url_encode(const std::vector<uint8_t>& in, std::string* out) {
-    if (in.empty()) {
-        *out = "";
-    } else {
-        url_encode(reinterpret_cast<const char*>(&in[0]), in.size(), out);
-    }
-}
-
-void url_encode(const std::string& in, std::string* out) {
-    url_encode(in.c_str(), in.size(), out);
-}
-
-// Adapted from
-// http://www.boost.org/doc/libs/1_40_0/doc/html/boost_asio/
-//   example/http/server3/request_handler.cpp
-// See http://www.boost.org/LICENSE_1_0.txt for license for this method.
-bool url_decode(const std::string& in, std::string* out) {
-    out->clear();
-    out->reserve(in.size());
-
-    for (size_t i = 0; i < in.size(); ++i) {
-        if (in[i] == '%') {
-            if (i + 3 <= in.size()) {
-                int value = 0;
-                std::istringstream is(in.substr(i + 1, 2));
-
-                if (is >> std::hex >> value) {
-                    (*out) += static_cast<char>(value);
-                    i += 2;
-                } else {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        } else if (in[i] == '+') {
-            (*out) += ' ';
-        } else {
-            (*out) += in[i];
-        }
-    }
-
-    return true;
-}
-
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
     size_t len = in.size();
     // Every 3 source bytes will be encoded into 4 bytes.
@@ -119,20 +55,10 @@ static void encode_base64_internal(const std::string& in, std::string* out, cons
     out->assign((char*)buf.get(), d - buf.get());
 }
 
-void base64url_encode(const std::string& in, std::string* out) {
-    static unsigned char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    encode_base64_internal(in, out, basis64, false);
-}
-
 void base64_encode(const std::string& in, std::string* out) {
     static unsigned char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     encode_base64_internal(in, out, basis64, true);
 }
-
-static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                                'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                                'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                                'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'};
 
 static const char base64_pad = '=';
 
@@ -147,34 +73,6 @@ static short decoding_table[256] = {
         -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
         -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
         -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2};
-
-static int mod_table[] = {0, 2, 1};
-
-size_t base64_encode(const unsigned char* data, size_t length, unsigned char* encoded_data) {
-    auto output_length = (size_t)(4.0 * ceil((double)length / 3.0));
-
-    if (encoded_data == nullptr) {
-        return 0;
-    }
-
-    for (uint32_t i = 0, j = 0; i < length;) {
-        uint32_t octet_a = i < length ? data[i++] : 0;
-        uint32_t octet_b = i < length ? data[i++] : 0;
-        uint32_t octet_c = i < length ? data[i++] : 0;
-        uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
-
-        encoded_data[j++] = encoding_table[(triple >> 3 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 2 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 1 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 0 * 6) & 0x3F];
-    }
-
-    for (int i = 0; i < mod_table[length % 3]; i++) {
-        encoded_data[output_length - 1 - i] = '=';
-    }
-
-    return output_length;
-}
 
 static inline int64_t base64_decode(const char* data, size_t length, char* decoded_data) {
     const char* current = data;
@@ -253,27 +151,6 @@ bool base64_decode(const std::string& in, std::string* out) {
     out->assign(tmp, len);
     delete[] tmp;
     return true;
-}
-
-void escape_for_html(const std::string& in, std::stringstream* out) {
-    for (auto& c : in) {
-        switch (c) {
-        case '<':
-            (*out) << "&lt;";
-            break;
-
-        case '>':
-            (*out) << "&gt;";
-            break;
-
-        case '&':
-            (*out) << "&amp;";
-            break;
-
-        default:
-            (*out) << c;
-        }
-    }
 }
 
 } // namespace starrocks

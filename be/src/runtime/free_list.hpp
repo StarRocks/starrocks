@@ -19,9 +19,11 @@
 
 #include <stdio.h>
 #include <string.h>
+
 #include <algorithm>
-#include <vector>
 #include <string>
+#include <vector>
+
 #include "common/logging.h"
 
 namespace starrocks {
@@ -41,14 +43,10 @@ public:
     // Returns the minimum allocation size that is compatible with
     // the free list.  The free list uses the allocations to maintain
     // its own internal linked list structure.
-    static int min_size() {
-        return sizeof(FreeListNode);
-    }
+    static int min_size() { return sizeof(FreeListNode); }
 
     // C'tor, initializes the free list to be empty
-    FreeList() {
-        reset();
-    }
+    FreeList() { reset(); }
 
     // Attempts to allocate a block that is at least the input size
     // from the free list.
@@ -89,9 +87,7 @@ public:
     }
 
     // Empties the free list
-    void reset() {
-        bzero(&_head, sizeof(FreeListNode));
-    }
+    void reset() { bzero(&_head, sizeof(FreeListNode)); }
 
 private:
     struct FreeListNode {
@@ -102,4 +98,4 @@ private:
     FreeListNode _head;
 };
 
-}
+} // namespace starrocks
