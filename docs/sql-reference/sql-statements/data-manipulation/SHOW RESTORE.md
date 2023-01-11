@@ -6,8 +6,10 @@ This statement is used to view RESTORE task
 
 Syntax:
 
-```sql
-SHOW RESTORE [FROM db_name]
+## Syntax
+
+```SQL
+SHOW RESTORE [FROM <db_name>]
 ```
 
 Note：
