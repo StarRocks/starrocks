@@ -283,8 +283,31 @@ Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
-Status JniScanner::_fill_column(JNIEnv* _jni_env, const FillColumnArgs& args) {
-    if (!args.column->is_nullable()) {
+Status JniScanner::_append_array_data(const FillColumnArgs& args) {
+    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+
+    auto* nullable_column = down_cast<NullableColumn*>(args.column.get());
+    nullable_column->resize(args.num_rows);
+
+    NullData& null_data = nullable_column->null_column_data();
+    memcpy(null_data.data(), null_column_ptr, args.num_rows);
+    nullable_column->update_has_null();
+
+    int total_length = offset_ptr[args.num_rows];
+    DCHECK(args.slot_type.is_array_type());
+    std::string name = args.slot_name + "[]";
+    FillColumnArgs sub_args = {.num_rows = total_length,
+                               .column = nullable_column->data_column(),
+                               .slot_name = name,
+                               .slot_type = args.slot_type.children[0],
+                               .must_nullable = true};
+    RETURN_IF_ERROR(_fill_column(sub_args));
+    return Status::OK();
+}
+
+Status JniScanner::_fill_column(const FillColumnArgs& args) {
+    if (args.must_nullable && !args.column->is_nullable()) {
         return Status::DataQualityError(fmt::format("NOT NULL column[{}] is not supported.", args.slot_name));
     }
     LogicalType column_type = args.slot_type.type;
@@ -314,6 +337,8 @@ Status JniScanner::_fill_column(JNIEnv* _jni_env, const FillColumnArgs& args) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL128) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(args)));
+    } else if (column_type == LogicalType::TYPE_ARRAY) {
+        RETURN_IF_ERROR((_append_array_data(args)));
     } else {
         return Status::InternalError(fmt::format("Type {} is not supported for off-heap table scanner", column_type));
     }
@@ -334,8 +359,12 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
         const std::string& slot_name = slot_desc->col_name();
         const TypeDescriptor& slot_type = slot_desc->type();
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        FillColumnArgs args{.num_rows = num_rows, .column = column, .slot_name = slot_name, .slot_type = slot_type};
-        RETURN_IF_ERROR(_fill_column(_jni_env, args));
+        FillColumnArgs args{.num_rows = num_rows,
+                            .column = column,
+                            .slot_name = slot_name,
+                            .slot_type = slot_type,
+                            .must_nullable = true};
+        RETURN_IF_ERROR(_fill_column(args));
         _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(
                 _jni_env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));

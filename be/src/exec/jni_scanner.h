@@ -51,6 +51,7 @@ private:
         ColumnPtr& column;
         const std::string& slot_name;
         const TypeDescriptor& slot_type;
+        bool must_nullable;
     };
 
     static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
@@ -75,12 +76,14 @@ private:
     Status _append_date_data(const FillColumnArgs& args);
     Status _append_datetime_data(const FillColumnArgs& args);
 
-    Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
-
-    Status _fill_column(JNIEnv* _jni_env, const FillColumnArgs& args);
+    Status _append_array_data(const FillColumnArgs& args);
 
     template <LogicalType type, typename CppType>
     void _append_data(Column* column, CppType& value);
+
+    Status _fill_column(const FillColumnArgs& args);
+
+    Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
 
     Status _release_off_heap_table(JNIEnv* _jni_env);
 
