@@ -440,7 +440,6 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
-    SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_consistency_mem_tracker);
     SAFE_DELETE(_clone_mem_tracker);
@@ -476,7 +475,12 @@ void ExecEnv::_destroy() {
     workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_query_pool_mem_tracker);
     SAFE_DELETE(_query_context_mgr);
+<<<<<<< HEAD
     SAFE_DELETE(_mem_tracker);
+=======
+    SAFE_DELETE(_runtime_filter_cache);
+    SAFE_DELETE(_driver_limiter);
+>>>>>>> b22695dab ([BugFix] _query_context should be released before _runtime_filter_cache during gracefully shuting down (#16417))
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
     SAFE_DELETE(_backend_client_cache);
