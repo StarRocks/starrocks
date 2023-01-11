@@ -52,11 +52,36 @@ export_mem_limit_from_conf() {
         fi
     done < $1
 
+    cgroup_version=$(stat -fc %T /sys/fs/cgroup)
+    if [ -f /.dockerenv ] && [ "$cgroup_version" == "tmpfs" ]; then
+        mem_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes | awk '{printf $1}')
+        if [ "$mem_limit" == "" ]; then
+            echo "can't get mem info from /sys/fs/cgroup/memory/memory.limit_in_bytes"
+            return 1
+        fi
+        mem_limit=`expr $mem_limit / 1024`
+    fi
+
+    if [ -f /.dockerenv ] && [ "$cgroup_version" == "cgroup2fs" ]; then
+        mem_limit=$(cat /sys/fs/cgroup/memory.max | awk '{printf $1}')
+        if [ "$mem_limit" == "" ]; then
+            echo "can't get mem info from /sys/fs/cgroup/memory.max"
+            return 1
+        fi
+        if [ "$mem_limit" != "max" ]; then
+            mem_limit=`expr $mem_limit / 1024`
+        fi
+    fi
+
     # read /proc/meminfo to fetch total memory of machine
     mem_total=$(cat /proc/meminfo |grep 'MemTotal' |awk -F : '{print $2}' |sed 's/^[ \t]*//g' | awk '{printf $1}')
     if [ "$mem_total" == "" ]; then
         echo "can't get mem info from /proc/meminfo"
         return 1
+    fi
+
+    if [[ (-v mem_limit) && ($mem_limit -le $mem_total) ]]; then
+      mem_total=$mem_limit
     fi
 
     if [ "$mem_limit_is_set" == "false" ]; then

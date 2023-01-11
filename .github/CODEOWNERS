@@ -1,0 +1,5 @@
+# committer will be the owner of all codes
+*   @StarRocks/starrocks-committer
+
+# /docs/ belong to docs-maintainer
+/docs/  @StarRocks/docs-maintainer

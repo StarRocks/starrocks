@@ -24,14 +24,18 @@ package com.starrocks.common;
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.mysql.privilege.Role;
-import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
     private FeNameFormat() {}
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
-    // Now we can not accept all characters because current design of delete save delete cond contains column name
+
+    // The length length of db name is 256
+    public static final String DB_NAME_REGEX = "^[a-zA-Z]\\w{0,255}$|^_[a-zA-Z0-9]\\w{0,254}$";
+
+    public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
+    // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,64}$";
@@ -41,17 +45,8 @@ public class FeNameFormat {
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
-    public static void checkClusterName(String clusterName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(clusterName) || !clusterName.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_CLUSTER_NAME, clusterName);
-        }
-        if (clusterName.equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_CLUSTER_NAME, clusterName);
-        }
-    }
-
     public static void checkDbName(String dbName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbName) || !dbName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
