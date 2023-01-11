@@ -34,19 +34,23 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -294,5 +298,12 @@ public class StarRocksAssert {
             }
             Assert.fail();
         }
+    }
+
+    public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
+        TableName tableName = new TableName(db, table);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
+        return showExecutor.execute();
     }
 }
