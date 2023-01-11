@@ -41,6 +41,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -67,6 +68,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -77,6 +79,7 @@ import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
@@ -108,12 +111,13 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
-
 public class ShowExecutorTest {
 
     private static final Logger LOG = LogManager.getLogger(ShowExecutorTest.class);
@@ -1012,5 +1016,28 @@ public class ShowExecutorTest {
         Assert.assertEquals("hive_test", resultSet.getString(0));
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowCreateExternalCatalog() throws AnalysisException, DdlException {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("hive.metastore.uris", "thrift://hadoop:9083");
+                properties.put("type", "hive");
+                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
+                return catalog;
+            }
+        };
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+                "comment \"hive_test\"\n" +
+                "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
     }
 }
