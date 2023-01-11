@@ -52,6 +52,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -94,6 +95,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
@@ -132,6 +134,7 @@ import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -321,6 +324,8 @@ public class ShowExecutor {
             handleShowComputeNodes();
         } else if (stmt instanceof ShowAuthenticationStmt) {
             handleShowAuthentication();
+        }  else if (stmt instanceof ShowCreateExternalCatalogStmt) {
+            handleShowCreateExternalCatalog();
         } else {
             handleEmtpy();
         }
@@ -1964,5 +1969,29 @@ public class ShowExecutor {
         }
 
         return returnRows;
+    }
+
+    private void handleShowCreateExternalCatalog() {
+        ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        Catalog catalog =  ctx.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        // Create external catalog catalogName (
+        StringBuilder createCatalogSql = new StringBuilder();
+        createCatalogSql.append("CREATE EXTERNAL CATALOG ")
+                .append("`").append(catalogName).append("`")
+                .append("\n");
+
+        // Comment
+        String comment = catalog.getComment();
+        if (comment != null) {
+            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+        }
+        // Properties
+        createCatalogSql.append("PROPERTIES (")
+                .append(new PrintableMap<>(catalog.getConfig(), " = ", true, true))
+                .append("\n)");
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

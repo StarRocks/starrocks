@@ -89,6 +89,7 @@ statement
     | createExternalCatalogStatement
     | dropExternalCatalogStatement
     | showCatalogsStatement
+    | showCreateExternalCatalogStatement
 
     // DML Statement
     | insertStatement
@@ -582,6 +583,10 @@ showComputeNodesStatement
 
 createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    ;
+
+showCreateExternalCatalogStatement
+    : SHOW CREATE CATALOG catalogName=identifierOrString
     ;
 
 dropExternalCatalogStatement
