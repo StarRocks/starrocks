@@ -85,7 +85,6 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange& range, Column
 template <LogicalType Type>
 bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Column* dst) const {
     if constexpr (Type == TYPE_VARCHAR) {
-        DCHECK(dst->is_binary());
         auto data_column = ColumnHelper::get_data_column(dst);
         auto& bytes = down_cast<BinaryColumn*>(data_column)->get_bytes();
         auto& offsets = down_cast<BinaryColumn*>(data_column)->get_offset();
