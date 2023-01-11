@@ -342,6 +342,9 @@ public:
         if (sink_operator()->is_finished()) {
             return true;
         }
+        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
+            return true;
+        }
 
         // PRECONDITION_BLOCK
         if (_state == DriverState::PRECONDITION_BLOCK) {
@@ -397,6 +400,10 @@ public:
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
     bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
+    bool is_epoch_finishing() { return _state == DriverState::EPOCH_PENDING_FINISH; }
+    bool is_still_epoch_finishing() {
+        return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
+    }
 
 protected:
     PipelineDriver()

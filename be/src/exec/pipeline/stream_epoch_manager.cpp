@@ -92,8 +92,12 @@ Status StreamEpochManager::start_epoch(ExecEnv* exec_env, const QueryContext* qu
     return Status::OK();
 }
 
-Status StreamEpochManager::prepare(const std::vector<FragmentContext*>& fragment_ctxs) {
+Status StreamEpochManager::prepare(const MVMaintenanceTaskInfo& maintenance_task_info,
+                                   const std::vector<FragmentContext*>& fragment_ctxs) {
     std::unique_lock<std::shared_mutex> l(_epoch_lock);
+
+    _maintenance_task_info = maintenance_task_info;
+
     size_t num_drivers = 0;
     bool enable_resource_group = true;
     // TODO(lism):
@@ -106,6 +110,11 @@ Status StreamEpochManager::prepare(const std::vector<FragmentContext*>& fragment
     _num_drivers = num_drivers;
     _enable_resource_group = enable_resource_group;
     return Status::OK();
+}
+
+const MVMaintenanceTaskInfo& StreamEpochManager::maintenance_task_info() const {
+    std::shared_lock<std::shared_mutex> l(_epoch_lock);
+    return _maintenance_task_info;
 }
 
 Status StreamEpochManager::set_finished(ExecEnv* exec_env, const QueryContext* query_ctx) {

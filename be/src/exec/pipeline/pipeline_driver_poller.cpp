@@ -120,6 +120,18 @@ void PipelineDriverPoller::run_internal() {
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
+                } else if (driver->is_epoch_finishing()) {
+                    if (driver->is_still_epoch_finishing()) {
+                        ++driver_it;
+                    } else {
+                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                       : DriverState::EPOCH_FINISH);
+                        remove_blocked_driver(_local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    }
+                } else if (driver->is_epoch_finished()) {
+                    remove_blocked_driver(_local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
@@ -183,8 +195,9 @@ size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredica
                 VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
                 driver->set_driver_state(DriverState::READY);
                 ready_drivers.push_back(driver);
-                _parked_drivers.erase(driver_it++);
+                _parked_drivers.erase(driver_it);
             }
+            driver_it++;
         }
     }
 

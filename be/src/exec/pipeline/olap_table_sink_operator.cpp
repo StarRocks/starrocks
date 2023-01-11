@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/olap_table_sink_operator.h"
 
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -79,6 +80,39 @@ bool OlapTableSinkOperator::pending_finish() const {
     }
 
     return false;
+}
+
+bool OlapTableSinkOperator::is_epoch_finishing() const {
+    return pending_finish();
+}
+
+Status OlapTableSinkOperator::set_epoch_finishing(RuntimeState* state) {
+    _is_epoch_finished = true;
+    if (_is_open_done) {
+        // sink's open already finish, we can try_close
+        return _sink->try_close(state);
+    } else {
+        // sink's open not finish, we need check in pending_finish() before close
+        return Status::OK();
+    }
+}
+
+Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
+    if (!_sink->is_close_done()) {
+        RETURN_IF_ERROR(_sink->close(state, Status::OK()));
+    }
+
+    _is_epoch_finished = false;
+    StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
+    DCHECK(stream_epoch_manager);
+    int64_t new_txn_id = stream_epoch_manager->epoch_info().txn_id;
+    RETURN_IF_ERROR(_sink->reset_epoch(state, new_txn_id));
+
+    RETURN_IF_ERROR(_sink->prepare(state));
+
+    RETURN_IF_ERROR(_sink->try_open(state));
+
+    return Status::OK();
 }
 
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {

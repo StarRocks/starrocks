@@ -34,7 +34,7 @@ class MVEpochTest {
         binlog.getBinlogMap().put(
                 new BinlogConsumeStateVO.BinlogIdVO(1),
                 new BinlogConsumeStateVO.BinlogLSNVO(2, 1));
-        MVEpoch epoch = new MVEpoch(1024);
+        MVEpoch epoch = new MVEpoch(0, 1024);
         epoch.onReady();
         epoch.onSchedule();
         epoch.onCommitting();

@@ -1684,4 +1684,13 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
     }
 }
 
+Status OlapTableSink::reset_epoch(RuntimeState* state, int64_t txn_id) {
+    _txn_id = txn_id;
+    _channels.clear();
+    _node_channels.clear();
+    _failed_channels.clear();
+    _partition_ids.clear();
+    return Status::OK();
+}
+
 } // namespace starrocks::stream_load
