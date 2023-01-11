@@ -691,7 +691,8 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
     LOG(INFO) << "[MV] mv maintenance task, query_id=" << t_request.query_id << ", mv_task_type:" << t_request.task_type
               << ", db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name
               << ", job_id=" << t_request.job_id << ", task_id=" << t_request.task_id
-              << ", signature=" << t_request.signature << ", plan=" << apache::thrift::ThriftDebugString(t_request);
+              << ", signature=" << t_request.signature;
+    VLOG(2) << "[MV] mv maintenance task, plan=" << apache::thrift::ThriftDebugString(t_request);
 
     auto mv_task_type = t_request.task_type;
     const TUniqueId& query_id = t_request.query_id;

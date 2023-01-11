@@ -304,7 +304,7 @@ public:
 
     ObjectPool* pool() { return _pool; }
 
-    Status reset_epoch(RuntimeState* state, int64_t txn_id);
+    Status reset_epoch(RuntimeState* state);
 
 private:
     template <LogicalType PT>

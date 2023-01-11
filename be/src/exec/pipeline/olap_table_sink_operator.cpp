@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/olap_table_sink_operator.h"
 
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -103,10 +102,8 @@ Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
     }
 
     _is_epoch_finished = false;
-    StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    int64_t new_txn_id = stream_epoch_manager->epoch_info().txn_id;
-    RETURN_IF_ERROR(_sink->reset_epoch(state, new_txn_id));
+
+    RETURN_IF_ERROR(_sink->reset_epoch(state));
 
     RETURN_IF_ERROR(_sink->prepare(state));
 

@@ -1019,14 +1019,6 @@ struct TStreamAggregationNode {
   // other exprs are the inputs to the aggregate function.
   2: optional list<Exprs.TExpr> aggregate_functions
 
-  // Tuple id used for intermediate aggregations (with slots of agg intermediate types)
-  3: required Types.TTupleId intermediate_tuple_id
-
-  // Tupld id used for the aggregation output (with slots of agg output types)
-  // Equal to intermediate_tuple_id if intermediate type == output type for all
-  // aggregate functions.
-  4: required Types.TTupleId output_tuple_id
-
   // IMT info
   10: optional Descriptors.TIMTDescriptor agg_result_imt
   11: optional Descriptors.TIMTDescriptor agg_intermediate_imt

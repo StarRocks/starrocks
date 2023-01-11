@@ -43,6 +43,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "config.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -1684,8 +1686,10 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
     }
 }
 
-Status OlapTableSink::reset_epoch(RuntimeState* state, int64_t txn_id) {
-    _txn_id = txn_id;
+Status OlapTableSink::reset_epoch(RuntimeState* state) {
+    pipeline::StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
+    DCHECK(stream_epoch_manager);
+    _txn_id = stream_epoch_manager->epoch_info().txn_id;
     _channels.clear();
     _node_channels.clear();
     _failed_channels.clear();
