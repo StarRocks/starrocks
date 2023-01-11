@@ -15,7 +15,7 @@ LOAD LABEL [<database_name>.]<label_name>
 )
 WITH BROKER "<broker_name>"
 [broker_properties]
-[opt_properties];
+[opt_properties]
 ```
 
 ## Parameters

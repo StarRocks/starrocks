@@ -121,7 +121,6 @@
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](./sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
-      + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
     + DDL
       + [ALTER DATABASE](./sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)

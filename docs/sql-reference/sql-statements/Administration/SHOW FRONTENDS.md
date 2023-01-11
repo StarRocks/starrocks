@@ -7,7 +7,7 @@ This statement is used to view FE nodes.
 Syntax:
 
 ```sql
-SHOW FRONTENDS;
+SHOW FRONTENDS
 ```
 
 Note:

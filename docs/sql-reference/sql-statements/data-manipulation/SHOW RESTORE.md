@@ -2,12 +2,12 @@
 
 ## Description
 
-This statement is used to view RESTORE task
+This statement is used to view RESTORE task.
 
-Syntax:
+## Syntax
 
-```sql
-SHOW RESTORE [FROM db_name]
+```SQL
+SHOW RESTORE [FROM <db_name>]
 ```
 
 Note：
@@ -43,7 +43,7 @@ Timeout：                job timeout, in seconds
 
 ## Examples
 
-1. View example_ db the next RESTORE task.
+View the RESTORE task of `example_db`.
 
 ```sql
 SHOW RESTORE FROM example_db;

@@ -7,7 +7,7 @@ This statement is used to show content in columns from specified tables.
 Syntax:
 
 ```sql
-SHOW FULL COLUMNS FROM tbl;
+SHOW FULL COLUMNS FROM <tbl_name>
 ```
 
 ## Examples
