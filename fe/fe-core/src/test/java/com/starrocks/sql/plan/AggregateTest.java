@@ -1728,6 +1728,7 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testExtractProject() throws Exception {
+        connectContext.getSessionVariable().setDisableRewriteSumByAssociativeRule(true);
         String sql;
         String plan;
 
@@ -1787,6 +1788,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  common expressions:\n" +
                 "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
                 "  |  <slot 18> : 17: cast + 1");
+        connectContext.getSessionVariable().setDisableRewriteSumByAssociativeRule(false);
 
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         sql = "select count(distinct t1c, upper(id_datetime)) from test_all_type";
@@ -1881,5 +1883,93 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
                 "  |  <slot 3> : -9223372036854775808");
+    }
+
+    @Test
+    public void testRewriteSumByAssociativeRule() throws Exception {
+        // 1. different types
+        // 1.1 nullable
+        String sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
+                " from test_all_type";
+        String plan = getVerboseExplain(sql);
+        // for each sum(col + 1), should rewrite to sum(col) + count(col) * 1
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  18 <-> [26: sum, BIGINT, true] + [27: count, BIGINT, true] * 1\n" +
+                "  |  19 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
+                "  |  20 <-> [32: sum, BIGINT, true] + [33: count, BIGINT, true] * 1\n" +
+                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [38: sum, DOUBLE, true] + cast([39: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [41: sum, BIGINT, true] + [42: count, BIGINT, true] * 1\n" +
+                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([45: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+        // 1.2 not null
+        sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
+                " from test_all_type_not_null";
+        plan = getVerboseExplain(sql);
+        // for each sum(col + 1), should rewrite to sum(col) + count() * 1,
+        // so count() will be a common expression
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  18 <-> [26: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
+                "  |  19 <-> [29: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
+                "  |  20 <-> [32: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
+                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [38: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [41: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
+                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([33: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
+                "  |  common expressions:\n" +
+                "  |  46 <-> [33: count, BIGINT, true] * 1");
+
+        // 2. aggregate result reuse
+        sql = "select sum(t1b), sum(t1b+1), sum(t1b+2) from test_all_type";
+        // if a column appears multiple times in different sum functions,
+        // we can reuse the results of sum and count
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> [18: sum, BIGINT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 1\n" +
+                "  |  15 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 2");
+
+        sql = "select sum(id_decimal), sum(id_decimal+1.0), sum(id_decimal+1.00), sum(id_decimal+1.000), " +
+                "sum(id_decimal+1.000000000000000000) from test_all_type";
+        plan = getVerboseExplain(sql);
+        // for decimal sum with different scales,
+        // the original ADD operator need to cast id_decimal to decimal128 with different scales,
+        // e.g.
+        // sum(id_decimal+1.0) -> sum(add(cast(cast(id_decimal as decimal128(28,9) as decimal128(37,9)))), 1.0)
+        // sum(id_decimal+1.00) -> sum(add(cast(cast(id_decimal as decimal128(28,9) as decimal128(36,9)))), 1.00)
+        // after applying RewriteSumByAssociativeRule, we can remove all unnecessary cast
+        // and reuse the result of sum(id_decimal) and count() multiple times.
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  15 <-> [20: sum, DECIMAL128(38,2), true]\n" +
+                "  |  16 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.0\n" +
+                "  |  17 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.00\n" +
+                "  |  18 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.000\n" +
+                "  |  19 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.000000000000000000\n" +
+                "  |  common expressions:\n" +
+                "  |  28 <-> cast([21: count, BIGINT, true] as DECIMAL128(18,0))");
+
+        // 3. mix sum and other agg functions
+        sql = "select avg(t1b), max(t1b), sum(t1b), sum(t1b+1) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  12 <-> [12: avg, DOUBLE, true]\n" +
+                "  |  13 <-> [13: max, SMALLINT, true]\n" +
+                "  |  14 <-> [14: sum, BIGINT, true]\n" +
+                "  |  15 <-> [14: sum, BIGINT, true] + [17: count, BIGINT, true] * 1");
+
+        // 4. with group by key
+        sql = "select t1b, sum(t1b),sum(t1b+1),avg(t1b) from test_all_type group by t1b";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
+                "  |  12 <-> [12: sum, BIGINT, true]\n" +
+                "  |  13 <-> [12: sum, BIGINT, true] + [16: count, BIGINT, true] * 1\n" +
+                "  |  14 <-> [14: avg, DOUBLE, true]");
+        assertContains(plan, "  |  group by: [2: t1b, SMALLINT, true]");
     }
 }

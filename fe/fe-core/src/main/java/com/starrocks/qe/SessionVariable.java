@@ -334,6 +334,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+    public static final String DISABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "disable_rewrite_sum_by_associative_rule";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -748,6 +749,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
+
+    @VarAttr(name = DISABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
+    private boolean disableRewriteSumByAssociativeRule = false;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
@@ -1556,6 +1560,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboReorderThresholdUseExhaustive(int cboReorderThresholdUseExhaustive) {
         this.cboReorderThresholdUseExhaustive = cboReorderThresholdUseExhaustive;
+    }
+
+    public void setDisableRewriteSumByAssociativeRule(boolean disableRewriteSumByAssociativeRule) {
+        this.disableRewriteSumByAssociativeRule = disableRewriteSumByAssociativeRule;
+    }
+
+    public boolean isDisableRewriteSumByAssociativeRule() {
+        return this.disableRewriteSumByAssociativeRule;
     }
 
     // Serialize to thrift object
