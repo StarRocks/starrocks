@@ -75,11 +75,13 @@ public class ColumnType {
             offset = 0;
         }
 
-        int indexOf(char ch0, char ch1, char ch2) {
+        int indexOf(char... args) {
             for (int i = offset; i < s.length(); i++) {
                 char c = s.charAt(i);
-                if (c == ch0 || c == ch1 || c == ch2) {
-                    return i;
+                for (char ch : args) {
+                    if (c == ch) {
+                        return i;
+                    }
                 }
             }
             return s.length();
@@ -115,10 +117,10 @@ public class ColumnType {
     private void parseStruct(List<String> childNames, List<ColumnType> childTypeValues, StringScanner scanner) {
         while (scanner.peek() != '>') {
             scanner.next(); // '<' or ','
-            int p = scanner.indexOf(':', ':', ':');
+            int p = scanner.indexOf(':');
             String name = scanner.substr(p);
-            scanner.moveTo(p + 1);
             childNames.add(name);
+            scanner.moveTo(p + 1);
             ColumnType x = new ColumnType();
             x.parse(scanner);
             childTypeValues.add(x);

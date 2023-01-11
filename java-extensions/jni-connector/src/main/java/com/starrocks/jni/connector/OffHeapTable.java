@@ -71,23 +71,23 @@ package com.starrocks.jni.connector;
 // @formatter:on
 
 public class OffHeapTable {
-    public ColumnVector[] vectors;
+    public OffHeapColumnVector[] vectors;
     public String[] fields;
-    public ColumnVector meta;
+    public OffHeapColumnVector meta;
     public int numRows;
     public boolean[] released;
 
     public OffHeapTable(ColumnType[] types, String[] fields, int capacity) {
         this.fields = fields;
-        this.vectors = new ColumnVector[types.length];
+        this.vectors = new OffHeapColumnVector[types.length];
         this.released = new boolean[types.length];
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
-            vectors[i] = new ColumnVector(capacity, types[i]);
+            vectors[i] = new OffHeapColumnVector(capacity, types[i]);
             metaSize += types[i].computeColumnSize();
             released[i] = false;
         }
-        this.meta = new ColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
+        this.meta = new OffHeapColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
         this.numRows = 0;
     }
 
@@ -112,7 +112,7 @@ public class OffHeapTable {
 
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
-        for (ColumnVector v : vectors) {
+        for (OffHeapColumnVector v : vectors) {
             v.updateMeta(meta);
         }
         return meta.valuesNativeAddress();
@@ -136,10 +136,10 @@ public class OffHeapTable {
     }
 
     public static class MetaChecker {
-        private ColumnVector meta;
+        private OffHeapColumnVector meta;
         int offset;
 
-        public MetaChecker(ColumnVector meta, int offset) {
+        public MetaChecker(OffHeapColumnVector meta, int offset) {
             this.meta = meta;
             this.offset = offset;
         }
@@ -157,7 +157,7 @@ public class OffHeapTable {
     public void checkMeta() {
         MetaChecker checker = new MetaChecker(meta, 0);
         checker.check(numRows);
-        for (ColumnVector c : vectors) {
+        for (OffHeapColumnVector c : vectors) {
             c.checkMeta(checker);
         }
     }

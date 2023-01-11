@@ -55,7 +55,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
     private final String[] requiredFields;
-    private Integer[] requiredColumnIds;
+    private int[] requiredColumnIds;
     private ColumnType[] requiredTypes;
     private final String[] nestedFields;
     private final String instantTime;
@@ -113,7 +113,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
 
         requiredTypes = new ColumnType[requiredFields.length];
-        requiredColumnIds = new Integer[requiredFields.length];
+        requiredColumnIds = new int[requiredFields.length];
         for (int i = 0; i < requiredFields.length; i++) {
             requiredColumnIds[i] = hiveColumnNameToIndex.get(requiredFields[i]);
             String type = hiveColumnNameToType.get(requiredFields[i]);
@@ -137,7 +137,8 @@ public class HudiSliceScanner extends ConnectorScanner {
     private Properties makeProperties() {
         Properties properties = new Properties();
         properties.setProperty("hive.io.file.readcolumn.ids",
-                Arrays.stream(this.requiredColumnIds).map(x -> String.valueOf(x)).collect(Collectors.joining(",")));
+                Arrays.stream(this.requiredColumnIds).mapToObj(x -> String.valueOf(x))
+                        .collect(Collectors.joining(",")));
         properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
         if (this.nestedFields.length > 0) {
             properties.setProperty("hive.io.file.readNestedColumn.paths", String.join(",", this.nestedFields));

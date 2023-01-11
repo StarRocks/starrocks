@@ -24,7 +24,7 @@ import java.util.List;
  * Reference to Apache Spark with some customization
  * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
-public class ColumnVector {
+public class OffHeapColumnVector {
 
     private long nulls;
     private long data;
@@ -58,9 +58,9 @@ public class ColumnVector {
      */
     protected int elementsAppended;
 
-    private ColumnVector[] childColumns;
+    private OffHeapColumnVector[] childColumns;
 
-    public ColumnVector(int capacity, ColumnType type) {
+    public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
         this.nulls = 0;
@@ -136,24 +136,24 @@ public class ColumnVector {
         } else if (type.isString()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
-            this.childColumns = new ColumnVector[1];
-            this.childColumns[0] = new ColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
         } else if (type.isArray()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
 
-            this.childColumns = new ColumnVector[1];
-            this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
         } else if (type.isMap()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
-            this.childColumns = new ColumnVector[2];
-            this.childColumns[0] = new ColumnVector(newCapacity, type.childTypes.get(0));
-            this.childColumns[1] = new ColumnVector(newCapacity, type.childTypes.get(1));
+            this.childColumns = new OffHeapColumnVector[2];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
+            this.childColumns[1] = new OffHeapColumnVector(newCapacity, type.childTypes.get(1));
         } else if (type.isStruct()) {
-            this.childColumns = new ColumnVector[type.childTypes.size()];
+            this.childColumns = new OffHeapColumnVector[type.childTypes.size()];
             for (int i = 0; i < this.childColumns.length; i++) {
-                this.childColumns[i] = new ColumnVector(newCapacity, type.childTypes.get(i));
+                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
             }
-            for (ColumnVector c : childColumns) {
+            for (OffHeapColumnVector c : childColumns) {
                 c.reserveInternal(newCapacity);
             }
         } else {
@@ -166,7 +166,7 @@ public class ColumnVector {
 
     private void reset() {
         if (childColumns != null) {
-            for (ColumnVector c : childColumns) {
+            for (OffHeapColumnVector c : childColumns) {
                 c.reset();
             }
         }
@@ -177,7 +177,7 @@ public class ColumnVector {
         }
     }
 
-    private ColumnVector arrayData() {
+    private OffHeapColumnVector arrayData() {
         return childColumns[0];
     }
 
@@ -380,7 +380,7 @@ public class ColumnVector {
         return elementsAppended++;
     }
 
-    public void updateMeta(ColumnVector meta) {
+    public void updateMeta(OffHeapColumnVector meta) {
         if (type.isString()) {
             meta.appendLong(nullsNativeAddress());
             meta.appendLong(arrayOffsetNativeAddress());
@@ -396,7 +396,7 @@ public class ColumnVector {
             childColumns[1].updateMeta(meta);
         } else if (type.isStruct()) {
             meta.appendLong(nullsNativeAddress());
-            for (ColumnVector c : childColumns) {
+            for (OffHeapColumnVector c : childColumns) {
                 c.updateMeta(meta);
             }
         } else {
@@ -564,7 +564,7 @@ public class ColumnVector {
             childColumns[0].checkMeta(checker);
             childColumns[1].checkMeta(checker);
         } else if (type.isStruct()) {
-            for (ColumnVector c : childColumns) {
+            for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
             }
         } else {
