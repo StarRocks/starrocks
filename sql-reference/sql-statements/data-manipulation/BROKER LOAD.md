@@ -228,7 +228,7 @@ INTO TABLE <table_name>
 
 > **说明**
 >
-> - 从 Amazon S3 导入数据使用的是 S3A 协议，因此文件路径的前缀必须为 `s3a://`。
+> - 由于 Broker Load 在访问 AWS S3 时只支持 S3A 协议，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 > - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
 
 #### Google CGS
