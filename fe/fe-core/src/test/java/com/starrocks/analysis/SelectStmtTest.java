@@ -21,8 +21,13 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -32,7 +37,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+<<<<<<< HEAD
 import java.util.UUID;
+=======
+import java.util.List;
+import java.util.stream.Collectors;
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
 
 public class SelectStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -399,4 +409,60 @@ public class SelectStmtTest {
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCurrentUserFunSupport() throws Exception {
+        String sql = "select current_user()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_user";
+        starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testTimeFunSupport() throws Exception {
+        String sql = "select current_timestamp()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_timestamp";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_time()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_time";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_date()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_date";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select localtime()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select localtime";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select localtimestamp()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select localtimestamp";
+        starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testSelectFromTabletIds() throws Exception {
+        FeConstants.runningUnitTest = true;
+        ShowResultSet tablets = starRocksAssert.showTablet("db1", "partition_table");
+        List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
+        Assert.assertEquals(tabletIds.size(), 4);
+        String tabletCsv = String.join(",", tabletIds);
+        String sql = String.format("select count(1) from db1.partition_table tablet (%s)", tabletCsv);
+        String explain = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(explain.contains(tabletCsv));
+
+        String invalidTabletCsv = tabletIds.stream().map(id -> id + "0").collect(Collectors.joining(","));
+        String invalidSql = String.format("select count(1) from db1.partition_table tablet (%s)", invalidTabletCsv);
+        try {
+            starRocksAssert.query(invalidSql).explainQuery();
+        } catch (Throwable ex) {
+            Assert.assertTrue(ex.getMessage().contains("Invalid tablet"));
+        }
+        FeConstants.runningUnitTest = false;
+    }
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
 }

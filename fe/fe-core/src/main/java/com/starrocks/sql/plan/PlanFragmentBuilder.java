@@ -541,7 +541,24 @@ public class PlanFragmentBuilder {
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
+<<<<<<< HEAD
                 for (Long partitionId : node.getSelectedPartitionId()) {
+=======
+                long localBeId = -1;
+                if (Config.enable_local_replica_selection) {
+                    localBeId = GlobalStateMgr.getCurrentSystemInfo()
+                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+                }
+
+                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
+                    return selectTabletIds != null && !selectTabletIds.isEmpty();
+                }).collect(Collectors.toList());
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                for (Long partitionId : scanNode.getSelectedPartitionIds()) {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
+                    Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
 
@@ -566,6 +583,11 @@ public class PlanFragmentBuilder {
 
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+<<<<<<< HEAD
+=======
+                    List<Tablet> tablets =
+                            selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);

@@ -23,6 +23,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
+<<<<<<< HEAD
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -39,16 +40,53 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DdlExecutor;
+=======
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.StatementBase;
+>>>>>>> 4e2af5401 ([BugFix] fixup mistake of access tablet(tablet_id,...) (#16390))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -271,5 +309,12 @@ public class StarRocksAssert {
             }
             Assert.fail();
         }
+    }
+
+    public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
+        TableName tableName = new TableName(db, table);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
+        return showExecutor.execute();
     }
 }
