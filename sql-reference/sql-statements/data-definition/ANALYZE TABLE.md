@@ -86,11 +86,11 @@ PROPERTIES (property [,property]);
 | **PROPERTIES**                 | **类型** | **默认值** | **说明**                                                     |
 | ------------------------------ | -------- | ---------- | ------------------------------------------------------------ |
 | statistic_sample_collect_rows  | INT      | 200000     | 最小采样行数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
-| histogram_mcv_size             | INT      | 100        | 直方图 most common value (MVC) 的数量。                      |
+| histogram_mcv_size             | INT      | 100        | 直方图 most common value (MCV) 的数量。                      |
 | histogram_sample_ratio         | FLOAT    | 0.1        | 直方图采样比例。                                             |
 | histogram_max_sample_row_count | LONG     | 10000000   | 直方图最大采样行数。                                         |
 
-直方图的采样行数由多个参数共同控制，采样行数取`statistic_sample_collect_rows`和表总行数 * `histogram_sample_ratio` 两者中的最大值。最多不超过`histogram_max_sample_row_count`指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
+直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
 
 直方图任务实际执行中使用的**PROPERTIES**，可以通过 SHOW ANALYZE STATUS 返回结果中的**PROPERTIES**列查看。
 
@@ -100,7 +100,7 @@ PROPERTIES (property [,property]);
 -- 手动采集v1列的直方图信息，使用默认配置。
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1;
 
--- 手动采集v1列的直方图信息，指定32个分桶，mcv指定为32个，采样比例为50%。
+-- 手动采集 v1 列的直方图信息，指定 32 个分桶，MCV 指定为 32 个，采样比例为 50%。
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1,v2 WITH 32 BUCKETS 
 PROPERTIES(
    "histogram_mcv_size" = "32",
