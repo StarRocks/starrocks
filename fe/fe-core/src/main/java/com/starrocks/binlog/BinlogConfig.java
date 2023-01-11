@@ -60,7 +60,7 @@ public class BinlogConfig implements Writable {
     // binlog config version starts from 0
     // -1 indicates invalid
     public BinlogConfig() {
-        this(INVALID, false, Config.task_ttl_second, Config.binlog_max_size);
+        this(INVALID, false, Config.binlog_ttl_second, Config.binlog_max_size);
     }
 
     public void buildFromProperties(Map<String, String> properties) {
