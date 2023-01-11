@@ -37,6 +37,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -265,11 +266,11 @@ public class StatisticUtils {
     }
 
     public static double multiplyRowCount(double left, double right) {
-        left = left > StatsConstants.MAXIMUM_ROW_COUNT ? StatsConstants.MAXIMUM_ROW_COUNT : left;
-        right = right > StatsConstants.MAXIMUM_ROW_COUNT ? StatsConstants.MAXIMUM_ROW_COUNT : right;
+        left = Math.min(left, StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT);
+        right = Math.min(right, StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT);
         double result;
-        if (left > StatsConstants.MAXIMUM_ROW_COUNT / right) {
-            result = StatsConstants.MAXIMUM_ROW_COUNT;
+        if (left > StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT / right) {
+            result = StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT;
         } else {
             result = left * right;
         }
@@ -277,11 +278,11 @@ public class StatisticUtils {
     }
 
     public static double multiplyOutputSize(double left, double right) {
-        left = left > StatsConstants.MAXIMUM_OUTPUT_SIZE ? StatsConstants.MAXIMUM_OUTPUT_SIZE : left;
-        right = right > StatsConstants.MAXIMUM_OUTPUT_SIZE ? StatsConstants.MAXIMUM_OUTPUT_SIZE : right;
+        left = Math.min(left, StatisticsEstimateCoefficient.MAXIMUM_OUTPUT_SIZE);
+        right = Math.min(right, StatisticsEstimateCoefficient.MAXIMUM_OUTPUT_SIZE);
         double result;
-        if (left > StatsConstants.MAXIMUM_OUTPUT_SIZE / right) {
-            result = StatsConstants.MAXIMUM_OUTPUT_SIZE;
+        if (left > StatisticsEstimateCoefficient.MAXIMUM_OUTPUT_SIZE / right) {
+            result = StatisticsEstimateCoefficient.MAXIMUM_OUTPUT_SIZE;
         } else {
             result = left * right;
         }

@@ -90,7 +90,7 @@ public class JoinReorderLeftDeep extends JoinOrder {
             ExpressionInfo joinExpr = buildJoinExpr(leftGroup, atoms.get(index));
             joinExpr.expr.deriveLogicalPropertyItself();
             calculateStatistics(joinExpr.expr);
-            computeCost(joinExpr, true);
+            computeCost(joinExpr);
 
             BitSet joinBitSet = new BitSet();
             joinBitSet.or(leftGroup.atoms);

@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.statistic.StatsConstants;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -127,8 +126,8 @@ public class Statistics {
             // The minimum value of rowCount is set to 1, and values less than 1 are meaningless.
             if (outputRowCount < 1D) {
                 this.outputRowCount = 1D;
-            } else if (outputRowCount > StatsConstants.MAXIMUM_ROW_COUNT) {
-                this.outputRowCount = StatsConstants.MAXIMUM_ROW_COUNT;
+            } else if (outputRowCount > StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT) {
+                this.outputRowCount = StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT;
             } else {
                 this.outputRowCount = outputRowCount;
             }
