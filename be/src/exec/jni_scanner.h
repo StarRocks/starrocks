@@ -46,6 +46,13 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
 
 private:
+    struct FillColumnArgs {
+        long num_rows;
+        ColumnPtr& column;
+        const std::string& slot_name;
+        const TypeDescriptor& slot_type;
+    };
+
     static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
 
     Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
@@ -57,19 +64,20 @@ private:
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
     template <LogicalType type, typename CppType>
-    Status _append_primitive_data(long num_rows, ColumnPtr& column);
+    Status _append_primitive_data(const FillColumnArgs& args);
 
     template <LogicalType type, typename CppType>
-    Status _append_decimal_data(long num_rows, ColumnPtr& column, const std::string& slot_name,
-                                const TypeDescriptor& slot_type);
+    Status _append_decimal_data(const FillColumnArgs& args);
 
     template <LogicalType type>
-    Status _append_string_data(long num_rows, ColumnPtr& column);
+    Status _append_string_data(const FillColumnArgs& args);
+
+    Status _append_date_data(const FillColumnArgs& args);
+    Status _append_datetime_data(const FillColumnArgs& args);
 
     Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
 
-    // Status _fill_column(JNIEnv* _jni_env, int num_rows, ColumnPtr& column, const std::string& slot_name,
-    //                     const TypeDescriptor& slot_type);
+    Status _fill_column(JNIEnv* _jni_env, const FillColumnArgs& args);
 
     template <LogicalType type, typename CppType>
     void _append_data(Column* column, CppType& value);
