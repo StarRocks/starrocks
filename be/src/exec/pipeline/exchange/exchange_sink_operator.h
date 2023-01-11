@@ -80,8 +80,7 @@ public:
     Status serialize_chunk(const Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     // Return the physical bytes of attachment.
-    int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment,
-                                      bool copy = true);
+    int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
 
 private:
     bool _is_large_chunk(size_t sz) const {

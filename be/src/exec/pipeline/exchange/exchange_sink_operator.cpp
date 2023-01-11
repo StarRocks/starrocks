@@ -249,7 +249,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         }
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment, false);
+        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   attachment_physical_bytes};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
@@ -710,29 +710,22 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-// chunk_request should be really copied if it will be sent by many times.
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
-                                                        butil::IOBuf& attachment, bool copy) {
+                                                        butil::IOBuf& attachment) {
     int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
 
-        if (copy) {
-            int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-            // if avoid this copy of `append()`, the chunk shouldn't be deleted until sent many times. To simple such
-            // issue, here just directly append().
-            attachment.append(chunk->data());
-            attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
-            chunk->clear_data();
-        } else {
-            // not copied for various chunk size larger than 2GB limit or not.
-            size_t size = attachment.append_user_data(
-                    (void*)((static_cast<std::string*>((chunk->release_data())))->c_str()), chunk->data().size(), free);
-            attachment_physical_bytes += size;
-            if (!chunk->data().empty()) {
-                throw std::runtime_error("chunk is not empty after released!");
-            }
+        attachment_physical_bytes += chunk->data().size();
+        // release chunk->data() to iobuf
+        auto res = attachment.append_user_data((void*)((static_cast<std::string*>((chunk->release_data())))->c_str()),
+                                               chunk->data().size(), free);
+        if (UNLIKELY(res != 0)) {
+            throw std::runtime_error("append user data to brpc iobuf error.");
+        }
+        if (UNLIKELY(!chunk->data().empty())) {
+            throw std::runtime_error("chunk is not empty after released.");
         }
 
         // If the request is too big, free the memory in order to avoid OOM
