@@ -17,6 +17,11 @@ package com.starrocks.catalog;
 
 public class AnyElementType extends PseudoType {
     @Override
+    public boolean equals(Object obj) {
+        return obj instanceof AnyElementType;
+    }
+
+    @Override
     public boolean matchesType(Type t) {
         return true;
     }
