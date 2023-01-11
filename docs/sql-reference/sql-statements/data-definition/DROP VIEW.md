@@ -4,11 +4,11 @@
 
 This statement is used to drop a logical view VIEW
 
-Syntax:
+## Syntax
 
 ```sql
 DROP VIEW [IF EXISTS]
-[db_name.]view_name;
+[db_name.]view_name
 ```
 
 ## Examples
