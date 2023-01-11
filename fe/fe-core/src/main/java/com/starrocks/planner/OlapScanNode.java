@@ -725,6 +725,10 @@ public class OlapScanNode extends ScanNode {
         this.isPreAggregation = true;
     }
 
+    public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.selectedPartitionIds = selectedPartitionIds;
+    }
+
     public void setTabletId2BucketSeq(Map<Long, Integer> tabletId2BucketSeq) {
         this.tabletId2BucketSeq = tabletId2BucketSeq;
     }
@@ -925,6 +929,10 @@ public class OlapScanNode extends ScanNode {
         }
         Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
         for (Long tabletId : scanTabletIds) {
+            // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
+            // maybe invalid.
+            Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
+                    String.format("Invalid tablet id: '%s'", tabletId));
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }

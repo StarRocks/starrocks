@@ -638,8 +638,14 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                for (Long partitionId : node.getSelectedPartitionId()) {
+                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
+                    return selectTabletIds != null && !selectTabletIds.isEmpty();
+                }).collect(Collectors.toList());
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
+                    Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -649,7 +655,8 @@ public class PlanFragmentBuilder {
                     }
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                    List<Tablet> tablets = selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+                    List<Tablet> tablets =
+                            selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
