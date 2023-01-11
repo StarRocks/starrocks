@@ -298,6 +298,8 @@ public class CatalogMgr {
     }
 
     public class CatalogProcNode implements ProcDirInterface {
+        private static final String DEFAULT_CATALOG_COMMENT =
+                "An internal catalog contains this cluster's self-managed tables.";
 
         @Override
         public boolean register(String name, ProcNodeInterface node) {
@@ -328,7 +330,7 @@ public class CatalogMgr {
             } finally {
                 readUnlock();
             }
-            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", DEFAULT_CATALOG_COMMENT));
             return result;
         }
     }
