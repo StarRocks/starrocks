@@ -10,7 +10,7 @@ Syntax:
 
 ```sql
 ADMIN SET REPLICA STATUS
-PROPERTIES ("key" = "value", ...);
+PROPERTIES ("key" = "value", ...)
 ```
 
 The following attributes are currently supported:
