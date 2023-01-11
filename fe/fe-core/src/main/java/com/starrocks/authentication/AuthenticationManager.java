@@ -53,8 +53,8 @@ public class AuthenticationManager {
 
     public static final String ROOT_USER = "root";
 
-    // core data struction
-    // user identity -> all the authentication infomation
+    // core data structure
+    // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new TreeMap<>((o1, o2) -> {
         // make sure that ip > domain > %
@@ -104,6 +104,8 @@ public class AuthenticationManager {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
+        AuthenticationProviderFactory.installPlugin(
+                LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
 
         // default user
         UserAuthenticationInfo info = new UserAuthenticationInfo();
@@ -291,7 +293,7 @@ public class AuthenticationManager {
 
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
-        if (! userToAuthenticationInfo.containsKey(userIdentity)) {
+        if (!userToAuthenticationInfo.containsKey(userIdentity)) {
             LOG.warn("cannot find user {}", userIdentity);
             return;
         }
@@ -299,7 +301,7 @@ public class AuthenticationManager {
         LOG.info("user {} is dropped", userIdentity);
         // 2. remove from userNameToProperty
         String userName = userIdentity.getQualifiedUser();
-        if (! hasUserNameNoLock(userName)) {
+        if (!hasUserNameNoLock(userName)) {
             LOG.info("user property for {} is dropped: {}", userName, userNameToProperty.get(userName));
             userNameToProperty.remove(userName);
         }
@@ -333,7 +335,7 @@ public class AuthenticationManager {
     private void updateUserNoLock(
             UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists) throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
-            if (! shouldExists) {
+            if (!shouldExists) {
                 throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
             }
         } else {
@@ -494,6 +496,10 @@ public class AuthenticationManager {
 
     public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
         return userToAuthenticationInfo.get(userIdentity);
+    }
+
+    public Map<UserIdentity, UserAuthenticationInfo> getUserToAuthenticationInfo() {
+        return userToAuthenticationInfo;
     }
 
     public void upgradeUserProperty(String userName, long maxConn) {
