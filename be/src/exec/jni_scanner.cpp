@@ -172,10 +172,9 @@ void JniScanner::_append_data(Column* column, CppType& value) {
 }
 
 template <LogicalType type, typename CppType>
-Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index,
-                                          ColumnPtr& column) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-    auto* column_ptr = reinterpret_cast<CppType*>(chunk_meta_ptr[chunk_meta_index++]);
+Status JniScanner::_append_primitive_data(long num_rows, ColumnPtr& column) {
+    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+    auto* column_ptr = reinterpret_cast<CppType*>(next_chunk_meta());
 
     auto* nullable_column = down_cast<NullableColumn*>(column.get());
     nullable_column->resize(num_rows);
@@ -193,14 +192,14 @@ Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, i
 }
 
 template <LogicalType type, typename CppType>
-Status JniScanner::_append_decimal_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column,
-                                        SlotDescriptor* slot_desc) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-    int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
-    char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
+Status JniScanner::_append_decimal_data(long num_rows, ColumnPtr& column, const std::string& slot_name,
+                                        const TypeDescriptor& slot_type) {
+    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
 
-    int precision = slot_desc->type().precision;
-    int scale = slot_desc->type().scale;
+    int precision = slot_type.precision;
+    int scale = slot_type.scale;
     for (int i = 0; i < num_rows; i++) {
         if (null_column_ptr[i]) {
             column->append_nulls(1);
@@ -209,8 +208,8 @@ Status JniScanner::_append_decimal_data(long num_rows, long* chunk_meta_ptr, int
             CppType cpp_val;
             if (DecimalV3Cast::from_string<CppType>(&cpp_val, precision, scale, decimal_str.data(),
                                                     decimal_str.size())) {
-                return Status::DataQualityError(fmt::format("Invalid value occurs in column[{}], value is [{}]",
-                                                            slot_desc->col_name(), decimal_str));
+                return Status::DataQualityError(
+                        fmt::format("Invalid value occurs in column[{}], value is [{}]", slot_name, decimal_str));
             }
             _append_data<type, CppType>(column.get(), cpp_val);
         }
@@ -219,10 +218,10 @@ Status JniScanner::_append_decimal_data(long num_rows, long* chunk_meta_ptr, int
 }
 
 template <LogicalType type>
-Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-    int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
-    char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
+Status JniScanner::_append_string_data(long num_rows, ColumnPtr& column) {
+    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
 
     auto* nullable_column = down_cast<NullableColumn*>(column.get());
     nullable_column->resize(num_rows);
@@ -244,12 +243,10 @@ Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int&
     return Status::OK();
 }
 
-Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chunk) {
+Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
     SCOPED_TIMER(_profile.fill_chunk_timer);
 
-    long* chunk_meta_ptr = reinterpret_cast<long*>(chunk_meta);
-    int chunk_meta_index = 0;
-    long num_rows = chunk_meta_ptr[chunk_meta_index++];
+    long num_rows = next_chunk_meta();
     if (num_rows == 0) {
         return Status::EndOfFile("");
     }
@@ -257,38 +254,33 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
     auto slot_desc_list = _scanner_params.tuple_desc->slots();
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
+        const std::string& slot_name = slot_desc->col_name();
+        const TypeDescriptor& slot_type = slot_desc->type();
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        LogicalType column_type = slot_desc->type().type;
+        LogicalType column_type = slot_type.type;
         if (!column->is_nullable()) {
-            return Status::DataQualityError(
-                    fmt::format("NOT NULL column[{}] is not supported.", slot_desc->col_name()));
+            return Status::DataQualityError(fmt::format("NOT NULL column[{}] is not supported.", slot_name));
         }
         if (column_type == LogicalType::TYPE_BOOLEAN) {
-            RETURN_IF_ERROR((
-                    _append_primitive_data<TYPE_BOOLEAN, uint8_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN, uint8_t>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_SMALLINT) {
-            RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
-                                                                            column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_INT) {
-            RETURN_IF_ERROR(
-                    (_append_primitive_data<TYPE_INT, int32_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_INT, int32_t>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_FLOAT) {
-            RETURN_IF_ERROR(
-                    (_append_primitive_data<TYPE_FLOAT, float>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT, float>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_BIGINT) {
-            RETURN_IF_ERROR(
-                    (_append_primitive_data<TYPE_BIGINT, int64_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT, int64_t>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_DOUBLE) {
-            RETURN_IF_ERROR(
-                    (_append_primitive_data<TYPE_DOUBLE, double>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE, double>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_VARCHAR) {
-            RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_CHAR) {
-            RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
+            RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(num_rows, column)));
         } else if (column_type == LogicalType::TYPE_DATE) {
-            bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-            int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
-            char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
+            bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+            int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+            char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
             for (int i = 0; i < num_rows; i++) {
                 if (null_column_ptr[i]) {
                     column->append_nulls(1);
@@ -296,17 +288,16 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
                     std::string date_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
                     DateValue dv;
                     if (!dv.from_string(date_str.c_str(), date_str.size())) {
-                        return Status::DataQualityError(
-                                fmt::format("Invalid date value occurs on column[{}], value is [{}]",
-                                            slot_desc->col_name(), date_str));
+                        return Status::DataQualityError(fmt::format(
+                                "Invalid date value occurs on column[{}], value is [{}]", slot_name, date_str));
                     }
                     _append_data<TYPE_DATE, DateValue>(column.get(), dv);
                 }
             }
         } else if (column_type == LogicalType::TYPE_DATETIME) {
-            bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-            int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
-            char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
+            bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
+            int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+            char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
             for (int i = 0; i < num_rows; i++) {
                 if (null_column_ptr[i]) {
                     column->append_nulls(1);
@@ -315,22 +306,18 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
                     std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
                     TimestampValue tsv;
                     if (!tsv.from_datetime_format_str(datetime_str.c_str(), datetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
-                        return Status::DataQualityError(
-                                fmt::format("Invalid datetime value occurs on column[{}], value is [{}]",
-                                            slot_desc->col_name(), origin_str));
+                        return Status::DataQualityError(fmt::format(
+                                "Invalid datetime value occurs on column[{}], value is [{}]", slot_name, origin_str));
                     }
                     _append_data<TYPE_DATETIME, TimestampValue>(column.get(), tsv);
                 }
             }
         } else if (column_type == LogicalType::TYPE_DECIMAL32) {
-            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
-                                                                           column, slot_desc)));
+            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(num_rows, column, slot_name, slot_type)));
         } else if (column_type == LogicalType::TYPE_DECIMAL64) {
-            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
-                                                                           column, slot_desc)));
+            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(num_rows, column, slot_name, slot_type)));
         } else if (column_type == LogicalType::TYPE_DECIMAL128) {
-            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
-                                                                             column, slot_desc)));
+            RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(num_rows, column, slot_name, slot_type)));
         } else {
             return Status::InternalError(
                     fmt::format("Type {} is not supported for off-heap table scanner", column_type));
@@ -353,7 +340,9 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
     RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
-    Status status = _fill_chunk(_jni_env, chunk_meta, chunk);
+    _chunk_meta_ptr = reinterpret_cast<long*>(chunk_meta);
+    _chunk_meta_index = 0;
+    Status status = _fill_chunk(_jni_env, chunk);
     RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
     return status;
 }

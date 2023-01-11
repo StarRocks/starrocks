@@ -57,16 +57,19 @@ private:
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
     template <LogicalType type, typename CppType>
-    Status _append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
+    Status _append_primitive_data(long num_rows, ColumnPtr& column);
 
     template <LogicalType type, typename CppType>
-    Status _append_decimal_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column,
-                                SlotDescriptor* slot_desc);
+    Status _append_decimal_data(long num_rows, ColumnPtr& column, const std::string& slot_name,
+                                const TypeDescriptor& slot_type);
 
     template <LogicalType type>
-    Status _append_string_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
+    Status _append_string_data(long num_rows, ColumnPtr& column);
 
-    Status _fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chunk);
+    Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
+
+    // Status _fill_column(JNIEnv* _jni_env, int num_rows, ColumnPtr& column, const std::string& slot_name,
+    //                     const TypeDescriptor& slot_type);
 
     template <LogicalType type, typename CppType>
     void _append_data(Column* column, CppType& value);
@@ -85,5 +88,10 @@ private:
 
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
+
+    long* _chunk_meta_ptr;
+    int _chunk_meta_index;
+
+    long next_chunk_meta() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 } // namespace starrocks
