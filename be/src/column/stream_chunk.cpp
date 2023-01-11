@@ -48,8 +48,7 @@ EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch)
 std::string EpochInfo::debug_string() const {
     std::stringstream ss;
     ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
-       << ", trigger_mode=" << (int)(trigger_mode)
-       << ", stage=" << epoch_stage;
+       << ", trigger_mode=" << (int)(trigger_mode) << ", stage=" << epoch_stage;
     return ss.str();
 }
 

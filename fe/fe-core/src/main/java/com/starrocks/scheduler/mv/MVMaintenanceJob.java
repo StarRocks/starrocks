@@ -228,6 +228,8 @@ public class MVMaintenanceJob implements Writable {
             boolean allFinished =
                     taskMap.values().stream().allMatch(x -> x.getEpochStage().equals(TMVEpochStage.BASELINE_FINISHED));
             if (allFinished) {
+                this.epoch.setEpochStage(TMVEpochStage.INCREMENTAL);
+                // TODO(murphy) persist the epoch change
                 LOG.info("[MV] All task of MV {} finished baseline data, enter incremental stage", view.getName());
                 taskMap.values().forEach(MVMaintenanceTask::enterIncrementalStage);
             }

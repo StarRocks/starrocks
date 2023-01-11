@@ -54,6 +54,8 @@ public class MVEpoch implements Writable {
     private long mvId;
     @SerializedName("epochState")
     private EpochState state;
+    @SerializedName("binlogState")
+    private BinlogConsumeStateVO binlogState;
     @SerializedName("startTimeMilli")
     private long startTimeMilli;
     @SerializedName("commitTimeMilli")
@@ -75,6 +77,7 @@ public class MVEpoch implements Writable {
         this.mvId = mv.getId();
         this.startTimeMilli = System.currentTimeMillis();
         this.state = EpochState.INIT;
+        this.binlogState = new BinlogConsumeStateVO();
         this.epochStage = TMVEpochStage.BASELINE_RUNNING;
     }
 
@@ -111,10 +114,11 @@ public class MVEpoch implements Writable {
         this.state = EpochState.COMMITTING;
     }
 
-    public void onCommitted() {
+    public void onCommitted(BinlogConsumeStateVO binlog) {
         Preconditions.checkState(state.equals(EpochState.COMMITTING));
         this.state = EpochState.COMMITTED;
         this.commitTimeMilli = System.currentTimeMillis();
+        this.binlogState = binlog;
     }
 
     public void onFailed() {
