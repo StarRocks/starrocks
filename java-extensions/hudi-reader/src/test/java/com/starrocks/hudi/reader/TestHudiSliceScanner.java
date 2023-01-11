@@ -75,8 +75,8 @@ a       b       c       d       e
             if (table.getNumRows() == 0) {
                 break;
             }
-            table.print(10);
-            table.checkMeta();
+            table.show(10);
+            table.checkTableMeta(true);
             table.close();
         }
         scanner.close();

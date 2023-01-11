@@ -87,7 +87,7 @@ public class OffHeapTable {
             metaSize += types[i].computeColumnSize();
             released[i] = false;
         }
-        this.meta = new OffHeapColumnVector(metaSize, new ColumnType(ColumnType.TypeValue.LONG));
+        this.meta = new OffHeapColumnVector(metaSize, new ColumnType("#meta", ColumnType.TypeValue.LONG));
         this.numRows = 0;
     }
 
@@ -118,7 +118,15 @@ public class OffHeapTable {
         return meta.valuesNativeAddress();
     }
 
-    public void print(int rowLimit) {
+    public void close() {
+        for (int i = 0; i < vectors.length; i++) {
+            releaseOffHeapColumnVector(i);
+        }
+        meta.close();
+    }
+
+    // for test only.
+    public void show(int rowLimit) {
         StringBuilder sb = new StringBuilder();
         sb.append("OffHeapTable: numRows = " + numRows + "\n");
         for (int i = 0; i < rowLimit && i < numRows; i++) {
@@ -135,37 +143,43 @@ public class OffHeapTable {
         System.out.print(sb);
     }
 
+    // for test only.
     public static class MetaChecker {
         private OffHeapColumnVector meta;
         int offset;
+        boolean verbose;
 
         public MetaChecker(OffHeapColumnVector meta, int offset) {
             this.meta = meta;
             this.offset = offset;
         }
 
-        public void check(long expected) {
+        public void setVerbose(boolean v) {
+            verbose = v;
+        }
+
+        public void check(String context, long expected) {
             if (meta.getLong(offset) != expected) {
                 throw new RuntimeException(
-                        "meta check failed at offset: " + offset + ", act = " + meta.getLong(offset) + ", exp = " +
-                                expected);
+                        "meta check failed at offset: " + offset + ", current = " + meta.getLong(offset) +
+                                ", expected = " +
+                                expected + ", context = " + context);
+            }
+            if (verbose) {
+                System.out.println("meta check ok: " + context);
             }
             offset += 1;
         }
     }
 
-    public void checkMeta() {
+    // for test only.
+    public void checkTableMeta(boolean verbose) {
         MetaChecker checker = new MetaChecker(meta, 0);
-        checker.check(numRows);
+        checker.setVerbose(verbose);
+        checker.check("numRows", numRows);
         for (OffHeapColumnVector c : vectors) {
             c.checkMeta(checker);
         }
     }
 
-    public void close() {
-        for (int i = 0; i < vectors.length; i++) {
-            releaseOffHeapColumnVector(i);
-        }
-        meta.close();
-    }
 }

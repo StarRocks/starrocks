@@ -38,6 +38,7 @@ public class ColumnType {
     }
 
     TypeValue typeValue;
+    String name;
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> structFieldIndex;
@@ -64,6 +65,11 @@ public class ColumnType {
         primitiveTypeValueSize.put(TypeValue.FLOAT, 4);
         primitiveTypeValueSize.put(TypeValue.LONG, 8);
         primitiveTypeValueSize.put(TypeValue.DOUBLE, 8);
+    }
+
+    @Override
+    public String toString() {
+        return typeValue.toString() + "(" + name + ")";
     }
 
     static final class StringScanner {
@@ -105,9 +111,11 @@ public class ColumnType {
     }
 
     private void parseArray(List<ColumnType> childTypeValues, StringScanner scanner) {
+        int idx = 0;
         while (scanner.peek() != '>') {
             scanner.next(); // '<', or ','
-            ColumnType x = new ColumnType();
+            ColumnType x = new ColumnType(this.name + '#' + idx);
+            idx += 1;
             x.parse(scanner);
             childTypeValues.add(x);
         }
@@ -120,8 +128,9 @@ public class ColumnType {
             int p = scanner.indexOf(':');
             String name = scanner.substr(p);
             childNames.add(name);
+            String fieldName = this.name + ':' + name;
             scanner.moveTo(p + 1);
-            ColumnType x = new ColumnType();
+            ColumnType x = new ColumnType(fieldName);
             x.parse(scanner);
             childTypeValues.add(x);
         }
@@ -162,14 +171,17 @@ public class ColumnType {
         }
     }
 
-    public ColumnType() {
+    public ColumnType(String name) {
+        this.name = name;
     }
 
-    public ColumnType(ColumnType.TypeValue value) {
+    public ColumnType(String name, ColumnType.TypeValue value) {
+        this.name = name;
         typeValue = value;
     }
 
-    public ColumnType(String type) {
+    public ColumnType(String name, String type) {
+        this.name = name;
         StringScanner scanner = new StringScanner(type);
         parse(scanner);
     }

@@ -137,7 +137,7 @@ public class OffHeapColumnVector {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(ColumnType.TypeValue.BYTE));
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data", ColumnType.TypeValue.BYTE));
         } else if (type.isArray()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
 
@@ -405,8 +405,73 @@ public class OffHeapColumnVector {
         }
     }
 
+    public void appendValue(ColumnValue o) {
+        // TODO(yanz): FIXME.
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        if (o == null) {
+            appendNull();
+            // NOTE(yan): for struct need to fill
+            if (type.isStruct()) {
+                List<ColumnValue> values = new ArrayList<>();
+                for (int i = 0; i < type.childTypes.size(); i++) {
+                    values.add(null);
+                }
+                appendStruct(values);
+            }
+            return;
+        }
+
+        switch (typeValue) {
+            case BOOLEAN:
+                appendBoolean(o.getBoolean());
+                break;
+            case SHORT:
+                appendShort(o.getShort());
+                break;
+            case INT:
+                appendInt(o.getInt());
+                break;
+            case FLOAT:
+                appendFloat(o.getFloat());
+                break;
+            case LONG:
+                appendLong(o.getLong());
+                break;
+            case DOUBLE:
+                appendDouble(o.getDouble());
+                break;
+            case STRING:
+            case DATE:
+            case DECIMAL:
+                appendString(o.getString());
+                break;
+            case ARRAY: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackArray(values);
+                appendArray(values);
+                break;
+            }
+            case MAP: {
+                List<ColumnValue> keys = new ArrayList<>();
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackMap(keys, values);
+                appendMap(keys, values);
+                break;
+            }
+            case STRUCT: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackStruct(type.getStructFieldIndex(), values);
+                appendStruct(values);
+                break;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        return;
+    }
+
+    // for test only.
     public void dump(StringBuilder sb, int i) {
-        // TODO(yanz): FIXME
         if (isNullAt(i)) {
             sb.append("NULL");
             return;
@@ -486,81 +551,19 @@ public class OffHeapColumnVector {
         return;
     }
 
-    public void appendValue(ColumnValue o) {
-        // TODO(yanz): FIXME.
-        ColumnType.TypeValue typeValue = type.getTypeValue();
-        if (o == null) {
-            appendNull();
-            // NOTE(yan): for struct need to fill
-            if (type.isStruct()) {
-                List<ColumnValue> values = new ArrayList<>();
-                for (int i = 0; i < type.childTypes.size(); i++) {
-                    values.add(null);
-                }
-                appendStruct(values);
-            }
-            return;
-        }
-
-        switch (typeValue) {
-            case BOOLEAN:
-                appendBoolean(o.getBoolean());
-                break;
-            case SHORT:
-                appendShort(o.getShort());
-                break;
-            case INT:
-                appendInt(o.getInt());
-                break;
-            case FLOAT:
-                appendFloat(o.getFloat());
-                break;
-            case LONG:
-                appendLong(o.getLong());
-                break;
-            case DOUBLE:
-                appendDouble(o.getDouble());
-                break;
-            case STRING:
-            case DATE:
-            case DECIMAL:
-                appendString(o.getString());
-                break;
-            case ARRAY: {
-                List<ColumnValue> values = new ArrayList<>();
-                o.unpackArray(values);
-                appendArray(values);
-                break;
-            }
-            case MAP: {
-                List<ColumnValue> keys = new ArrayList<>();
-                List<ColumnValue> values = new ArrayList<>();
-                o.unpackMap(keys, values);
-                appendMap(keys, values);
-                break;
-            }
-            case STRUCT: {
-                List<ColumnValue> values = new ArrayList<>();
-                o.unpackStruct(type.getStructFieldIndex(), values);
-                appendStruct(values);
-                break;
-            }
-            default:
-                throw new RuntimeException("Unknown type value: " + typeValue);
-        }
-        return;
-    }
-
+    // for test only.
     public void checkMeta(OffHeapTable.MetaChecker checker) {
-        checker.check(nulls);
+        String context = type.name;
+        String contextOffset = context + "#offset";
+        checker.check(context + "#null", nulls);
         if (type.isString()) {
-            checker.check(arrayOffsetNativeAddress());
-            checker.check(arrayDataNativeAddress());
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            checker.check(context + "#data", arrayDataNativeAddress());
         } else if (type.isArray()) {
-            checker.check(arrayOffsetNativeAddress());
+            checker.check(contextOffset, arrayOffsetNativeAddress());
             childColumns[0].checkMeta(checker);
         } else if (type.isMap()) {
-            checker.check(arrayOffsetNativeAddress());
+            checker.check(contextOffset, arrayOffsetNativeAddress());
             childColumns[0].checkMeta(checker);
             childColumns[1].checkMeta(checker);
         } else if (type.isStruct()) {
@@ -568,7 +571,7 @@ public class OffHeapColumnVector {
                 c.checkMeta(checker);
             }
         } else {
-            checker.check(data);
+            checker.check(context, data);
         }
     }
 }
