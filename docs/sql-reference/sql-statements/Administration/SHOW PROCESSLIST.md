@@ -7,7 +7,7 @@ Lists the operations currently being performed by threads executing within the s
 ## Syntax
 
 ```SQL
-SHOW [FULL] PROCESSLIST;
+SHOW [FULL] PROCESSLIST
 ```
 
 ## Parameter

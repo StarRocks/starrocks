@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to display all tables in the current db
+Displays all tables in the current database.
 
 Syntax：
 

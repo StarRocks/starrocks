@@ -632,7 +632,7 @@ select count(*) from profile_wos_p7;
 
 ## Apache Iceberg external table
 
-From v2.1.0, StarRocks provides external tables to query data in Apache Iceberg. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
+From v2.1.0, StarRocks allows you to query data from Apache Iceberg by using external tables. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
 
 ### Before you begin
 
@@ -801,7 +801,7 @@ select count(*) from iceberg_tbl;
 
 ## Hudi external table
 
-StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
+From v2.2.0, StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
 
 ### Before you begin
 

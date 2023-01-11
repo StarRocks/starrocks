@@ -7,7 +7,7 @@ After you obtain the privilege to impersonate a user, you can use the EXECUTE AS
 ## Syntax
 
 ```SQL
-EXECUTE AS user WITH NO REVERT;
+EXECUTE AS user WITH NO REVERT
 ```
 
 ## Parameters

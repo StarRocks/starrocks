@@ -9,19 +9,19 @@ Syntax:
 1. Recover database
 
     ```sql
-    RECOVER DATABASE db_name;
+    RECOVER DATABASE <db_name>
     ```
 
 2. Recover database
 
     ```sql
-    RECOVER TABLE [db_name.]table_name;
+    RECOVER TABLE [<db_name>.]<table_name>
     ```
 
 3. Recover partition
 
     ```sql
-    RECOVER PARTITION partition_name FROM [db_name.]table_name;
+    RECOVER PARTITION partition_name FROM [<db_name>.]<table_name>
     ```
 
 Note：

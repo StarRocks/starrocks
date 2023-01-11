@@ -9,7 +9,7 @@ By default, StarRocks automatically collects full statistics of a table. It chec
 ## Syntax
 
 ```SQL
-DROP ANALYZE <ID>;
+DROP ANALYZE <ID>
 ```
 
 The task ID can be obtained by using the SHOW ANALYZE JOB statement.

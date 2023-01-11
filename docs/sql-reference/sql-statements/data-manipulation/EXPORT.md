@@ -9,11 +9,11 @@ This is an asynchronous operation, which returns if the task is submitted succes
 Syntax:
 
 ```sql
-EXPORT TABLE table_name
+EXPORT TABLE <table_name>
 [PARTITION (p1[,p2])]
 TO export_path
 [opt_properties]
-WITH BROKER;
+WITH BROKER
 ```
 
 1. `table_name`

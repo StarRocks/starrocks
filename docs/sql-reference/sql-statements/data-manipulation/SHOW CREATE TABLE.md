@@ -5,7 +5,7 @@ Returns the CREATE TABLE statement that was used to create a given table. The SH
 ## Syntax
 
 ```SQL
-SHOW CREATE TABLE [db_name.]table_name;
+SHOW CREATE TABLE [db_name.]table_name
 ```
 
 ## Parameters

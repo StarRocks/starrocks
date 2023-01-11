@@ -8,7 +8,7 @@ Syntax:
 
 ```sql
 ADMIN SHOW REPLICA STATUS FROM [db_name.]tbl_name [PARTITION (p1, ...)]
-[where_clause];
+[where_clause]
 ```
 
 ```sql

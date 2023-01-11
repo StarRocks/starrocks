@@ -7,7 +7,7 @@ Views the repositories created in StarRocks.
 ## Syntax
 
 ```SQL
-SHOW REPOSITORIES;
+SHOW REPOSITORIES
 ```
 
 ## Return

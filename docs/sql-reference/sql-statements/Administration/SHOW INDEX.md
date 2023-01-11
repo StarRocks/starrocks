@@ -7,9 +7,9 @@ This statement is used to show information related to index in a table. It curre
 Syntax:
 
 ```sql
-SHOW INDEX[ES] FROM [db_name.]table_name [FROM database];
-或者
-SHOW KEY[S] FROM [db_name.]table_name [FROM database];
+SHOW INDEX[ES] FROM [db_name.]table_name [FROM database]
+Or
+SHOW KEY[S] FROM [db_name.]table_name [FROM database]
 ```
 
 ## Examples

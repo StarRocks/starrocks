@@ -7,7 +7,7 @@ Query all catalogs in the current StarRocks cluster, including the internal cata
 ## Syntax
 
 ```SQL
-SHOW CATALOGS;
+SHOW CATALOGS
 ```
 
 ## Output

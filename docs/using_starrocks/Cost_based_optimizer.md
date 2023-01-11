@@ -164,7 +164,7 @@ Parameter description:
 | ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_sample_collect_rows  | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size         | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size             | INT      | 100               | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 
@@ -401,7 +401,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size                   | LONG     | 100               | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size                   | LONG     | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio               | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count       | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 | statistic_manager_sleep_time_sec     | LONG     | 60                | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:Create tables for storing statistics.Delete statistics that have been deleted.Delete expired statistics. |

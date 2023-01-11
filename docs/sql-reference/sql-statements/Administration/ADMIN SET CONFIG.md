@@ -9,7 +9,7 @@ After setting, configuration items will be restored to be configuration or defau
 Syntax:
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("key" = "value");
+ADMIN SET FRONTEND CONFIG ("key" = "value")
 ```
 
 ## Examples

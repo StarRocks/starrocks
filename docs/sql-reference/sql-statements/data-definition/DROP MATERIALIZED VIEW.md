@@ -11,7 +11,7 @@ Drops a materialized view. You cannot drop a materialized view that is being cre
 ## Syntax
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name;
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 ```
 
 Parameters in brackets [] is optional.

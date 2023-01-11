@@ -7,7 +7,7 @@ This statement is used to drop database.
 Syntax:
 
 ```sql
-DROP DATABASE [IF EXISTS] [FORCE] db_name;
+DROP DATABASE [IF EXISTS] [FORCE] <db_name>
 ```
 
 Note:

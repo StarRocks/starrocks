@@ -7,7 +7,7 @@ Displays the configuration of the current cluster (currently only FE configurati
 ## Syntax
 
 ```sql
-ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 ```
 
 Note:

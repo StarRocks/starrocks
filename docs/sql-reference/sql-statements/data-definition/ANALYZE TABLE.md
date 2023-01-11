@@ -13,7 +13,7 @@ For more information about basic statistics, see [Gather statistics for CBO](../
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 ```
 
 #### Parameter description
@@ -87,7 +87,7 @@ PROPERTIES (property [,property]);
 | ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_sample_collect_rows  | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size         | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size             | INT      | 100               | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 

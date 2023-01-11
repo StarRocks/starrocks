@@ -7,7 +7,7 @@ This statement is used to view the installed plugins.
 Syntax:
 
 ```sql
-SHOW PLUGINS;
+SHOW PLUGINS
 ```
 
 This command will display all built-in plugins and custom plugins.

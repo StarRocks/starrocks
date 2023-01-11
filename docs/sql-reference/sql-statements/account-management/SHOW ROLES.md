@@ -7,13 +7,13 @@ This statement is used to show all the information about the created roles, cont
 Syntax:
 
 ```sql
-SHOW ROLES;
+SHOW ROLES
 ```
 
 ## Examples
 
-1. View the created roles
+View the created roles.
 
-    ```sql
-    SHOW ROLES;
-    ```
+```sql
+SHOW ROLES;
+```

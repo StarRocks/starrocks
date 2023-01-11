@@ -15,7 +15,7 @@ data_desc1[, data_desc2, ...]
 )
 WITH RESOURCE resource_name
 [resource_properties]
-[opt_properties];
+[opt_properties]
 ```
 
 1.load_label

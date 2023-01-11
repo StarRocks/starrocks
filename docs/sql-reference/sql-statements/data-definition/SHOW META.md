@@ -9,7 +9,7 @@ Views metadata of statistics, including basic statistics and histograms.
 #### Syntax
 
 ```SQL
-SHOW STATS META [WHERE];
+SHOW STATS META [WHERE]
 ```
 
 This statement returns the following columns.

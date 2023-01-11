@@ -15,7 +15,7 @@ This statement requires no privileges for execution. Before you create external 
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
-PROPERTIES ("key"="value", ...);
+PROPERTIES ("key"="value", ...)
 ```
 
 ## Parameters

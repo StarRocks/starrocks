@@ -8,7 +8,7 @@ Syntax:
 
 ```sql
 CREATE [EXTERNAL] RESOURCE "resource_name"
-PROPERTIES ("key"="value", ...);
+PROPERTIES ("key"="value", ...)
 ```
 
 Note:  

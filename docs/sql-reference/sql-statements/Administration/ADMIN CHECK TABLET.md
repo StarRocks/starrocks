@@ -8,7 +8,7 @@ Syntax:
 
 ```sql
 ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
-PROPERTIES("type" = "...");
+PROPERTIES("type" = "...")
 ```
 
 Note:

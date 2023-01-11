@@ -7,7 +7,7 @@ Shows the definition of a specific materialized view.
 ## Syntax
 
 ```SQL
-SHOW CREATE MATERIALIZED VIEW [database.]mv_name
+SHOW CREATE MATERIALIZED VIEW [database.]<mv_name>
 ```
 
 Parameters in brackets [] is optional.

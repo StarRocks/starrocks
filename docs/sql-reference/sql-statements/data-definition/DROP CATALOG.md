@@ -7,7 +7,7 @@ Deletes an external catalog. The internal catalog cannot be deleted. A StarRocks
 ## Syntax
 
 ```SQL
-DROP CATALOG catalog_name;
+DROP CATALOG <catalog_name>
 ```
 
 ## Parameters

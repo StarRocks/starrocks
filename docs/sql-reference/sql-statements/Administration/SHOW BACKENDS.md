@@ -7,7 +7,7 @@ Shows the information of all BE nodes in the cluster.
 ## Syntax
 
 ```SQL
-SHOW BACKENDS;
+SHOW BACKENDS
 ```
 
 ## Return

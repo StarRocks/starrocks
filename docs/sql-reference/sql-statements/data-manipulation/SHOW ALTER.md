@@ -7,7 +7,7 @@ This statement is used to show the execution of various modification tasks curre
 ## Syntax
 
 ```sql
-SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM db_name];
+SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM <db_name>]
 ```
 
 ## Parameters

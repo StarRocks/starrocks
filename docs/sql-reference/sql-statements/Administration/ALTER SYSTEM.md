@@ -9,8 +9,8 @@ This statement is used to operate nodes in a system. (Administrator only!)
 1. Add nodes (Please add in this way if multi-tenant functionality is not used).
 
    ```sql
-   ALTER SYSTEM ADD BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
+   ALTER SYSTEM ADD BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...]
+   ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...]
    ```
 
    After BE nodes are successfully added to your StarRocks cluster, you can execute the [SHOW BACKENDS](./SHOW%20BACKENDS.md) statement to see the newly added nodes.
@@ -19,38 +19,38 @@ This statement is used to operate nodes in a system. (Administrator only!)
 2. Add idle nodes (Namely, add BACKEND that does not belong to any cluster).
 
    ```sql
-   ALTER SYSTEM ADD FREE BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
+   ALTER SYSTEM ADD FREE BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...]
    ```
 
 3. Add nodes to a cluster.
 
    ```sql
-   ALTER SYSTEM ADD BACKEND TO cluster_name "host:heartbeat_port"[,"host:heartbeat_port"...];
+   ALTER SYSTEM ADD BACKEND TO cluster_name "host:heartbeat_port"[,"host:heartbeat_port"...]
    ```
 
 4. Delete nodes.
 
    ```sql
-   ALTER SYSTEM DROP BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
+   ALTER SYSTEM DROP BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...]
+   ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...]
    ```
 
 5. Take nodes offline.
 
    ```sql
-   ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
+   ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...]
    ```
 
 6. Add Broker.
 
    ```sql
-   ALTER SYSTEM ADD BROKER broker_name "host:port"[,"host:port"...];
+   ALTER SYSTEM ADD BROKER broker_name "host:port"[,"host:port"...]
    ```
 
 7. Reduce Broker.
 
    ```sql
-   ALTER SYSTEM DROP BROKER broker_name "host:port"[,"host:port"...];
+   ALTER SYSTEM DROP BROKER broker_name "host:port"[,"host:port"...]
    ```
 
 8. Delete all Brokers.
@@ -62,7 +62,7 @@ This statement is used to operate nodes in a system. (Administrator only!)
 9. Set up a Load error hub for collecting and displaying import errors.
 
    ```sql
-   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
+   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...])
    ```
 
 Note:
