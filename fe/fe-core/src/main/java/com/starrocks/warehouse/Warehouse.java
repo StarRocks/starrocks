@@ -285,7 +285,8 @@ public class Warehouse implements Writable {
                 // for debug
                 LOG.info("add cluster {} for warehouse {} ", clusterId, name);
             } else {
-                throw new DdlException("cluster num of " + name + " exceed max cluster limit " + maxCluster);
+                throw new DdlException("cluster num of " + name + "is " +
+                        clusters.size() + " exceed max cluster limit " + maxCluster);
             }
         } finally {
             writeUnLock();
