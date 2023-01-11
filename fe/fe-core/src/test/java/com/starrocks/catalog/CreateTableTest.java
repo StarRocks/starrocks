@@ -684,7 +684,7 @@ public class CreateTableTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("not_binlog_table");
 
-        Assert.assertFalse(table.isHaveBinlogConfig());
+        Assert.assertFalse(table.containsBinlogConfig());
         Assert.assertFalse(table.enableBinlog());
 
         ExceptionChecker.expectThrowsNoException(
