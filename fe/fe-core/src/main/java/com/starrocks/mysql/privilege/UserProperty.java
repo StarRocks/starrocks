@@ -248,11 +248,11 @@ public class UserProperty implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
-            // consume the flag of empty user name
+            // consume the flag of empty username
             in.readBoolean();
         }
 
-        // user name
+        // username
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(Text.readString(in));
         } else {

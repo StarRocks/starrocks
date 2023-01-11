@@ -622,10 +622,10 @@ public class DataDescription {
         if (isLoadFromTable()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkTableAction(ConnectContext.get(), fullDbName,
-                        tableName, PrivilegeType.TableAction.SELECT)) {
+                        srcTableName, PrivilegeType.TableAction.SELECT)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                             ConnectContext.get().getQualifiedUser(),
-                            ConnectContext.get().getRemoteIP(), tableName);
+                            ConnectContext.get().getRemoteIP(), srcTableName);
                 }
             } else {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,

@@ -119,6 +119,7 @@ public class Password implements Writable {
                 return LdapSecurity.checkPasswordByRoot(remoteUser, new String(clearPassword, StandardCharsets.UTF_8));
             }
         } else if (authPlugin == AuthPlugin.AUTHENTICATION_KERBEROS) {
+            // TODO(yiming): support kerberos in new RBAC privilege framework later
             try {
                 Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuth().getAuthClazz();
                 Method method = authClazz.getMethod("authenticate",

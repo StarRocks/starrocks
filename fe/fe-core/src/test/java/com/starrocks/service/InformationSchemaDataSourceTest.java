@@ -80,6 +80,8 @@ public class InformationSchemaDataSourceTest {
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setPattern("db1");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
         req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);

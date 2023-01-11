@@ -69,6 +69,7 @@ public class MysqlProto {
 
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
+        // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
             if (Config.enable_auth_check) {
                 UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
@@ -83,6 +84,8 @@ public class MysqlProto {
             }
             return true;
         }
+
+        // In old `Auth` framework
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(user, remoteIp,
                 scramble, randomString, currentUserIdentity)) {
@@ -147,7 +150,7 @@ public class MysqlProto {
                 LOG.info("enable ssl connection successfully");
             }
 
-            // read the authenticate package again from client
+            // read the authentication package again from client
             authPacket = readAuthPacket(context);
             if (authPacket == null) {
                 return false;
@@ -177,6 +180,7 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
+            // TODO(yiming): support kerberos in new RBAC privilege framework later
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
                 if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     try {
@@ -264,18 +268,18 @@ public class MysqlProto {
         }
         // save previous user login info
         UserIdentity priviousUserIdentity = context.getCurrentUserIdentity();
-        String priviousQualifiedUser = context.getQualifiedUser();
-        String priviousResourceGroup = context.getSessionVariable().getResourceGroup();
+        String previousQualifiedUser = context.getQualifiedUser();
+        String previousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
         if (!authenticate(context, changeUserPacket.getAuthResponse(), context.getAuthDataSalt(),
                 changeUserPacket.getUser())) {
-            LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", priviousQualifiedUser,
+            LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
             sendResponsePacket(context);
             // reconstruct serializer with context capability
             context.getSerializer().setCapability(context.getCapability());
-            // recover from privious user login info
-            context.getSessionVariable().setResourceGroup(priviousResourceGroup);
+            // recover from previous user login info
+            context.getSessionVariable().setResourceGroup(previousResourceGroup);
             return false;
         }
         // set database
@@ -285,18 +289,18 @@ public class MysqlProto {
                 GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
             } catch (DdlException e) {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
-                        priviousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
+                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
                 sendResponsePacket(context);
                 // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
-                // recover from privious user login info
-                context.getSessionVariable().setResourceGroup(priviousResourceGroup);
+                // recover from previous user login info
+                context.getSessionVariable().setResourceGroup(previousResourceGroup);
                 context.setCurrentUserIdentity(priviousUserIdentity);
-                context.setQualifiedUser(priviousQualifiedUser);
+                context.setQualifiedUser(previousQualifiedUser);
                 return false;
             }
         }
-        LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", priviousQualifiedUser,
+        LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
                 context.getQualifiedUser());
         return true;
     }
@@ -373,7 +377,7 @@ public class MysqlProto {
 
     public static byte[] readNulTerminateString(ByteBuffer buffer) {
         int oldPos = buffer.position();
-        int nullPos = oldPos;
+        int nullPos;
         for (nullPos = oldPos; nullPos < buffer.limit(); ++nullPos) {
             if (buffer.get(nullPos) == 0) {
                 break;

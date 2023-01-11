@@ -1678,12 +1678,14 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
+        // TODO(yiming): handle show grants in new RBAC privilege framework
         List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
+        // TODO(yiming): handle show roles in new RBAC privilege framework
         List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }

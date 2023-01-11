@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.mysql.privilege;
+package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
 import com.starrocks.cluster.ClusterNamespace;

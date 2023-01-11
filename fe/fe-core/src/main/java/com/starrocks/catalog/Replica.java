@@ -131,7 +131,7 @@ public class Replica implements Writable {
     private boolean setBadForce = false;
 
     /*
-     * If set to true, with means this replica need to be repaired. explicitly.
+     * If set to true, which means this replica need to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
      * when task finished, the version of this replica is behind the partition's visible version.
      * So this replica need a further repair.

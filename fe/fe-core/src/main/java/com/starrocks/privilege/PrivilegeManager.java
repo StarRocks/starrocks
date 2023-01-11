@@ -601,6 +601,13 @@ public class PrivilegeManager {
         provider.validateGrant(type, actions, objects);
     }
 
+    private static ConnectContext createTmpContext(UserIdentity currentUser) {
+        ConnectContext tmpContext = new ConnectContext();
+        tmpContext.setCurrentUserIdentity(currentUser);
+        tmpContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return tmpContext;
+    }
+
     public static boolean checkSystemAction(
             ConnectContext context, PrivilegeType.SystemAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -613,6 +620,11 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkSystemAction(
+            UserIdentity currentUser, PrivilegeType.SystemAction action) {
+        return checkSystemAction(createTmpContext(currentUser), action);
+    }
+
     public static boolean checkTableAction(
             ConnectContext context, String db, String table, PrivilegeType.TableAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -623,6 +635,11 @@ public class PrivilegeManager {
             LOG.warn("caught exception when checking action[{}] on table {}.{}", action, db, table, e);
             return false;
         }
+    }
+
+    public static boolean checkTableAction(
+            UserIdentity currentUser, String db, String table, PrivilegeType.TableAction action) {
+        return checkTableAction(createTmpContext(currentUser), db, table, action);
     }
 
     public static boolean checkDbAction(ConnectContext context, String db, PrivilegeType.DbAction action) {
@@ -770,6 +787,11 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkAnyActionOnMaterializedView(
+            UserIdentity currentUser, String db, String materializedView) {
+        return checkAnyActionOnMaterializedView(createTmpContext(currentUser), db, materializedView);
+    }
+
     public static boolean checkAnyActionOnView(
             ConnectContext context, String db, String view) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -783,6 +805,11 @@ public class PrivilegeManager {
             LOG.warn("caught exception when checking any action on view {}", db, e);
             return false;
         }
+    }
+
+    public static boolean checkAnyActionOnView(
+            UserIdentity currentUser, String db, String view) {
+        return checkAnyActionOnView(createTmpContext(currentUser), db, view);
     }
 
     /**
@@ -852,6 +879,10 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkAnyActionOnOrInDb(UserIdentity currentUser, String db) {
+        return checkAnyActionOnOrInDb(createTmpContext(currentUser), db);
+    }
+
     /**
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
@@ -910,9 +941,6 @@ public class PrivilegeManager {
         }
     }
 
-    /**
-     * show tables
-     */
     public static boolean checkAnyActionOnTable(ConnectContext context, String db, String table) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
@@ -925,6 +953,10 @@ public class PrivilegeManager {
             LOG.warn("caught exception when checking any action on db {}", db, e);
             return false;
         }
+    }
+
+    public static boolean checkAnyActionOnTable(UserIdentity currentUser, String db, String table) {
+        return checkAnyActionOnTable(createTmpContext(currentUser), db, table);
     }
 
     public static Set<Long> getOwnedRolesByUser(UserIdentity userIdentity) throws PrivilegeException {

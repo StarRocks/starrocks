@@ -498,7 +498,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
+                            stmt.getPropertyPairList());
+                } else {
+                    context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
+                }
             });
             return null;
         }

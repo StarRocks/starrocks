@@ -620,7 +620,6 @@ public class PrivilegeCheckerV2 {
                 return visit(node.getQueryStatement());
             }
 
-            // TODO(yiming): check mv privilege if needed
             @Override
             public Void visitView(ViewRelation node, Void context) {
                 // if user has select privilege for the view, then there's no need to check base table

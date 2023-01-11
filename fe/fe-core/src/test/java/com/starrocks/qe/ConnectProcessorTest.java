@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -44,7 +45,6 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
@@ -313,7 +313,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testInitDb() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(Auth.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
@@ -324,7 +324,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testInitDbFail() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(Auth.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());

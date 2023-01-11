@@ -32,6 +32,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -40,7 +41,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -577,7 +577,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setDatabase(db.getFullName());
         // set privilege
-        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression

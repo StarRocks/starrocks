@@ -16,10 +16,10 @@
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
 
@@ -67,7 +67,7 @@ public class Task implements Writable {
 
     // set default to ROOT is for compatibility
     @SerializedName("createUser")
-    private String createUser = Auth.ROOT_USER;
+    private String createUser = AuthenticationManager.ROOT_USER;
 
     public Task(String name) {
         this.name = name;

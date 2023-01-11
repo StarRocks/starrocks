@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -42,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -138,10 +140,10 @@ public class AuthenticationManager {
     }
 
     /**
-     * If someone login from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
+     * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
      * 1. test_user@10.1.1.1
      * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-     * If multiple hostnames matche the login ip, just return one randomly.
+     * If multiple hostnames match the login ip, just return one randomly.
      * 3. test_user@%, as a fallback.
      */
     private Integer scoreUserIdentityHost(UserIdentity userIdentity) {
@@ -253,6 +255,35 @@ public class AuthenticationManager {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, info);
         } catch (AuthenticationException e) {
             throw new DdlException("failed to alter user " + userIdentity, e);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties) throws DdlException {
+        UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
+        if (userProperty == null) {
+            throw new DdlException("user '" + user + "' doesn't exist");
+        }
+        userProperty.update(properties);
+    }
+
+    public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
+        try {
+            writeLock();
+            updateUserPropertyNoLock(user, properties);
+            UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
+            LOG.info("finished to update user '{}' with properties: {}", user, properties);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+        try {
+            writeLock();
+            updateUserPropertyNoLock(info.getUser(), info.getProperties());
         } finally {
             writeUnlock();
         }

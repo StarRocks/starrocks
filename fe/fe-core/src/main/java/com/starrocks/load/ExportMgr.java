@@ -230,7 +230,7 @@ public class ExportMgr {
                         continue;
                     }
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeManager.checkAnyActionOnDb(ConnectContext.get(), db.getFullName())) {
+                        if (!PrivilegeManager.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
                             continue;
                         }
                     } else {
