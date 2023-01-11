@@ -103,6 +103,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
 
+    // csv properties
+    public static final String TRIMSPACE = "trimspace";
+    public static final String SKIPHEADER = "skipheader";
+    public static final String ENCLOSE = "enclose";
+    public static final String ESCAPE = "escape";
+
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
     public static final String KAFKA_TOPIC_PROPERTY = "kafka_topic";
@@ -137,6 +143,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
             .add(LoadStmt.MERGE_CONDITION)
+            .add(TRIMSPACE)
+            .add(SKIPHEADER)
+            .add(ENCLOSE)
+            .add(ESCAPE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -184,6 +194,30 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String jsonPaths = "";
     private String jsonRoot = ""; // MUST be a jsonpath string
     private boolean stripOuterArray = false;
+
+    public boolean isTrimspace() {
+        return trimspace;
+    }
+
+    private boolean trimspace = false;
+
+    public long getSkipheader() {
+        return skipheader;
+    }
+
+    private long skipheader = 0;
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    private byte enclose = 0;
+
+    public byte getEscape() {
+        return escape;
+    }
+
+    private byte escape = 0;
 
     // kafka related properties
     private String kafkaBrokerList;
@@ -484,6 +518,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             }
         } else {
             format = "csv"; // default csv
+        }
+        if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
+            trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
+            skipheader = Long.valueOf(jobProperties.getOrDefault(SKIPHEADER, "0"));
+            enclose = (byte) jobProperties.getOrDefault(ENCLOSE, "0").charAt(0);
+            escape = (byte) jobProperties.getOrDefault(ESCAPE, "0").charAt(0);
         }
     }
 

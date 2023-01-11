@@ -424,6 +424,10 @@ public class StreamLoadInfo {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
         }
+        trimSpace = routineLoadJob.isTrimspace();
+        skipHeader = routineLoadJob.getSkipheader();
+        enclose = routineLoadJob.getEnclose();
+        escape = routineLoadJob.getEscape();
     }
 
     // used for stream load
