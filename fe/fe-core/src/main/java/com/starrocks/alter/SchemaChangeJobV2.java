@@ -531,9 +531,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
+                    long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
+                        // Mark schema changed tablet not to move to trash.
+                        long baseTabletId = partitionIndexTabletMap.get(
+                                                    partitionId, shadowIdxId).get(shadowTablet.getId());
+                        GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
