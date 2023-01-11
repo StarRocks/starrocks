@@ -7,7 +7,7 @@ This statement is used to delete a table.
 ## Syntax
 
 ```sql
-DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
+DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
 ```
 
 Note:

@@ -7,7 +7,7 @@ This statement is used to display the amount of data, the number of copies, and 
 Syntax：
 
 ```sql
-SHOW DATA [FROM db_name[.table_name]];
+SHOW DATA [FROM <db_name>[.<table_name>]]
 ```
 
 Note：

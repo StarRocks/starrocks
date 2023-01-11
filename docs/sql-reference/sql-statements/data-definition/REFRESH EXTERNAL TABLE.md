@@ -22,7 +22,7 @@ The following describes the syntaxes and parameters based on different cases:
 
     ```SQL
     REFRESH EXTERNAL TABLE table_name 
-    [PARTITION ('partition_name', ...)];
+    [PARTITION ('partition_name', ...)]
     ```
 
     | **Parameter**  | **Required** | **Description**                                              |
@@ -34,7 +34,7 @@ The following describes the syntaxes and parameters based on different cases:
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
-    [PARTITION ('partition_name', ...)];
+    [PARTITION ('partition_name', ...)]
     ```
 
     | **Parameter**    | **Required** | **Description**                                              |
