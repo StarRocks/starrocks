@@ -52,8 +52,6 @@ export_mem_limit_from_conf() {
         fi
     done < $1
 
-<<<<<<< HEAD
-=======
     cgroup_version=$(stat -fc %T /sys/fs/cgroup)
     if [ -f /.dockerenv ] && [ "$cgroup_version" == "tmpfs" ]; then
         mem_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes | awk '{printf $1}')
@@ -75,12 +73,15 @@ export_mem_limit_from_conf() {
         fi
     fi
 
->>>>>>> 25573ed69 ([BugFix] Get right path of memory.max (#15199))
     # read /proc/meminfo to fetch total memory of machine
     mem_total=$(cat /proc/meminfo |grep 'MemTotal' |awk -F : '{print $2}' |sed 's/^[ \t]*//g' | awk '{printf $1}')
     if [ "$mem_total" == "" ]; then
         echo "can't get mem info from /proc/meminfo"
         return 1
+    fi
+
+    if [[ (-v mem_limit) && ($mem_limit -le $mem_total) ]]; then
+      mem_total=$mem_limit
     fi
 
     if [ "$mem_limit_is_set" == "false" ]; then
