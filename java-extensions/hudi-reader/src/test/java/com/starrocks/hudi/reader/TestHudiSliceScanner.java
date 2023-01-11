@@ -196,4 +196,12 @@ a       b       c       d       e
         params.put("nested_fields", "e.c.b.a");
         runScanOnParams(params);
     }
+
+    @Test
+    public void case2doScanTestOnStructType4() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.c.b.b,e.c.b.a,e.c.a,e.b,e.a");
+        runScanOnParams(params);
+    }
 }
