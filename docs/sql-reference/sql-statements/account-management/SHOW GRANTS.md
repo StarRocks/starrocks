@@ -7,7 +7,7 @@ This statement is used to view user permissions.
 Syntax:
 
 ```sql
-SHOW [ALL] GRANTS [FOR user_identity];
+SHOW [ALL] GRANTS [FOR user_identity]
 ```
 
 Note:
