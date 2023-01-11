@@ -398,6 +398,7 @@ public class GlobalStateMgr {
     // We're developing a new privilege & authentication framework
     // This is used to turned on in hard code.
     public static final boolean USING_NEW_PRIVILEGE = false;
+
     // change to true in UT
     private AtomicBoolean usingNewPrivilege;
 

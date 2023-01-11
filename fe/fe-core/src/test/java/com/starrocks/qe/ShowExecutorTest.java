@@ -40,6 +40,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -71,6 +72,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
@@ -752,6 +754,32 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowAuthentication() throws AnalysisException, DdlException {
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(null, false);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("Password", resultSet.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3).getName());
+        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
+
+        stmt = new ShowAuthenticationStmt(null, true);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
+
+        stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, true);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
+    }
+
+    @Test
     public void testShowEngine() throws AnalysisException, DdlException {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -911,6 +939,7 @@ public class ShowExecutorTest {
             public Database getDb(String catalogName, String dbName) {
                 return new Database();
             }
+
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();

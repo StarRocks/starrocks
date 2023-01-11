@@ -95,14 +95,14 @@ public class AuthUpgrader {
     }
 
     protected void upgradeUser() throws AuthUpgradeUnrecoverableException {
-        UserPrivTable globalTable = this.auth.getUserPrivTable();
+        UserPrivTable userPrivTable = this.auth.getUserPrivTable();
         DbPrivTable dbTable = this.auth.getDbPrivTable();
         TablePrivTable tableTable = this.auth.getTablePrivTable();
         ResourcePrivTable resourceTable = this.auth.getResourcePrivTable();
         ImpersonateUserPrivTable impersonateUserPrivTable = this.auth.getImpersonateUserPrivTable();
 
         // 1. create all ip users
-        Iterator<PrivEntry> iter = globalTable.getFullReadOnlyIterator();
+        Iterator<PrivEntry> iter = userPrivTable.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             GlobalPrivEntry entry = (GlobalPrivEntry) iter.next();
             try {
@@ -153,7 +153,7 @@ public class AuthUpgrader {
 
         // 3. grant privileges on all ip users
         // must loop again after all the users is created, otherwise impersonate may fail on non-existence user
-        iter = globalTable.getFullReadOnlyIterator();
+        iter = userPrivTable.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             GlobalPrivEntry entry = (GlobalPrivEntry) iter.next();
             try {
@@ -213,7 +213,7 @@ public class AuthUpgrader {
                     Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
                     // 1. grant global privileges
-                    Iterator<PrivEntry> globalIter = globalTable.getReadOnlyIteratorByUser(userIdentity);
+                    Iterator<PrivEntry> globalIter = userPrivTable.getReadOnlyIteratorByUser(userIdentity);
                     if (globalIter.hasNext()) {
                         upgradeUserGlobalPrivileges((GlobalPrivEntry) globalIter.next(), collection);
                     }
