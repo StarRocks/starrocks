@@ -156,14 +156,14 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayAddCluster(log);
                     break;
                 }
                 case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayRemoveCluster(log);
                     break;

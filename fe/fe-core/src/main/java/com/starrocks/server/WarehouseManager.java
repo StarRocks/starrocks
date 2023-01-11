@@ -152,8 +152,12 @@ public class WarehouseManager implements Writable {
     public void suspendWarehouse(SuspendWarehouseStmt stmt) {
         String whName = stmt.getFullWhName();
         readLock();
-        Warehouse warehouse = fullNameToWh.get(whName);
-        readUnlock();
+        Warehouse warehouse = null;
+        try {
+            warehouse = fullNameToWh.get(whName);
+        } finally {
+            readUnlock();
+        }
         warehouse.suspendSelf(false);
         OpWarehouseLog log = new OpWarehouseLog(whName);
         GlobalStateMgr.getCurrentState().getEditLog().logSuspendWh(log);
@@ -161,16 +165,24 @@ public class WarehouseManager implements Writable {
 
     public void replaySuspendWarehouse(String whName) {
         readLock();
-        Warehouse wh = fullNameToWh.get(whName);
-        readUnlock();
-        wh.suspendSelf(true);
+        Warehouse warehouse = null;
+        try {
+            warehouse = fullNameToWh.get(whName);
+        } finally {
+            readUnlock();
+        }
+        warehouse.suspendSelf(true);
     }
 
     public void resumeWarehouse(ResumeWarehouseStmt stmt) {
         String whName = stmt.getFullWhName();
+        Warehouse warehouse = null;
         readLock();
-        Warehouse warehouse = fullNameToWh.get(whName);
-        readUnlock();
+        try {
+            warehouse = fullNameToWh.get(whName);
+        } finally {
+            readUnlock();
+        }
         warehouse.resumeSelf(false);
         OpWarehouseLog log = new OpWarehouseLog(whName);
         GlobalStateMgr.getCurrentState().getEditLog().logResumeWh(log);
@@ -178,9 +190,13 @@ public class WarehouseManager implements Writable {
 
     public void replayResumeWarehouse(String whName) {
         readLock();
-        Warehouse wh = fullNameToWh.get(whName);
-        readUnlock();
-        wh.resumeSelf(true);
+        Warehouse warehouse = null;
+        try {
+            warehouse = fullNameToWh.get(whName);
+        } finally {
+            readUnlock();
+        }
+        warehouse.resumeSelf(true);
     }
 
     public void dropWarehouse(DropWarehouseStmt stmt) {
