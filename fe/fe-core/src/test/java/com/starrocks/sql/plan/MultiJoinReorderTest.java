@@ -49,22 +49,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
 
         String sql = "select * from t1, t2, t3, t0;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("4:NESTLOOP JOIN\n" +
+        String planFragment = getCostExplain(sql);
+        Assert.assertTrue(planFragment, planFragment.contains("  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE"));
+                "  |  cardinality: 10\n"));
         Assert.assertTrue(planFragment.contains("  9:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----8:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("  6:NESTLOOP JOIN\n" +
+                "  |  cardinality: 1000000000000000\n"));
+        Assert.assertTrue(planFragment.contains("  7:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n"));
+                "  |  cardinality: 1000000\n"));
     }
 
     @Test
@@ -215,38 +209,32 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join (select * from t1 join t3 on t1.v4 = t3.v10 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
                 "on t1.v5 = a.v8 ";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("24:HASH JOIN\n" +
+        String planFragment = getCostExplain(sql);
+        Assert.assertTrue(planFragment, planFragment.contains("  23:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v4 = 4: v10"));
+                "  |  equal join conjunct: [1: v4, BIGINT, true] = [4: v10, BIGINT, true]\n" +
+                "  |  output columns: 7\n" +
+                "  |  cardinality: 900000000\n"));
 
-        Assert.assertTrue(planFragment, planFragment.contains("19:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("  18:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 13: v10 = 10: v4"));
+                "  |  equal join conjunct: [13: v10, BIGINT, true] = [10: v4, BIGINT, true]\n"));
     }
 
     @Test
     public void testCrossJoinReorderDP() throws Exception {
         connectContext.getSessionVariable().enableDPJoinReorder();
         String sql = "select * from t1, t2, t3, t0;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("4:NESTLOOP JOIN\n" +
+        String planFragment = getCostExplain(sql);
+        Assert.assertTrue(planFragment, planFragment.contains("  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE"));
+                "  |  cardinality: 10"));
         Assert.assertTrue(planFragment.contains("  9:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----8:EXCHANGE\n"));
-        Assert.assertTrue(planFragment.contains("  6:NESTLOOP JOIN\n" +
+                "  |  cardinality: 1000000000000000"));
+        Assert.assertTrue(planFragment.contains("  7:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n"));
+                "  |  cardinality: 1000000"));
     }
 
     @Test
@@ -465,7 +453,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testMultiCrossJoinReorder() throws Exception {
         // check multi cross join reorder without exception
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
-        assertPlanContains(sql, "21:NESTLOOP JOIN");
+        assertPlanContains(sql, "20:NESTLOOP JOIN");
     }
 
     @Test
