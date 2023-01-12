@@ -721,15 +721,15 @@ CONF_mBool(pipeline_print_profile, "false");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
-CONF_Int64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
+CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
 // Default is 16384*64, where 16384 is the chunk size in pipeline.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 //
 // Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
-CONF_Int64(tablet_internal_parallel_min_scan_dop, "4");
+CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
