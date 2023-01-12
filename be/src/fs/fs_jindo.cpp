@@ -163,6 +163,13 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri) {
 
     if (UNLIKELY(_items >= MAX_CLIENTS_ITEMS)) {
         int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
+
+        auto old_client = _clients[idx];
+        JdoContext_t ctx = jdo_createContext1(old_client);
+        jdo_destroySystem(ctx);
+        jdo_freeContext(ctx);
+        jdo_freeSystem(old_client);
+
         _configs[idx] = jdo_options;
         _clients[idx] = client;
     } else {

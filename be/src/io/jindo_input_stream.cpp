@@ -70,6 +70,14 @@ StatusOr<int64_t> JindoInputStream::position() {
 StatusOr<int64_t> JindoInputStream::get_size() {
     if (_size == -1) {
         JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+        bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
+        if (UNLIKELY(!file_exist)) {
+            std::string msg = fmt::format("File {} does not exist, request offset = {}",
+                                          _file_path, _offset);
+            LOG(ERROR) << msg;
+            return Status::IOError(msg);
+        }
+
         JdoFileStatus_t info;
         jdo_getFileStatus(jdo_ctx, _file_path.c_str(), &info);
         Status get_status = check_jindo_status(jdo_ctx);
