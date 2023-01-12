@@ -63,7 +63,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
 
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
@@ -200,7 +201,8 @@ protected:
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
                                                       std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
-        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
+        _tablets_channel =
+                new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
     }
 
     void TearDown() override {
