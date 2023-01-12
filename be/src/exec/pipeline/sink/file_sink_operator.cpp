@@ -123,14 +123,16 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
 
     // cancelling has happened but close is not invoked
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 0) {
+            close(_state);
+        }
         return;
     }
 
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
-            set_io_status(status);
-            close(_state);
+            LOG(WARNING) << "open file writer failed, error: " << status.to_string();
+            _fragment_ctx->cancel(status);
             return;
         }
         _is_writer_opened = true;
@@ -138,12 +140,14 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 0);
         close(_state);
         return;
     }
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        set_io_status(status);
-        close(_state);
+        LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
+        _fragment_ctx->cancel(status);
+        return;
     }
 }
 

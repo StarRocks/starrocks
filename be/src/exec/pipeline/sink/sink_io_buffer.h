@@ -81,9 +81,7 @@ public:
 
     virtual bool is_finished() { return _is_finished && _num_pending_chunks == 0; }
 
-    virtual void cancel_one_sinker() {
-        _is_cancelled = true;
-    }
+    virtual void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
         _is_finished = true;

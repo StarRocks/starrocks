@@ -85,13 +85,15 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& ite
     }
 
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 0) {
+            close(_state);
+        }
         return;
     }
 
     if (_writer == nullptr) {
         if (Status status = _open_mysql_table_writer(); !status.ok()) {
-            close(_state);
+            LOG(WARNING) << "open mysql table writer failed, error: " << status.to_string();
             _fragment_ctx->cancel(status);
             return;
         }
@@ -100,11 +102,12 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& ite
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 0);
         close(_state);
         return;
     }
     if (Status status = _writer->append(chunk.get()); !status.ok()) {
-        close(_state);
+        LOG(WARNING) << "add chunk to mysql table writer failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
         return;
     }
