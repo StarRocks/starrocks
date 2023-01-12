@@ -23,8 +23,8 @@ import com.starrocks.qe.ShowResultSetMetaData;
 public class ShowCreateExternalCatalogStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("catalog", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create External Catalog", ScalarType.createVarchar(30)))
+                    .addColumn(new Column("Catalog", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Create Catalog", ScalarType.createVarchar(30)))
                     .build();
 
     private final String catalogName;
