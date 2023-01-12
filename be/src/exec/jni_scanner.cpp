@@ -14,6 +14,7 @@
 
 #include "jni_scanner.h"
 
+#include "column/array_column.h"
 #include "column/type_traits.h"
 #include "fmt/core.h"
 #include "udf/java/java_udf.h"
@@ -173,35 +174,24 @@ void JniScanner::_append_data(Column* column, CppType& value) {
 
 template <LogicalType type, typename CppType>
 Status JniScanner::_append_primitive_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    auto* column_ptr = reinterpret_cast<CppType*>(next_chunk_meta());
-
-    auto* nullable_column = down_cast<NullableColumn*>(args.column.get());
-    nullable_column->resize(args.num_rows);
-
-    NullData& null_data = nullable_column->null_column_data();
-    memcpy(null_data.data(), null_column_ptr, args.num_rows);
-
-    auto* data_column = nullable_column->data_column().get();
+    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
+    auto* data_column = args.column;
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(data_column);
     memcpy(runtime_column->get_data().data(), column_ptr, args.num_rows * sizeof(CppType));
-
-    nullable_column->update_has_null();
     return Status::OK();
 }
 
 template <LogicalType type, typename CppType>
 Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
-    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
     int precision = args.slot_type.precision;
     int scale = args.slot_type.scale;
     for (int i = 0; i < args.num_rows; i++) {
-        if (null_column_ptr[i]) {
-            args.column->append_nulls(1);
+        if (args.nulls && args.nulls[i]) {
+            // NULL
         } else {
             std::string decimal_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
             CppType cpp_val;
@@ -210,7 +200,7 @@ Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
                 return Status::DataQualityError(
                         fmt::format("Invalid value occurs in column[{}], value is [{}]", args.slot_name, decimal_str));
             }
-            _append_data<type, CppType>(args.column.get(), cpp_val);
+            _append_data<type, CppType>(args.column, cpp_val);
         }
     }
     return Status::OK();
@@ -218,17 +208,10 @@ Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
 
 template <LogicalType type>
 Status JniScanner::_append_string_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
-    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
-    auto* nullable_column = down_cast<NullableColumn*>(args.column.get());
-    nullable_column->resize(args.num_rows);
-
-    NullData& null_data = nullable_column->null_column_data();
-    memcpy(null_data.data(), null_column_ptr, args.num_rows);
-
-    auto* data_column = nullable_column->data_column().get();
+    auto* data_column = args.column;
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(data_column);
 
@@ -237,18 +220,15 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     memcpy(runtime_column->get_offset().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
     memcpy(runtime_column->get_bytes().data(), column_ptr, total_length);
-
-    nullable_column->update_has_null();
     return Status::OK();
 }
 
 Status JniScanner::_append_date_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
-    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
     for (int i = 0; i < args.num_rows; i++) {
-        if (null_column_ptr[i]) {
-            args.column->append_nulls(1);
+        if (args.nulls && args.nulls[i]) {
+            // NULL
         } else {
             std::string date_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
             DateValue dv;
@@ -256,19 +236,18 @@ Status JniScanner::_append_date_data(const FillColumnArgs& args) {
                 return Status::DataQualityError(fmt::format("Invalid date value occurs on column[{}], value is [{}]",
                                                             args.slot_name, date_str));
             }
-            _append_data<TYPE_DATE, DateValue>(args.column.get(), dv);
+            _append_data<TYPE_DATE, DateValue>(args.column, dv);
         }
     }
     return Status::OK();
 }
 
 Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
-    char* column_ptr = reinterpret_cast<char*>(next_chunk_meta());
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
     for (int i = 0; i < args.num_rows; i++) {
-        if (null_column_ptr[i]) {
-            args.column->append_nulls(1);
+        if (args.nulls && args.nulls[i]) {
+            // NULL
         } else {
             std::string origin_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
             std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
@@ -277,39 +256,54 @@ Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
                 return Status::DataQualityError(fmt::format(
                         "Invalid datetime value occurs on column[{}], value is [{}]", args.slot_name, origin_str));
             }
-            _append_data<TYPE_DATETIME, TimestampValue>(args.column.get(), tsv);
+            _append_data<TYPE_DATETIME, TimestampValue>(args.column, tsv);
         }
     }
     return Status::OK();
 }
 
 Status JniScanner::_append_array_data(const FillColumnArgs& args) {
-    bool* null_column_ptr = reinterpret_cast<bool*>(next_chunk_meta());
-    int* offset_ptr = reinterpret_cast<int*>(next_chunk_meta());
+    DCHECK(args.slot_type.is_array_type());
 
-    auto* nullable_column = down_cast<NullableColumn*>(args.column.get());
-    nullable_column->resize(args.num_rows);
-
-    NullData& null_data = nullable_column->null_column_data();
-    memcpy(null_data.data(), null_column_ptr, args.num_rows);
-    nullable_column->update_has_null();
+    auto* array_column = down_cast<ArrayColumn*>(args.column);
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+    memcpy(array_column->offsets_column()->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
     int total_length = offset_ptr[args.num_rows];
-    DCHECK(args.slot_type.is_array_type());
-    std::string name = args.slot_name + "[]";
+    array_column->elements_column()->resize(total_length);
+    std::string name = args.slot_name + ".0";
     FillColumnArgs sub_args = {.num_rows = total_length,
-                               .column = nullable_column->data_column(),
                                .slot_name = name,
                                .slot_type = args.slot_type.children[0],
-                               .must_nullable = true};
-    RETURN_IF_ERROR(_fill_column(sub_args));
+                               .nulls = nullptr,
+                               .column = array_column->elements_column().get(),
+                               .must_nullable = false};
+    RETURN_IF_ERROR(_fill_column(&sub_args));
     return Status::OK();
 }
 
-Status JniScanner::_fill_column(const FillColumnArgs& args) {
+Status JniScanner::_fill_column(FillColumnArgs* pargs) {
+    FillColumnArgs& args = *pargs;
     if (args.must_nullable && !args.column->is_nullable()) {
         return Status::DataQualityError(fmt::format("NOT NULL column[{}] is not supported.", args.slot_name));
     }
+
+    if (args.column->is_nullable()) {
+        bool* null_column_ptr = static_cast<bool*>(next_chunk_meta_as_ptr());
+        auto* nullable_column = down_cast<NullableColumn*>(args.column);
+        nullable_column->resize(args.num_rows);
+
+        NullData& null_data = nullable_column->null_column_data();
+        memcpy(null_data.data(), null_column_ptr, args.num_rows);
+        nullable_column->update_has_null();
+
+        auto* data_column = nullable_column->data_column().get();
+        pargs->column = data_column;
+        pargs->nulls = null_data.data();
+    } else {
+        next_chunk_meta_as_ptr();
+    }
+
     LogicalType column_type = args.slot_type.type;
     if (column_type == LogicalType::TYPE_BOOLEAN) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN, uint8_t>(args)));
@@ -348,7 +342,7 @@ Status JniScanner::_fill_column(const FillColumnArgs& args) {
 Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
     SCOPED_TIMER(_profile.fill_chunk_timer);
 
-    long num_rows = next_chunk_meta();
+    long num_rows = next_chunk_meta_as_long();
     if (num_rows == 0) {
         return Status::EndOfFile("");
     }
@@ -360,11 +354,12 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
         const TypeDescriptor& slot_type = slot_desc->type();
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
-                            .column = column,
                             .slot_name = slot_name,
                             .slot_type = slot_type,
+                            .nulls = nullptr,
+                            .column = column.get(),
                             .must_nullable = true};
-        RETURN_IF_ERROR(_fill_column(args));
+        RETURN_IF_ERROR(_fill_column(&args));
         _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(
                 _jni_env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
@@ -383,7 +378,7 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
     RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
-    _chunk_meta_ptr = reinterpret_cast<long*>(chunk_meta);
+    _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
     _chunk_meta_index = 0;
     Status status = _fill_chunk(_jni_env, chunk);
     RETURN_IF_ERROR(_release_off_heap_table(_jni_env));

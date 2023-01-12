@@ -48,9 +48,11 @@ public:
 private:
     struct FillColumnArgs {
         long num_rows;
-        ColumnPtr& column;
         const std::string& slot_name;
         const TypeDescriptor& slot_type;
+
+        uint8_t* nulls;
+        Column* column;
         bool must_nullable;
     };
 
@@ -81,7 +83,7 @@ private:
     template <LogicalType type, typename CppType>
     void _append_data(Column* column, CppType& value);
 
-    Status _fill_column(const FillColumnArgs& args);
+    Status _fill_column(FillColumnArgs* args);
 
     Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
 
@@ -103,6 +105,7 @@ private:
     long* _chunk_meta_ptr;
     int _chunk_meta_index;
 
-    long next_chunk_meta() { return _chunk_meta_ptr[_chunk_meta_index++]; }
+    void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
+    long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 } // namespace starrocks
