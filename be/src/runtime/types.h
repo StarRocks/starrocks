@@ -312,6 +312,8 @@ struct TypeDescriptor {
     /// TTypeNodes for this type and its children.
     void to_thrift(TTypeDesc* thrift_type) const;
 
+    size_t get_array_depth_limit() const;
+
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.
     ///

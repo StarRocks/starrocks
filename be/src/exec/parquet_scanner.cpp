@@ -244,6 +244,16 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 
 Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num_elements, const arrow::Array* array,
                                                const TypeDescriptor* type_desc, const ColumnPtr& column) {
+    if (type_desc->type == TYPE_ARRAY) {
+        // only base types are supported, nested types are not supported
+        size_t depth_limit = type_desc->get_array_depth_limit();
+        auto arrow_list_check_depth_func = get_arrow_list_check_depth();
+        RETURN_IF_ERROR(arrow_list_check_depth_func(array, depth_limit));
+        auto list_conv_func = get_arrow_list_converter();
+        return list_conv_func(array, _batch_start_idx, num_elements, column.get(), _chunk_start_idx, nullptr,
+                              &_chunk_filter, &_conv_ctx, type_desc);
+    }
+
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
@@ -259,23 +269,15 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
         fill_filter(array, _batch_start_idx, num_elements, &_chunk_filter, _chunk_start_idx);
         data_column = column.get();
     }
-    if (type_desc->type == TYPE_ARRAY) {
-        // only base types are supported, nested types are not supported
-        auto list_conv_func = get_arrow_list_converter();
-        return list_conv_func(array, _batch_start_idx, num_elements, 1 /* non nested */, type_desc, data_column,
-                              _chunk_start_idx, null_data, &_conv_ctx);
-    } else {
-        auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
-        auto st = conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data,
-                            filter_data, &_conv_ctx);
-        if (st.ok()) {
-            // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
-            if (column->is_nullable()) {
-                down_cast<NullableColumn*>(column.get())->update_has_null();
-            }
-        }
-        return st;
+
+    auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
+    auto st = conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data, filter_data,
+                        &_conv_ctx);
+    if (st.ok() && column->is_nullable()) {
+        // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+        down_cast<NullableColumn*>(column.get())->update_has_null();
     }
+    return st;
 }
 
 bool ParquetScanner::chunk_is_full() {
