@@ -834,14 +834,14 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
         //    of this partition depends on "reserveTablets"
-        //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
+        //    If "reserveTablets" is true, the tablets of this partition will not to delete.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
 
-            Preconditions.checkState(partitionInfo.getType() == PartitionType.RANGE);
+            Preconditions.checkState(partitionInfo.isRangePartition());
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             if (!isForceDrop) {

@@ -25,6 +25,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -101,12 +102,17 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
             throws DdlException {
+        PartitionType partitionType = PartitionType.RANGE;
+        if (isExprPartition)  {
+            partitionType = PartitionType.EXPR_RANGE;
+        }
         // we will support other PartitionInto in the future
         if (rangePartitionDesc == null) {
             // for materialized view express partition.
-            return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema);
+            return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema, partitionType);
         }
         List<Column> partitionColumns = Lists.newArrayList();
 
@@ -116,7 +122,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         }
 
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns);
+                new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns, partitionType);
 
         for (SingleRangePartitionDesc desc : getRangePartitionDesc().getSingleRangePartitionDescs()) {
             long partitionId = partitionNameToId.get(desc.getPartitionName());

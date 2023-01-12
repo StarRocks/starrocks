@@ -55,14 +55,14 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
     }
 
 
-    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {
         super(columns);
         Preconditions.checkState(partitionExprs != null);
         Preconditions.checkState(partitionExprs.size() > 0);
         Preconditions.checkState(partitionExprs.size() == columns.size());
         this.partitionExprs = partitionExprs;
         this.isMultiColumnPartition = partitionExprs.size() > 0;
-        this.type = PartitionType.EXPR_RANGE;
+        this.type = type;
     }
 
     public List<Expr> getPartitionExprs() {

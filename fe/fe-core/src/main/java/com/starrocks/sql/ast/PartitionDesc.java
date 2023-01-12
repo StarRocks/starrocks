@@ -46,7 +46,10 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+    // Currently, RANGE is used for materialized view ExpressionRangePartitionInfo, which is isExprPartition=false,
+    // and EXPR_RANGE is used for ordinary table ExpressionRangePartitionInfo, which is isExprPartition=true
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
             throws DdlException {
         throw new NotImplementedException();
     }
