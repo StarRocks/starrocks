@@ -813,8 +813,6 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan12, "agg_join_mv_5");
 
         dropMv("test", "agg_join_mv_5");
-<<<<<<< HEAD
-=======
 
         // test aggregate with projection
         createAndRefreshMv("test", "agg_mv_6", "create materialized view agg_mv_6" +
@@ -1001,7 +999,6 @@ public class MvRewriteOptimizationTest {
                 "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey > 4");
 
         dropMv("test", "hive_union_mv_1");
->>>>>>> 983acdff0 ([BugFix] fix mv with count distinct rewrite bug (#16561))
     }
 
     @Test
