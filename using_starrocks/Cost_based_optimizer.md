@@ -161,7 +161,7 @@ PROPERTIES (property [,property]);
 | **PROPERTIES**                 | **类型** | **默认值** | **说明**                                                     |
 | ------------------------------ | -------- | ---------- | ------------------------------------------------------------ |
 | statistic_sample_collect_rows  | INT      | 200000     | 最小采样行数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
-| histogram_mcv_size             | INT      | 100        | 直方图 most common value (MVC) 的数量。                      |
+| histogram_mcv_size             | INT      | 100        | 直方图 most common value (MCV) 的数量。                      |
 | histogram_sample_ratio         | FLOAT    | 0.1        | 直方图采样比例。                                             |
 | histogram_max_sample_row_count | LONG     | 10000000   | 直方图最大采样行数。                                         |
 
