@@ -160,7 +160,6 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     });
     if (cntl->request_attachment().size() > 0) {
         butil::IOBuf& io_buf = cntl->request_attachment();
-        size_t offset = 0;
         for (size_t i = 0; i < req->chunks().size(); ++i) {
             auto chunk = req->mutable_chunks(i);
             if (UNLIKELY(io_buf.size() < chunk->data_size())) {
@@ -169,7 +168,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 st = Status::InternalError(msg);
                 return;
             }
-            // Note the ref memory is freed after closure is called.
+            // also with copying due to the discontinuous memory in chunk
             auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
             if (UNLIKELY(size != chunk->data_size())) {
                 auto msg = fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
@@ -177,7 +176,6 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 st = Status::InternalError(msg);
                 return;
             }
-            offset += chunk->data_size();
         }
     }
 
