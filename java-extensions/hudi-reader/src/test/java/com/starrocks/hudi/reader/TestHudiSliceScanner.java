@@ -3,6 +3,7 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.OffHeapTable;
 import com.starrocks.utils.Platform;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -65,10 +66,11 @@ a       b       c       d       e
         return params;
     }
 
-    void runScanOnParams(Map<String, String> params) throws IOException {
+    String runScanOnParams(Map<String, String> params) throws IOException {
         HudiSliceScanner scanner = new HudiSliceScanner(4096, params);
         System.out.println(scanner.toString());
         scanner.open();
+        StringBuilder sb = new StringBuilder();
         while (true) {
             scanner.getNextOffHeapChunk();
             OffHeapTable table = scanner.getOffHeapTable();
@@ -76,10 +78,12 @@ a       b       c       d       e
                 break;
             }
             table.show(10);
+            sb.append(table.dump(10));
             table.checkTableMeta(true);
             table.close();
         }
         scanner.close();
+        return sb.toString();
     }
 
     @Test
@@ -170,21 +174,33 @@ a       b       c       d       e
     public void case2doScanTestOnBasicType() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "a,b");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [a:0,b:hello]\n" +
+                "row1: [a:0,b:NULL]\n" +
+                "row2: [a:0,b:hello]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
     public void case2doScanTestOnArrayType() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "c");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [c:NULL]\n" +
+                "row1: [c:[[30,40],[10,20,30]]]\n" +
+                "row2: [c:[[10,20,30],[40,50,60,70]]]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
     public void case2doScanTestOnMapType() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "d");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [d:NULL]\n" +
+                "row1: [d:NULL]\n" +
+                "row2: [d:[{key1:[1,10]},{key2:[2,20]},{key3:NULL}]]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
@@ -192,7 +208,11 @@ a       b       c       d       e
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.b,e.a");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [e:{b:[{key1:10}],a:NULL}]\n" +
+                "row1: [e:{b:[{key1:10}],a:NULL}]\n" +
+                "row2: [e:{b:[{key1:10}],a:[10,20]}]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
@@ -200,7 +220,11 @@ a       b       c       d       e
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.c.a,e.b,e.a");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [e:{c:{a:[10,20]},b:[{key1:10}],a:NULL}]\n" +
+                "row1: [e:{c:{a:[10,20]},b:[{key1:10}],a:NULL}]\n" +
+                "row2: [e:{c:{a:[10,20]},b:[{key1:10}],a:[10,20]}]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
@@ -208,7 +232,11 @@ a       b       c       d       e
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.c.b.a");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [e:{c:{b:{a:10}}}]\n" +
+                "row1: [e:{c:{b:NULL}}]\n" +
+                "row2: [e:{c:{b:{a:10}}}]\n";
+        Assert.assertEquals(out, exp);
     }
 
     @Test
@@ -216,6 +244,10 @@ a       b       c       d       e
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.c.b.b,e.c.b.a,e.c.a,e.b,e.a");
-        runScanOnParams(params);
+        String out = runScanOnParams(params);
+        String exp = "row0: [e:{c:{b:{b:world,a:10},a:[10,20]},b:[{key1:10}],a:NULL}]\n" +
+                "row1: [e:{c:{b:NULL,a:[10,20]},b:[{key1:10}],a:NULL}]\n" +
+                "row2: [e:{c:{b:{b:world,a:10},a:[10,20]},b:[{key1:10}],a:[10,20]}]\n";
+        Assert.assertEquals(out, exp);
     }
 }
