@@ -139,13 +139,14 @@ enum AggrMode {
 enum AggrAutoState { INIT_PREAGG = 0, ADJUST, PASS_THROUGH, FORCE_PREAGG, PREAGG, SELECTIVE_PREAGG };
 
 struct AggrAutoContext {
-    constexpr static size_t ContinuousUpperLimit = 100000;
+    constexpr static size_t ContinuousUpperLimit = 10000;
     constexpr static int ForcePreaggLimit = 3;
     constexpr static int PreaggLimit = 100;
+    constexpr static int AdjustLimit = 100;
     constexpr static double LowReduction = 0.3;
     constexpr static double HighReduction = 0.8;
     constexpr static size_t MaxHtSize = 128 * 1024 * 1024; // 128 MB
-    constexpr static int AdjustLimit = 5;
+    constexpr static int StableLimit = 5;
     std::string get_auto_state_string(const AggrAutoState& state);
     size_t get_continuous_limit();
     void update_continuous_limit();

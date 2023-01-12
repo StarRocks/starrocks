@@ -127,8 +127,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(C
 
 /* A state machine autoly chooses different preaggregation modes. If the initial preaggregation cannot insert
  * more data into hash table, the state shifts from INIT_PREAGG to ADJUST. The ADJUST state has 3 branches:
- * (1) If continuous AggrAutoContext::AdjustLimit chunks are lowly aggregated, shifting to PASS_THROUGH state;
- * (2) Else if continuous AggrAutoContext::AdjustLimit chunks are highly aggregated, shifting to PREAGG state;
+ * (1) If continuous AggrAutoContext::StableLimit chunks are lowly aggregated, shifting to PASS_THROUGH state;
+ * (2) Else if continuous AggrAutoContext::StableLimit chunks are highly aggregated, shifting to PREAGG state;
  * (3) otherwise or the ADJUST state sustains continuous_limit times, shifting to SELECTIVE_PREAGG state.
  *
  * PASS_THROUGH state sustains continuous_limit times, it will force doing preaggregation if the hash table's size <
@@ -187,9 +187,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             _auto_context.pass_through_count++;
             _auto_context.preagg_count = 0;
             _auto_context.selective_preagg_count = 0;
-            if (_auto_context.pass_through_count == AggrAutoContext::AdjustLimit) {
+            if (_auto_context.pass_through_count == AggrAutoContext::StableLimit) {
                 _auto_state = AggrAutoState::PASS_THROUGH;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit << " low reduction "
+                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::StableLimit << " low reduction "
                           << agg_count * 1.0 / chunk_size << " "
                           << _auto_context.get_auto_state_string(AggrAutoState::ADJUST) << " -> "
                           << _auto_context.get_auto_state_string(_auto_state);
@@ -203,10 +203,10 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             _auto_context.preagg_count++;
             _auto_context.pass_through_count = 0;
             _auto_context.selective_preagg_count = 0;
-            if (_auto_context.preagg_count == AggrAutoContext::AdjustLimit) {
+            if (_auto_context.preagg_count == AggrAutoContext::StableLimit) {
                 _auto_state = AggrAutoState::PREAGG;
                 _auto_context.preagg_count = 0;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit << " high reduction "
+                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::StableLimit << " high reduction "
                           << agg_count * 1.0 / chunk_size << " "
                           << _auto_context.get_auto_state_string(AggrAutoState::ADJUST) << " -> "
                           << _auto_context.get_auto_state_string(_auto_state);
@@ -216,9 +216,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             _auto_context.selective_preagg_count++;
             _auto_context.pass_through_count = 0;
             _auto_context.preagg_count = 0;
-            if (_auto_context.selective_preagg_count == AggrAutoContext::AdjustLimit) {
+            if (_auto_context.selective_preagg_count == AggrAutoContext::StableLimit) {
                 _auto_state = AggrAutoState::SELECTIVE_PREAGG;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit << " "
+                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::StableLimit << " "
                           << _auto_context.get_auto_state_string(AggrAutoState::ADJUST)
                           << _auto_context.get_auto_state_string(_auto_state);
             }
