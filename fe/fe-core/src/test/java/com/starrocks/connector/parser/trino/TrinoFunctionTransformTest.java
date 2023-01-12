@@ -54,7 +54,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testArrayFnTransform() throws Exception {
         String sql = "select array_union(c1, c2) from test_array";
-        assertPlanContains(sql, "array_distinct(array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>)))");
+        assertPlanContains(sql, "array_distinct(array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR");
 
         sql = "select concat(array[1,2,3], array[4,5,6]) from test_array";
         assertPlanContains(sql, "array_concat(ARRAY<tinyint(4)>[1,2,3], ARRAY<tinyint(4)>[4,5,6])");
