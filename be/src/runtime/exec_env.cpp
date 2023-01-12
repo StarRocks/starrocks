@@ -336,7 +336,6 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
-<<<<<<< HEAD
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
@@ -429,10 +428,6 @@ void ExecEnv::_destroy() {
         delete _hdfs_scan_executor;
         _hdfs_scan_executor = nullptr;
     }
-    if (_runtime_filter_cache) {
-        delete _runtime_filter_cache;
-        _runtime_filter_cache = nullptr;
-    }
     if (_thread_pool) {
         delete _thread_pool;
         _thread_pool = nullptr;
@@ -476,73 +471,20 @@ void ExecEnv::_destroy() {
     if (_load_mem_tracker) {
         delete _load_mem_tracker;
         _load_mem_tracker = nullptr;
-=======
-    SAFE_DELETE(_agent_server);
-    SAFE_DELETE(_runtime_filter_worker);
-    SAFE_DELETE(_profile_report_worker);
-    SAFE_DELETE(_heartbeat_flags);
-    SAFE_DELETE(_small_file_mgr);
-    SAFE_DELETE(_transaction_mgr);
-    SAFE_DELETE(_stream_context_mgr);
-    SAFE_DELETE(_routine_load_task_executor);
-    SAFE_DELETE(_stream_load_executor);
-    SAFE_DELETE(_brpc_stub_cache);
-    SAFE_DELETE(_load_stream_mgr);
-    SAFE_DELETE(_load_channel_mgr);
-    SAFE_DELETE(_broker_mgr);
-    SAFE_DELETE(_bfd_parser);
-    SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_driver_executor);
-    SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_fragment_mgr);
-    SAFE_DELETE(_udf_call_pool);
-    SAFE_DELETE(_pipeline_prepare_pool);
-    SAFE_DELETE(_pipeline_sink_io_pool);
-    SAFE_DELETE(_query_rpc_pool);
-    SAFE_DELETE(_scan_executor_without_workgroup);
-    SAFE_DELETE(_scan_executor_with_workgroup);
-    SAFE_DELETE(_connector_scan_executor_without_workgroup);
-    SAFE_DELETE(_connector_scan_executor_with_workgroup);
-    SAFE_DELETE(_thread_pool);
-
-    if (_lake_tablet_manager != nullptr) {
-        _lake_tablet_manager->prune_metacache();
->>>>>>> b22695dab ([BugFix] _query_context should be released before _runtime_filter_cache during gracefully shuting down (#16417))
     }
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
-<<<<<<< HEAD
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;
-=======
-    SAFE_DELETE(_query_context_mgr);
-    SAFE_DELETE(_runtime_filter_cache);
-    SAFE_DELETE(_driver_limiter);
-    SAFE_DELETE(_broker_client_cache);
-    SAFE_DELETE(_frontend_client_cache);
-    SAFE_DELETE(_backend_client_cache);
-    SAFE_DELETE(_result_queue_mgr);
-    SAFE_DELETE(_result_mgr);
-    SAFE_DELETE(_stream_mgr);
-    SAFE_DELETE(_external_scan_context_mgr);
-    SAFE_DELETE(_lake_tablet_manager);
-    SAFE_DELETE(_lake_location_provider);
-    SAFE_DELETE(_lake_update_manager);
-    SAFE_DELETE(_cache_mgr);
-    _metrics = nullptr;
-
-    _reset_tracker();
-}
-
-void ExecEnv::_reset_tracker() {
-    for (auto iter = _mem_trackers.rbegin(); iter != _mem_trackers.rend(); ++iter) {
-        iter->reset();
->>>>>>> b22695dab ([BugFix] _query_context should be released before _runtime_filter_cache during gracefully shuting down (#16417))
     }
     if (_query_context_mgr) {
         delete _query_context_mgr;
         _query_context_mgr = nullptr;
+    }
+    if (_runtime_filter_cache) {
+        delete _runtime_filter_cache;
+        _runtime_filter_cache = nullptr;
     }
     if (_mem_tracker) {
         delete _mem_tracker;
