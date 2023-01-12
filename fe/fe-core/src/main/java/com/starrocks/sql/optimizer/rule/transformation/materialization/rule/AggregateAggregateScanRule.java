@@ -14,7 +14,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 /*
  *
- * Here is the rule for pattern Aggregate-Scan
+ * Here is the rule for pattern Aggregate-Aggregate-Scan
  *
  */
 public class AggregateAggregateScanRule extends SingleTableRewriteBaseRule {
