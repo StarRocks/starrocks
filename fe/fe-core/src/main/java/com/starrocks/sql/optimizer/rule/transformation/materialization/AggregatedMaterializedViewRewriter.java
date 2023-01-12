@@ -29,7 +29,6 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -77,19 +76,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     @Override
     public boolean isValidPlan(OptExpression expression) {
-        if (expression == null) {
-            return false;
-        }
-        Operator op = expression.getOp();
-        if (!(op instanceof LogicalAggregationOperator)) {
-            return false;
-        }
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) op;
-        if (!agg.getType().equals(AggType.GLOBAL)) {
-            return false;
-        }
         // TODO: to support grouping set/rollup/cube
-        return MvUtils.isLogicalSPJ(expression.inputAt(0));
+        return MvUtils.isLogicalSPJG(expression);
     }
 
     // here there may be a projection on LogicalAggregationOperator.
