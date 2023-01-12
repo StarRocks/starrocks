@@ -141,7 +141,6 @@ public class OffHeapColumnVector {
                     ColumnType.TypeValue.BYTE));
         } else if (type.isArray()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
-
             this.childColumns = new OffHeapColumnVector[1];
             this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
         } else if (type.isMap()) {
@@ -203,6 +202,12 @@ public class OffHeapColumnVector {
     public int appendNull() {
         reserve(elementsAppended + 1);
         putNull(elementsAppended);
+
+        if (offsetData != 0) {
+            int offset = getArrayOffset(elementsAppended);
+            putArrayOffset(elementsAppended, offset, 0);
+        }
+
         return elementsAppended++;
     }
 
@@ -321,11 +326,11 @@ public class OffHeapColumnVector {
     private int appendByteArray(byte[] value, int offset, int length) {
         int copiedOffset = arrayData().appendBytes(length, value, offset);
         reserve(elementsAppended + 1);
-        putOffset(elementsAppended, copiedOffset, length);
+        putArrayOffset(elementsAppended, copiedOffset, length);
         return elementsAppended++;
     }
 
-    private void putOffset(int rowId, int offset, int length) {
+    private void putArrayOffset(int rowId, int offset, int length) {
         Platform.putInt(null, offsetData + 4L * rowId, offset);
         Platform.putInt(null, offsetData + 4L * (rowId + 1), offset + length);
     }
@@ -356,7 +361,7 @@ public class OffHeapColumnVector {
             childColumns[0].appendValue(v);
         }
         reserve(elementsAppended + 1);
-        putOffset(elementsAppended, offset, size);
+        putArrayOffset(elementsAppended, offset, size);
         return elementsAppended++;
     }
 
@@ -370,7 +375,7 @@ public class OffHeapColumnVector {
             childColumns[1].appendValue(v);
         }
         reserve(elementsAppended + 1);
-        putOffset(elementsAppended, offset, size);
+        putArrayOffset(elementsAppended, offset, size);
         return elementsAppended++;
     }
 
