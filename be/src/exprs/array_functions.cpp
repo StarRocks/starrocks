@@ -1536,7 +1536,7 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
     // collect all array columns
     std::vector<ArrayColumn::Ptr> array_columns;
     for (auto& column : columns) {
-        if (column->is_nullable()) {
+        if (column->has_null()) {
             auto nullable_column = down_cast<NullableColumn*>(column.get());
             array_columns.emplace_back(std::static_pointer_cast<ArrayColumn>(nullable_column->data_column()));
         } else if (column->is_constant()) {
