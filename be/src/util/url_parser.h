@@ -66,11 +66,6 @@ public:
     // If false is returned the contents of results are undefined.
     static bool parse_url(const StringValue& url, UrlPart part, StringValue* result);
 
-    // Tries to parse key from url. Places the result in result.
-    // Returns false if the URL is malformed or if part is invalid. True otherwise.
-    // If false is returned the contents of results are undefined.
-    static bool parse_url_key(const StringValue& url, UrlPart part, const StringValue& key, StringValue* result);
-
     // Compares part against url_authority, url_file, url_host, etc.,
     // and returns the corresponding enum.
     // If part did not match any of the url part constants, returns INVALID.
