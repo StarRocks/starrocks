@@ -77,11 +77,9 @@ private:
 
     Status _append_date_data(const FillColumnArgs& args);
     Status _append_datetime_data(const FillColumnArgs& args);
-
     Status _append_array_data(const FillColumnArgs& args);
-
-    template <LogicalType type, typename CppType>
-    void _append_data(Column* column, CppType& value);
+    Status _append_map_data(const FillColumnArgs& args);
+    Status _append_struct_data(const FillColumnArgs& args);
 
     Status _fill_column(FillColumnArgs* args);
 
@@ -106,7 +104,7 @@ private:
     long* _chunk_meta_ptr;
     int _chunk_meta_index;
 
-    void reset_chunk_meta(long chuk_meta) {
+    void reset_chunk_meta(long chunk_meta) {
         _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
         _chunk_meta_index = 0;
     }

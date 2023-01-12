@@ -15,6 +15,8 @@
 #include "jni_scanner.h"
 
 #include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "fmt/core.h"
 #include "udf/java/java_udf.h"
@@ -287,6 +289,65 @@ Status JniScanner::_append_array_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
+Status JniScanner::_append_map_data(const FillColumnArgs& args) {
+    DCHECK(args.slot_type.is_map_type());
+
+    auto* map_column = down_cast<MapColumn*>(args.column);
+    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
+
+    auto* offsets = map_column->offsets_column().get();
+    offsets->resize_uninitialized(args.num_rows + 1);
+    memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+
+    int total_length = offset_ptr[args.num_rows];
+    {
+        Column* keys = map_column->keys_column().get();
+        std::string name = args.slot_name + ".0";
+        FillColumnArgs sub_args = {.num_rows = total_length,
+                                   .slot_name = name,
+                                   .slot_type = args.slot_type.children[0],
+                                   .nulls = nullptr,
+                                   .column = keys,
+                                   .must_nullable = false};
+        RETURN_IF_ERROR(_fill_column(&sub_args));
+    }
+
+    {
+        Column* values = map_column->values_column().get();
+        std::string name = args.slot_name + ".1";
+        FillColumnArgs sub_args = {.num_rows = total_length,
+                                   .slot_name = name,
+                                   .slot_type = args.slot_type.children[1],
+                                   .nulls = nullptr,
+                                   .column = values,
+                                   .must_nullable = false};
+        RETURN_IF_ERROR(_fill_column(&sub_args));
+    }
+    return Status::OK();
+}
+
+Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
+    DCHECK(args.slot_type.is_struct_type());
+
+    auto* struct_column = down_cast<StructColumn*>(args.column);
+    const TypeDescriptor& type = args.slot_type;
+    int j = 0;
+    for (int i = 0; i < type.children.size(); i++) {
+        if (type.selected_fields[i]) {
+            Column* column = struct_column->fields_column()[i].get();
+            std::string name = args.slot_name + "." + type.field_names[i];
+            FillColumnArgs sub_args = {.num_rows = args.num_rows,
+                                       .slot_name = name,
+                                       .slot_type = type.children[i],
+                                       .nulls = nullptr,
+                                       .column = column,
+                                       .must_nullable = true};
+            RETURN_IF_ERROR(_fill_column(&sub_args));
+        }
+    }
+    return Status::OK();
+}
+
 Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     FillColumnArgs& args = *pargs;
     if (args.must_nullable && !args.column->is_nullable()) {
@@ -342,6 +403,10 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(args)));
     } else if (column_type == LogicalType::TYPE_ARRAY) {
         RETURN_IF_ERROR((_append_array_data(args)));
+    } else if (column_type == LogicalType::TYPE_MAP) {
+        RETURN_IF_ERROR((_append_map_data(args)));
+    } else if (column_type == LogicalType::TYPE_STRUCT) {
+        RETURN_IF_ERROR((_append_struct_data(args)));
     } else {
         return Status::InternalError(fmt::format("Type {} is not supported for off-heap table scanner", column_type));
     }
@@ -387,7 +452,7 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
     RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
-    reset_chunk_meta(chunk_meta);    
+    reset_chunk_meta(chunk_meta);
     Status status = _fill_chunk(_jni_env, chunk);
     RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
     return status;
