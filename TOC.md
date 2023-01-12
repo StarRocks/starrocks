@@ -196,7 +196,7 @@
       + [USE](/sql-reference/sql-statements/data-definition/USE.md)
     + DML
       + [ALTER LOAD](/sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md)
-      + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
+      + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ALTER%20ROUTINE%20LOAD.md)
       + [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
       + [CANCEL REFRESH MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
@@ -208,7 +208,7 @@
       + [PAUSE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md)
       + [REFRESH MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md)
       + [RESUME ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
-      + [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)
+      + [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)
       + [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md)
       + [SHOW ALTER](/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md)
       + [SHOW ALTER MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md)
