@@ -177,12 +177,20 @@ public class MvUtils {
     }
 
     public static boolean isLogicalSPJG(OptExpression root) {
+        return isLogicalSPJG(root, 0);
+    }
+
+    public static boolean isLogicalSPJG(OptExpression root, int level) {
         if (root == null) {
             return false;
         }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalAggregationOperator)) {
-            return false;
+            if (level == 0) {
+                return false;
+            } else {
+                return isLogicalSPJ(root);
+            }
         }
         LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
         if (agg.getType() != AggType.GLOBAL) {
@@ -190,7 +198,7 @@ public class MvUtils {
         }
 
         OptExpression child = root.inputAt(0);
-        return isLogicalSPJ(child);
+        return isLogicalSPJG(child, level + 1);
     }
 
     public static boolean isLogicalSPJ(OptExpression root) {
