@@ -99,6 +99,7 @@ private:
 
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
+    Filter _chunk_filter;
 
 private:
     long* _chunk_meta_ptr;
