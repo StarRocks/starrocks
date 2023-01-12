@@ -14,13 +14,13 @@ This statement is a synchronous operation and requires you to have the `ALTER_PR
 - Cancel schema changes.
 
     ```SQL
-    CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name;
+    CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name
     ```
 
 - Cancel changes to rollup indexes.
 
     ```SQL
-    CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name;
+    CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name
     ```
 
 ## Parameters

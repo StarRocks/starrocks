@@ -7,7 +7,7 @@ This statement is used to truncate the specified table and partition data.
 Syntax:
 
 ```sql
-TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)];
+TRUNCATE TABLE [db.]tbl[ PARTITION(p1, p2, ...)]
 ```
 
 Note:
