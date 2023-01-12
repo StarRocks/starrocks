@@ -339,14 +339,14 @@ public class CreateRoutineLoadStmtTest {
     @Test
     public void testAnalyzeCSVConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
-                "PROPERTIES(\"format\" = \"csv\", \"trimspace\"=\"true\", \"enclose\"=\"\'\", \"escape\"=\"\\\") " +
+                "PROPERTIES(\"format\" = \"csv\", \"trimspace\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +
                 "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
         Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
         Assert.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
-        Assert.assertEquals(createRoutineLoadStmt.getEscape(), '\\');
+        Assert.assertEquals(createRoutineLoadStmt.getEscape(), '|');
     }
 
     @Test
