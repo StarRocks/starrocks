@@ -79,6 +79,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddMaterializedColumnClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -579,6 +580,8 @@ public class Alter {
                 processSwap(db, olapTable, alterClauses);
             } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
                 needProcessOutsideDatabaseLock = true;
+            } else if (currentAlterOps.contains(AlterOpType.MATERIALIZED_COLUMN)) {
+                processMaterializeColumn(db, olapTable, alterClauses);
             } else {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
@@ -662,6 +665,22 @@ public class Alter {
                 }
             }
         }
+    }
+
+    private void processMaterializeColumn(Database db, OlapTable olapTable, List<AlterClause> alterClauses) throws UserException {
+        if (!(alterClauses.get(0) instanceof AddMaterializedColumnClause)) {
+            throw new DdlException("materialized column operation only support table");
+        }
+        AddMaterializedColumnClause clause = (AddMaterializedColumnClause) alterClauses.get(0);
+        if (olapTable.getMaterializedColumnMeta(clause.getColumnName()) != null) {
+            throw new DdlException("Column [" + clause.getColumnName() + "] already exists");
+        }
+
+        //Expression to sql.
+        String sql = clause.getExpression().toSql();
+        olapTable.setMaterializedColumnMeta(clause.getColumnName(), clause.getExpression().toSql(), clause.getExpression());
+
+        olapTable.rebuildFullSchema();
     }
 
     // entry of processing swap table

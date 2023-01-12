@@ -54,6 +54,7 @@ public enum AlterOpType {
     // others operation, such as add/drop backend. currently we do not care about them
     ALTER_OTHER,
     SWAP,
+    MATERIALIZED_COLUMN,
 
     INVALID_OP; // INVALID_OP must be the last one
 

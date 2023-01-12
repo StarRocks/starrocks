@@ -44,6 +44,7 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.Expr;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.binlog.BinlogConfig;
@@ -201,6 +202,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
     // that is, all transactions which id is smaller than binlogTxnId have been finished/aborted,
     // then binlog is available
     protected long binlogTxnId = -1;
+
+    @SerializedName(value = "materializedColumnMetas")
+    protected List<MaterializedColumnMeta> materializedColumnMetas = Lists.newArrayList();
+    @SerializedName(value = "materializedColumns")
+    protected List<Column> materializedColumns = Lists.newArrayList();
+    @SerializedName(value = "nameToMaterializedColumn")
+    protected Map<String, MaterializedColumnMeta> nameToMaterializedColumn = Maps.newHashMap();
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -414,6 +422,28 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 origStmt, null);
     }
 
+    public void setMaterializedColumnMeta(String columnName, String stmt, Expr expr) {
+        OriginStatement s = new OriginStatement(stmt, 0);
+        Column column = new Column(columnName, expr.getType());
+        MaterializedColumnMeta columnMeta = new MaterializedColumnMeta(getId(), s, expr, column);
+        materializedColumnMetas.add(columnMeta);
+
+        materializedColumns.add(column);
+        nameToMaterializedColumn.put(columnName, columnMeta);
+    }
+
+    public List<MaterializedColumnMeta> getMaterializedColumnMeta() {
+        return materializedColumnMetas;
+    }
+
+    public MaterializedColumnMeta getMaterializedColumnMeta(String columnName) {
+        return nameToMaterializedColumn.get(columnName);
+    }
+    public boolean hasMaterializedColumn() {
+        return !nameToMaterializedColumn.isEmpty();
+    }
+
+
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt, List<Integer> sortColumns) {
@@ -465,6 +495,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     nameToColumn.put(column.getName(), column);
                 }
             }
+        }
+        for (Column c : materializedColumns) {
+            fullSchema.add(c);
+            nameToColumn.put(c.getName(), c);
         }
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }

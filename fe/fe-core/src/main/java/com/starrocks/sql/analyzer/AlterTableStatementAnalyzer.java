@@ -16,12 +16,15 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
@@ -38,6 +41,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddMaterializedColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -75,6 +79,7 @@ public class AlterTableStatementAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
+        alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
@@ -82,6 +87,15 @@ public class AlterTableStatementAnalyzer {
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
+        private Table table;
+
+        public void setTable(Table table) {
+            this.table = table;
+        }
+
+        public Table getTable() {
+            return table;
+        }
         public void analyze(AlterClause statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -290,6 +304,30 @@ public class AlterTableStatementAnalyzer {
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
             clause.setColumn(columnDef.toColumn());
+            return null;
+        }
+
+        @Override
+        public Void visitAddMaterializedColumnClause(AddMaterializedColumnClause clause, ConnectContext context) {
+            Expr expr = clause.getExpression();
+            ImmutableList.Builder<Field> fields = ImmutableList.builder();
+            TableName tableName = new TableName(context.getDatabase(), table.getName());
+
+            for (Column column : table.getFullSchema()) {
+                Field field;
+                if (table.getBaseSchema().contains(column)) {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new com.starrocks.analysis.SlotRef(tableName, column.getName(), column.getName()), true);
+                } else {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new com.starrocks.analysis.SlotRef(tableName, column.getName(), column.getName()), false);
+                }
+                fields.add(field);
+            }
+
+            Scope s = new Scope(RelationId.anonymous(), new RelationFields(fields.build()));
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), s, context);
+
             return null;
         }
 
