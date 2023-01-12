@@ -1728,7 +1728,7 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testExtractProject() throws Exception {
-        connectContext.getSessionVariable().setDisableRewriteSumByAssociativeRule(true);
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
         String sql;
         String plan;
 
@@ -1788,7 +1788,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  common expressions:\n" +
                 "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
                 "  |  <slot 18> : 17: cast + 1");
-        connectContext.getSessionVariable().setDisableRewriteSumByAssociativeRule(false);
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(true);
 
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         sql = "select count(distinct t1c, upper(id_datetime)) from test_all_type";
