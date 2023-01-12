@@ -102,9 +102,14 @@ private:
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
 
+private:
     long* _chunk_meta_ptr;
     int _chunk_meta_index;
 
+    void reset_chunk_meta(long chuk_meta) {
+        _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
+        _chunk_meta_index = 0;
+    }
     void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
