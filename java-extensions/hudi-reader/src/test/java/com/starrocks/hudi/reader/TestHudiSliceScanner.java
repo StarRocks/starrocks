@@ -167,9 +167,23 @@ a       b       c       d       e
     }
 
     @Test
-    public void case2doScanTestOnMapArrayType() throws IOException {
+    public void case2doScanTestOnBasicType() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
-        params.put("required_fields", "a,b,c,d");
+        params.put("required_fields", "a,b");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void case2doScanTestOnArrayType() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "c");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void case2doScanTestOnMapType() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "d");
         runScanOnParams(params);
     }
 
