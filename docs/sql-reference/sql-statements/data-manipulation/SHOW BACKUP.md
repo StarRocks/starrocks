@@ -4,14 +4,17 @@
 
 This statement is used to view BACKUP tasks
 
-Syntax：
-SHOW BACKUP [FROM db_name]
+## Syntax
+
+```sql
+SHOW BACKUP [FROM <db_name>]
+```
 
 Note：
 
 ```plain text
-1.Only the last BACKUP task is saved in StarRocks.
-2.Each column has the following meaning:
+1. Only the last BACKUP task is saved in StarRocks.
+2. Each column has the following meaning:
 JobId：                  Unique job ID
 SnapshotName：           Name of the backup
 DbName：                 Owning database
@@ -36,7 +39,7 @@ Timeout：                Job timeout in seconds
 
 ## Examples
 
-1. View example_ db Last BACKUP task.
+View example_ db Last BACKUP task.
 
 ```sql
 SHOW BACKUP FROM example_db;

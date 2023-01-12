@@ -103,7 +103,7 @@ Broker Load mode:
 ~~~sql
 LOAD LABEL test_db.label
  (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/file")
     INTO TABLE `test`
     COLUMNS TERMINATED BY ","
     (dt, id, user_id)
