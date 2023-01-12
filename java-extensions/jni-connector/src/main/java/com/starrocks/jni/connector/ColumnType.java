@@ -114,7 +114,7 @@ public class ColumnType {
         int idx = 0;
         while (scanner.peek() != '>') {
             scanner.next(); // '<', or ','
-            ColumnType x = new ColumnType(this.name + '#' + idx);
+            ColumnType x = new ColumnType(this.name + '.' + idx);
             idx += 1;
             x.parse(scanner);
             childTypeValues.add(x);
@@ -128,7 +128,7 @@ public class ColumnType {
             int p = scanner.indexOf(':');
             String name = scanner.substr(p);
             childNames.add(name);
-            String fieldName = this.name + ':' + name;
+            String fieldName = this.name + '.' + name;
             scanner.moveTo(p + 1);
             ColumnType x = new ColumnType(fieldName);
             x.parse(scanner);
