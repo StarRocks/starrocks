@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -156,11 +157,13 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
         OptExpression newPreAggProjectOpt = OptExpression.create(new LogicalProjectOperator(newPreAggProjections),
                 input.getInputs().get(0).getInputs().get(0).getInputs());
+        newPreAggProjectOpt.setLogicalProperty(new LogicalProperty(new ColumnRefSet(newPreAggProjections.keySet())));
 
         OptExpression newAggOpt = OptExpression.create(newAggOperator, newPreAggProjectOpt);
+        newAggOpt.setLogicalProperty(new LogicalProperty(newAggOperator.getOutputColumns(null)));
 
         OptExpression newPostAggProjectOpt = OptExpression.create(newPostAggProjectOperator, newAggOpt);
-
+        newPostAggProjectOpt.setLogicalProperty(new LogicalProperty(new ColumnRefSet(newPostAggProjections.keySet())));
         return Lists.newArrayList(newPostAggProjectOpt);
     }
 
