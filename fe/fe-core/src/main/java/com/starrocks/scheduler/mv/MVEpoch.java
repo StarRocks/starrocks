@@ -17,6 +17,7 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MvId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -60,21 +61,18 @@ public class MVEpoch implements Writable {
     @SerializedName("commitTimeMilli")
     private long commitTimeMilli;
 
-    @SerializedName("commitInfos")
-    private List<TabletCommitInfo> commitInfos = new ArrayList<>();
-
-    @SerializedName("failedInfos")
-    private List<TabletFailInfo> failedInfos = new ArrayList<>();
-
-    @SerializedName("numEpochFinished")
-    private AtomicLong numEpochFinished = new AtomicLong(0);
-
     // Ephemeral states
     private transient long txnId;
 
-    public MVEpoch(long dbId, long mvId) {
-        this.dbId = dbId;
-        this.mvId = mvId;
+    private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
+
+    private transient List<TabletFailInfo> failedInfos = new ArrayList<>();
+
+    private transient AtomicLong numEpochFinished = new AtomicLong(0);
+
+    public MVEpoch(MvId mv) {
+        this.dbId = mv.getDbId();
+        this.mvId = mv.getId();
         this.startTimeMilli = System.currentTimeMillis();
         this.state = EpochState.INIT;
         this.binlogState = new BinlogConsumeStateVO();

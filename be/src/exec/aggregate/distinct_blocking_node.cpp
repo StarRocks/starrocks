@@ -184,7 +184,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     context->add_pipeline(ops_with_sink);
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        add_chunk_accumulate_operator_if_needed(ops_with_source, context, id());
+        may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
     if (limit() != -1) {

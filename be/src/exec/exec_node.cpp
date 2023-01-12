@@ -849,9 +849,10 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     return Status::OK();
 }
 
-void ExecNode::add_chunk_accumulate_operator_if_needed(OpFactories& ops, pipeline::PipelineBuilderContext* context,
-                                                       int id) {
-    // Only add chunk accumulate opearator for non stream pipeline context.
+void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
+    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
+    // for now just disable it in stream pipelines:
+    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
     if (!context->is_stream_pipeline()) {
         ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
     }

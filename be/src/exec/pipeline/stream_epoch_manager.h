@@ -82,8 +82,8 @@ private:
     MVMaintenanceTaskInfo _maintenance_task_info;
     std::unordered_map<TUniqueId, NodeId2ScanRanges> _fragment_id_to_node_id_scan_ranges;
     std::vector<FragmentContext*> _finished_fragment_ctxs;
-    bool _enable_resource_group;
-    int64_t _num_drivers;
+    bool _enable_resource_group = true;
+    int64_t _num_drivers = 0;
 };
 
 } // namespace starrocks::pipeline

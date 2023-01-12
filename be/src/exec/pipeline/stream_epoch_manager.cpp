@@ -98,17 +98,13 @@ Status StreamEpochManager::prepare(const MVMaintenanceTaskInfo& maintenance_task
 
     _maintenance_task_info = maintenance_task_info;
 
-    size_t num_drivers = 0;
-    bool enable_resource_group = true;
     // TODO(lism):
     // - Prepare enable_resource_gorup in FE.
     // - Ensure all fragment ctx's enable_resource_group are the same.
     for (auto* fragment_ctx : fragment_ctxs) {
-        enable_resource_group &= fragment_ctx->enable_resource_group();
-        num_drivers += fragment_ctx->num_drivers();
+        _enable_resource_group &= fragment_ctx->enable_resource_group();
+        _num_drivers += fragment_ctx->num_drivers();
     }
-    _num_drivers = num_drivers;
-    _enable_resource_group = enable_resource_group;
     return Status::OK();
 }
 

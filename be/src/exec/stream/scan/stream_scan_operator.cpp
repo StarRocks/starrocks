@@ -55,10 +55,6 @@ bool StreamScanOperator::has_output() const {
 
 Status StreamScanOperator::reset_epoch(RuntimeState* state) {
     DCHECK(_is_stream_pipeline);
-    auto stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    _current_epoch_info = stream_epoch_manager->epoch_info();
-    VLOG_ROW << "reset_epoch:" << _current_epoch_info.debug_string();
     _is_epoch_finished = false;
     _is_finished = false;
     _run_time = 0;

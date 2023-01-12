@@ -244,8 +244,7 @@ public:
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
-    static void add_chunk_accumulate_operator_if_needed(OpFactories& ops, pipeline::PipelineBuilderContext* context,
-                                                        int id);
+    static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
 protected:
     friend class DataSink;

@@ -526,7 +526,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     ops.emplace_back(std::move(scan_operator));
 
     if ((!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) && !ops.back()->has_topn_filter()) {
-        ExecNode::add_chunk_accumulate_operator_if_needed(ops, context, scan_node->id());
+        ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
     size_t limit = scan_node->limit();

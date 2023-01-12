@@ -62,7 +62,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     /**
      * TODO(murphy) make it event-driven instead of blocking here
      */
-    public void runEpoch(MVEpoch epoch) {
+    public void runEpoch(MVEpoch epoch) throws Exception {
         LOG.info("runEpoch: {}", epoch);
         try {
             beginEpoch(epoch);
@@ -109,7 +109,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         }
     }
 
-    private boolean waitEpochFinish(MVEpoch epoch) {
+    private boolean waitEpochFinish(MVEpoch epoch) throws Exception {
         LOG.info("waitEpochFinish: {}", epoch);
         // TODO(murphy) wait all task finish
         long numTasks = mvMaintenanceJob.getTasks().size();
@@ -119,11 +119,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             if (maxWaitTimes < 0) {
                 return false;
             }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                return false;
-            }
+            Thread.sleep(100);
             maxWaitTimes--;
         }
         LOG.info("waitEpochFinish done: {}", epoch);

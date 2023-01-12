@@ -59,7 +59,6 @@ private:
     std::atomic<int32_t> _chunk_num{0};
     bool _is_stream_pipeline{false};
     bool _is_epoch_finished{true};
-    EpochInfo _current_epoch_info;
     int64_t _run_time = 0;
 };
 

@@ -319,7 +319,6 @@ public class MaterializedViewAnalyzer {
                 ExecPlan execPlan =
                         PlanFragmentBuilder.createPhysicalPlanForMV(ctx, createStmt, optimizedPlan, logicalPlan,
                                 queryRelation, columnRefFactory);
-                createStmt.setMaintenancePlan(execPlan, columnRefFactory);
             } catch (DdlException ex) {
                 throw new RuntimeException(ex);
             } finally {

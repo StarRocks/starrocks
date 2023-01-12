@@ -268,7 +268,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
 
     if (operators.back()->has_runtime_filters()) {
-        add_chunk_accumulate_operator_if_needed(operators, context, id());
+        may_add_chunk_accumulate_operator(operators, context, id());
     }
 
     if (limit() != -1) {

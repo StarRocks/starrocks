@@ -108,7 +108,7 @@ public class MVMaintenanceJob implements Writable {
         this.dbId = view.getDbId();
         this.viewId = view.getId();
         this.view = view;
-        this.epoch = new MVEpoch(dbId, view.getId());
+        this.epoch = new MVEpoch(view.getMvId());
         this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
