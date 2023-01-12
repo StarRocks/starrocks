@@ -79,30 +79,6 @@ public:
 #endif
     }
 
-    void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
-        if (n == 0) return;
-        const uint32_t bucket_idx = hash_values[0] & _directory_mask;
-#ifdef __AVX2__
-        auto* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
-        __m256i now = _mm256_load_si256(addr);
-        for (size_t i = 0; i < n; i++) {
-            const __m256i mask = make_mask(hash_values[i] >> _log_num_buckets);
-            now = _mm256_or_si256(now, mask);
-        }
-        _mm256_store_si256(addr, now);
-#else
-        uint32_t masks[BITS_SET_PER_BLOCK];
-        for (size_t i = 0; i < n; i++) {
-            auto hash = hash_values[i];
-
-            make_mask(hash >> _log_num_buckets, masks);
-            for (int j = 0; j < BITS_SET_PER_BLOCK; ++j) {
-                _directory[bucket_idx][j] |= masks[j];
-            }
-        }
-#endif
-    }
-
     size_t max_serialized_size() const;
     size_t serialize(uint8_t* data) const;
     size_t deserialize(const uint8_t* data);
