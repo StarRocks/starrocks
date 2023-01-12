@@ -1071,6 +1071,61 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan24, "agg_mv_8");
 
         dropMv("test", "agg_mv_8");
+
+        createAndRefreshMv("test", "agg_mv_9", "create materialized view agg_mv_9" +
+                " distributed by hash(`deptno`) as select deptno," +
+                " count(distinct empid) as num" +
+                " from emps group by deptno");
+
+        String query25 = "select deptno, count(distinct empid) from emps group by deptno";
+        String plan25 = getFragmentPlan(query25);
+        PlanTestBase.assertContains(plan25, "agg_mv_9");
+        dropMv("test", "agg_mv_9");
+
+        starRocksAssert.withTable("CREATE TABLE `test_table_1` (\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `experiment_id` bigint(20) NULL COMMENT \"\",\n" +
+                "  `hour` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `player_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `metric_value` double NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`dt`, `experiment_id`, `hour`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p202207 VALUES [(\"2022-07-01\"), (\"2022-08-01\")),\n" +
+                "PARTITION p202208 VALUES [(\"2022-08-01\"), (\"2022-09-01\")),\n" +
+                "PARTITION p202209 VALUES [(\"2022-09-01\"), (\"2022-10-01\")),\n" +
+                "PARTITION p202210 VALUES [(\"2022-10-01\"), (\"2022-11-01\")))\n" +
+                "DISTRIBUTED BY HASH(`player_id`) BUCKETS 160 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+        cluster.runSql("test", "insert into test_table_1 values('2022-07-01', 1, '08:00:00', 'player_id_1', 20.0)");
+        cluster.runSql("test", "insert into test_table_1 values('2022-08-01', 1, '08:00:00', 'player_id_1', 20.0)");
+        cluster.runSql("test", "insert into test_table_1 values('2022-09-01', 1, '08:00:00', 'player_id_1', 20.0)");
+        cluster.runSql("test", "insert into test_table_1 values('2022-10-01', 1, '08:00:00', 'player_id_1', 20.0)");
+
+        createAndRefreshMv("test", "agg_mv_10", "create materialized view agg_mv_10" +
+                " distributed by hash(experiment_id)\n" +
+                " refresh manual\n" +
+                " as\n" +
+                " SELECT `dt`, `experiment_id`," +
+                "       count(DISTINCT `player_id`) AS `count_distinct_player_id`\n" +
+                " FROM `test_table_1`\n" +
+                " GROUP BY `dt`, `experiment_id`;");
+
+        String query26 = "SELECT `dt`, `experiment_id`," +
+                " count(DISTINCT `player_id`) AS `count_distinct_player_id`\n" +
+                "FROM `test_table_1`\n" +
+                "GROUP BY `dt`, `experiment_id`";
+        String plan26 = getFragmentPlan(query26);
+        PlanTestBase.assertContains(plan26, "agg_mv_10");
+        dropMv("test", "agg_mv_10");
+        starRocksAssert.dropTable("test_table_1");
     }
 
     @Test
