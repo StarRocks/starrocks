@@ -12,15 +12,15 @@ Before creating a custom automatic collection task, you must disable automatic f
 
 ```SQL
 -- Automatically collect stats of all databases.
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property])
 
 -- Automatically collect stats of all tables in a database.
 CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 
 -- Automatically collect stats of specified columns in a table.
 CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 ```
 
 ## Parameter description
