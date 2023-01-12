@@ -377,7 +377,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             if (oldAggregations.containsKey(op)) {
                 CallOperator aggFunction = oldAggregations.get(op);
                 if (aggFunction.isAggregate() && !aggFunction.isDistinct()
-                        && aggFunction.getFnName().equals("sum") &&
+                        && aggFunction.getFnName().equals(FunctionSet.SUM) &&
                         !aggFunction.getType().isDecimalV2()) {
                     ScalarOperator aggExpr = aggFunction.getArguments().get(0);
                     if (aggExpr.isColumnRef()) {
