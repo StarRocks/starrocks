@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -52,7 +53,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         super(RuleType.TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
                 Pattern.create(OperatorType.LOGICAL_PROJECT)
                         .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR)
-                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT))));
+                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF))));
     }
 
     @Override
@@ -130,6 +131,18 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         requiredColumns.union(newPostAggProjections.keySet());
 
         rewriteSumVisitor.newAggregations.putAll(rewriteSumVisitor.reservedAggregations);
+
+        // for high-cardinality group-by agg, more agg functions may introduce additional performance overhead,
+        // so we add a restriction here, for the query with group by keys,
+        // if the number of agg functions can not be reduced after rewriting, just skip it.
+        if (aggregationOperator.getGroupingKeys() != null && !aggregationOperator.getGroupingKeys().isEmpty()) {
+            HashSet<CallOperator> uniqueNewAggregations = new HashSet<>(rewriteSumVisitor.newAggregations.values());
+            HashSet<CallOperator> uniqueOldAggregations = new HashSet<>(aggregationOperator.getAggregations().values());
+            if (uniqueNewAggregations.size() >= uniqueOldAggregations.size()) {
+                return Lists.newArrayList();
+            }
+        }
+
         newPreAggProjections.putAll(rewriteSumVisitor.oldPreAggProjections);
 
         LogicalProjectOperator newPostAggProjectOperator =

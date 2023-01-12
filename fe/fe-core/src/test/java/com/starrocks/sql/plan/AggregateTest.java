@@ -1962,14 +1962,23 @@ public class AggregateTest extends PlanTestBase {
                 "  |  15 <-> [14: sum, BIGINT, true] + [17: count, BIGINT, true] * 1");
 
         // 4. with group by key
-        sql = "select t1b, sum(t1b),sum(t1b+1),avg(t1b) from test_all_type group by t1b";
+        // if the number of agg function can be reduced after applying this rule, do it
+        sql = "select t1c, sum(t1b),sum(t1b+1),sum(t1b+2) from test_all_type group by t1c";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  13 <-> [18: sum, BIGINT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 1\n" +
+                "  |  15 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 2");
+        assertContains(plan, "  |  group by: [3: t1c, INT, true]");
+        // if the number of agg function cannot be reduced after applying this rule, skip it
+        sql = "select t1c, sum(t1b+1),avg(t1b) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
                 "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
-                "  |  12 <-> [12: sum, BIGINT, true]\n" +
-                "  |  13 <-> [12: sum, BIGINT, true] + [16: count, BIGINT, true] * 1\n" +
-                "  |  14 <-> [14: avg, DOUBLE, true]");
-        assertContains(plan, "  |  group by: [2: t1b, SMALLINT, true]");
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  11 <-> cast([2: t1b, SMALLINT, true] as INT) + 1");
     }
 }
