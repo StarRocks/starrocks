@@ -61,6 +61,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -1975,6 +1976,11 @@ public class ShowExecutor {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
         Catalog catalog =  connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        List<List<String>> rows = Lists.newArrayList();
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
+            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+            return;
+        }
         // Create external catalog catalogName (
         StringBuilder createCatalogSql = new StringBuilder();
         createCatalogSql.append("CREATE EXTERNAL CATALOG ")
@@ -1990,7 +1996,6 @@ public class ShowExecutor {
         createCatalogSql.append("PROPERTIES (")
                 .append(new PrintableMap<>(catalog.getConfig(), " = ", true, true))
                 .append("\n)");
-        List<List<String>> rows = Lists.newArrayList();
         rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
