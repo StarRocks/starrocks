@@ -432,18 +432,17 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
         }
     }
 
-    auto this_rowset = shared_from_this();
-    if (tmp_seg_iters.empty()) {
-        // nothing to do
-    } else if (rowset_meta()->is_segments_overlapping()) {
-        for (auto& iter : tmp_seg_iters) {
-            auto wrapper = std::make_shared<SegmentIteratorWrapper>(this_rowset, std::move(iter));
+    if (!tmp_seg_iters.empty()) {
+        if (rowset_meta()->is_segments_overlapping()) {
+            for (auto& iter : tmp_seg_iters) {
+                auto wrapper = std::make_shared<SegmentIteratorWrapper>(shared_from_this(), std::move(iter));
+                segment_iterators->emplace_back(std::move(wrapper));
+            }
+        } else {
+            auto iter = new_union_iterator(std::move(tmp_seg_iters));
+            auto wrapper = std::make_shared<SegmentIteratorWrapper>(shared_from_this(), std::move(iter));
             segment_iterators->emplace_back(std::move(wrapper));
         }
-    } else {
-        auto iter = new_union_iterator(std::move(tmp_seg_iters));
-        auto wrapper = std::make_shared<SegmentIteratorWrapper>(this_rowset, std::move(iter));
-        segment_iterators->emplace_back(std::move(wrapper));
     }
     return Status::OK();
 }
