@@ -2185,7 +2185,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // replicated storage
         olapTable.setEnableReplicatedStorage(
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
+                PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine));
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
