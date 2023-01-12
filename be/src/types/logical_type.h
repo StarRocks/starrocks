@@ -242,6 +242,10 @@ UNION_VALUE_GUARD(LogicalType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arit
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
 UNION_VALUE_GUARD(LogicalType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct)
+// TODO support more complex type as aggregate function
+UNION_VALUE_GUARD(LogicalType, AggregateComplexPTGuard, pt_is_complex_aggregate, pt_is_arithmetic_struct,
+                  pt_is_decimalv2_struct, pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct,
+                  pt_is_json_struct)
 
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);

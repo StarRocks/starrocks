@@ -43,15 +43,11 @@ void AggregateFuncResolver::register_bitmap() {
 struct MinMaxAnyDispatcher {
     template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_json<pt>) {
             resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
                     "min", true, AggregateFactory::MakeMinAggregateFunction<pt>());
             resolver->add_aggregate_mapping<pt, pt, MaxAggregateData<pt>>(
                     "max", true, AggregateFactory::MakeMaxAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
-                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
-        }
-        if constexpr (pt_is_json<pt>) {
             resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
                     "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
         }
@@ -62,8 +58,8 @@ template <LogicalType ret_type>
 struct MaxByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type>)&&(pt_is_aggregate<ret_type> ||
-                                                                              pt_is_string<ret_type>)) {
+        if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type> || pt_is_json<arg_type>)&&(
+                              pt_is_aggregate<ret_type> || pt_is_string<ret_type> || pt_is_json<ret_type>)) {
             resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
         }
@@ -78,16 +74,17 @@ struct MaxByDispatcher {
 };
 
 void AggregateFuncResolver::register_minmaxany() {
-    for (auto ret_type : aggregate_types()) {
-        for (auto arg_type : aggregate_types()) {
+    auto minmax_types = aggregate_types();
+    minmax_types.push_back(TYPE_JSON);
+    for (auto ret_type : minmax_types) {
+        for (auto arg_type : minmax_types) {
             type_dispatch_all(arg_type, MaxByDispatcher(), this, ret_type);
         }
     }
 
-    for (auto type : aggregate_types()) {
+    for (auto type : minmax_types) {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
-    type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
 } // namespace starrocks

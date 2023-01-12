@@ -20,18 +20,22 @@
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
+#include "types/logical_type.h"
 #include "util/raw_container.h"
+
 namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 struct MaxByAggregateData {};
 
 template <LogicalType PT>
-struct MaxByAggregateData<PT, AggregatePTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
+struct MaxByAggregateData<PT, AggregateComplexPTGuard<PT>> {
+    using T = AggDataValueType<PT>;
     raw::RawVector<uint8_t> buffer_result;
     T max = RunTimeTypeLimits<PT>::min_value();
+
     void reset() {
         buffer_result.clear();
         max = RunTimeTypeLimits<PT>::min_value();
@@ -51,6 +55,26 @@ struct MaxByElement {
     void operator()(State& state, const char* buffer, size_t size, const T& right) const {
         if (right > state.max) {
             state.max = right;
+            state.buffer_result.resize(size);
+            memcpy(state.buffer_result.data(), buffer, size);
+        }
+    }
+};
+
+template <LogicalType PT, typename State>
+struct MaxByElement<PT, State, JsonGuard<PT>> {
+    using T = RunTimeCppType<PT>;
+
+    void operator()(State& state, Column* col, size_t row_num, const T& right) const {
+        if (*right > state.max) {
+            AggDataTypeTraits<PT>::assign_value(state.max, right);
+            state.buffer_result.resize(col->serialize_size(row_num));
+            col->serialize(row_num, state.buffer_result.data());
+        }
+    }
+    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
+        if (*right > state.max) {
+            AggDataTypeTraits<PT>::assign_value(state.max, right);
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
         }
@@ -139,18 +163,32 @@ public:
             src = binary_column->get_slice(row_num);
         }
 
-        T max;
-        memcpy(&max, src.data, sizeof(T));
-        OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), max);
+        if constexpr (PT != TYPE_JSON) {
+            T max;
+            memcpy(&max, src.data, sizeof(T));
+            OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), max);
+        } else {
+            JsonValue max(src);
+            size_t value_size = max.serialize_size();
+            OP()(this->data(state), src.data + value_size, src.size - value_size, &max);
+        }
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         raw::RawVector<uint8_t> buffer;
-        buffer.resize(this->data(state).buffer_result.size() + sizeof(T));
-        memcpy(buffer.data(), &(this->data(state).max), sizeof(T));
-        memcpy(buffer.data() + sizeof(T), this->data(state).buffer_result.data(),
-               this->data(state).buffer_result.size());
-
+        if constexpr (PT != TYPE_JSON) {
+            size_t value_size = sizeof(T);
+            buffer.resize(this->data(state).buffer_result.size() + value_size);
+            memcpy(buffer.data(), &(this->data(state).max), value_size);
+            memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
+                   this->data(state).buffer_result.size());
+        } else {
+            size_t value_size = this->data(state).max.serialize_size();
+            buffer.resize(this->data(state).buffer_result.size() + value_size);
+            this->data(state).max.serialize(buffer.data());
+            memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
+                   this->data(state).buffer_result.size());
+        }
         if (to->is_nullable()) {
             auto* column = down_cast<NullableColumn*>(to);
             if (this->data(state).buffer_result.size() == 0) {
@@ -201,11 +239,20 @@ public:
                 result->get_offset()[i + 1] = old_size;
             } else {
                 size_t serde_size = src[0]->serialize_size(i);
-                size_t new_size = old_size + sizeof(T) + serde_size;
-                bytes.resize(new_size);
                 T value = col_max->get_data()[i];
-                memcpy(bytes.data() + old_size, &value, sizeof(T));
-                src[0]->serialize(i, bytes.data() + old_size + sizeof(T));
+                size_t new_size;
+                if constexpr (PT != TYPE_JSON) {
+                    new_size = old_size + sizeof(T) + serde_size;
+                    bytes.resize(new_size);
+                    memcpy(bytes.data() + old_size, &value, sizeof(T));
+                    src[0]->serialize(i, bytes.data() + old_size + sizeof(T));
+                } else {
+                    size_t value_size = value->serialize_size();
+                    new_size = old_size + value_size + serde_size;
+                    bytes.resize(new_size);
+                    value->serialize(bytes.data() + old_size);
+                    src[0]->serialize(i, bytes.data() + old_size + value_size);
+                }
                 result->get_offset()[i + 1] = new_size;
                 old_size = new_size;
             }

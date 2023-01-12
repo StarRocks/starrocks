@@ -70,4 +70,19 @@ ColumnPtr JsonColumn::clone_shared() const {
     return BaseClass::clone_shared();
 }
 
+const uint8_t* JsonColumn::deserialize_and_append(const uint8_t* data) {
+    JsonValue value((JsonValue::VSlice(data)));
+    size_t size = value.serialize_size();
+    append(std::move(value));
+    return data + size;
+}
+
+uint32_t JsonColumn::serialize_size(size_t idx) const {
+    return get_object(idx)->serialize_size();
+}
+
+uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) {
+    return get_object(idx)->serialize(pos);
+}
+
 } // namespace starrocks

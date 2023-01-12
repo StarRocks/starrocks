@@ -38,6 +38,9 @@ struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_data()[row]; }
+
+    static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
+    static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
 };
 
 // For pointer ref types
@@ -54,6 +57,9 @@ struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
 
     static const RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_object(row); }
+
+    static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, *input); }
+    static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, *input); }
 };
 
 template <LogicalType lt>
@@ -72,6 +78,19 @@ struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
     }
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_slice(row); }
+
+    static void update_max(ValueType& current, const RefType& input) {
+        if (Slice(current.data(), current.size()).compare(input) < 0) {
+            current.resize(input.size);
+            memcpy(current.data(), input.data, input.size);
+        }
+    }
+    static void update_min(ValueType& current, const RefType& input) {
+        if (Slice(current.data(), current.size()).compare(input) > 0) {
+            current.resize(input.size);
+            memcpy(current.data(), input.data, input.size);
+        }
+    }
 };
 
 template <LogicalType lt>
