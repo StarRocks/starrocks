@@ -320,7 +320,7 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
                                    .slot_type = args.slot_type.children[1],
                                    .nulls = nullptr,
                                    .column = values,
-                                   .must_nullable = false};
+                                   .must_nullable = true};
         RETURN_IF_ERROR(_fill_column(&sub_args));
     }
     return Status::OK();
@@ -334,7 +334,8 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     int j = 0;
     for (int i = 0; i < type.children.size(); i++) {
         if (type.selected_fields[i]) {
-            Column* column = struct_column->fields_column()[i].get();
+            Column* column = struct_column->fields_column()[j].get();
+            j += 1;
             std::string name = args.slot_name + "." + type.field_names[i];
             FillColumnArgs sub_args = {.num_rows = args.num_rows,
                                        .slot_name = name,
@@ -359,7 +360,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         // and update `args.nulls` and set `data_column` to `args.column`
         bool* null_column_ptr = static_cast<bool*>(next_chunk_meta_as_ptr());
         auto* nullable_column = down_cast<NullableColumn*>(args.column);
-        nullable_column->resize(args.num_rows);
+        nullable_column->resize_uninitialized(args.num_rows);
 
         NullData& null_data = nullable_column->null_column_data();
         memcpy(null_data.data(), null_column_ptr, args.num_rows);
