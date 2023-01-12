@@ -21,11 +21,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TMVEpoch;
+import com.starrocks.thrift.TMVEpochStage;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import com.starrocks.thrift.TMVEpochStage;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -49,7 +49,7 @@ public class MVEpoch implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVEpoch.class);
 
     @SerializedName("dbId")
-    private long dbId;
+    private final long dbId;
     @SerializedName("mvId")
     private long mvId;
     @SerializedName("epochState")
@@ -66,11 +66,11 @@ public class MVEpoch implements Writable {
     // Ephemeral states
     private transient long txnId;
 
-    private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
+    private final transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
 
-    private transient List<TabletFailInfo> failedInfos = new ArrayList<>();
+    private final transient List<TabletFailInfo> failedInfos = new ArrayList<>();
 
-    private transient AtomicLong numEpochFinished = new AtomicLong(0);
+    private final transient AtomicLong numEpochFinished = new AtomicLong(0);
 
     public MVEpoch(MvId mv) {
         this.dbId = mv.getDbId();
@@ -130,7 +130,7 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
-        this.commitInfos.clear();;
+        this.commitInfos.clear();
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }

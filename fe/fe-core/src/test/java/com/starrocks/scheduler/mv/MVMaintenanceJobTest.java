@@ -16,6 +16,8 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -73,14 +75,25 @@ public class MVMaintenanceJobTest extends PlanTestBase {
             public void prepareExec() throws Exception {
             }
         };
-        job.onSchedule();
 
         new MockUp<TxnBasedEpochCoordinator>() {
             @Mock
             public void runEpoch(MVEpoch epoch) {
             }
         };
+        new MockUp<BinlogManager>() {
+            @Mock
+            public boolean isBinlogAvailable(long dbId, long tableId) {
+                return true;
+            }
 
+            @Mock
+            public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
+                return Maps.newHashMap();
+            }
+        };
+
+        job.onSchedule();
         job.onTransactionPublish();
         assertTrue(job.isRunnable());
         assertEquals(MVMaintenanceJob.JobState.RUN_EPOCH, job.getState());

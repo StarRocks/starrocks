@@ -293,12 +293,6 @@ public class MVMaintenanceJob implements Writable {
                     return false;
                 }
             }
-
-            for (MaterializedView.BaseTableInfo base : view.getBaseTableInfos()) {
-                Map<Long, Long> availableVersionMap =
-                        binlogManager.getBinlogAvailableVersion(base.getDbId(), base.getTableId());
-
-            }
         }
 
         LOG.info("MV maintenance job prepared: {}", this.view.getName());
