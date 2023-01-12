@@ -53,12 +53,12 @@ public class TestHudiSliceScanner {
 
     @Before
     public void setUp() {
-        Platform.enableUnsafeMemoryTracker();
+        System.setProperty("starrocks.fe.test", "1");
     }
 
     @After
     public void tearDown() {
-        Platform.disableUnsafeMemoryTracker();
+        System.setProperty("starrocks.fe.test", "0");
     }
 
     /*
