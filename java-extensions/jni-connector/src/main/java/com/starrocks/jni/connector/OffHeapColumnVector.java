@@ -411,16 +411,12 @@ public class OffHeapColumnVector {
         ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
-            if (type.isStruct() || type.isMap()) {
+            if (type.isStruct()) {
                 List<ColumnValue> nulls = new ArrayList<>();
                 for (int i = 0; i < type.childTypes.size(); i++) {
                     nulls.add(null);
                 }
-                if (type.isStruct()) {
-                    appendStruct(nulls);
-                } else if (type.isMap()) {
-                    appendMap(nulls, nulls);
-                }
+                appendStruct(nulls);
             }
             return;
         }
