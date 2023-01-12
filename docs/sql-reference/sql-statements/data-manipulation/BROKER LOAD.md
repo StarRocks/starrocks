@@ -239,6 +239,10 @@ If the source data is stored in a Google CGS bucket, provide the following confi
 | fs.s3a.secret.key | The Secret Key that you can use to access the Google CGS bucket. |
 | fs.s3a.endpoint   | The endpoint that you can use to access the Google CGS bucket. |
 
+> **NOTE**
+>
+> Broker Load supports accessing Google CGS only according to the S3A protocol. Therefore, when you load data from Google CGS, you must replace the prefix in the CGS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+
 To create an Access/Secret key pair to access your Google CGS bucket, follow these steps:
 
 1. Log in to [Google GCP](https://console.cloud.google.com/storage/settings).

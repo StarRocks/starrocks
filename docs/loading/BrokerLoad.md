@@ -193,7 +193,7 @@ WITH BROKER
 
 > **NOTE**
 >
-> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> Broker Load supports accessing Google CGS only according to the S3A protocol. Therefore, when you load data from Google CGS, you must replace the prefix in the CGS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
 ### Query data
 
