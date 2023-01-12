@@ -542,7 +542,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
                         TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  95:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  96:HASH JOIN\n" +
                 "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 186: S_SUPPKEY = 202: cast\n"));

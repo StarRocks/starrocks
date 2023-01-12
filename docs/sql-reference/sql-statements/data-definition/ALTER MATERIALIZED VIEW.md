@@ -4,7 +4,7 @@
 
 Alters the name or refresh strategy of a materialized view.
 
-## Sytax
+## Syntax
 
 ```SQL
 ALTER MATERIALIZED VIEW [database.]mv_name {REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name}

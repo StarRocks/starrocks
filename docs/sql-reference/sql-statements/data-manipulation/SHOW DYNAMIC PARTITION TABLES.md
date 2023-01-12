@@ -4,10 +4,10 @@
 
 This statement is used to display the status of all dynamic partition tables in the current db
 
-Syntax:
+## Syntax
 
 ```sql
-SHOW DYNAMIC PARTITION TABLES [FROM db_name];
+SHOW DYNAMIC PARTITION TABLES [FROM <db_name>]
 ```
 
 ## Examples

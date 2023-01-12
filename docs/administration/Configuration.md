@@ -76,7 +76,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows            | -    | 200000       | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size                   | -    | 64           | The default bucket number for a histogram.                   |
-| histogram_mcv_size                       | -    | 100          | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size                       | -    | 100          | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio                   | -    | 0.1          | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count           | -    | 10000000     | The maximum number of rows to collect for a histogram.       |
 | statistics_manager_sleep_time_sec        | s    | 60           | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:<ul><li>Create tables for storing statistics. </li><li>Delete statistics that have been deleted.</li><li>Delete expired statistics.</li></ul>|

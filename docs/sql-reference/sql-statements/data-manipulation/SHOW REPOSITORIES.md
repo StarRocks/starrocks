@@ -6,8 +6,8 @@ This statement is used to view the currently created repositories.
 
 Syntax:
 
-```sql
-SHOW REPOSITORIES;
+```SQL
+SHOW REPOSITORIES
 ```
 
 ```plain text

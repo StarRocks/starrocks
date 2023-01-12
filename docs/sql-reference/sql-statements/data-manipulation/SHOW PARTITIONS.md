@@ -7,7 +7,7 @@ This statement is used to display partition information
 Syntax:
 
 ```sql
-SHOW PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT];
+SHOW PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 ```
 
 Note:
