@@ -7,7 +7,7 @@ This statement is used to create indexes.
 Syntax:
 
 ```sql
-CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'balabala'];
+CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'balabala']
 ```
 
 Note:
@@ -17,7 +17,7 @@ Note:
 
 ## Examples
 
-1. Create bitmap index for siteid on table1.
+1. Create bitmap index for `siteid` on `table1`.
 
     ```sql
     CREATE INDEX index_name ON table1 (siteid) USING BITMAP COMMENT 'balabala';

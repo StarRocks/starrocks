@@ -14,7 +14,7 @@ Canceling a load job is an asynchronous process. You can use the [SHOW LOAD](../
 ```SQL
 CANCEL LOAD
 [FROM db_name]
-WHERE LABEL = "label_name";
+WHERE LABEL = "label_name"
 ```
 
 ## Parameters
