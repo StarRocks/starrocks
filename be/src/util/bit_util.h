@@ -130,40 +130,6 @@ public:
         return result;
     }
 
-    // Swaps the byte order (i.e. endianess)
-    static inline int64_t byte_swap(int64_t value) { return __builtin_bswap64(value); }
-    static inline uint64_t byte_swap(uint64_t value) { return static_cast<uint64_t>(__builtin_bswap64(value)); }
-    static inline int32_t byte_swap(int32_t value) { return __builtin_bswap32(value); }
-    static inline uint32_t byte_swap(uint32_t value) { return static_cast<uint32_t>(__builtin_bswap32(value)); }
-    static inline int16_t byte_swap(int16_t value) { return (((value >> 8) & 0xff) | ((value & 0xff) << 8)); }
-    static inline uint16_t byte_swap(uint16_t value) {
-        return static_cast<uint16_t>(byte_swap(static_cast<int16_t>(value)));
-    }
-
-    // Write the swapped bytes into dst. len must be 1, 2, 4 or 8.
-    static inline void byte_swap(void* dst, void* src, int len) {
-        switch (len) {
-        case 1:
-            *reinterpret_cast<int8_t*>(dst) = *reinterpret_cast<int8_t*>(src);
-            break;
-
-        case 2:
-            *reinterpret_cast<int16_t*>(dst) = byte_swap(*reinterpret_cast<int16_t*>(src));
-            break;
-
-        case 4:
-            *reinterpret_cast<int32_t*>(dst) = byte_swap(*reinterpret_cast<int32_t*>(src));
-            break;
-
-        case 8:
-            *reinterpret_cast<int64_t*>(dst) = byte_swap(*reinterpret_cast<int64_t*>(src));
-            break;
-
-        default:
-            DCHECK(false);
-        }
-    }
-
     // Returns the rounded up to 64 multiple. Used for conversions of bits to i64.
     static inline uint32_t round_up_numi64(uint32_t bits) { return (bits + 63) >> 6; }
 

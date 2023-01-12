@@ -23,7 +23,6 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   arrow/utils.cpp
   bfd_parser.cpp
-  bitmap.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp
