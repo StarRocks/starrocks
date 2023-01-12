@@ -392,7 +392,7 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     }
 }
 
-void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
+void ArrayColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -404,7 +404,7 @@ void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
     }
 }
 
-void ArrayColumn::crc32_hash_at(uint32_t* hash, int32_t idx) const {
+void ArrayColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;

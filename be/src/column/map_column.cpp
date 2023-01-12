@@ -376,7 +376,7 @@ int MapColumn::compare_at(size_t left, size_t right, const Column& right_column,
     return -1;
 }
 
-void MapColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
+void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
@@ -389,7 +389,7 @@ void MapColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
     }
 }
 
-void MapColumn::crc32_hash_at(uint32_t* hash, int32_t idx) const {
+void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
