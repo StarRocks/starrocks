@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -45,7 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-// For aggregate functions like `sum(expr + const)`, we can rewrite it to `sum(expr) + const * count()`
+// For aggregate functions like `sum(expr +/- const)`, we can rewrite it to `sum(expr) +/- const * count()`
 // to reduce the overhead of a project calculation.
 public class RewriteSumByAssociativeRule extends TransformationRule {
     public RewriteSumByAssociativeRule() {
@@ -242,8 +243,16 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 ScalarOperator agg1 = createNewAggFunction(
                                         newArg1, newArg0, aggFunction.getType());
 
+                                Function newFn = GlobalStateMgr.getCurrentState().getFunction(
+                                        new Function(new FunctionName(functionName),
+                                                Lists.newArrayList(agg0.getType(), agg1.getType()),
+                                                aggFunction.getType(), false),
+                                        Function.CompareMode.IS_IDENTICAL);
+                                Preconditions.checkState(newFn != null,
+                                        "cannot find function " + functionName);
+
                                 CallOperator newOperator = new CallOperator(functionName,
-                                        aggFunction.getType(), Lists.newArrayList(agg0, agg1));
+                                        aggFunction.getType(), Lists.newArrayList(agg0, agg1), newFn);
                                 return newOperator;
                             }
                         }
@@ -330,9 +339,18 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                     default:
                         Preconditions.checkState(false, "unexpected sum function result type");
                 }
+
+                Function multiplyFn = GlobalStateMgr.getCurrentState().getFunction(
+                        new Function(new FunctionName(FunctionSet.MULTIPLY),
+                                Lists.newArrayList(countOperator.getType(), constOperator.getType()),
+                                returnType, false),
+                        Function.CompareMode.IS_IDENTICAL);
+                Preconditions.checkState(multiplyFn != null,
+                        "cannot find function multiply");
+
                 CallOperator newMultiply = new CallOperator(FunctionSet.MULTIPLY, returnType,
                         Lists.newArrayList(
-                                countOperator, constOperator));
+                                countOperator, constOperator), multiplyFn);
                 return newMultiply;
             } else {
                 // generate sum(arg0)
