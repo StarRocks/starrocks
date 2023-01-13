@@ -87,19 +87,18 @@ public class MVMaintenanceTask {
         return request;
     }
 
-    public void buildScanRange() {
+    public synchronized void buildScanRangeForBaseline() {
         for (TExecPlanFragmentParams instance : fragmentInstances) {
             for (Map.Entry<Integer, List<TScanRangeParams>> scanRangeParamListEntry :
                     instance.params.getPer_node_scan_ranges().entrySet()) {
                 int scanNodeId = scanRangeParamListEntry.getKey();
                 List<TScanRangeParams> scanRangeParamList = scanRangeParamListEntry.getValue();
+                List<TScanRange> scanRangeList =
+                        binlogConsumeState
+                                .computeIfAbsent(instance.params.getFragment_instance_id(), key -> Maps.newHashMap())
+                                .computeIfAbsent(scanNodeId, key -> Lists.newArrayList());
                 for (TScanRangeParams scanRangeParam : scanRangeParamList) {
-                    TScanRange scanRange = scanRangeParam.getScan_range();
-
-                    binlogConsumeState
-                            .computeIfAbsent(instance.params.getFragment_instance_id(), key -> Maps.newHashMap())
-                            .computeIfAbsent(scanNodeId, key -> Lists.newArrayList())
-                            .add(scanRange);
+                    scanRangeList.add(scanRangeParam.getScan_range());
                 }
             }
         }
@@ -201,6 +200,7 @@ public class MVMaintenanceTask {
 
         if (epochStage.equals(TMVEpochStage.BASELINE_RUNNING)) {
             epochStage = TMVEpochStage.BASELINE_FINISHED;
+            LOG.info("[MV] {} task {} finish baseline scan", job.getView().getName(), taskId);
         }
     }
 

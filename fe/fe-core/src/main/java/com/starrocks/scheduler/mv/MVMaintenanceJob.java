@@ -306,6 +306,7 @@ public class MVMaintenanceJob implements Writable {
         this.connectContext = StatisticUtils.buildConnectContext();
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         this.connectContext.getSessionVariable().setEnableIncrementalRefreshMv(true);
+        this.connectContext.setThreadLocalInfo();
         Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
@@ -401,7 +402,7 @@ public class MVMaintenanceJob implements Writable {
                 task.addFragmentInstance(tParams.get(i));
             }
         }
-        tasksByBe.values().forEach(MVMaintenanceTask::buildScanRange);
+        tasksByBe.values().forEach(MVMaintenanceTask::buildScanRangeForBaseline);
 
         this.taskMap = tasksByBe;
     }
