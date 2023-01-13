@@ -57,6 +57,7 @@ public abstract class AgentTask {
     // some of are not.
     // so whether the task is finished depends on caller's logic, not the value of this member.
     protected boolean isFinished = false;
+    protected boolean isSubmitted = false;
     protected long createTime;
     protected String traceParent;
 
@@ -157,7 +158,14 @@ public abstract class AgentTask {
         return isFinished;
     }
 
+    public void setSubmitted(boolean isSubmitted) {
+        this.isSubmitted = isSubmitted;
+    }
+
     public boolean shouldResend(long currentTimeMillis) {
+        if (!isSubmitted) {
+            return false;
+        }
         return createTime == -1 || currentTimeMillis - createTime > Config.agent_task_resend_wait_time_ms;
     }
 
