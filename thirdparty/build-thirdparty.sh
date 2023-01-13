@@ -630,7 +630,7 @@ build_bitshuffle() {
     # we still need to support non-AVX2-capable hardware. So, we build it twice,
     # once with the flag and once without, and use some linker tricks to
     # suffix the AVX2 symbols with '_avx2'.
-    arches="default avx2 avx512"
+    arches="default avx2"
     # Becuase aarch64 don't support avx2, disable it.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         arches="default"
@@ -641,8 +641,6 @@ build_bitshuffle() {
         arch_flag=""
         if [ "$arch" == "avx2" ]; then
             arch_flag="-mavx2"
-        elif [ "$arch" == "avx512" ]; then
-            arch_flag="-march=icelake-server"
         fi
         tmp_obj=bitshuffle_${arch}_tmp.o
         dst_obj=bitshuffle_${arch}.o
@@ -654,12 +652,6 @@ build_bitshuffle() {
         ld -r -o $tmp_obj bitshuffle_core.o bitshuffle.o iochain.o
         # For the AVX2 symbols, suffix them.
         if [ "$arch" == "avx2" ]; then
-            # Create a mapping file with '<old_sym> <suffixed_sym>' on each line.
-            nm --defined-only --extern-only $tmp_obj | while read addr type sym ; do
-              echo ${sym} ${sym}_${arch}
-            done > renames.txt
-            objcopy --redefine-syms=renames.txt $tmp_obj $dst_obj
-        elif [ "$arch" == "avx512" ]; then
             # Create a mapping file with '<old_sym> <suffixed_sym>' on each line.
             nm --defined-only --extern-only $tmp_obj | while read addr type sym ; do
               echo ${sym} ${sym}_${arch}
