@@ -169,6 +169,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 Stream Load
 | sink.properties.format|  NO | CSV | String | The file format of data loaded into starrocks. Valid values: **CSV** and **JSON**. Default value: **CSV**. |
 | sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**,details in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key model. |
 | sink.properties.ignore_json_size | NO |false| String | ignore the batching size (100MB) of json data |
+| sink.properties.timeout | NO |600| String | Timeout for transaction stream load when you use exactly-once sink. A new transaction will begin after a Flink checkpoint is triggered, and be committed when the next checkpoint is triggered, so you should set the value larger than the Flink checkpoint interval, otherwise the Flink job will fail because of transaction timeout .   |
 
 ## Flink 与 StarRocks 的数据类型映射关系
 
@@ -197,7 +198,12 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 Stream Load
 
 ## 注意事项
 
-* StarRocks从2.4.0开始支持[Stream Load事务接口](StreamLoad.md)，Sink基于该接口重新设计实现了exactly-once，相较于原来基于非事务接口的实现，降低了内存使用和checkpoint耗时，提高了作业的实时性和稳定性。使用该功能需要同时升级StarRocks到2.4+版本，以及Flink connecotr到1.2.4+版本，升级后默认使用事务接口实现，也可以通过配置`sink.version`为`V1`继续使用非事务接口。如果只升级StarRocks或Flink connector，sink会自动选择非事务接口实现。
+* 自 2.4 版本 StarRocks 开始支持[Stream Load 事务接口](./stream_load_transaction_interface.md)。自 Flink connector 1.2.4 版本起， Sink 基于事务接口重新设计实现了 exactly-once，相较于原来基于非事务接口的实现，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。
+  自 Flink connector 1.2.4 版本起，sink 默认使用事务接口实现。如果需要使用非事务接口实现，则需要配置 `sink.version` 为`V1`。
+   > **注意**
+   >
+   > 如果只升级 StarRocks 或 Flink connector，sink 会自动选择非事务接口实现。
+
 * 基于Stream Load非事务接口实现的exactly-once，依赖flink的checkpoint-interval在每次checkpoint时保存批数据以及其label，在checkpoint完成后的第一次invoke中阻塞flush所有缓存在state当中的数据，以此达到精准一次。但如果StarRocks挂掉了，会导致用户的flink sink stream 算子长时间阻塞，并引起flink的监控报警或强制kill。
 
 * 默认使用csv格式进行导入，用户可以通过指定`'sink.properties.row_delimiter' = '\\x02'`（此参数自 StarRocks-1.15.0 开始支持）与`'sink.properties.column_separator' = '\\x01'`来自定义行分隔符与列分隔符。
@@ -220,3 +226,7 @@ flink-connector-starrocks 导入底层调用的 Stream Load实现，可以在 fl
 * 日志中如果有 `http://$fe:${http_port}/api/$db/$tbl/_stream_load` 生成，表示成功触发了 Stream Load 任务，任务结果也会打印在 flink 日志中，返回值可参考 [Stream Load 返回值](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD#返回值)。
 
 * 日志中如果没有上述信息，请在 [StarRocks 论坛](https://forum.starrocks.com/) 提问，我们会及时跟进。
+
+## 常见问题
+
+请参见 [FLink Connector 常见问题](../faq/loading/Flink_connector_faq)。
