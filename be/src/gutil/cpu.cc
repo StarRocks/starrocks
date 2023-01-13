@@ -174,8 +174,6 @@ void CPU::Initialize() {
                    (cpu_info[2] & 0x08000000) != 0 /* OSXSAVE */ && (xgetbv(0) & 6) == 6 /* XSAVE enabled by kernel */;
         has_aesni_ = (cpu_info[2] & 0x02000000) != 0;
         has_avx2_ = has_avx_ && (cpu_info7[1] & 0x00000020) != 0;
-        has_avx512f_ = has_avx2_ && (cpu_info7[1] & 0x00010000) != 0;
-        has_avx512bw_ = has_avx2_ && (cpu_info7[1] & 0x40000000) != 0;
     }
     // Get the brand string of the cpu.
     __cpuid(cpu_info, 0x80000000);
@@ -215,6 +213,11 @@ void CPU::Initialize() {
             // our purposes we can treat it as invariant.
             has_non_stop_time_stamp_counter_ = true;
         }
+    }
+    // https://gcc.gnu.org/onlinedocs/gcc/x86-Built-in-Functions.html
+    __builtin_cpu_init();
+    if (__builtin_cpu_supports("avx512f")) {
+        has_avx512f_ = true;
     }
 #elif defined(ARCH_CPU_ARM_FAMILY)
 #if (defined(OS_ANDROID) || defined(OS_LINUX))
