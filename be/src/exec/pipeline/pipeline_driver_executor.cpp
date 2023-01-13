@@ -124,6 +124,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
+                } else if (driver->is_still_epoch_finishing()) {
+                    driver->set_driver_state(DriverState::EPOCH_PENDING_FINISH);
+                    _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
                     _finalize_driver(driver, runtime_state, DriverState::CANCELED);
                 }
@@ -144,7 +147,7 @@ void GlobalDriverExecutor::_worker_thread() {
             this->_driver_queue->update_statistics(driver);
 
             // Check big query
-            if (status.ok() && driver->workgroup()) {
+            if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
                 status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
@@ -183,6 +186,7 @@ void GlobalDriverExecutor::_worker_thread() {
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
+            case EPOCH_PENDING_FINISH:
             case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;

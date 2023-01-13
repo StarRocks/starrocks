@@ -20,6 +20,6 @@ package com.starrocks.scheduler.mv;
  */
 public interface EpochCoordinator {
 
-    void runEpoch(MVEpoch epoch);
+    void runEpoch(MVEpoch epoch) throws Exception;
 
 }
