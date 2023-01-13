@@ -335,6 +335,23 @@ The following parameters are supported:
   >
   > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates.
 
+## Column mapping
+
+When you load data, you can configure column mapping between the data file and the destination table by using the `column_list` parameter. If the columns of the data file can be mapped one on one in sequence onto the columns of the destination table, you do not need to specify the `column_list` parameter. Otherwise, you must specify the `column_list` parameter, as shown in the following two use cases:
+
+- The columns of the data file can be mapped one on one onto the columns of the destination table, and the data does not need to be computed by functions before it is loaded into the destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged.
+
+  For example, the destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the destination table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+
+- The columns of the data file cannot be mapped one on one onto the columns of the destination table, and the data needs to be computed by functions before it is loaded into the mapping destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the destination table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the destination table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the destination table column names. For example, you can specify `(col1, col2, col3, temp)`, in which the fourth column of the data file is temporarily named `temp`.
+  - The destination table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `(col, year = year(col), month=month(col), day=day(col))`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping destination table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the destination table column `year`.
+
 ## Examples
 
 This section uses HDFS as an example to describe various load configurations.
