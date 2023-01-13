@@ -717,16 +717,26 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
 
+#ifndef NDEBUG
+        // avoid AddressSanitizer: alloc-dealloc-mismatch
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        // if avoid this copy of `append()`, the chunk shouldn't be deleted until sent many times. To simple such
+        // issue, here just directly append().
+        attachment.append(chunk->data());
+        attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
+#else
         attachment_physical_bytes += chunk->data().size();
         // release chunk->data() to iobuf
-        auto res = attachment.append_user_data((void*)((static_cast<std::string*>((chunk->release_data())))->c_str()),
-                                               chunk->data().size(), free);
+        auto res = attachment.append_user_data((void*)((static_cast<std::string*>(chunk->release_data()))->c_str()),
+                                               chunk->data().size(), [](void* buf) { delete[] (char*)buf; });
         if (UNLIKELY(res != 0)) {
             throw std::runtime_error("append user data to brpc iobuf error.");
         }
         if (UNLIKELY(!chunk->data().empty())) {
             throw std::runtime_error("chunk is not empty after released.");
         }
+#endif
+        chunk->clear_data();
 
         // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
