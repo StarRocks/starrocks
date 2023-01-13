@@ -147,6 +147,8 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -3555,6 +3557,14 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
+            if (!PrivilegeManager.checkMaterializedViewAction(ConnectContext.get(),
+                    stmt.getDbName(),
+                    stmt.getMvName(),
+                    PrivilegeType.MaterializedViewAction.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DROP MATERIALIZED VIEW");
+            }
+
             MaterializedView view = (MaterializedView) table;
             MVManager.getInstance().stopMaintainMV(view);
 

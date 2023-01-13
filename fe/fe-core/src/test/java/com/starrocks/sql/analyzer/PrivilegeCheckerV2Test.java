@@ -45,6 +45,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -2055,12 +2056,12 @@ public class PrivilegeCheckerV2Test {
                 "REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized_view db1.mv2 to test",
                 "revoke refresh on materialized_view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATETIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
         verifyGrantRevoke(
                 "CANCEL REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized_view db1.mv2 to test",
                 "revoke refresh on materialized_view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATETIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
 
         ctxToRoot();
         starRocksAssert.dropMaterializedView("db1.mv2");
@@ -2115,14 +2116,21 @@ public class PrivilegeCheckerV2Test {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
-        verifyGrantRevoke(
-                "DROP MATERIALIZED VIEW db1.mv4;",
-                "grant drop on materialized_view db1.mv4 to test",
-                "revoke drop on materialized_view db1.mv4 from test",
-                "Access denied; you need (at least one of) the DROP MATETIALIZED VIEW privilege(s) for this operation");
 
-        ctxToRoot();
-        starRocksAssert.dropMaterializedView("db1.mv4");
+        DropMaterializedViewStmt statement = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                "drop materialized view db1.mv4", starRocksAssert.getCtx());
+
+        ctxToTestUser();
+        try {
+            GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the DROP MATERIALIZED VIEW privilege(s)"));
+        }
+
+        grantRevokeSqlAsRoot("grant drop on materialized_view db1.mv4 to test");
+        GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
         ctxToTestUser();
     }
 

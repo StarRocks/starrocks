@@ -1562,7 +1562,7 @@ public class PrivilegeCheckerV2 {
                     statement.getMvName().getTbl(),
                     PrivilegeType.MaterializedViewAction.REFRESH)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATETIALIZED VIEW");
+                        "REFRESH MATERIALIZED VIEW");
             }
             return null;
         }
@@ -1575,7 +1575,7 @@ public class PrivilegeCheckerV2 {
                     statement.getMvName().getTbl(),
                     PrivilegeType.MaterializedViewAction.REFRESH)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATETIALIZED VIEW");
+                        "REFRESH MATERIALIZED VIEW");
             }
             return null;
         }
@@ -1590,13 +1590,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
-            if (!PrivilegeManager.checkMaterializedViewAction(context,
-                    statement.getDbName(),
-                    statement.getMvName(),
-                    PrivilegeType.MaterializedViewAction.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "DROP MATETIALIZED VIEW");
-            }
+            // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
             return null;
         }
 

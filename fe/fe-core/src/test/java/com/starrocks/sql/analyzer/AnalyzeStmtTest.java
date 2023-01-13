@@ -152,11 +152,14 @@ public class AnalyzeStmtTest {
 
         AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+                        2020, 1, 1, 1, 1));
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, {}, Test Failed]",
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, " +
+                        "2020-01-01 01:01:00, 2020-01-01 01:01:00, " +
+                        "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         sql = "show stats meta";
@@ -171,7 +174,8 @@ public class AnalyzeStmtTest {
         sql = "show histogram meta";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
         HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(testDb.getId(), table.getId(), "v1",
-                StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
+                StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(
+                        2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
@@ -187,7 +191,9 @@ public class AnalyzeStmtTest {
         Column v1 = table.getColumn("v1");
         Column v2 = table.getColumn("v2");
 
-        Assert.assertEquals(String.format(new String("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+        Assert.assertEquals(String.format(new String("SELECT cast(1 as INT), now(), " +
+                        "db_id, table_id, column_name," +
+                        " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
@@ -198,17 +204,21 @@ public class AnalyzeStmtTest {
                         "cast(min(cast(min as bigint(20))) as string) " +
                         "FROM column_statistics WHERE table_id = %d and column_name = \"v2\" " +
                         "GROUP BY db_id, table_id, column_name"), table.getId(), table.getId()),
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(v1, v2)));
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+                        Lists.newArrayList(v1, v2)));
 
-        Assert.assertEquals(String.format("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
+        Assert.assertEquals(String.format(
+                "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = %d and table_id = %d and column_name in ('v1', 'v2')",
                         database.getId(), table.getId()),
-                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList("v1", "v2")));
+                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(),
+                        table.getId(), Lists.newArrayList("v1", "v2")));
 
         FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table,
                 Lists.newArrayList(partition.getId()),
-                Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
 
         Assert.assertEquals(String.format("SELECT %d, %d, 'v1', %d, 'test.t0', 't0', " +
@@ -285,9 +295,11 @@ public class AnalyzeStmtTest {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
 
         GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(1, getConnectContext());
-        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
+        Assert.assertThrows(SemanticException.class,
+                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
         GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
-        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+        Assert.assertThrows(SemanticException.class,
+                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
     }
 
     @Test
@@ -296,22 +308,27 @@ public class AnalyzeStmtTest {
         Table table = testDb.getTable("t0");
         AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+                        2020, 1, 1, 1, 1));
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setProgress(50);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
     }
 

@@ -31,7 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.PEntryObject;
