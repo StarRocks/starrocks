@@ -153,7 +153,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         return Lists.newArrayList(newPostAggProjectOpt);
     }
 
-    // use this to quickly check if we can rewrite input plan
+    // use this to quickly check if we can rewrite the aggregate function
     private static class FastRewritableChecker {
         public Map<ColumnRefOperator, ScalarOperator> preAggProjections;
 
