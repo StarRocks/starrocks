@@ -55,6 +55,7 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -380,6 +381,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+    // TODO(murphy) persist the maintenance plan with MV
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
 
@@ -952,6 +954,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ExecPlan buildMaintenancePlan(ConnectContext session) {
+        // Only incremental refresh MV needs a maintenance plan
+        if (!refreshScheme.isIncremental()) {
+            return null;
+        }
+        String createMvSql = getMaterializedViewDdlStmt(false);
+        this.maintenancePlan = MVUtils.buildPlanForMV(createMvSql, session);
+        return this.maintenancePlan;
     }
 
     public ExecPlan getMaintenancePlan() {

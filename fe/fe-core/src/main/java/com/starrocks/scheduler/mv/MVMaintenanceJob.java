@@ -91,21 +91,18 @@ public class MVMaintenanceJob implements Writable {
     @SerializedName("epoch")
     private MVEpoch epoch;
 
-    // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
-    private final transient ExecPlan plan;
-
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
-    private transient AtomicReference<JobState> state = new AtomicReference<>();
-    private transient JobPrepareStage prepareStage = JobPrepareStage.INIT;
-    private transient AtomicBoolean inSchedule = new AtomicBoolean(false);
-    private transient MaterializedView view;
-    private transient ConnectContext connectContext;
-    // TODO(murphy) implement a real query coordinator
-    private transient CoordinatorPreprocessor queryCoordinator;
-    private transient TxnBasedEpochCoordinator epochCoordinator;
-    private transient Map<Long, MVMaintenanceTask> taskMap;
-    private transient BiMap<Long, TNetworkAddress> taskId2Addr;
+    // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
+    private ExecPlan plan;
+    private AtomicReference<JobState> state = new AtomicReference<>();
+    private JobPrepareStage prepareStage = JobPrepareStage.INIT;
+    private AtomicBoolean inSchedule = new AtomicBoolean(false);
+    private MaterializedView view;
+    private ConnectContext connectContext;
+    private CoordinatorPreprocessor queryCoordinator;
+    private TxnBasedEpochCoordinator epochCoordinator;
+    private Map<Long, MVMaintenanceTask> taskMap;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
@@ -126,7 +123,9 @@ public class MVMaintenanceJob implements Writable {
         return job;
     }
 
-    // TODO recover the entire job state, include execution plan
+    /**
+     * Restore the transient state of job, including execution plan, task topology
+     */
     public boolean restore() {
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
         if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
@@ -138,6 +137,7 @@ public class MVMaintenanceJob implements Writable {
         this.serializedState = JobState.INIT;
         this.state.set(serializedState);
         this.inSchedule.set(false);
+        this.buildContext(true);
         return true;
     }
 
@@ -258,10 +258,10 @@ public class MVMaintenanceJob implements Writable {
      * 1. Deploy tasks to executors on BE
      * 2. Trigger the epoch
      */
-    void prepare() throws Exception {
+    private void prepare() throws Exception {
         this.state.set(JobState.PREPARING);
         try {
-            buildContext();
+            buildContext(false);
 
             buildPhysicalTopology();
 
@@ -282,7 +282,7 @@ public class MVMaintenanceJob implements Writable {
     /**
      * Check if the preparation of job has been finished
      */
-    public boolean checkPrepared() {
+    private boolean checkPrepared() {
         Preconditions.checkState(this.state.get().equals(JobState.PREPARING));
         if (prepareStage.equals(JobPrepareStage.ENABLE_BINLOG)) {
             BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
@@ -300,19 +300,27 @@ public class MVMaintenanceJob implements Writable {
         return true;
     }
 
-    void buildContext() {
-        // TODO(murphy) fill current user
+    protected void buildContext(boolean fromRestore) {
         // Build connection context
+        // TODO(murphy) persist the context along with the job
         this.connectContext = StatisticUtils.buildConnectContext();
-        Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
+        this.connectContext.getSessionVariable().setEnableIncrementalRefreshMv(true);
+        Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
         }
         TUniqueId queryId = connectContext.getExecutionId();
 
+        // Build or restore the execution plan
+        if (fromRestore) {
+            this.plan = this.view.buildMaintenancePlan(connectContext);
+        } else {
+            this.plan = this.view.getMaintenancePlan();
+        }
+
         // Build  query coordinator
-        ExecPlan execPlan = this.view.getMaintenancePlan();
+        ExecPlan execPlan = this.plan;
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
@@ -335,7 +343,7 @@ public class MVMaintenanceJob implements Writable {
     /**
      * Build physical fragments for the maintenance plan
      */
-    void buildPhysicalTopology() throws Exception {
+    protected void buildPhysicalTopology() throws Exception {
         if (CollectionUtils.isNotEmpty(plan.getFragments()) &&
                 plan.getTopFragment().getSink() instanceof OlapTableSink) {
             ConnectContext context = queryCoordinator.getConnectContext();
@@ -395,7 +403,6 @@ public class MVMaintenanceJob implements Writable {
         }
         tasksByBe.values().forEach(MVMaintenanceTask::buildScanRange);
 
-        this.taskId2Addr = taskId2Addr;
         this.taskMap = tasksByBe;
     }
 
@@ -560,6 +567,10 @@ public class MVMaintenanceJob implements Writable {
 
     public MVEpoch getEpoch() {
         return epoch;
+    }
+
+    public ExecPlan getExecPlan() {
+        return plan;
     }
 
     @Override

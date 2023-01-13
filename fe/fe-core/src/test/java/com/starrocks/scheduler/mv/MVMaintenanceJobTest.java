@@ -18,19 +18,25 @@ package com.starrocks.scheduler.mv;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.qe.CoordinatorPreprocessor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -45,6 +51,14 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class MVMaintenanceJobTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        Config.enable_experimental_mv = true;
+        PlanTestBase.beforeClass();
+        SessionVariable variable = starRocksAssert.getCtx().getSessionVariable();
+        variable.setEnableIncrementalRefreshMv(true);
+    }
 
     @Test
     public void basic() throws Exception {
@@ -122,6 +136,50 @@ public class MVMaintenanceJobTest extends PlanTestBase {
     }
 
     @Test
+    public void restore() throws Exception {
+        // Create a job and serialize it
+        String sql = "select LO_ORDERDATE, count(LO_LINENUMBER) cnt from lineorder_flat_for_mv group by LO_ORDERDATE";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW inc_mv1 " +
+                " distributed by hash(LO_ORDERDATE) " +
+                " refresh incremental as " + sql);
+
+        Database currentDb = GlobalStateMgr.getCurrentState().getDb(connectContext.getDatabase());
+        MaterializedView view = (MaterializedView) currentDb.getTable("inc_mv1");
+        ExecPlan originPlan = view.getMaintenancePlan();
+        String expectedPlan =
+                "PLAN FRAGMENT 0\n" +
+                        " OUTPUT EXPRS:\n" +
+                        "  PARTITION: RANDOM\n" +
+                        "\n" +
+                        "  OLAP TABLE SINK\n" +
+                        "    TABLE: inc_mv1\n" +
+                        "    TUPLE ID: 2\n" +
+                        "    RANDOM\n" +
+                        "\n" +
+                        "  1:StreamAgg\n" +
+                        "  |  output: count(3: LO_LINENUMBER)\n" +
+                        "  |  group_by: 1: LO_ORDERDATE\n" +
+                        "  |  \n" +
+                        "  0:BinlogScanNode\n";
+        assertContains(originPlan.getExplainString(StatementBase.ExplainLevel.NORMAL), expectedPlan);
+
+        MVMaintenanceJob job = new MVMaintenanceJob(view);
+        DataOutputBuffer buffer = new DataOutputBuffer(1024);
+        job.write(buffer);
+        byte[] bytes = buffer.getData();
+
+        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        MVMaintenanceJob deserialized = MVMaintenanceJob.read(input);
+        assertEquals(job, deserialized);
+
+        // Try to restore the deserialized job
+        assertTrue(deserialized.restore());
+        ExecPlan restorePlan = deserialized.getExecPlan();
+        String planString = restorePlan.getExplainString(TExplainLevel.NORMAL);
+        assertContains(planString, expectedPlan);
+    }
+
+    @Test
     public void buildPhysicalTopology() throws Exception {
         String sql = "select count(distinct v5) from t1 join t2";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
@@ -146,7 +204,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setMaintenancePlan(pair.second);
 
         MVMaintenanceJob job = new MVMaintenanceJob(view);
-        job.buildContext();
+        job.buildContext(false);
         job.buildPhysicalTopology();
 
         Map<Long, MVMaintenanceTask> taskMap = job.getTasks();

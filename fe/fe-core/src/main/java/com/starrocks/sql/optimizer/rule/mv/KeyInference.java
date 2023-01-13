@@ -104,7 +104,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
     public KeyPropertySet visitPhysicalOlapScan(OptExpression optExpression, Void ctx) {
         PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
         Table table = scan.getTable();
-        Preconditions.checkState(table.isOlapTable());
+        Preconditions.checkState(table.isLocalTable(), "table type is " + table.getType());
         OlapTable olapTable = (OlapTable) table;
 
         return visitTable(olapTable, scan, scan.getRealOutputColumns(), scan.getColRefToColumnMetaMap());

@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * TODO(murphy) implement the Coordinator to compute task correctly
  * <p>
  * Runnable maintenance task on each executor
  * 1. After maintenance job started, generated tasks are deployed on executors
