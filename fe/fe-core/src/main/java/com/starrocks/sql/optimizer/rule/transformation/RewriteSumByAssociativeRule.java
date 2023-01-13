@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -38,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.math.BigDecimal;
@@ -52,9 +50,8 @@ import java.util.Map;
 public class RewriteSumByAssociativeRule extends TransformationRule {
     public RewriteSumByAssociativeRule() {
         super(RuleType.TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
-                Pattern.create(OperatorType.LOGICAL_PROJECT)
-                        .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR)
-                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF))));
+                        Pattern.create(OperatorType.LOGICAL_AGGR)
+                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
     }
 
     @Override
@@ -62,20 +59,17 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableRewriteSumByAssociativeRule()) {
             return false;
         }
-        LogicalProjectOperator postAggProjectOperator = (LogicalProjectOperator) input.getOp();
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
-        LogicalProjectOperator preAggProjectOperator =
-                (LogicalProjectOperator) input.getInputs().get(0).getInputs().get(0).getOp();
 
-        FastCheckRewritableVisitor fastCheckRewritableVisitor =
-                new FastCheckRewritableVisitor(
-                        aggregationOperator.getAggregations(), preAggProjectOperator.getColumnRefMap());
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator preAggProjectOperator = (LogicalProjectOperator) input.getInputs().get(0).getOp();
+
+        FastRewritableChecker fastRewritableChecker =
+                new FastRewritableChecker(preAggProjectOperator.getColumnRefMap());
 
         boolean canRewritable = false;
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> postAggProjection :
-                postAggProjectOperator.getColumnRefMap().entrySet()) {
-            ScalarOperator projectExpr = postAggProjection.getValue();
-            canRewritable |= projectExpr.accept(fastCheckRewritableVisitor, null);
+        for (Map.Entry<ColumnRefOperator, CallOperator> aggregation :
+                aggregationOperator.getAggregations().entrySet()) {
+            canRewritable |= fastRewritableChecker.isRewritable(aggregation.getValue());
         }
 
         return canRewritable;
@@ -87,113 +81,86 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         /*
          * Before
          *
-         * LogicalProjectOperator {projection=[28: sum]}
-         * ->  LogicalAggregation {type=GLOBAL ,aggregations={28: sum=sum(27: expr)} ,groupKeys=[]}
-         *   ->  LogicalProjectOperator {projection=[add(cast(1: id_int as bigint(20)), 1)]}
+         * LogicalAggregation {type=GLOBAL ,aggregations={28: sum=sum(27: expr)} ,groupKeys=[]}
+         * ->  LogicalProjectOperator {projection=[add(cast(1: id_int as bigint(20)), 1)]}
          *
          * After
          *
-         * LogicalProjectOperator {projection=[add(30: sum, multiply(31: count, 1))]
-         * ->  LogicalAggregation {type=GLOBAL ,aggregations={30: sum=sum(29: id_int), 31: count=count()} ,groupKeys=[]}
+         * LogicalProjectOperator {projection=[add(30: sum, multiply(31: count, 1))]}
+         * -> LogicalAggregation {type=GLOBAL ,aggregations={30: sum=sum(29: id_int), 31: count=count()} ,groupKeys=[]}
          *   ->  LogicalProjectOperator {projection=[add(cast(1: id_int as bigint(20)), 1), 1: id_int]}
          */
-        LogicalProjectOperator postAggProjectOperator = (LogicalProjectOperator) input.getOp();
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
-        LogicalProjectOperator preAggProjectOperator =
-                (LogicalProjectOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator preAggProjectOperator = (LogicalProjectOperator) input.getInputs().get(0).getOp();
 
         ColumnRefSet requiredColumns = context.getTaskContext().getRequiredColumns();
 
         Map<ColumnRefOperator, ScalarOperator> newPreAggProjections = Maps.newHashMap();
         Map<ColumnRefOperator, ScalarOperator> newPostAggProjections = Maps.newHashMap();
 
-        RewriteSumVisitor rewriteSumVisitor = new RewriteSumVisitor(
+        AggFunctionRewriter aggFunctionRewriter = new AggFunctionRewriter(
                 aggregationOperator.getAggregations(),
                 preAggProjectOperator.getColumnRefMap(),
                 context.getColumnRefFactory(),
                 newPreAggProjections,
-                newPostAggProjections
-                );
+                newPostAggProjections);
 
-        // try to rewrite aggregate function top-down
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> postAggProjection :
-                postAggProjectOperator.getColumnRefMap().entrySet()) {
-            ColumnRefOperator columnRefOperator = postAggProjection.getKey();
-            ScalarOperator projectExpr = postAggProjection.getValue();
-            ScalarOperator newProjectExpr = projectExpr.accept(rewriteSumVisitor, null);
-            newPostAggProjections.put(columnRefOperator, newProjectExpr);
+        for (Map.Entry<ColumnRefOperator, CallOperator> aggregation :
+                aggregationOperator.getAggregations().entrySet()) {
+            ColumnRefOperator columnRefOperator = aggregation.getKey();
+            CallOperator aggFunction = aggregation.getValue();
+            newPostAggProjections.put(columnRefOperator, aggFunctionRewriter.rewrite(columnRefOperator, aggFunction));
         }
 
-        if (rewriteSumVisitor.newAggregations.isEmpty()) {
+        if (aggFunctionRewriter.newAggregations.isEmpty()) {
             return Lists.newArrayList();
         }
 
-        requiredColumns.except(postAggProjectOperator.getColumnRefMap().keySet());
         requiredColumns.union(newPostAggProjections.keySet());
-
-        rewriteSumVisitor.newAggregations.putAll(rewriteSumVisitor.reservedAggregations);
+        Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+        newAggregations.putAll(aggFunctionRewriter.newAggregations);
+        newAggregations.putAll(aggFunctionRewriter.reservedAggregations);
 
         // for high-cardinality group-by agg, more agg functions may introduce additional performance overhead,
         // so we add a restriction here, for the query with group by keys,
         // if the number of agg functions can not be reduced after rewriting, just skip it.
         if (aggregationOperator.getGroupingKeys() != null && !aggregationOperator.getGroupingKeys().isEmpty()) {
-            HashSet<CallOperator> uniqueNewAggregations = new HashSet<>(rewriteSumVisitor.newAggregations.values());
+            HashSet<CallOperator> uniqueNewAggregations = new HashSet<>(newAggregations.values());
             HashSet<CallOperator> uniqueOldAggregations = new HashSet<>(aggregationOperator.getAggregations().values());
             if (uniqueNewAggregations.size() >= uniqueOldAggregations.size()) {
                 return Lists.newArrayList();
             }
         }
 
-        newPreAggProjections.putAll(rewriteSumVisitor.oldPreAggProjections);
+        newPreAggProjections.putAll(aggFunctionRewriter.oldPreAggProjections);
 
         LogicalProjectOperator newPostAggProjectOperator =
                 new LogicalProjectOperator(newPostAggProjections);
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 aggregationOperator.getType(),
-                aggregationOperator.getGroupingKeys(), rewriteSumVisitor.newAggregations);
+                aggregationOperator.getGroupingKeys(), newAggregations);
         Preconditions.checkState(aggregationOperator.getProjection() == null,
                 "projection in LogicalAggOperator shouldn't be set in logical rewrite phase");
 
         OptExpression newPreAggProjectOpt = OptExpression.create(new LogicalProjectOperator(newPreAggProjections),
                 input.getInputs().get(0).getInputs().get(0).getInputs());
-        newPreAggProjectOpt.setLogicalProperty(new LogicalProperty(new ColumnRefSet(newPreAggProjections.keySet())));
 
         OptExpression newAggOpt = OptExpression.create(newAggOperator, newPreAggProjectOpt);
-        newAggOpt.setLogicalProperty(new LogicalProperty(newAggOperator.getOutputColumns(null)));
 
         OptExpression newPostAggProjectOpt = OptExpression.create(newPostAggProjectOperator, newAggOpt);
-        newPostAggProjectOpt.setLogicalProperty(new LogicalProperty(new ColumnRefSet(newPostAggProjections.keySet())));
         return Lists.newArrayList(newPostAggProjectOpt);
     }
 
-    // use this visitor to quickly check if we can rewrite input plan
-    private static class FastCheckRewritableVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-        public Map<ColumnRefOperator, CallOperator> aggregations;
+    // use this to quickly check if we can rewrite input plan
+    private static class FastRewritableChecker {
         public Map<ColumnRefOperator, ScalarOperator> preAggProjections;
 
-
-        public FastCheckRewritableVisitor(Map<ColumnRefOperator, CallOperator> aggregations,
-                                          Map<ColumnRefOperator, ScalarOperator> preAggProjections) {
-            this.aggregations = aggregations;
+        public FastRewritableChecker(Map<ColumnRefOperator, ScalarOperator> preAggProjections) {
             this.preAggProjections = preAggProjections;
         }
 
-        @Override
-        public Boolean visit(ScalarOperator scalarOperator, Void context) {
-            boolean canRewritable = false;
-            for (ScalarOperator child : scalarOperator.getChildren()) {
-                canRewritable |= child.accept(this, null);
-            }
-            return canRewritable;
-        }
-
-        @Override
-        public Boolean visitVariableReference(ColumnRefOperator op, Void context) {
-            if (!aggregations.containsKey(op)) {
-                return false;
-            }
-            CallOperator aggFunction = aggregations.get(op);
+        public boolean isRewritable(CallOperator aggFunction) {
             if (!aggFunction.isAggregate() || aggFunction.isDistinct() ||
                     !aggFunction.getFnName().equals(FunctionSet.SUM) || aggFunction.getType().isDecimalV2()) {
                 return false;
@@ -218,7 +185,8 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         }
     }
 
-    private static class RewriteSumVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
+
+    private static class AggFunctionRewriter {
         public Map<ColumnRefOperator, CallOperator> oldAggregations;
         public Map<ColumnRefOperator, ScalarOperator> oldPreAggProjections;
         public ColumnRefFactory columnRefFactory;
@@ -230,7 +198,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
 
         private Map<ScalarOperator, ColumnRefOperator> commonArguments;
 
-        public RewriteSumVisitor(Map<ColumnRefOperator, CallOperator> oldAggregations,
+        public AggFunctionRewriter(Map<ColumnRefOperator, CallOperator> oldAggregations,
                                  Map<ColumnRefOperator, ScalarOperator> oldPreAggProjections,
                                  ColumnRefFactory columnRefFactory,
                                  Map<ColumnRefOperator, ScalarOperator> newPreAggProjections,
@@ -245,14 +213,45 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             this.commonArguments = Maps.newHashMap();
         }
 
-        @Override
-        public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
-            int childrenSize = scalarOperator.getChildren().size();
-            for (int i = 0; i < childrenSize; i++) {
-                ScalarOperator child = scalarOperator.getChild(i);
-                scalarOperator.setChild(i, child.accept(this, null));
+        public ScalarOperator rewrite(ColumnRefOperator op, CallOperator aggFunction) {
+            if (aggFunction.isAggregate() && !aggFunction.isDistinct()
+                    && aggFunction.getFnName().equals(FunctionSet.SUM) &&
+                    !aggFunction.getType().isDecimalV2()) {
+                ScalarOperator aggExpr = aggFunction.getArguments().get(0);
+                if (aggExpr.isColumnRef()) {
+                    ColumnRefOperator aggColumnRef = (ColumnRefOperator) aggExpr;
+                    ScalarOperator aggColumnExpr = oldPreAggProjections.get(aggColumnRef);
+                    if (aggColumnExpr.getOpType() == OperatorType.CALL) {
+                        CallOperator callOperator = (CallOperator) aggColumnExpr;
+                        String functionName = callOperator.getFnName();
+                        if (functionName.equals(FunctionSet.ADD) || functionName.equals(FunctionSet.SUBTRACT)) {
+                            List<ScalarOperator> arguments = callOperator.getArguments();
+                            Preconditions.checkState(arguments.size() == 2);
+                            // there is at least one constant in arguments
+                            if (arguments.get(0).isConstant() || arguments.get(1).isConstant()) {
+                                // sometimes expr need to be cast before evaluating ADD/SUB operation.
+                                // for example, suppose the type of expr is SMALLINT,
+                                // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
+                                // but this cast is not needed in the sum function after rewriting,
+                                // we can remove it and get sum(expr) + count() * 1
+                                ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
+                                ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
+
+                                ScalarOperator agg0 = createNewAggFunction(
+                                        newArg0, newArg1, aggFunction.getType());
+                                ScalarOperator agg1 = createNewAggFunction(
+                                        newArg1, newArg0, aggFunction.getType());
+
+                                CallOperator newOperator = new CallOperator(functionName,
+                                        aggFunction.getType(), Lists.newArrayList(agg0, agg1));
+                                return newOperator;
+                            }
+                        }
+                    }
+                }
             }
-            return scalarOperator;
+            reservedAggregations.put(op, oldAggregations.get(op));
+            return op;
         }
 
         private ScalarOperator rewriteCastForAggExpr(ScalarOperator expr) {
@@ -375,49 +374,5 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             }
         }
 
-        @Override
-        public ScalarOperator visitVariableReference(ColumnRefOperator op, Void context) {
-            if (oldAggregations.containsKey(op)) {
-                CallOperator aggFunction = oldAggregations.get(op);
-                if (aggFunction.isAggregate() && !aggFunction.isDistinct()
-                        && aggFunction.getFnName().equals(FunctionSet.SUM) &&
-                        !aggFunction.getType().isDecimalV2()) {
-                    ScalarOperator aggExpr = aggFunction.getArguments().get(0);
-                    if (aggExpr.isColumnRef()) {
-                        ColumnRefOperator aggColumnRef = (ColumnRefOperator) aggExpr;
-                        ScalarOperator aggColumnExpr = oldPreAggProjections.get(aggColumnRef);
-                        if (aggColumnExpr.getOpType() == OperatorType.CALL) {
-                            CallOperator callOperator = (CallOperator) aggColumnExpr;
-                            String functionName = callOperator.getFnName();
-                            if (functionName.equals(FunctionSet.ADD) || functionName.equals(FunctionSet.SUBTRACT)) {
-                                List<ScalarOperator> arguments = callOperator.getArguments();
-                                Preconditions.checkState(arguments.size() == 2);
-                                // there is at least one constant in arguments
-                                if (arguments.get(0).isConstant() || arguments.get(1).isConstant()) {
-                                    // sometimes expr need to be cast before evaluating ADD/SUB operation.
-                                    // for example, suppose the type of expr is SMALLINT,
-                                    // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
-                                    // but this cast is not needed in the sum function after rewriting,
-                                    // we can remove it and get sum(expr) + count() * 1
-                                    ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
-                                    ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
-
-                                    ScalarOperator agg0 = createNewAggFunction(
-                                            newArg0, newArg1, aggFunction.getType());
-                                    ScalarOperator agg1 = createNewAggFunction(
-                                            newArg1, newArg0, aggFunction.getType());
-
-                                    CallOperator newOperator = new CallOperator(functionName,
-                                            aggFunction.getType(), Lists.newArrayList(agg0, agg1));
-                                    return newOperator;
-                                }
-                            }
-                        }
-                    }
-                }
-                reservedAggregations.put(op, oldAggregations.get(op));
-            }
-            return op;
-        }
     }
 }

@@ -1980,5 +1980,17 @@ public class AggregateTest extends PlanTestBase {
                 "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
                 "  |  3 <-> [3: t1c, INT, true]\n" +
                 "  |  11 <-> cast([2: t1b, SMALLINT, true] as INT) + 1");
+
+        // 4.2 with group by key and having
+        sql = "select t1c, sum(t1b)+2,sum(t1b+1),sum(t1b+2)+1 from test_all_type group by t1c having sum(t1b+1) > 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1\n" +
+                "  |  16 <-> [18: sum, BIGINT, true] + 2\n" +
+                "  |  17 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 2 + 1");
+        assertContains(plan, "  |  group by: [3: t1c, INT, true]\n" +
+                "  |  having: [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1 > 10");
     }
 }
