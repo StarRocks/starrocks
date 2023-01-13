@@ -4,6 +4,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
@@ -396,7 +397,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
+                "  |  <slot 26> : CAST(49 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + "))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -1870,7 +1871,8 @@ public class JoinTest extends PlanTestBase {
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
-        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
+        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR("
+                + ScalarType.MAX_VARCHAR_LENGTH + "))"));
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -2057,11 +2059,11 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(2: v2 AS VARCHAR(1048576)) = 'zxcv'");
+                "     PREDICATES: CAST(2: v2 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + ")) = 'zxcv'");
         assertContains(plan, "  1:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(5: v2 AS VARCHAR(1048576)) = 'zxcv'\n");
+                + "     PREDICATES: CAST(5: v2 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + ")) = 'zxcv'\n");
     }
 
     @Test
@@ -2071,7 +2073,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "|  equal join conjunct: 1: v1 = 4: v4");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR("
+                + ScalarType.MAX_VARCHAR_LENGTH + "))\n" +
                 "     partitions=0/1\n");
     }
 
@@ -2626,7 +2629,8 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
-                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR("
+                + ScalarType.MAX_VARCHAR_LENGTH + "))");
     }
 
     @Test
