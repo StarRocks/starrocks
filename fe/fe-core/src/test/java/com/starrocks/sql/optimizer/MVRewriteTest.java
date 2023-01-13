@@ -1157,15 +1157,19 @@ public class MVRewriteTest {
         String query =
                 "select deptno, sum(case salary when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
                         " group by deptno";
-        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainWithout(QUERY_USE_EMPS_MV);
 
         query = "select deptno, sum(case deptno when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
                 " group by deptno";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
 
         query = "select deptno, sum(case deptno when 1 then salary when 2 then 3 end) as ssalary from " +
                 EMPS_TABLE_NAME + " group by deptno";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, sum(case deptno when 1 then salary when 2 then truncate(3.14,1) end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
 
         query = "select deptno, sum(case deptno when 1 then salary when 2 then salary end) as ssalary from " +
                 EMPS_TABLE_NAME + " group by deptno";
