@@ -53,11 +53,11 @@ Status BinlogDataSource::open(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
-    VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
-            << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
+    VLOG(2) << "Tablet id " << _tablet->tablet_id() << ", scan_range=" << _scan_range
+            << ", binlog_read_schema=" << _binlog_read_schema;
 
     if (_is_baseline) {
-        // Reader scan rangej from epoch manager, instead of plan node
+        // Reader scan range from epoch manager, instead of plan node
         int64_t tablet_id = _tablet->tablet_id();
         auto& instance_id = state->fragment_instance_id();
         auto* binlog_offset = em->get_binlog_offset(instance_id, _plan_node_id, tablet_id);
@@ -65,6 +65,10 @@ Status BinlogDataSource::open(RuntimeState* state) {
             return Status::InternalError(fmt::format("binlog scan range found: instance_id={} plan_node={} tablet={}",
                                                      print_id(instance_id), _plan_node_id, tablet_id));
         }
+        VLOG(2) << "Open binlog datasource for baseline "
+                << "tablet_id=" << _tablet->tablet_id() << ", scan_range=" << binlog_offset->debug_string()
+                << ", binlog_read_schema=" << _binlog_read_schema;
+
         Version version(0, binlog_offset->tablet_version);
 
         _tablet_reader = std::make_shared<TabletReader>(_tablet, version, _binlog_read_schema);
