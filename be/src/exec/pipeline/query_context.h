@@ -232,7 +232,7 @@ private:
     void _stop_clean_func() { _stop.store(true); }
     bool _is_stopped() { return _stop; }
     size_t _slot_idx(const TUniqueId& query_id);
-    void _clean_slot_unlocked(size_t i);
+    void _clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del);
 
 private:
     const size_t _num_slots;
