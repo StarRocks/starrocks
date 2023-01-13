@@ -1,5 +1,37 @@
 # Flink Connector常见问题
 
+## 使用事务接口的 exactly-once 时，导入失败
+
+**问题描述：**
+
+```plaintext
+com.starrocks.data.load.stream.exception.StreamLoadFailException: {
+    "TxnId": 33823381,
+    "Label": "502c2770-cd48-423d-b6b7-9d8f9a59e41a",
+    "Status": "Fail",
+    "Message": "timeout by txn manager",--具体报错信息
+    "NumberTotalRows": 1637,
+    "NumberLoadedRows": 1637,
+    "NumberFilteredRows": 0,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 4284214,
+    "LoadTimeMs": 120294,
+    "BeginTxnTimeMs": 0,
+    "StreamLoadPlanTimeMs": 7,
+    "ReadDataTimeMs": 9,
+    "WriteDataTimeMs": 120278,
+    "CommitAndPublishTimeMs": 0
+}
+```
+
+**原因分析：**
+
+`sink.properties.timeout`小于Flink checkpoint interval，导致事务超时。
+
+**解决方案：**
+
+需要将timeout调整大于checkpoint interval
+
 ## flink-connector-jdbc_2.11sink到StarRocks时间落后8小时
 
 **问题描述：**
