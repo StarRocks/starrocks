@@ -262,7 +262,7 @@ public:
 #define DCHECK_CHUNK(chunk_ptr)
 #endif
 
-    std::string debug_row(uint32_t index) const;
+    std::string debug_row(size_t index) const;
 
     std::string debug_columns() const;
 
