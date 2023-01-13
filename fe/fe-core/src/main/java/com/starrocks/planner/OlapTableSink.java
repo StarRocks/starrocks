@@ -108,10 +108,10 @@ public class OlapTableSink extends DataSink {
 
     private final int clusterId;
     // input variables
-    private final OlapTable dstTable;
+    private OlapTable dstTable;
     private final TupleDescriptor tupleDescriptor;
     // specified partition ids. this list should not be empty and should contains all related partition ids
-    private final List<Long> partitionIds;
+    private List<Long> partitionIds;
 
     // set after init called
     private TDataSink tDataSink;
@@ -505,6 +505,38 @@ public class OlapTableSink extends DataSink {
 
     public boolean canUsePipeLine() {
         return Config.enable_pipeline_load && enablePipelineLoad;
+    }
+
+    public int getClusterId() {
+        return clusterId;
+    }
+
+    public OlapTable getDstTable() {
+        return dstTable;
+    }
+
+    public void setDstTable(OlapTable table) {
+        this.dstTable = table;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public TupleDescriptor getTupleDescriptor() {
+        return tupleDescriptor;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
+    }
+
+    public TWriteQuorumType getWriteQuorum() {
+        return writeQuorum;
+    }
+
+    public boolean isEnableReplicatedStorage() {
+        return enableReplicatedStorage;
     }
 }
 

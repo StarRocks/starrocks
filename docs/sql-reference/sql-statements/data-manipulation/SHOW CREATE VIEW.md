@@ -5,7 +5,7 @@ Returns the CREATE VIEW statement that was used to create a given view. The CREA
 ## Syntax
 
 ```SQL
-SHOW CREATE VIEW [db_name.]view_name;
+SHOW CREATE VIEW [db_name.]view_name
 ```
 
 ## Parameters

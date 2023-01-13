@@ -104,7 +104,7 @@ public class JoinReorderGreedy extends JoinOrder {
                 joinBitSet.or(leftBitset);
                 joinBitSet.or(rightBitset);
 
-                computeCost(joinExpr, true);
+                computeCost(joinExpr);
                 getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr);
                 double joinCost = joinExpr.cost;
                 if (joinCost < bestCost) {

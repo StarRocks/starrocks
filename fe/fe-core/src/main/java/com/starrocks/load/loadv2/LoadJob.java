@@ -547,10 +547,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             checkAuthWithoutAuthInfo(command);
             return;
         }
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkPrivByAuthInfo(ConnectContext.get(), authorizationInfo,
-                PrivPredicate.LOAD)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                    Privilege.LOAD_PRIV);
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkPrivByAuthInfo(ConnectContext.get(), authorizationInfo,
+                    PrivPredicate.LOAD)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        Privilege.LOAD_PRIV);
+            }
         }
     }
 

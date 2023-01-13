@@ -90,7 +90,6 @@ private:
 
     // Mock data for testing
     Status _mock_chunk(Chunk* chunk);
-    std::atomic<int32_t> _chunk_num;
 };
 
 } // namespace starrocks::connector

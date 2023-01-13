@@ -9,7 +9,7 @@ This statement cannot be used to view the status of custom collection tasks. To 
 ## Syntax
 
 ```SQL
-SHOW ANALYZE STATUS [WHERE];
+SHOW ANALYZE STATUS [WHERE]
 ```
 
 You can use `LILE or WHERE` to filter the information to return.

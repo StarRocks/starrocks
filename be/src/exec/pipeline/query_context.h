@@ -21,6 +21,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"

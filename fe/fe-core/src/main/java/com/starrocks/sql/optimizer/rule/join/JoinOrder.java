@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
@@ -34,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.BitSet;
 import java.util.HashMap;
@@ -205,7 +204,7 @@ public abstract class JoinOrder {
             BitSet atomBit = new BitSet();
             atomBit.set(i);
             ExpressionInfo atomExprInfo = new ExpressionInfo(atoms.get(i));
-            computeCost(atomExprInfo, true);
+            computeCost(atomExprInfo);
 
             GroupInfo groupInfo = new GroupInfo(atomBit);
             groupInfo.bestExprInfo = atomExprInfo;
@@ -271,20 +270,22 @@ public abstract class JoinOrder {
         expr.setStatistics(expressionContext.getStatistics());
     }
 
-    protected void computeCost(ExpressionInfo exprInfo, boolean penaltyCross) {
+    protected void computeCost(ExpressionInfo exprInfo) {
         double cost = exprInfo.expr.getStatistics().getOutputRowCount();
         exprInfo.rowCount = cost;
         if (exprInfo.leftChildExpr != null) {
-            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
-                    StatsConstants.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
+            cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
+                    StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
 
-            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
-                    StatsConstants.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
+            cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
+                    StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
-            if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
-                cost = cost > (StatsConstants.MAXIMUM_COST / StatsConstants.CROSS_JOIN_COST_PENALTY) ?
-                        StatsConstants.MAXIMUM_COST : cost * StatsConstants.CROSS_JOIN_COST_PENALTY;
+            if (joinOperator.getJoinType().isCrossJoin()) {
+                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
+                        StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY) ?
+                        StatisticsEstimateCoefficient.MAXIMUM_COST :
+                        cost * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;

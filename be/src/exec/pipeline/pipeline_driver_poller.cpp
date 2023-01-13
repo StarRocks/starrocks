@@ -120,6 +120,18 @@ void PipelineDriverPoller::run_internal() {
                         remove_blocked_driver(_local_blocked_drivers, driver_it);
                         ready_drivers.emplace_back(driver);
                     }
+                } else if (driver->is_epoch_finishing()) {
+                    if (driver->is_still_epoch_finishing()) {
+                        ++driver_it;
+                    } else {
+                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                       : DriverState::EPOCH_FINISH);
+                        remove_blocked_driver(_local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    }
+                } else if (driver->is_epoch_finished()) {
+                    remove_blocked_driver(_local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
@@ -176,20 +188,34 @@ size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredica
 
     {
         std::unique_lock<std::mutex> lock(_global_parked_mutex);
-        auto driver_it = _parked_drivers.begin();
-        while (driver_it != _parked_drivers.end()) {
+        for (auto driver_it = _parked_drivers.begin(); driver_it != _parked_drivers.end();) {
             auto driver = *driver_it;
             if (predicate_func(driver)) {
                 VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
                 driver->set_driver_state(DriverState::READY);
                 ready_drivers.push_back(driver);
-                _parked_drivers.erase(driver_it++);
+                driver_it = _parked_drivers.erase(driver_it);
+            } else {
+                driver_it++;
             }
         }
     }
 
     _driver_queue->put_back(ready_drivers);
     return ready_drivers.size();
+}
+
+size_t PipelineDriverPoller::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+    size_t parked_driver_num = 0;
+    auto driver_it = _parked_drivers.begin();
+    while (driver_it != _parked_drivers.end()) {
+        auto driver = *driver_it;
+        if (predicate_func(driver)) {
+            parked_driver_num += 1;
+        }
+        driver_it++;
+    }
+    return parked_driver_num;
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {

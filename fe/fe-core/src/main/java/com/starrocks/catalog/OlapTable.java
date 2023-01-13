@@ -294,7 +294,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
-    public boolean isHaveBinlogConfig() {
+    public boolean containsBinlogConfig() {
         if (tableProperty == null ||
                 tableProperty.getBinlogConfig() == null ||
                 tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
@@ -965,6 +965,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         partitions.addAll(tempPartitions.getAllPartitions());
         return partitions;
+    }
+
+    public List<Long> getAllPartitionIds() {
+        return new ArrayList<>(idToPartition.keySet());
     }
 
     public Collection<Partition> getRecentPartitions(int recentPartitionNum) {

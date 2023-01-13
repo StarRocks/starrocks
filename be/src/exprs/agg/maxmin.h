@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "util/raw_container.h"
 
@@ -29,13 +30,14 @@ template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
 
 template <LogicalType PT>
-struct MaxAggregateData<PT, AggregatePTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
+struct MaxAggregateData<PT, AggregateComplexPTGuard<PT>> {
+    using T = AggDataValueType<PT>;
     T result = RunTimeTypeLimits<PT>::min_value();
 
     void reset() { result = RunTimeTypeLimits<PT>::min_value(); }
 };
 
+// TODO(murphy) refactor the guard with AggDataTypeTraits
 template <LogicalType PT>
 struct MaxAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
@@ -55,8 +57,8 @@ template <LogicalType PT, typename = guard::Guard>
 struct MinAggregateData {};
 
 template <LogicalType PT>
-struct MinAggregateData<PT, AggregatePTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
+struct MinAggregateData<PT, AggregateComplexPTGuard<PT>> {
+    using T = AggDataValueType<PT>;
     T result = RunTimeTypeLimits<PT>::max_value();
 
     void reset() { result = RunTimeTypeLimits<PT>::max_value(); }
@@ -84,7 +86,7 @@ struct MaxElement {
     // final result. If retract's row is greater or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const T& right) { return state.result <= right; }
-    void operator()(State& state, const T& right) const { state.result = std::max<T>(state.result, right); }
+    void operator()(State& state, const T& right) const { AggDataTypeTraits<PT>::update_max(state.result, right); }
 };
 
 template <LogicalType PT, typename State, typename = guard::Guard>
@@ -94,7 +96,7 @@ struct MinElement {
     // final result. If retract's row is smaller or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const T& right) { return state.result >= right; }
-    void operator()(State& state, const T& right) const { state.result = std::min<T>(state.result, right); }
+    void operator()(State& state, const T& right) const { AggDataTypeTraits<PT>::update_min(state.result, right); }
 };
 
 template <LogicalType PT, typename State>
@@ -166,7 +168,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable() && !to->is_binary());
-        down_cast<InputColumnType*>(to)->append(this->data(state).result);
+        AggDataTypeTraits<PT>::append_value(down_cast<InputColumnType*>(to), this->data(state).result);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -176,7 +178,7 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable() && !to->is_binary());
-        down_cast<InputColumnType*>(to)->append(this->data(state).result);
+        AggDataTypeTraits<PT>::append_value(down_cast<InputColumnType*>(to), this->data(state).result);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -184,7 +186,7 @@ public:
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).result;
+            AggDataTypeTraits<PT>::assign_value(column, i, this->data(state).result);
         }
     }
 

@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to modify an existing table. If no rollup index is specified, the default operation is base index.
+Modifies an existing table. If no rollup index is specified, the default operation is base index.
 
 The statement is divided into three types of operations: schema change, rollup, partition, which cannot appear in an ALTER TABLE statement at the same time. Schema change and rollup are asynchronous operations and are returned if the task is submitted successfully. User can then use the SHOW ALTER command to check the progress.
 
@@ -12,7 +12,7 @@ Syntax:
 
 ```SQL
 ALTER TABLE [database.]table
-alter_clause1[, alter_clause2, ...];
+alter_clause1[, alter_clause2, ...]
 ```
 
 alter_clause is divided into partition, rollup, schema change, rename, index and swap.

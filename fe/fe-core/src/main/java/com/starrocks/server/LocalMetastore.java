@@ -3257,15 +3257,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> baseSchema = stmt.getMvColumnItems();
         validateColumns(baseSchema);
         // create partition info
-        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
-        PartitionInfo partitionInfo;
-        if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(
-                    Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
-        } else {
-            partitionInfo = new SinglePartitionInfo();
-        }
+        PartitionInfo partitionInfo = buildPartitionInfo(stmt);
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -3478,11 +3470,24 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             unlock();
         }
-        LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
+        LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        PartitionInfo partitionInfo;
+        if (partitionDesc != null) {
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Collections.singletonList(stmt.getPartitionColumn()),
+                    Maps.newHashMap(), false);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
+        return partitionInfo;
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,

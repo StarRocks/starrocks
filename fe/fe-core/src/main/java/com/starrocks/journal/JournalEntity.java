@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BrokerMgr;
@@ -63,7 +64,6 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterLoadJobOperationLog;
@@ -118,6 +118,7 @@ import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
@@ -753,6 +754,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_UPDATE_USER_PROP_V2: {
+                data = UserPropertyInfo.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DROP_USER_V2: {
                 data = UserIdentity.read(in);
                 isRead = true;
@@ -769,13 +775,17 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_AUTH_UPGRDE_V2: {
+            case OperationType.OP_AUTH_UPGRADE_V2: {
                 data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_MV_JOB_STATE:
                 data = MVMaintenanceJob.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MV_EPOCH_UPDATE:
+                data = MVEpoch.read(in);
                 isRead = true;
                 break;
             default: {

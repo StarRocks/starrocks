@@ -121,7 +121,7 @@ public class DomainResolver extends LeaderDaemon {
 
             // refresh user priv table by resolved IPs
             if (auth != null) {
-                auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+                auth.refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
             } else {
                 authenticationManager.setHostnameToIpSet(resolvedIPsMap);
             }
@@ -134,7 +134,7 @@ public class DomainResolver extends LeaderDaemon {
     /**
      * Check if domain name is valid
      *
-     * @param host: currently is the user's whitelist bns or dns name
+     * @param domainName: currently is the user's whitelist bns or dns name
      * @return true of false
      */
     public boolean isValidDomain(String domainName) {

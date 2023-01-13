@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.parser.trino;
 
+import org.apache.commons.lang3.StringUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -262,6 +264,80 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSelectStruct() throws Exception {
+        String sql = "select c0, c1.a from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : 2: c1.a");
+
+        sql = "select c0, test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c0, test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c0, default_catalog.test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+
+        sql = "select c1.a[10].b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 2: c1.a[10].b");
+
+        sql = "select c2.a, c2.b from test_struct";
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : 3: c2.a\n" +
+                "  |  <slot 5> : 3: c2.b");
+
+        sql = "select c2.a + c2.b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : CAST(3: c2.a AS DOUBLE) + 3: c2.b");
+
+        sql = "select sum(c2.b) from test_struct group by c2.a";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 3: c2.a\n" +
+                "  |  <slot 5> : 3: c2.b");
+    }
+
+    @Test
+    public void testSelectRow() throws Exception {
+        String sql = "select row(1,2)";
+        assertPlanContains(sql, " <slot 2> : row(1, 2)");
+
+        sql = "select row(1.1, 2.2, 3.3)";
+        assertPlanContains(sql, "<slot 2> : row(1.1, 2.2, 3.3)");
+
+        sql = "select row(1, 'xxx', 1.23)";
+        assertPlanContains(sql, "<slot 2> : row(1, 'xxx', 1.23)");
+    }
+
+    @Test
+    public void testSelectMap() throws Exception {
+        String sql = "select c0, c1[1] from test_map";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 1> : 1: c0\n" +
+                "  |  <slot 4> : 2: c1[1]");
+
+        sql = "select c0 from test_map where c1[1] > 10";
+        assertPlanContains(sql, "PREDICATES: 2: c1[1] > 10");
+
+        sql = "select avg(c1[1]) from test_map where c1[1] is not null";
+        assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(2: c1[1])");
+
+        sql = "select c2[2][1] from test_map";
+        assertPlanContains(sql, "<slot 4> : 3: c2[2][1]");
+    }
+
+    @Test
+    public void testSelectMapFunction() throws Exception {
+        String sql = "select map_keys(c1) from test_map";
+        assertPlanContains(sql, "<slot 4> : map_keys(2: c1)");
+
+        sql = "select map_values(c1) from test_map";
+        assertPlanContains(sql, "<slot 4> : map_values(2: c1)");
+    }
+
+    @Test
     public void testSelectGroupBy() throws Exception {
         String sql = "select v1, count(v2) from t0 group by v1";
         assertPlanContains(sql, "output: count(2: v2)\n" +
@@ -448,5 +524,46 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (t0 a join t0 b using(v1)) , t1";
         assertPlanContains(sql, "equal join conjunct: 1: v1 = 4: v1");
+    }
+
+    @Test
+    public void testExplain() throws Exception {
+        String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "SCAN [t1] => [8:auto_fill_col]\n" +
+                "                    Estimates: {row: 1, cpu: 2.00, memory: 0.00, network: 0.00, cost: 1.00}\n" +
+                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
+                "                    8:auto_fill_col := 1"));
+
+        sql = "explain select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "2:Project\n" +
+                        "  |  <slot 8> : 1\n" +
+                        "  |  \n" +
+                        "  1:OlapScanNode\n" +
+                        "     TABLE: t1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=0/1"));
+
+        sql = "explain (Type DISTRIBUTED)select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "5:Project\n" +
+                        "  |  output columns:\n" +
+                        "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                        "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |  cardinality: 1\n" +
+                        "  |  \n" +
+                        "  4:NESTLOOP JOIN"));
+
+        sql = "explain (Type io)select v1, v2 from t0,t1";
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+                "5:Project\n" +
+                        "  |  output columns:\n" +
+                        "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                        "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |  cardinality: 1\n" +
+                        "  |  column statistics: \n" +
+                        "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                        "  |  * v2-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 }
