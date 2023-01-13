@@ -39,6 +39,7 @@ Status StreamPipelineTest::prepare() {
     const auto& fragment_id = params.fragment_instance_id;
 
     _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(600);
     _query_ctx->set_query_expire_seconds(600);
@@ -87,7 +88,8 @@ Status StreamPipelineTest::prepare() {
 
     // prepare epoch manager
     auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
-    stream_epoch_manager->prepare({_fragment_ctx});
+    MVMaintenanceTaskInfo maintenance_task_info;
+    RETURN_IF_ERROR(stream_epoch_manager->prepare(maintenance_task_info, {_fragment_ctx}));
 
     return Status::OK();
 }
@@ -97,9 +99,13 @@ Status StreamPipelineTest::execute() {
     Status prepare_status = _fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     DCHECK(prepare_status.ok());
-
-    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->driver_executor()->submit(driver.get());
+    bool enable_resource_group = _fragment_ctx->enable_resource_group();
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env, enable_resource_group](const DriverPtr& driver) {
+        if (enable_resource_group) {
+            exec_env->wg_driver_executor()->submit(driver.get());
+        } else {
+            exec_env->driver_executor()->submit(driver.get());
+        }
         return Status::OK();
     });
     return Status::OK();

@@ -1745,6 +1745,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        LOG.info("Recieve mvReport: {}", request);
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }

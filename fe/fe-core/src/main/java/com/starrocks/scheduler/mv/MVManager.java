@@ -25,12 +25,13 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,7 +51,7 @@ import java.util.stream.Collectors;
  * TODO(Murphy) refactor all MV management code into here
  */
 public class MVManager {
-    private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
+    private static final Logger LOG = LogManager.getLogger(MVManager.class);
     private static final MVManager INSTANCE = new MVManager();
 
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
@@ -79,10 +80,10 @@ public class MVManager {
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
             if (CollectionUtils.isNotEmpty(data.jobList)) {
                 for (MVMaintenanceJob job : data.jobList) {
-                    long viewId = job.getViewId();
-                    MaterializedView view;
+                    // NOTE: job's view is not serialized, cannot use it directly!
+                    MvId mvId = new MvId(job.getDbId(), job.getViewId());
                     job.restore();
-                    jobMap.put(job.getView().getMvId(), job);
+                    jobMap.put(mvId, job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
                 LOG.debug("reload MV maintenance job details: {}", str);
@@ -99,10 +100,29 @@ public class MVManager {
     public void replay(MVMaintenanceJob job) throws IOException {
         try {
             job.restore();
-            jobMap.put(job.getView().getMvId(), job);
+            // NOTE: job's view is not serialized, cannot use it directly!
+            MvId mvId = new MvId(job.getDbId(), job.getViewId());
+            jobMap.put(mvId, job);
             LOG.info("Replay MV maintenance jobs: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV maintenance job failed: {}", job);
+            LOG.warn(e);
+        }
+    }
+
+    /**
+     * Replay epoch from journal
+     */
+    public void replayEpoch(MVEpoch epoch) throws IOException {
+        // TODO: Make it works.
+        try {
+            MvId mvId = new MvId(epoch.getDbId(), epoch.getMvId());
+            Preconditions.checkState(jobMap.containsKey(mvId));
+            MVMaintenanceJob job = jobMap.get(mvId);
+            job.setEpoch(epoch);
+            LOG.info("Replay MV epoch: {}", job);
+        } catch (Exception e) {
+            LOG.warn("Replay MV epoch failed: {}", epoch);
             LOG.warn(e);
         }
     }
@@ -208,21 +228,29 @@ public class MVManager {
     }
 
     public void onReportEpoch(TMVMaintenanceTasks request) {
+        LOG.info("onReportEpoch: {}", request);
         Preconditions.checkArgument(request.isSetDb_id(), "required");
         Preconditions.checkArgument(request.isSetMv_id(), "required");
         Preconditions.checkArgument(request.isSetTask_id(), "required");
         Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
 
         long dbId = request.getDb_id();
-        long tableId = request.getMv_id();
+        long mvId = request.getMv_id();
         long taskId = request.getTask_id();
 
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(new MvId(dbId, tableId)));
-        MVMaintenanceTask task = job.getTask(taskId);
+        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(new MvId(dbId, mvId)));
         TMVReportEpochTask report = request.getReport_epoch();
-        task.updateEpochState(report);
+        LOG.info("onReportEpoch job:{}", job);
 
-        // TODO(murphy) trigger the epoch commit in report event
+        // add commitInfos & failInfos
+        MVEpoch epoch = job.getEpoch();
+        List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(report.getTxn_commit_info());
+        List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(report.getTxn_fail_info());
+        epoch.onEpochReport(commitInfos, failInfos);
+
+        // TODO: handle exception
+        MVMaintenanceTask task = job.getTask(taskId);
+        task.updateEpochState(report);
     }
 
     /**

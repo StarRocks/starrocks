@@ -86,7 +86,7 @@ public class MVMaintenanceJob implements Writable {
     @SerializedName("state")
     private JobState serializedState;
     @SerializedName("epoch")
-    private final MVEpoch epoch;
+    private MVEpoch epoch;
 
     // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
     private final transient ExecPlan plan;
@@ -108,7 +108,7 @@ public class MVMaintenanceJob implements Writable {
         this.dbId = view.getDbId();
         this.viewId = view.getId();
         this.view = view;
-        this.epoch = new MVEpoch(view.getId());
+        this.epoch = new MVEpoch(view.getMvId());
         this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
@@ -130,6 +130,10 @@ public class MVMaintenanceJob implements Writable {
         this.serializedState = JobState.INIT;
         this.state.set(serializedState);
         this.inSchedule.set(false);
+    }
+
+    public void setEpoch(MVEpoch epoch) {
+        this.epoch = epoch;
     }
 
     public void startJob() {
@@ -248,6 +252,12 @@ public class MVMaintenanceJob implements Writable {
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
 
+    public OlapTableSink getMVOlapTableSink() {
+        Preconditions.checkState(CollectionUtils.isNotEmpty(plan.getFragments()));
+        Preconditions.checkState(plan.getTopFragment().getSink() instanceof OlapTableSink);
+        return (OlapTableSink) (plan.getTopFragment().getSink());
+    }
+
     /**
      * Build physical fragments for the maintenance plan
      */
@@ -257,7 +267,7 @@ public class MVMaintenanceJob implements Writable {
             ConnectContext context = queryCoordinator.getConnectContext();
             context.getSessionVariable().setPreferComputeNode(false);
             context.getSessionVariable().setUseComputeNodes(0);
-            OlapTableSink dataSink = (OlapTableSink) plan.getFragments().get(0).getSink();
+            OlapTableSink dataSink = getMVOlapTableSink();
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
             long dbId = getView().getDbId();
@@ -324,18 +334,12 @@ public class MVMaintenanceJob implements Writable {
         for (MVMaintenanceTask task : taskMap.values()) {
             long taskId = task.getTaskId();
             TNetworkAddress address = task.getBeRpcAddr();
-            // Request information
-            String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setQuery_id(queryCoordinator.getQueryId());
             request.setTask_type(MVTaskType.START_MAINTENANCE);
-            request.setJob_id(getJobId());
-            request.setTask_id(taskId);
-            request.setStart_maintenance(new TMVMaintenanceStartTask());
-            request.setDb_name(dbName);
-            request.setMv_name(view.getName());
+            setMVMaintenanceTasksInfo(request, task);
+
             request.setStart_maintenance(new TMVMaintenanceStartTask());
             request.start_maintenance.setFragments(task.getFragmentInstances());
 
@@ -368,6 +372,18 @@ public class MVMaintenanceJob implements Writable {
             throw ex;
         }
     }
+    private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
+                                           MVMaintenanceTask task) {
+        // Request information
+        String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
+
+        request.setDb_name(dbName);
+        request.setMv_name(view.getName());
+        request.setDb_id(dbId);
+        request.setMv_id(viewId);
+        request.setJob_id(getJobId());
+        request.setTask_id(task.getTaskId());
+    }
 
     private void stopTasks() throws Exception {
         QeProcessorImpl.INSTANCE.unregisterQuery(connectContext.getExecutionId());
@@ -378,8 +394,7 @@ public class MVMaintenanceJob implements Writable {
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setQuery_id(connectContext.getExecutionId());
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
-            request.setJob_id(getJobId());
-            request.setTask_id(task.getTaskId());
+            setMVMaintenanceTasksInfo(request, task);
             request.setStop_maintenance(new TMVMaintenanceStopTask());
             TNetworkAddress address = task.getBeRpcAddr();
 
@@ -463,6 +478,9 @@ public class MVMaintenanceJob implements Writable {
     public long getViewId() {
         return viewId;
     }
+    public long getDbId() {
+        return dbId;
+    }
 
     public MVEpoch getEpoch() {
         return epoch;
@@ -470,7 +488,7 @@ public class MVMaintenanceJob implements Writable {
 
     @Override
     public String toString() {
-        return String.format("MVJob id=%s,viewId=%d,epoch=%s, state=%s", jobId, viewId, epoch, state);
+        return String.format("MVJob id=%s,dbId=%s,viewId=%d,epoch=%s, state=%s", jobId, dbId, viewId, epoch, state);
     }
 
     @Override

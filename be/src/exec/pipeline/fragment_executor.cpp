@@ -477,6 +477,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
+    auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -485,7 +486,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& pipelines = _fragment_ctx->pipelines();
 
     // Build pipelines
-    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism);
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, is_stream_pipeline);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
 

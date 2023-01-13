@@ -151,7 +151,8 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
         if (sink_operator()->is_epoch_finished()) {
             VLOG_ROW << "Driver epoch finished, driver=" << this->to_readable_string();
             RETURN_IF_ERROR(return_status = _mark_operator_epoch_finished(_operators.back(), runtime_state));
-            set_driver_state(DriverState::EPOCH_FINISH);
+            set_driver_state(is_still_epoch_finishing() ? DriverState::EPOCH_PENDING_FINISH
+                                                        : DriverState::EPOCH_FINISH);
             return _state;
         }
 

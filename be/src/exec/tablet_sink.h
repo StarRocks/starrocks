@@ -304,6 +304,8 @@ public:
 
     ObjectPool* pool() { return _pool; }
 
+    Status reset_epoch(RuntimeState* state);
+
 private:
     template <LogicalType PT>
     void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,

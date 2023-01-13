@@ -941,6 +941,11 @@ public class EditLog {
                     MVManager.getInstance().replay(job);
                     break;
                 }
+                case OperationType.OP_MV_EPOCH_UPDATE: {
+                    MVEpoch epoch = (MVEpoch) journal.getData();
+                    MVManager.getInstance().replayEpoch(epoch);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);

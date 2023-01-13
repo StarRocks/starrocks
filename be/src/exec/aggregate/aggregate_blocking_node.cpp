@@ -273,8 +273,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        ops_with_source.emplace_back(
-                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+        may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
     if (limit() != -1) {

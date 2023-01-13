@@ -61,6 +61,7 @@
 #include "exec/lake_meta_scan_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/project_node.h"
@@ -846,6 +847,15 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
+}
+
+void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
+    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
+    // for now just disable it in stream pipelines:
+    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
+    if (!context->is_stream_pipeline()) {
+        ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
+    }
 }
 
 } // namespace starrocks

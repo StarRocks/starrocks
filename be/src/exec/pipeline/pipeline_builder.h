@@ -28,8 +28,10 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
-    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism)
-            : _fragment_context(fragment_context), _degree_of_parallelism(degree_of_parallelism) {}
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, bool is_stream_pipeline)
+            : _fragment_context(fragment_context),
+              _degree_of_parallelism(degree_of_parallelism),
+              _is_stream_pipeline(is_stream_pipeline) {}
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
@@ -71,6 +73,8 @@ public:
 
     size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
+    bool is_stream_pipeline() const { return _is_stream_pipeline; }
+
     Pipelines get_pipelines() const { return _pipelines; }
 
     RuntimeState* runtime_state() { return _fragment_context->runtime_state(); }
@@ -109,6 +113,7 @@ private:
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
 
     const size_t _degree_of_parallelism;
+    const bool _is_stream_pipeline;
 };
 
 class PipelineBuilder {

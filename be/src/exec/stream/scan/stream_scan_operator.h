@@ -27,20 +27,39 @@ namespace starrocks::pipeline {
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
-    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter);
+    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter,
+                              bool is_stream_pipeline);
 
     ~StreamScanOperatorFactory() override = default;
 
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
+
+private:
+    bool _is_stream_pipeline;
 };
 
 class StreamScanOperator final : public ConnectorScanOperator {
 public:
-    StreamScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
+    StreamScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
+                       bool is_stream_pipeline);
 
     ~StreamScanOperator() override = default;
 
+    bool is_finished() const override;
+    bool has_output() const override;
+    Status reset_epoch(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    bool is_epoch_finished() const override { return _is_epoch_finished; }
+
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
+private:
+    StatusOr<ChunkPtr> _mark_mock_data_finished();
+
+    std::atomic<int32_t> _chunk_num{0};
+    bool _is_stream_pipeline{false};
+    bool _is_epoch_finished{true};
+    int64_t _run_time = 0;
 };
 
 class StreamChunkSource : public ConnectorChunkSource {

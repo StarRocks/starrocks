@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.UserException;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
@@ -25,16 +26,14 @@ import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 
 /**
  * EpochCoordinator based on transaction:
@@ -49,6 +48,9 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private static final long MAX_EXEC_MILLIS = 1000;
     private static final long MAX_SCAN_ROWS = 100_000;
     private static final long JOB_TIMEOUT = 120;
+
+    // default: 1 hour
+    private static final long STREAM_MV_DEFAULT_LOAD_TIMEOUT_S = 3600;
     private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 100_000;
 
     private final MVMaintenanceJob mvMaintenanceJob;
@@ -60,7 +62,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     /**
      * TODO(murphy) make it event-driven instead of blocking here
      */
-    public void runEpoch(MVEpoch epoch) {
+    public void runEpoch(MVEpoch epoch) throws Exception {
         LOG.info("runEpoch: {}", epoch);
         try {
             beginEpoch(epoch);
@@ -85,8 +87,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
         MaterializedView view = mvMaintenanceJob.getView();
         long dbId = view.getDbId();
-        List<Long> tableIdList =
-                view.getBaseTableInfos().stream().map(t -> t.getTableId()).collect(Collectors.toList());
+        List<Long> tableIdList =  Arrays.asList(view.getId());
         long currentTs = System.currentTimeMillis();
         String label = String.format("MV_REFRESH_%d-%d-%d", dbId, view.getId(), currentTs);
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
@@ -95,6 +96,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
+
+            // Init OlapSink's txnId
+            OlapTableSink olapTableSink = mvMaintenanceJob.getMVOlapTableSink();
+            olapTableSink.init(mvMaintenanceJob.getQueryId(), txnId, dbId, STREAM_MV_DEFAULT_LOAD_TIMEOUT_S);
+
             execute(epoch);
         } catch (Exception e) {
             epoch.onFailed();
@@ -103,8 +109,20 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         }
     }
 
-    private boolean waitEpochFinish(MVEpoch epoch) {
+    private boolean waitEpochFinish(MVEpoch epoch) throws Exception {
+        LOG.info("waitEpochFinish: {}", epoch);
         // TODO(murphy) wait all task finish
+        long numTasks = mvMaintenanceJob.getTasks().size();
+        long maxWaitTimes = 200;
+        while (epoch.getNumEpochFinished() != numTasks) {
+            LOG.info("numTasks={}, numEpochFinished={}", numTasks, epoch.getNumEpochFinished());
+            if (maxWaitTimes < 0) {
+                return false;
+            }
+            Thread.sleep(100);
+            maxWaitTimes--;
+        }
+        LOG.info("waitEpochFinish done: {}", epoch);
         return true;
     }
 
@@ -112,26 +130,27 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         LOG.info("commitEpoch: {}", epoch);
         long dbId = mvMaintenanceJob.getView().getDbId();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        List<TabletCommitInfo> commitInfo = null;
-        List<TabletFailInfo> failedInfo = null;
 
         try {
             epoch.onCommitting();
 
             boolean published = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
-                    epoch.getTxnId(), commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
+                    epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS);
             Preconditions.checkState(published, "must be published");
 
             // TODO(murphy) collect binlog consumption state from execution
             BinlogConsumeStateVO binlogState = new BinlogConsumeStateVO();
 
             // TODO(murphy) atomic persist the epoch update and transaction commit
+            // TODO: Really need this?
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
             epoch.onCommitted(binlogState);
         } catch (UserException e) {
             epoch.onFailed();
             // TODO(murphy) handle error
+            LOG.warn("Failed to commit transaction for epoch {}", epoch);
+            throw new RuntimeException(e);
         }
     }
 
@@ -174,6 +193,8 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             taskMsg.setPer_node_scan_ranges(task.getBinlogConsumeState());
             taskMsg.setMax_exec_millis(MAX_EXEC_MILLIS);
             taskMsg.setMax_scan_rows(MAX_SCAN_ROWS);
+
+            LOG.info("runEpoch: {}", request);
             try {
                 results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
             } catch (Exception e) {

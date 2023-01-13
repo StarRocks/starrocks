@@ -136,11 +136,6 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
 }
 
 Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
-    int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
-    if (num >= 2) {
-        return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
-    }
-
     for (int row = 0; row < 10; row++) {
         for (int col = 0; col < chunk->num_columns(); col++) {
             LogicalType type = _binlog_read_schema.field(col)->type()->type();
