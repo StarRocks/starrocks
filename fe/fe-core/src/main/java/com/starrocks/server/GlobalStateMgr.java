@@ -2223,11 +2223,60 @@ public class GlobalStateMgr {
                 sb.append(olapTable.enableReplicatedStorage()).append("\"");
             }
 
+<<<<<<< HEAD
             // write quorum
             if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
                         .append("\" = \"");
                 sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+=======
+                // replicated_storage
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+
+                // binlog config
+                if (olapTable.containsBinlogConfig()) {
+                    // binlog_version
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getVersion()).append("\"");
+                    // binlog_enable
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogEnable()).append("\"");
+                    // binlog_ttl
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogTtlSecond()).append("\"");
+                    // binlog_max_size
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
+                }
+
+                // write quorum
+                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                            .append("\" = \"");
+                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // storage media
+                Map<String, String> properties = olapTable.getTableProperty().getProperties();
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
+>>>>>>> 57ea5dcfa ([Refactor] Default enable replicated storage (#15984))
             }
 
             // compression type
