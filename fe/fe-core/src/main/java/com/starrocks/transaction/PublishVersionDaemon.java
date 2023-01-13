@@ -46,13 +46,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -60,15 +58,21 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.spark_project.jetty.util.ConcurrentHashSet;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends LeaderDaemon {
@@ -76,6 +80,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
     private static final long RETRY_INTERVAL_MS = 1000;
+
+    private Executor lakeTaskExecutor;
+    private ConcurrentHashSet<Long> publishingLakeTransactions;
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -120,6 +127,20 @@ public class PublishVersionDaemon extends LeaderDaemon {
         } catch (Throwable t) {
             LOG.error("errors while publish version to all backends", t);
         }
+    }
+
+    private @NotNull Executor getLakeTaskExecutor() {
+        if (lakeTaskExecutor == null) {
+            lakeTaskExecutor = Executors.newFixedThreadPool(Config.experimental_lake_publish_version_threads);
+        }
+        return lakeTaskExecutor;
+    }
+
+    private @NotNull ConcurrentHashSet<Long> getPublishingLakeTransactions() {
+        if (publishingLakeTransactions == null) {
+            publishingLakeTransactions = new ConcurrentHashSet<>();
+        }
+        return publishingLakeTransactions;
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
@@ -228,7 +249,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
-    // TODO: support mix OlapTable with LakeTable
     boolean isLakeTableTransaction(TransactionState transactionState) {
         if (transactionState.getTableIdList().isEmpty()) {
             return false;
@@ -251,69 +271,108 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return false;
     }
 
-    // todo: refine performance
-    void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) throws UserException {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-
+    void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
+        int maxPublishingTransactions = Config.experimental_lake_publish_version_threads * 2;
+        ConcurrentHashSet<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
+            if (publishingTransactions.size() >= maxPublishingTransactions) {
+                break;
+            }
+
             long txnId = txnState.getTransactionId();
-            Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
-            if (db == null) {
-                LOG.info("the database of transaction {} has been deleted", txnId);
-                globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
-                continue;
-            }
-            boolean finished = true;
-            for (TableCommitInfo tableCommitInfo : txnState.getIdToTableCommitInfos().values()) {
-                if (!publishTable(db, txnState, tableCommitInfo)) {
-                    finished = false;
-                }
-            }
-            if (finished) {
-                globalTransactionMgr.finishTransaction(db.getId(), txnId, null);
+            if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
+                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
+                future.thenRun(() -> publishingTransactions.remove(txnId));
             }
         }
     }
 
-    private boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) {
-        boolean finished = true;
+    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
-        for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-
-            long currentTime = System.currentTimeMillis();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) {
-                continue;
-            }
-            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
-                finished = false;
-                continue;
-            }
-
-            boolean ok = false;
+        long dbId = txnState.getDbId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.info("the database of transaction {} has been deleted", txnId);
             try {
-                ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
-            } catch (Throwable e) {
-                LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
-                        txnId, e.getMessage());
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(e);
+                globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
+            } catch (UserException ex) {
+                LOG.warn("Fail to finish txn " + txnId, ex);
+            }
+            return CompletableFuture.completedFuture(null);
+        }
+
+        CompletableFuture<Boolean> publishFuture;
+        Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
+        if (tableCommitInfos.size() == 1) {
+            TableCommitInfo tableCommitInfo = tableCommitInfos.iterator().next();
+            publishFuture = publishLakeTableAsync(db, txnState, tableCommitInfo);
+        } else {
+            List<CompletableFuture<Boolean>> futureList = new ArrayList<>(tableCommitInfos.size());
+            for (TableCommitInfo tableCommitInfo : tableCommitInfos) {
+                CompletableFuture<Boolean> future = publishLakeTableAsync(db, txnState, tableCommitInfo);
+                futureList.add(future);
+            }
+            publishFuture = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0])).thenApply(
+                    v -> futureList.stream().allMatch(CompletableFuture::join));
+        }
+
+        return publishFuture.thenAccept(success -> {
+            if (success) {
+                try {
+                    globalTransactionMgr.finishTransaction(dbId, txnId, null);
+                } catch (UserException e) {
+                    throw new RuntimeException(e);
                 }
             }
-            if (ok) {
-                partitionCommitInfo.setVersionTime(System.currentTimeMillis());
-            } else {
-                partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
-                finished = false;
+        }).exceptionally(ex -> {
+            LOG.error("Fail to finish transaction " + txnId, ex);
+            return null;
+        });
+    }
+
+    private CompletableFuture<Boolean> publishLakeTableAsync(Database db, TransactionState txnState,
+                                                             TableCommitInfo tableCommitInfo) {
+        Collection<PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo().values();
+        if (partitionCommitInfos.size() == 1) {
+            PartitionCommitInfo partitionCommitInfo = partitionCommitInfos.iterator().next();
+            return publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+        } else {
+            List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                CompletableFuture<Boolean> future = publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+                futureList.add(future);
             }
+            return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
+                    .thenApply(v -> futureList.stream().allMatch(CompletableFuture::join));
         }
-        return finished;
+    }
+
+    private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
+                                                                 @NotNull PartitionCommitInfo partitionCommitInfo,
+                                                                 @NotNull TransactionState txnState) {
+        long versionTime = partitionCommitInfo.getVersionTime();
+        if (versionTime > 0) {
+            return CompletableFuture.completedFuture(true);
+        }
+        if (versionTime < 0 && System.currentTimeMillis() < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        return CompletableFuture.supplyAsync(() -> {
+            boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
+            partitionCommitInfo.setVersionTime(success ? System.currentTimeMillis() : -System.currentTimeMillis());
+            return success;
+        }, getLakeTaskExecutor()).exceptionally(ex -> {
+            LOG.error("Fail to publish txn " + txnState.getTransactionId(), ex);
+            partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
+            return false;
+        });
     }
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState)
-            throws RpcException, NoAliveBackendException {
+                                     @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
@@ -358,17 +417,24 @@ public class PublishVersionDaemon extends LeaderDaemon {
             db.readUnlock();
         }
 
-        if (shadowTablets != null && !shadowTablets.isEmpty()) {
-            Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
-        }
-        if (normalTablets != null && !normalTablets.isEmpty()) {
-            Map<Long, Double> compactionScores = new HashMap<>();
-            Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
+        try {
+            if (CollectionUtils.isNotEmpty(shadowTablets)) {
+                Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
+            }
+            if (CollectionUtils.isNotEmpty(normalTablets)) {
+                Map<Long, Double> compactionScores = new HashMap<>();
+                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
 
-            Quantiles quantiles = Quantiles.compute(compactionScores.values());
-            partitionCommitInfo.setCompactionScore(quantiles);
+                Quantiles quantiles = Quantiles.compute(compactionScores.values());
+                partitionCommitInfo.setCompactionScore(quantiles);
+            }
+            return true;
+        } catch (Throwable e) {
+            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+                    txnId, e.getMessage());
+            LOG.debug(e);
+            return false;
         }
-        return true;
     }
 
     /**
