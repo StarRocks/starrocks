@@ -20,11 +20,13 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -585,6 +587,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
+    public boolean isForceExternalTableQueryRewrite() {
+        return tableProperty.getForceExternalTableQueryRewrite();
+    }
+
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
         if (!isLoadTriggeredRefresh()) {
             return false;
@@ -699,6 +705,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
         }
 
+        // force_external_table_query_rewrite
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -765,14 +778,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public Set<String> getPartitionNamesToRefreshForMv() {
         PartitionInfo partitionInfo = getPartitionInfo();
+
+        boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
                 Table table = tableInfo.getTable();
-                // if there is one external table, just return empty sets
-                // because that we can not judge whether mv based on external table is update-to-date
+
+                // we can not judge whether mv based on external table is update-to-date,
+                // because we do not know that any changes in external table.
                 if (!table.isLocalTable()) {
-                    return Sets.newHashSet();
+                    if (forceExternalTableQueryRewrite) {
+                        // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                        continue;
+                    } else {
+                        return getPartitionNames();
+                    }
                 }
                 Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
                 if (!partitionNames.isEmpty()) {
@@ -784,7 +805,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             // 1. dropped partitions
             // 2. newly added partitions
             // 3. partitions loaded with new data
-            return getUpdatedPartitionNamesForPartitionBy();
+            return getPartitionNamesToRefreshForPartitionedMv();
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition info type:"
                     + partitionInfo.getClass().getName());
@@ -792,15 +813,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return Sets.newHashSet();
     }
 
-    private Set<String> getUpdatedPartitionNamesForPartitionBy() {
+    private Set<String> getPartitionNamesToRefreshForPartitionedMv() {
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
         Table partitionTable = partitionInfo.first;
+        boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
             if (!table.isLocalTable()) {
-                return Sets.newHashSet();
+                if (forceExternalTableQueryRewrite) {
+                    // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                    continue;
+                } else {
+                    return getPartitionNames();
+                }
             }
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
@@ -810,13 +837,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return getPartitionNames();
             }
         }
-        // from here, partitionTable must be OlapTable or MaterializedView
-        OlapTable basePartitionTable = (OlapTable) partitionTable;
-
         // check partition-by table
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-
-        Map<String, Range<PartitionKey>> basePartitionMap = basePartitionTable.getRangePartitionMap();
+        Map<String, Range<PartitionKey>> basePartitionMap;
+        try {
+            basePartitionMap = PartitionUtil.getPartitionRange(partitionTable,
+                    partitionInfo.second);
+        } catch (UserException e) {
+            LOG.warn("Materialized view compute partition difference with base table failed.", e);
+            return getPartitionNames();
+        }
         Map<String, Range<PartitionKey>> mvPartitionMap = getRangePartitionMap();
         PartitionDiff partitionDiff = getPartitionDiff(partitionExpr, partitionInfo.second,
                 basePartitionMap, mvPartitionMap);
