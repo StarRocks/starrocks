@@ -53,7 +53,8 @@ public:
     Status start_epoch(ExecEnv* exec_env, const QueryContext* query_ctx,
                        const std::vector<FragmentContext*>& fragment_ctxs, const EpochInfo& epoch_info,
                        const ScanRangeInfo& scan_info);
-    Status prepare(const std::vector<FragmentContext*>& fragment_ctxs);
+    Status prepare(const MVMaintenanceTaskInfo& maintenance_task_info,
+                   const std::vector<FragmentContext*>& fragment_ctxs);
     Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id, int64_t tablet_id,
                                 BinlogOffset binlog_offset);
     Status activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id, int64_t expected_num_drivers,
@@ -64,6 +65,7 @@ public:
                                           int64_t tablet_id) const;
     const EpochInfo& epoch_info() const;
     const std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges() const;
+    const MVMaintenanceTaskInfo& maintenance_task_info() const;
 
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
     void count_down_fragment_ctx(RuntimeState* state, FragmentContext* fragment_ctx, size_t val = 1);
@@ -77,10 +79,11 @@ private:
     mutable std::shared_mutex _epoch_lock;
     std::atomic_bool _is_finished{false};
     EpochInfo _epoch_info;
+    MVMaintenanceTaskInfo _maintenance_task_info;
     std::unordered_map<TUniqueId, NodeId2ScanRanges> _fragment_id_to_node_id_scan_ranges;
     std::vector<FragmentContext*> _finished_fragment_ctxs;
-    bool _enable_resource_group;
-    int64_t _num_drivers;
+    bool _enable_resource_group = true;
+    int64_t _num_drivers = 0;
 };
 
 } // namespace starrocks::pipeline

@@ -689,8 +689,10 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
     LOG(INFO) << "[MV] mv maintenance task, query_id=" << t_request.query_id << ", mv_task_type:" << t_request.task_type
-              << "db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name << ", job_id=" << t_request.job_id
-              << ", task_id=" << t_request.task_id << ", signature=" << t_request.signature;
+              << ", db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name
+              << ", job_id=" << t_request.job_id << ", task_id=" << t_request.task_id
+              << ", signature=" << t_request.signature;
+    VLOG(2) << "[MV] mv maintenance task, plan=" << apache::thrift::ThriftDebugString(t_request);
 
     auto mv_task_type = t_request.task_type;
     const TUniqueId& query_id = t_request.query_id;
@@ -787,7 +789,8 @@ Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTa
     }
     auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
     DCHECK(stream_epoch_manager);
-    RETURN_IF_ERROR(stream_epoch_manager->prepare(fragment_ctxs));
+    auto maintenance_task = MVMaintenanceTaskInfo::from_maintenance_task(task);
+    RETURN_IF_ERROR(stream_epoch_manager->prepare(maintenance_task, fragment_ctxs));
     return Status::OK();
 }
 
