@@ -116,6 +116,11 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_base_ro
 
 void BaseAndCumulativeCompactionPolicy::debug_rowsets(CompactionType type,
                                                       const std::vector<uint32_t>& input_rowset_ids) {
+    static const int verboselevel = 3;
+
+    if (!VLOG_IS_ON(verboselevel)) {
+        return;
+    }
     std::vector<uint32_t> rowset_ids;
     std::vector<uint32_t> delete_rowset_ids;
     for (const auto& rowset : _tablet_metadata->rowsets()) {
@@ -124,13 +129,13 @@ void BaseAndCumulativeCompactionPolicy::debug_rowsets(CompactionType type,
             delete_rowset_ids.emplace_back(rowset.id());
         }
     }
-    LOG(INFO) << "pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
-              << ", version: " << _tablet_metadata->version()
-              << ", cumulative point: " << _tablet_metadata->cumulative_point()
-              << ", input rowsets size: " << input_rowset_ids.size() << ", input rowsets: ["
-              << JoinInts(input_rowset_ids, ",") + "]"
-              << ", rowsets: [" << JoinInts(rowset_ids, ",") << "]"
-              << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
+    VLOG(verboselevel) << "pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
+                       << ", version: " << _tablet_metadata->version()
+                       << ", cumulative point: " << _tablet_metadata->cumulative_point()
+                       << ", input rowsets size: " << input_rowset_ids.size() << ", input rowsets: ["
+                       << JoinInts(input_rowset_ids, ",") + "]"
+                       << ", rowsets: [" << JoinInts(rowset_ids, ",") << "]"
+                       << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
 }
 
 StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets(int64_t version) {
