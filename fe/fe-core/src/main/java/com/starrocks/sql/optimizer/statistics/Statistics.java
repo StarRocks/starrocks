@@ -67,9 +67,6 @@ public class Statistics {
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
         ColumnStatistic result = columnStatistics.get(column);
-        if (result == null) {
-            System.out.printf("xx");
-        }
         Preconditions.checkState(result != null, "cannot find statistics of col: %s", column);
         return result;
     }
