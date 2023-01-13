@@ -108,7 +108,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tblName) {
         org.apache.iceberg.Table icebergTable
                 = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
+<<<<<<< HEAD
         if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)) {
+=======
+        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)
+                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)
+                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
+>>>>>>> 80bbc21d4 ([BugFix] Fix list iceberg partition with glue (#16603))
             throw new StarRocksIcebergException(
                     "Do not support get partitions from catalog type: " + catalogType);
         }
