@@ -1903,6 +1903,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField
+    public static int experimental_lake_publish_version_threads = 16;
+
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = true;
 
