@@ -2228,6 +2228,13 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
                         .append("\" = \"");
                 sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+
+                // replicated_storage
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+
             }
 
             // compression type
