@@ -4537,6 +4537,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
         FunctionName fnName = FunctionName.createFnName(functionName);
+        boolean isDistinct = context.DISTINCT() != null;
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
@@ -4545,9 +4546,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
                 }
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
-                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                FunctionParams params = new FunctionParams(isDistinct, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
                         "floor"));
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, params);
 
                 return functionCallExpr;
             } else if (context.expression().size() == 3) {
@@ -4563,9 +4565,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     throw new ParsingException(functionName + " must use FLOOR/CEIL as third parameter");
                 }
                 UnitBoundary unitBoundary = (UnitBoundary) e3;
-                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                FunctionParams params = new FunctionParams(isDistinct, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
                         unitBoundary.getDescription().toLowerCase()));
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, params);
 
                 return functionCallExpr;
             } else {
@@ -4612,7 +4615,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
-                new FunctionParams(false, visit(context.expression(), Expr.class)));
+                new FunctionParams(isDistinct, visit(context.expression(), Expr.class)));
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
         }

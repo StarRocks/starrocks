@@ -1759,7 +1759,7 @@ functionCall
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
+    | qualifiedName '(' DISTINCT? (expression (',' expression)*)? ')'  over?              #simpleFunctionCall
     ;
 
 aggregationFunction

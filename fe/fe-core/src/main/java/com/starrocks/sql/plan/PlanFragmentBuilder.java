@@ -1663,6 +1663,12 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF));
+                    replaceExpr.getParams().setIsDistinct(false);
                 }
                 Preconditions.checkState(replaceExpr != null);
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());

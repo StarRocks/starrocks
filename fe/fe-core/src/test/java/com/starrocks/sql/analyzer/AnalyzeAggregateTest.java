@@ -70,6 +70,12 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature: max_by(bigint(20), bigint(20), bigint(20)).");
         analyzeFail("select max_by(v1,1) from t0", "max_by function args must be column");
         analyzeFail("select max_by(1,v1) from t0", "max_by function args must be column");
+
+        analyzeSuccess("select array_agg(DISTINCT v2) from t0 group by v1");
+        analyzeSuccess("select array_agg(DISTINCT v1) from t0 group by v2");
+        analyzeSuccess("select array_agg(DISTINCT v1) from t0 group by v2,v3");
+        analyzeSuccess("select array_agg(DISTINCT v2), array_agg(DISTINCT v3) from t0 group by v1");
+        analyzeSuccess("select array_agg(DISTINCT v2), array_agg(DISTINCT v3) from t0");
     }
 
     @Test

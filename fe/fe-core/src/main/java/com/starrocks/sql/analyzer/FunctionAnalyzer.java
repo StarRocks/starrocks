@@ -160,9 +160,6 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("array_agg does not support DISTINCT");
-            }
             if (arg.getType().isDecimalV3()) {
                 throw new SemanticException("array_agg does not support DecimalV3");
             }
