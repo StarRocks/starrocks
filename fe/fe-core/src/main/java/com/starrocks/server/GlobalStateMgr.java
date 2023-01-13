@@ -2276,12 +2276,10 @@ public class GlobalStateMgr {
                 sb.append(olapTable.enablePersistentIndex()).append("\"");
 
                 // replicated_storage
-                if (olapTable.enableReplicatedStorage()) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                            .append("\" = \"");
-                    sb.append(olapTable.enableReplicatedStorage()).append("\"");
-                }
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
 
                 // binlog config
                 if (olapTable.containsBinlogConfig()) {

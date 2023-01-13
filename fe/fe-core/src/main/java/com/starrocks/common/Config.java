@@ -1135,6 +1135,12 @@ public class Config extends ConfigBase {
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
      * FOR BeLoadBalancer:
      * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
      * this backend will be marked as LOW load, if load score is 10% higher than average score, HIGH load

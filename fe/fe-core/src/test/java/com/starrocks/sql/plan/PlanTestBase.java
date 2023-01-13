@@ -746,6 +746,7 @@ public class PlanTestBase {
                         "COMMENT \"OLAP\"\n" +
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
                         "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"false\",\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");")
                 .withTable("CREATE TABLE test.`bigtable` (\n" +
@@ -1049,6 +1050,7 @@ public class PlanTestBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"false\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
