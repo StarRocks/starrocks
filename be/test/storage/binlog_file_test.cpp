@@ -49,9 +49,7 @@ public:
 
 protected:
     std::shared_ptr<TestLogEntryInfo> _build_insert_segment_log_entry(int64_t version, RowsetId& rowset_id,
-                                                                      int seg_index, int64_t start_seq_id,
-                                                                      int64_t num_rows, bool end_of_version,
-                                                                      int64_t timestamp) {
+            int seg_index, int64_t start_seq_id, int64_t num_rows, bool end_of_version, int64_t timestamp) {
         std::shared_ptr<TestLogEntryInfo> entry_info = std::make_shared<TestLogEntryInfo>();
         LogEntryPB& log_entry = entry_info->log_entry;
         log_entry.set_entry_type(INSERT_RANGE_PB);
@@ -91,6 +89,23 @@ protected:
     std::shared_ptr<FileSystem> _fs;
     std::string _binlog_file_dir = "binlog_file_test";
 };
+
+void estimate_log_entry_size(LogEntryTypePB entry_type, int32_t* estimated_size) {
+    // TODO support other types
+    EXPECT_EQ(INSERT_RANGE_PB, entry_type);
+    LogEntryPB entry;
+    entry.set_entry_type(entry_type);
+    InsertRangePB* insert_range = entry.mutable_insert_range_data();
+    FileIdPB* file_id = insert_range->mutable_file_id();
+    RowsetIdPB* rs_id = file_id->mutable_rowset_id();
+    rs_id->set_hi(0);
+    rs_id->set_mi(0);
+    rs_id->set_lo(0);
+    file_id->set_segment_index(0);
+    insert_range->set_start_row_id(0);
+    insert_range->set_num_rows(1);
+    *estimated_size = entry.ByteSizeLong();
+}
 
 void verify_rowset_id(RowsetIdPB* expect_rowset_id, RowsetIdPB* actual_rowset_id) {
     ASSERT_EQ(expect_rowset_id->hi(), actual_rowset_id->hi());
@@ -137,10 +152,10 @@ void verify_log_entry_info(const std::shared_ptr<TestLogEntryInfo>& expect, LogE
 
 void verify_seek_and_next(std::string file_path, std::shared_ptr<BinlogFileMetaPB> file_meta, int64_t seek_version,
                           int64_t seek_seq_id, std::vector<std::shared_ptr<TestLogEntryInfo>>& expected,
-                          int expect_first_index) {
+                          int expected_first_entry_index) {
     std::shared_ptr<BinlogFileReader> file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
     Status st = file_reader->seek(seek_version, seek_seq_id);
-    for (int i = expect_first_index; i < expected.size(); i++) {
+    for (int i = expected_first_entry_index; i < expected.size(); i++) {
         ASSERT_TRUE(st.ok());
         std::shared_ptr<TestLogEntryInfo> expect_entry = expected[i];
         LogEntryInfo* actual_entry = file_reader->log_entry();
@@ -190,8 +205,8 @@ void verify_file_meta(BinlogFileMetaPB* expect_file_meta, std::shared_ptr<Binlog
     ASSERT_TRUE(rowset_set.empty());
 }
 
-// Test for duplicate key, and there is only insert range
-TEST_F(BinlogFileTest, test_duplicate_key) {
+// Test simple write/read for duplicate key, and there is only insert range
+TEST_F(BinlogFileTest, test_dup_key_basic) {
     CompressionTypePB compression_type = LZ4_FRAME;
     int32_t page_size = 50;
     int64_t file_id = 1;
@@ -302,6 +317,76 @@ TEST_F(BinlogFileTest, test_duplicate_key) {
     verify_seek_and_next(file_path, file_meta, 4, 32, expect_entries, 5);
     verify_seek_and_next(file_path, file_meta, 4, 40, expect_entries, 6);
     verify_seek_and_next(file_path, file_meta, 4, 59, expect_entries, 6);
+}
+
+// Test generating large binlog file with random content for duplicate key
+TEST_F(BinlogFileTest, test_dup_key_random) {
+    CompressionTypePB compression_type = NO_COMPRESSION;
+    int32_t expect_file_size = 100 * 1024 * 1024;
+    int32_t expect_num_versions = 1000;
+    int32_t max_page_size = 32 * 1024;
+    int32_t estimated_log_entry_size;
+    estimate_log_entry_size(INSERT_RANGE_PB, &estimated_log_entry_size);
+    int32_t avg_entries_per_version = expect_file_size / estimated_log_entry_size;
+
+    std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, 1);
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(file_path));
+    std::shared_ptr<BinlogFileWriter> file_writer =
+            std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
+    file_writer->init();
+    std::vector<std::shared_ptr<TestLogEntryInfo>> expect_entries;
+    struct VersionInfo {
+        int64_t version;
+        int32_t num_entries;
+        int64_t num_rows_per_entry;
+    };
+    std::vector<VersionInfo> versions;
+    while (file_writer->file_size() < expect_file_size && versions.size() < expect_num_versions) {
+        VersionInfo version_info;
+        version_info.version = versions.size() + 1;
+        version_info.num_entries = std::rand() % avg_entries_per_version * 2;
+        version_info. num_rows_per_entry = std::rand() % 100 + 1;
+        RowsetId rowset_id;
+        rowset_id.init(2, version_info.version, 2, 3);
+        ASSERT_OK(file_writer->begin(version_info.version, rowset_id, 0, version_info.version));
+        if (version_info.num_entries == 0) {
+            ASSERT_OK(file_writer->add_empty());
+        } else {
+            for (int32_t n = 0; n < version_info.num_entries; n++) {
+                ASSERT_OK(file_writer->add_insert_range(n, 0, version_info.num_rows_per_entry));
+            }
+        }
+        ASSERT_OK(file_writer->commit(true));
+    }
+    ASSERT_OK(file_writer->close(true));
+
+    std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
+    file_writer->copy_file_meta(file_meta.get());
+
+    std::shared_ptr<BinlogFileReader> file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
+    Status st = file_reader->seek(1, 0);
+    for (auto& version_info : versions) {
+        int64_t version = version_info.version;
+        RowsetId rowset_id;
+        rowset_id.init(2, version_info.version, 2, 3);
+        int64_t start_seq_id = 0;
+        for (int32_t n = 0; n < version_info.num_entries; n++) {
+            ASSERT_TRUE(st.ok());
+            bool end_of_version = (n + 1) == version_info.num_entries;
+            std::shared_ptr<TestLogEntryInfo> expect_entry;
+            if (version_info.num_entries > 0) {
+                expect_entry = _build_insert_segment_log_entry(version, rowset_id, n, start_seq_id,
+                                                           version_info.num_rows_per_entry, end_of_version, version);
+            } else {
+                expect_entry = _build_empty_rowset_log_entry(version, version);
+            }
+            LogEntryInfo* actual_entry = file_reader->log_entry();
+            verify_log_entry_info(expect_entry, actual_entry);
+            st = file_reader->next();
+            start_seq_id += version_info.num_rows_per_entry;
+        }
+    }
+    ASSERT_TRUE(st.is_end_of_file());
 }
 
 TEST_F(BinlogFileTest, test_abort) {
