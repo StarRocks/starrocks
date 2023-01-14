@@ -177,12 +177,21 @@ public class ScalarApply2JoinRule extends TransformationRule {
         PredicateOperator countRowsPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
+<<<<<<< HEAD
         Function assertTrueFn = Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
         CallOperator assertTrueCallOp =
                 new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
                         Collections.singletonList(countRowsPredicate),
                         assertTrueFn);
+=======
+        Function assertTrueFn =
+                Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
+                        Function.CompareMode.IS_IDENTICAL);
+        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
+                Lists.newArrayList(countRowsPredicate,
+                        ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
+>>>>>>> 7621e92a8 ([Enhancement] add join unreorder hint (#16515))
         ColumnRefOperator assertion =
                 factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
         projectMap.put(assertion, assertTrueCallOp);
@@ -229,8 +238,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
         assertOptExpression.getInputs().add(input.getInputs().get(1));
 
         // use hint, forbidden reorder un-correlate subquery
-        OptExpression joinOptExpression = new OptExpression(
-                LogicalJoinOperator.builder().setJoinType(JoinOperator.CROSS_JOIN).setJoinHint("broadcast").build());
+        OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
+                .setJoinType(JoinOperator.CROSS_JOIN)
+                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
         joinOptExpression.getInputs().add(assertOptExpression);
 
