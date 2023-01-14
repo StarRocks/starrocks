@@ -626,7 +626,7 @@ void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) 
 }
 
 template <typename T>
-std::string BinaryColumnBase<T>::debug_item(uint32_t idx) const {
+std::string BinaryColumnBase<T>::debug_item(size_t idx) const {
     std::string s;
     auto slice = get_slice(idx);
     s.reserve(slice.size + 2);

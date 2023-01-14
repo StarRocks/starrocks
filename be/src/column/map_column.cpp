@@ -500,7 +500,7 @@ void MapColumn::reset_column() {
     _values->reset_column();
 }
 
-std::string MapColumn::debug_item(uint32_t idx) const {
+std::string MapColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     size_t offset = _offsets->get_data()[idx];
     size_t map_size = _offsets->get_data()[idx + 1] - offset;

@@ -200,13 +200,13 @@ public:
 
     const Buffer<T>& get_pool() const { return _pool; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        int size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        size_t size = this->size();
+        for (size_t i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {
