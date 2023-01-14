@@ -122,8 +122,8 @@ public class JoinHelper {
     }
 
     public boolean onlyShuffle() {
-        return type.isRightJoin() || type.isFullOuterJoin() || "SHUFFLE".equalsIgnoreCase(hint) ||
-                "BUCKET".equalsIgnoreCase(hint);
+        return type.isRightJoin() || type.isFullOuterJoin() || JoinOperator.HINT_SHUFFLE.equals(hint) ||
+                JoinOperator.HINT_BUCKET.equals(hint);
     }
 
     public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
@@ -173,6 +173,6 @@ public class JoinHelper {
                                         String hint) {
         // Cross join only support broadcast join
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
-                (type.isInnerJoin() && equalOnPredicate.isEmpty()) || "BROADCAST".equalsIgnoreCase(hint);
+                (type.isInnerJoin() && equalOnPredicate.isEmpty()) || JoinOperator.HINT_BROADCAST.equals(hint);
     }
 }
