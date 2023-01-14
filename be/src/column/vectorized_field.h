@@ -32,7 +32,7 @@ class Datum;
 class VectorizedField {
 public:
     VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
-                    uint16_t short_key_length, bool is_key, bool nullable)
+                    uint8_t short_key_length, bool is_key, bool nullable)
             : _id(id),
               _agg_method(agg),
               _name(name),
@@ -126,7 +126,6 @@ public:
     const TypeInfoPtr& type() const { return _type; }
 
     bool is_nullable() const;
-    void set_nullable(bool nullable);
 
     bool is_key() const;
     void set_is_key(bool is_key);
@@ -182,14 +181,6 @@ private:
 
 inline bool VectorizedField::is_nullable() const {
     return _flags & (1 << kNullableShift);
-}
-
-inline void VectorizedField::set_nullable(bool nullable) {
-    if (nullable) {
-        _flags |= (1 << kNullableShift);
-    } else {
-        _flags &= ~(1 << kNullableShift);
-    }
 }
 
 inline bool VectorizedField::is_key() const {

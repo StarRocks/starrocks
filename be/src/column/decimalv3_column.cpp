@@ -70,7 +70,7 @@ void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) c
 }
 
 template <typename T>
-std::string DecimalV3Column<T>::debug_item(uint32_t idx) const {
+std::string DecimalV3Column<T>::debug_item(size_t idx) const {
     auto& data = this->get_data();
     return DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
 }

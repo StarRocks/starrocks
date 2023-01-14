@@ -366,7 +366,7 @@ void Chunk::check_or_die() {
 }
 #endif
 
-std::string Chunk::debug_row(uint32_t index) const {
+std::string Chunk::debug_row(size_t index) const {
     std::stringstream os;
     os << "[";
     for (size_t col = 0; col < _columns.size() - 1; ++col) {

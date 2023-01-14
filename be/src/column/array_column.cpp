@@ -514,7 +514,7 @@ void ArrayColumn::reset_column() {
     _elements->reset_column();
 }
 
-std::string ArrayColumn::debug_item(uint32_t idx) const {
+std::string ArrayColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;

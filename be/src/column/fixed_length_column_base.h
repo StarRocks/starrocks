@@ -200,7 +200,7 @@ public:
 
     Datum get(size_t n) const override { return Datum(_data[n]); }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 

@@ -297,7 +297,7 @@ public:
 
     void invalidate_slice_cache() { _slices_cache = false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;

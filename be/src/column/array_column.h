@@ -164,7 +164,7 @@ public:
 
     bool is_nullable() const override { return false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 

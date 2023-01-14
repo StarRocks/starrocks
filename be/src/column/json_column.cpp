@@ -50,7 +50,7 @@ void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx
     }
 }
 
-std::string JsonColumn::debug_item(uint32_t idx) const {
+std::string JsonColumn::debug_item(size_t idx) const {
     return get_object(idx)->to_string_uncheck();
 }
 

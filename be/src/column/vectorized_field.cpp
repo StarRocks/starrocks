@@ -36,7 +36,7 @@ void VectorizedField::full_encode_ascending(const Datum& value, std::string* buf
 VectorizedFieldPtr VectorizedField::convert_to(LogicalType to_type) const {
     VectorizedFieldPtr new_field = std::make_shared<VectorizedField>(*this);
     new_field->_type = get_type_info(to_type);
-    new_field->_short_key_length = new_field->_type->size();
+    new_field->_short_key_length = static_cast<uint8_t>(new_field->_type->size());
     return new_field;
 }
 

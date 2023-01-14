@@ -75,18 +75,6 @@ struct SorterComparator<TimestampValue> {
     }
 };
 
-template <class PermutationType>
-static std::string dubug_column(const Column* column, const PermutationType& permutation) {
-    if (column == nullptr) {
-        return "null";
-    }
-    std::string res;
-    for (auto p : permutation) {
-        res += fmt::format("{:>5}, ", column->debug_item(p.index_in_chunk));
-    }
-    return res;
-}
-
 // TODO: reduce duplicate code
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,

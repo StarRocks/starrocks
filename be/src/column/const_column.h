@@ -216,7 +216,7 @@ public:
         _size = 0;
     }
 
-    std::string debug_item(uint32_t idx) const override {
+    std::string debug_item(size_t idx) const override {
         std::stringstream ss;
         ss << "CONST: " << _data->debug_item(0);
         return ss.str();

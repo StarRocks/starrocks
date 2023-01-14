@@ -270,7 +270,7 @@ public:
         _has_null = false;
     }
 
-    std::string debug_item(uint32_t idx) const override {
+    std::string debug_item(size_t idx) const override {
         DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         if (_null_column->get_data()[idx]) {
@@ -285,8 +285,8 @@ public:
         DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         ss << "[";
-        int size = _data_column->size();
-        for (int i = 0; i < size - 1; ++i) {
+        size_t size = _data_column->size();
+        for (size_t i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {
