@@ -1874,8 +1874,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     PREAGGREGATION: ON");
     }
 
-    @Test
-    public void test() throws Exception {
+    @Ignore
+    public void testDeepTreePredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
         setTableStatistics(table2, 20000000);
@@ -1883,9 +1883,55 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = getSQLFile("optimized-plan/large_predicate");
         // need JVM -Xss10m
 
-        //        String plan = getFragmentPlan(sql);
-        //        System.out.println(PlannerProfile.printPlannerTimeCost(connectContext.getPlannerProfile()));
-        //        assertContains(plan, "  0:OlapScanNode\n" +
-        //                "     TABLE: test_dict");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: test_dict");
+    }
+
+    @Test
+    public void testJoinUnreorder() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        setTableStatistics(t1, 10);
+
+        String sql = "Select * " +
+                " from t0 join t1 on t0.v3 = t1.v6 " +
+                "         join t2 on t0.v2 = t2.v8 and t1.v5 = t2.v7";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: v5 = 7: v7");
+        assertContains(plan, "  6:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
+                "  |  equal join conjunct: 2: v2 = 8: v8");
+
+        sql = "Select * " +
+                " from t0 join[unreorder] t1 on t0.v3 = t1.v6 " +
+                "         join[unreorder] t2 on t0.v2 = t2.v8 and t1.v5 = t2.v7";
+
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  equal join conjunct: 5: v5 = 7: v7\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE");
     }
 }
