@@ -344,7 +344,7 @@ void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     buf->finish_push_bracket();
 }
 
-std::string StructColumn::debug_item(uint32_t idx) const {
+std::string StructColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';

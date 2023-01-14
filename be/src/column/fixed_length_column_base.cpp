@@ -280,7 +280,7 @@ void FixedLengthColumnBase<T>::remove_first_n_values(size_t count) {
 }
 
 template <typename T>
-std::string FixedLengthColumnBase<T>::debug_item(uint32_t idx) const {
+std::string FixedLengthColumnBase<T>::debug_item(size_t idx) const {
     std::stringstream ss;
     if constexpr (sizeof(T) == 1) {
         // for bool, int8_t
@@ -292,7 +292,7 @@ std::string FixedLengthColumnBase<T>::debug_item(uint32_t idx) const {
 }
 
 template <>
-std::string FixedLengthColumnBase<int128_t>::debug_item(uint32_t idx) const {
+std::string FixedLengthColumnBase<int128_t>::debug_item(size_t idx) const {
     std::stringstream ss;
     starrocks::operator<<(ss, _data[idx]);
     return ss.str();
@@ -302,8 +302,8 @@ template <typename T>
 std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
-    int size = this->size();
-    for (int i = 0; i < size - 1; ++i) {
+    size_t size = this->size();
+    for (size_t i = 0; i < size - 1; ++i) {
         ss << debug_item(i) << ", ";
     }
     if (size > 0) {

@@ -362,7 +362,7 @@ public:
     [[nodiscard]] virtual bool set_null(size_t idx __attribute__((unused))) { return false; }
 
     // Only used for debug one item in this column
-    virtual std::string debug_item(uint32_t idx) const { return ""; }
+    virtual std::string debug_item(size_t idx) const { return ""; }
 
     virtual std::string debug_string() const { return {}; }
 
