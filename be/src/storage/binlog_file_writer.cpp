@@ -125,6 +125,9 @@ Status BinlogFileWriter::add_empty() {
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
     log_entry->set_entry_type(EMPTY_PB);
 
+    // No need to add rowset
+    _pending_version_context->rowsets.clear();
+    _pending_page_context->rowsets.clear();
     PendingPageContext* page_context = _pending_page_context.get();
     page_context->num_log_entries += 1;
     // TODO reduce estimation cost
