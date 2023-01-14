@@ -65,10 +65,6 @@ enum WriterState {
     CLOSED
 };
 
-std::string binlog_writer_state() {
-
-}
-
 // Build the binlog file. A binlog file contains multiple pages, each page contains multiple log entries,
 // and each entry contains one or more change events(INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE). Change
 // events from multiple ingestion are written to the file sequentially. The order is the same as that they

@@ -49,7 +49,9 @@ public:
 
 protected:
     std::shared_ptr<TestLogEntryInfo> _build_insert_segment_log_entry(int64_t version, RowsetId& rowset_id,
-            int seg_index, int64_t start_seq_id, int64_t num_rows, bool end_of_version, int64_t timestamp) {
+                                                                      int seg_index, int64_t start_seq_id,
+                                                                      int64_t num_rows, bool end_of_version,
+                                                                      int64_t timestamp) {
         std::shared_ptr<TestLogEntryInfo> entry_info = std::make_shared<TestLogEntryInfo>();
         LogEntryPB& log_entry = entry_info->log_entry;
         log_entry.set_entry_type(INSERT_RANGE_PB);
@@ -334,18 +336,19 @@ TEST_F(BinlogFileTest, test_dup_key_random) {
     std::shared_ptr<BinlogFileWriter> file_writer =
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     file_writer->init();
-    std::vector<std::shared_ptr<TestLogEntryInfo>> expect_entries;
     struct VersionInfo {
         int64_t version;
         int32_t num_entries;
         int64_t num_rows_per_entry;
     };
     std::vector<VersionInfo> versions;
+    std::vector<std::shared_ptr<TestLogEntryInfo>> expect_entries;
     while (file_writer->file_size() < expect_file_size && versions.size() < expect_num_versions) {
         VersionInfo version_info;
         version_info.version = versions.size() + 1;
         version_info.num_entries = std::rand() % avg_entries_per_version * 2;
-        version_info. num_rows_per_entry = std::rand() % 100 + 1;
+        version_info.num_rows_per_entry = std::rand() % 100 + 1;
+        versions.push_back(version_info);
         RowsetId rowset_id;
         rowset_id.init(2, version_info.version, 2, 3);
         ASSERT_OK(file_writer->begin(version_info.version, rowset_id, 0, version_info.version));
@@ -375,8 +378,8 @@ TEST_F(BinlogFileTest, test_dup_key_random) {
             bool end_of_version = (n + 1) == version_info.num_entries;
             std::shared_ptr<TestLogEntryInfo> expect_entry;
             if (version_info.num_entries > 0) {
-                expect_entry = _build_insert_segment_log_entry(version, rowset_id, n, start_seq_id,
-                                                           version_info.num_rows_per_entry, end_of_version, version);
+                expect_entry = _build_insert_segment_log_entry(
+                        version, rowset_id, n, start_seq_id, version_info.num_rows_per_entry, end_of_version, version);
             } else {
                 expect_entry = _build_empty_rowset_log_entry(version, version);
             }
