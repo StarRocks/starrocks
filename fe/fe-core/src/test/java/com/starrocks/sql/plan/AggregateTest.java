@@ -1413,11 +1413,16 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
+<<<<<<< HEAD
                 "  |  equal join conjunct: 20: t1c <=> 15: t1c");
         assertContains(plan, "21:HASH JOIN\n" +
+=======
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c\n");
+        assertContains(plan, "20:HASH JOIN\n" +
+>>>>>>> 7621e92a8 ([Enhancement] add join unreorder hint (#16515))
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
+                "  |  equal join conjunct: 15: t1c <=> 20: t1c");
 
         sql =
                 "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
@@ -1426,15 +1431,16 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 2> : 2: t1b\n" +
                 "  |  <slot 3> : 3: t1c\n" +
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
-        assertContains(plan, "22:HASH JOIN\n" +
+        assertContains(plan, "21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
-                "  |  equal join conjunct: 17: expr <=> 20: expr");
+                "  |  equal join conjunct: 16: t1c <=> 23: t1c\n" +
+                "  |  equal join conjunct: 17: expr <=> 24: expr");
 
         sql =
                 "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "25:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 23: t1b, 24: t1c, 25: expr\n" +
@@ -1443,6 +1449,13 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 23> : 2: t1b\n" +
                 "  |  <slot 24> : 3: t1c\n" +
                 "  |  <slot 25> : 11: expr");
+=======
+        assertContains(plan, "27:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: t1c <=> 27: t1c\n" +
+                "  |  equal join conjunct: 17: expr <=> 28: expr");
+>>>>>>> 7621e92a8 ([Enhancement] add join unreorder hint (#16515))
     }
 
     @Test
