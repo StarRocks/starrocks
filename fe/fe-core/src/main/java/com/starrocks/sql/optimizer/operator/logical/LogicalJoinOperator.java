@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -33,6 +34,10 @@ public class LogicalJoinOperator extends LogicalOperator {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false);
     }
 
+    public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint) {
+        this(joinType, onPredicate, joinHint, Operator.DEFAULT_LIMIT, null, false);
+    }
+
     private LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
                                 long limit, ScalarOperator predicate,
                                 boolean hasPushDownJoinOnClause) {
@@ -40,7 +45,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinType = joinType;
         this.onPredicate = onPredicate;
         Preconditions.checkNotNull(joinHint);
-        this.joinHint = joinHint;
+        this.joinHint = StringUtils.upperCase(joinHint);
 
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
         this.hasDeriveIsNotNullPredicate = false;
