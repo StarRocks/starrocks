@@ -16,6 +16,8 @@
 
 #include "column/array_column.h"
 #include "column/column_hash.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "util/raw_container.h"
@@ -149,14 +151,12 @@ private:
 
         result_offsets.reserve(num_array);
 
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn>, uint8_t,
-                                             typename ElementColumn::ValueType>;
+        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
+                                                     std::is_same_v<MapColumn, ElementColumn> ||
+                                                     std::is_same_v<StructColumn, ElementColumn>,
+                                             uint8_t, typename ElementColumn::ValueType>;
 
         auto offsets_ptr = offsets.get_data().data();
-        [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-        auto targets_ptr = (const ValueType*)(targets.raw_data());
-        auto& first_target = *targets_ptr;
-
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
         };
@@ -208,11 +208,17 @@ private:
                 }
 
                 uint8_t found = 0;
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
-                    found = (elements.compare_at(offset + j, i, targets, -1) == 0);
+                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                              std::is_same_v<StructColumn, ElementColumn>) {
+                    found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
+                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
+                    auto& first_target = *targets_ptr;
                     found = (elements_ptr[offset + j] == first_target);
                 } else {
+                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
 
@@ -276,6 +282,8 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(MapColumn);
+        HANDLE_ELEMENT_TYPE(StructColumn);
 
         LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
         DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
@@ -491,13 +499,12 @@ private:
 
         auto* result_ptr = result->get_data().data();
 
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn>, uint8_t,
-                                             typename ElementColumn::ValueType>;
+        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
+                                                     std::is_same_v<MapColumn, ElementColumn> ||
+                                                     std::is_same_v<StructColumn, ElementColumn>,
+                                             uint8_t, typename ElementColumn::ValueType>;
 
         auto offsets_ptr = offsets.get_data().data();
-        [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-        auto targets_ptr = (const ValueType*)(targets.raw_data());
-        auto& first_target = *targets_ptr;
 
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
@@ -531,11 +538,17 @@ private:
                         break;
                     }
                 }
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
-                    found = (elements.compare_at(offset + j, i, targets, -1) == 0);
+                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                              std::is_same_v<StructColumn, ElementColumn>) {
+                    found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
+                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
+                    auto& first_target = *targets_ptr;
                     found = (elements_ptr[offset + j] == first_target);
                 } else {
+                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
                     found = (elements_ptr[offset + j] == targets_ptr[i]);
                 }
                 if (found) {
@@ -595,6 +608,8 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(MapColumn);
+        HANDLE_ELEMENT_TYPE(StructColumn);
 
         // TODO(zhuming): demangle class name
         LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();

@@ -533,6 +533,64 @@ PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, equals) {
+    // lhs: [1,2,3], [4,5], [1,2]
+    // rhs: [3,2,1], [4,5], [1,null]
+    ArrayColumn::Ptr lhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = Int32Column::create();
+        lhs = ArrayColumn::create(elements, offsets);
+    }
+
+    {
+        lhs->elements_column()->append_datum(Datum(1));
+        lhs->elements_column()->append_datum(Datum(2));
+        lhs->elements_column()->append_datum(Datum(3));
+        lhs->offsets_column()->append_datum(Datum(3));
+    }
+    {
+        lhs->elements_column()->append_datum(Datum(4));
+        lhs->elements_column()->append_datum(Datum(5));
+        lhs->offsets_column()->append_datum(Datum(5));
+    }
+    {
+        lhs->elements_column()->append_datum(Datum(1));
+        lhs->elements_column()->append_datum(Datum(2));
+        lhs->offsets_column()->append_datum(Datum(7));
+    }
+
+    ArrayColumn::Ptr rhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = Int32Column::create();
+        auto nulls = NullColumn ::create();
+        rhs = ArrayColumn::create(NullableColumn::create(elements, nulls), offsets);
+    }
+
+    {
+        rhs->elements_column()->append_datum(Datum(3));
+        rhs->elements_column()->append_datum(Datum(2));
+        rhs->elements_column()->append_datum(Datum(1));
+        rhs->offsets_column()->append_datum(Datum(3));
+    }
+    {
+        rhs->elements_column()->append_datum(Datum(4));
+        rhs->elements_column()->append_datum(Datum(5));
+        rhs->offsets_column()->append_datum(Datum(5));
+    }
+    {
+        rhs->elements_column()->append_datum(Datum(1));
+        rhs->elements_column()->append_datum(Datum());
+        rhs->offsets_column()->append_datum(Datum(7));
+    }
+
+    ASSERT_FALSE(lhs->equals(0, *rhs, 0));
+    ASSERT_TRUE(lhs->equals(1, *rhs, 1));
+    ASSERT_FALSE(lhs->equals(2, *rhs, 2));
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_multi_dimension_array) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();

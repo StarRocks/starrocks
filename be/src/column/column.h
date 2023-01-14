@@ -332,6 +332,11 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
+    // For some columns equals will be overwritten for more efficient
+    virtual bool equals(size_t left, const Column& rhs, size_t right) const {
+        return compare_at(left, right, rhs, -1) == 0;
+    }
+
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
