@@ -177,8 +177,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "from t0";
         assertPlanContains(sql, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
-        sql =
-                "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
+        sql = "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
                         "from t0";
         assertPlanContains(sql, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
@@ -231,7 +230,6 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  <slot 4> : CAST(3: c2[1] AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
                 "  |  <slot 5> : 3: c2[1]");
     }
-
 
     @Test
     public void testSelectArrayFunction() throws Exception {
@@ -335,6 +333,75 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select map_values(c1) from test_map";
         assertPlanContains(sql, "<slot 4> : map_values(2: c1)");
+    }
+
+    @Test
+    public void testAliasRelation() throws Exception {
+        String sql = "select * from (select 1,2,3)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 2\n" +
+                "  |  <slot 4> : 3");
+
+        sql = "select 1 from (select 1,2)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 1");
+
+        sql = "select v1+1 from (select v1,v2 from t0)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 1: v1 + 1");
+
+        sql = "select a.v1+1 from (select v1, v2 from t0) a";
+        assertPlanContains(sql, "<slot 4> : 1: v1 + 1");
+
+        sql = "select v1 from (select v1 ,v4 from t0 join t1 on v2 = v5)";
+        assertPlanContains(sql, " 5:Project\n" +
+                "  |  <slot 1> : 1: v1");
+
+        sql = "select v1 from (select v1 from t0 cross join t1)";
+        assertPlanContains(sql, "5:Project\n" +
+                "  |  <slot 1> : 1: v1");
+
+        sql = "select\n" +
+                "    o_year,\n" +
+                "    sum(case\n" +
+                "            when nation = 'IRAN' then volume\n" +
+                "            else 0\n" +
+                "        end) / sum(volume) as mkt_share\n" +
+                "from\n" +
+                "    (\n" +
+                "        select\n" +
+                "            extract(year from o_orderdate) as o_year,\n" +
+                "            l_extendedprice * (1 - l_discount) as volume,\n" +
+                "            n2.n_name as nation\n" +
+                "        from\n" +
+                "            part,\n" +
+                "            supplier,\n" +
+                "            lineitem,\n" +
+                "            orders,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2,\n" +
+                "            region\n" +
+                "        where\n" +
+                "                p_partkey = l_partkey\n" +
+                "          and s_suppkey = l_suppkey\n" +
+                "          and l_orderkey = o_orderkey\n" +
+                "          and o_custkey = c_custkey\n" +
+                "          and c_nationkey = n1.n_nationkey\n" +
+                "          and n1.n_regionkey = r_regionkey\n" +
+                "          and r_name = 'MIDDLE EAST'\n" +
+                "          and s_nationkey = n2.n_nationkey\n" +
+                "          and o_orderdate between date '1995-01-01' and date '1996-12-31'\n" +
+                "          and p_type = 'ECONOMY ANODIZED STEEL'\n" +
+                "    ) \n" +
+                "group by\n" +
+                "    o_year\n" +
+                "order by\n" +
+                "    o_year ";
+        assertPlanContains(sql, "  41:Project\n" +
+                "  |  <slot 69> : 69: year\n" +
+                "  |  <slot 74> : 72: sum / 73: sum");
     }
 
     @Test
