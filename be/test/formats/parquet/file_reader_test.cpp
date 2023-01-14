@@ -1416,6 +1416,65 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     //    }
 }
 
+TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor c1 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+
+    TypeDescriptor c2 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
+
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    c2.field_names.emplace_back("f1");
+    c2.selected_fields.emplace_back(true);
+
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    c2.field_names.emplace_back("f2");
+    c2.selected_fields.emplace_back(true);
+
+    TypeDescriptor f3 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_ARRAY);
+    f3.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+
+    c2.children.emplace_back(f3);
+    c2.field_names.emplace_back("f3");
+    c2.selected_fields.emplace_back(true);
+
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    c2.field_names.emplace_back("not_existed");
+    c2.selected_fields.emplace_back(true);
+
+    SlotDesc slot_descs[] = {
+            {"c1", c1}, {"c2", c2}, {""},
+    };
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file4_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(c2, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1024, chunk->num_rows());
+
+    EXPECT_EQ("[0, {f1:0,f2:'a',f3:[0,1,2],not_existed:NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1:1,f2:'a',f3:[1,2,3],not_existed:NULL}]", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1:2,f2:'a',f3:[2,3,4],not_existed:NULL}]", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1:3,f2:'c',f3:[3,4,5],not_existed:NULL}]", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1:4,f2:'c',f3:[4,5,6],not_existed:NULL}]", chunk->debug_row(4));
+}
+
 TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
     auto file = _create_file(_file4_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
