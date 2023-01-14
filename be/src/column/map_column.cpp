@@ -376,6 +376,62 @@ int MapColumn::compare_at(size_t left, size_t right, const Column& right_column,
     return -1;
 }
 
+bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) const {
+    const auto& rhs_map = down_cast<const MapColumn&>(rhs);
+
+    size_t lhs_offset = _offsets->get_data()[left];
+    size_t lhs_end = _offsets->get_data()[left + 1];
+    size_t rhs_offset = rhs_map._offsets->get_data()[right];
+    size_t rhs_end = rhs_map._offsets->get_data()[right + 1];
+    // If size is not equal return false
+    if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
+        return false;
+    }
+
+    auto lhs_keys = ColumnHelper::get_data_column(_keys.get());
+    auto lhs_values = ColumnHelper::get_data_column(_values.get());
+    auto rhs_keys = ColumnHelper::get_data_column(rhs_map._keys.get());
+    auto rhs_values = ColumnHelper::get_data_column(rhs_map._values.get());
+
+    for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
+        bool found = false;
+        for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
+            if (_keys->is_null(i)) {
+                if (!rhs_map._keys->is_null(i)) {
+                    continue;
+                }
+            } else {
+                if (rhs_map._keys->is_null(i)) {
+                    continue;
+                }
+                if (!lhs_keys->equals(i, *rhs_keys, j)) {
+                    continue;
+                }
+            }
+            // So two keys is the same
+            if (_values->is_null(i)) {
+                if (!rhs_map._values->is_null(i)) {
+                    return false;
+                }
+            } else {
+                if (rhs_map._values->is_null(i)) {
+                    return false;
+                }
+                if (!lhs_values->equals(i, *rhs_values, j)) {
+                    return false;
+                }
+            }
+            found = true;
+            break;
+        }
+        if (!found) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];

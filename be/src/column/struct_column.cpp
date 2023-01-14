@@ -294,6 +294,31 @@ int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int n
     return 0;
 }
 
+bool StructColumn::equals(size_t left, const Column& rhs, size_t right) const {
+    const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
+    if (_fields.size() != rhs_struct._fields.size()) {
+        return false;
+    }
+    for (int i = 0; i < _fields.size(); ++i) {
+        if (_fields[i]->is_null(left)) {
+            if (!rhs_struct._fields[i]->is_null(right)) {
+                return false;
+            }
+        } else {
+            if (rhs_struct._fields[i]->is_null(right)) {
+                return false;
+            }
+
+            auto lhs_field = ColumnHelper::get_data_column(_fields[i].get());
+            auto rhs_field = ColumnHelper::get_data_column(rhs_struct._fields[i].get());
+            if (!lhs_field->equals(left, *rhs_field, right)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {

@@ -23,6 +23,7 @@ class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
 public:
+    using ValueType = void;
     using Container = Buffer<std::string>;
 
     // Used to construct an unnamed struct
@@ -126,6 +127,8 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
+
+    bool equals(size_t left, const Column& rhs, size_t right) const override;
 
     void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
