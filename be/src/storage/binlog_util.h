@@ -45,6 +45,8 @@ public:
         pb->set_lo(rowset_id.lo);
     }
 
+    static std::string file_meta_to_string(BinlogFileMetaPB* file_meta);
+
     static bool get_file_id_from_name(const std::string& file_name, int64_t* file_id);
 
     static Status list_binlog_file_ids(std::string& binlog_dir, std::set<int64_t>* binlog_file_ids);

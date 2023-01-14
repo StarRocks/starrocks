@@ -32,6 +32,7 @@ BinlogFileReader::BinlogFileReader(std::string file_name, std::shared_ptr<Binlog
           _next_page_index(0) {}
 
 Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
+    VLOG(3) << "Seek binlog file reader: " << _file_path << ", version: " << version << ", seq_id: " << seq_id;
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
     ASSIGN_OR_RETURN(_file, fs->new_random_access_file(_file_path))

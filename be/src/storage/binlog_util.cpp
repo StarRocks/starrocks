@@ -20,6 +20,18 @@
 
 namespace starrocks {
 
+std::string BinlogUtil::file_meta_to_string(BinlogFileMetaPB* file_meta) {
+    std::stringstream ss;
+    ss << "{" << "id: " << file_meta->id()
+       << ", start_version: " << file_meta->start_version() << ", start_seq_id: " << file_meta->start_seq_id()
+       << ", start_timestamp_in_us: " << file_meta->start_timestamp_in_us()
+       << ", end_version: " << file_meta->end_version() << ", end_seq_id: " << file_meta->end_seq_id()
+       << ", end_timestamp_in_us: " << file_meta->end_timestamp_in_us()
+       << ", num_pages: " << file_meta->num_pages() << ", file_size: " << file_meta->file_size()
+       << "}";
+    return ss.str();
+}
+
 bool BinlogUtil::get_file_id_from_name(const std::string& file_name, int64_t* file_id) {
     static re2::RE2 re(R"((\d+)\.binlog)", re2::RE2::Quiet);
     std::string fild_id_str;

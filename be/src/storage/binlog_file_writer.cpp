@@ -34,7 +34,8 @@ BinlogFileWriter::BinlogFileWriter(int64_t file_id, std::string file_name, int32
           _writer_state(WAITING_INIT) {}
 
 Status BinlogFileWriter::init() {
-    CHECK(_writer_state == WAITING_INIT);
+    VLOG(3) << "Init binlog writer: " << _file_path;
+    RETURN_IF_ERROR(_check_state(WAITING_INIT));
     // 1. create file
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
@@ -85,8 +86,9 @@ Status BinlogFileWriter::init() {
 
 Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
                                int64_t change_event_timestamp_in_us) {
-    CHECK(_writer_state == WAITING_BEGIN);
-
+    VLOG(3) << "Begin binlog writer: " << _file_path << ", version: " << version << ", rowset_id: "
+            << rowset_id.to_string() << ", start_seq_id: " << start_seq_id;
+    RETURN_IF_ERROR(_check_state(WAITING_BEGIN));
     PendingVersionContext* version_context = _pending_version_context.get();
     version_context->version = version;
     version_context->rowset_id.init(rowset_id.to_string());
@@ -113,11 +115,12 @@ Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64
 }
 
 Status BinlogFileWriter::add_empty() {
-    CHECK(_writer_state == WRITING);
-    CHECK(_pending_page_context->num_log_entries == 0)
-            << "Empty rowset should only have one empty log entry,"
-            << ", version " << _pending_version_context->version << ", file id " << _file_id << ", file name "
-            << _file_path << ", actual number of entries " << _pending_page_context->num_log_entries;
+    RETURN_IF_ERROR(_check_state(WRITING));
+    if (_pending_page_context->num_log_entries != 0) {
+        return Status::InternalError(fmt::format("Empty rowset should only have one empty log entry"
+                    ", version {}, file path {}, , actual number of entries {}", _pending_version_context->version,
+                    _file_path, _pending_page_context->num_log_entries));
+    }
 
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
     log_entry->set_entry_type(EMPTY_PB);
@@ -130,7 +133,7 @@ Status BinlogFileWriter::add_empty() {
 }
 
 Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows) {
-    CHECK(_writer_state == WRITING);
+    RETURN_IF_ERROR(_check_state(WRITING));
     RETURN_IF_ERROR(_switch_page_if_full());
     PendingPageContext* page_context = _pending_page_context.get();
     LogEntryPB* log_entry = page_context->page_content.add_entries();
@@ -163,7 +166,7 @@ Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_i
 
 Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t before_row_id, int32_t after_seg_index,
                                     int after_row_id) {
-    CHECK(_writer_state == WRITING);
+    RETURN_IF_ERROR(_check_state(WRITING));
     RETURN_IF_ERROR(_switch_page_if_full());
 
     PendingPageContext* page_context = _pending_page_context.get();
@@ -198,7 +201,7 @@ Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t be
 }
 
 Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t row_id) {
-    CHECK(_writer_state == WRITING);
+    RETURN_IF_ERROR(_check_state(WRITING));
     RETURN_IF_ERROR(_switch_page_if_full());
 
     PendingPageContext* page_context = _pending_page_context.get();
@@ -218,7 +221,9 @@ Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t ro
 }
 
 Status BinlogFileWriter::commit(bool end_of_version) {
-    CHECK(_writer_state == WRITING);
+    VLOG(3) << "Commit binlog writer: " << _file_path << ", version: " << _pending_version_context->version
+            << ", end_of_version: " << end_of_version;
+    RETURN_IF_ERROR(_check_state(WRITING));
     CHECK(_pending_page_context->num_log_entries > 0);
     Status status = _flush_page(end_of_version);
     if (!status.ok()) {
@@ -261,7 +266,8 @@ Status BinlogFileWriter::commit(bool end_of_version) {
 }
 
 Status BinlogFileWriter::abort() {
-    CHECK(_writer_state == WRITING);
+    VLOG(3) << "Abort binlog writer: " << _file_path << ", version: " << _pending_version_context->version;
+    RETURN_IF_ERROR(_check_state(WRITING));
     _reset_pending_context();
     RETURN_IF_ERROR(_truncate_file(_file_meta->file_size()));
     _writer_state = WAITING_BEGIN;
@@ -269,7 +275,10 @@ Status BinlogFileWriter::abort() {
 }
 
 Status BinlogFileWriter::reset(BinlogFileMetaPB* previous_meta) {
-    CHECK(_writer_state == WAITING_BEGIN);
+    VLOG(3) << "Reset binlog writer " << _file_path << ", current file meta: "
+            << BinlogUtil::file_meta_to_string(_file_meta.get()) << ", previous file meta: "
+            << BinlogUtil::file_meta_to_string(previous_meta);
+    RETURN_IF_ERROR(_check_state(WAITING_BEGIN));
     _file_meta->Clear();
     _file_meta->CopyFrom(*previous_meta);
     RETURN_IF_ERROR(_truncate_file(_file_meta->file_size()));
@@ -277,6 +286,7 @@ Status BinlogFileWriter::reset(BinlogFileMetaPB* previous_meta) {
 }
 
 Status BinlogFileWriter::close(bool append_file_meta) {
+    VLOG(3) << "Close binlog writer: " << _file_path;
     if (_writer_state == CLOSED) {
         return Status::OK();
     }
@@ -290,6 +300,14 @@ Status BinlogFileWriter::close(bool append_file_meta) {
     }
 
     return Status::OK();
+}
+
+Status BinlogFileWriter::_check_state(WriterState expect_state) {
+    if (_writer_state == expect_state) {
+        return Status::OK();
+    }
+    return Status::InternalError(
+            fmt::format("Unexpected state, current state {}, expect state {}", _writer_state, expect_state));
 }
 
 Status BinlogFileWriter::_switch_page_if_full() {

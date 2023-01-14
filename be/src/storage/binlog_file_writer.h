@@ -65,6 +65,10 @@ enum WriterState {
     CLOSED
 };
 
+std::string binlog_writer_state() {
+
+}
+
 // Build the binlog file. A binlog file contains multiple pages, each page contains multiple log entries,
 // and each entry contains one or more change events(INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE). Change
 // events from multiple ingestion are written to the file sequentially. The order is the same as that they
@@ -164,6 +168,7 @@ public:
     void copy_file_meta(BinlogFileMetaPB* new_file_meta) { new_file_meta->CopyFrom(*_file_meta.get()); }
 
 private:
+    Status _check_state(WriterState expect_state);
     Status _switch_page_if_full();
     Status _flush_page(bool end_of_version);
     void _append_file_meta();
