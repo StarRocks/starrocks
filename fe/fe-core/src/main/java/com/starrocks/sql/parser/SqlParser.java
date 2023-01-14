@@ -26,11 +26,14 @@ import io.trino.sql.parser.ParsingException;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
 
 public class SqlParser {
+    private static final Logger LOG = LogManager.getLogger(SqlParser.class);
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
@@ -53,6 +56,7 @@ public class SqlParser {
             }
         } catch (ParsingException e) {
             // we only support trino partial syntax, use StarRocks parser to parse now
+            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
