@@ -387,12 +387,12 @@ PARALLEL_TEST(JsonColumnTest, test_serialize) {
     auto column = RunTimeColumnType<TYPE_JSON>::create();
     JsonValue json = JsonValue::parse("1").value();
     column->append(&json);
-    
+
     EXPECT_EQ(json.serialize_size(), column->serialize_size(0));
     std::vector<uint8_t> buffer;
     buffer.resize(json.serialize_size());
     column->serialize(0, buffer.data());
-    
+
     // deserialize
     auto new_column = column->clone_empty();
     new_column->deserialize_and_append(buffer.data());
