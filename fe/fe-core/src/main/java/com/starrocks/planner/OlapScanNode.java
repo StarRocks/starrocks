@@ -920,14 +920,16 @@ public class OlapScanNode extends ScanNode {
 
     private Map<Long, List<Long>> mapTabletsToPartitions() {
         Map<Long, Long> tabletToPartitionMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size());
+        Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
+
         for (Long partitionId : selectedPartitionIds) {
+            partitionToTabletMap.put(partitionId, Lists.newArrayList());
             Partition partition = olapTable.getPartition(partitionId);
             MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
             for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                 tabletToPartitionMap.put(tabletId, partitionId);
             }
         }
-        Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
         for (Long tabletId : scanTabletIds) {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
