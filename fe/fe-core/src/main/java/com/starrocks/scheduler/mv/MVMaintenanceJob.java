@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -117,16 +118,23 @@ public class MVMaintenanceJob implements Writable {
 
     public static MVMaintenanceJob read(DataInput input) throws IOException {
         MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
-        job.state = new AtomicReference<>();
-        job.inSchedule = new AtomicBoolean();
-        job.state.set(job.getSerializedState());
+        job.reloadState();
         return job;
+    }
+
+    public void reloadState() {
+        state = new AtomicReference<>();
+        inSchedule = new AtomicBoolean();
+        state.set(getSerializedState());
     }
 
     /**
      * Restore the transient state of job, including execution plan, task topology
      */
     public boolean restore() {
+        if (serializedState.equals(JobState.FAILED)) {
+            return false;
+        }
         Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
         if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
             LOG.warn("Fail to restore job could table type incorrect: {}", table);
@@ -134,7 +142,6 @@ public class MVMaintenanceJob implements Writable {
             return false;
         }
         this.view = (MaterializedView) table;
-        this.serializedState = JobState.INIT;
         this.state.set(serializedState);
         this.inSchedule.set(false);
         this.buildContext(true);
@@ -559,11 +566,8 @@ public class MVMaintenanceJob implements Writable {
         return serializedState;
     }
 
-    public long getViewId() {
-        return viewId;
-    }
-    public long getDbId() {
-        return dbId;
+    public MvId getMvId() {
+        return new MvId(dbId, viewId);
     }
 
     public MVEpoch getEpoch() {

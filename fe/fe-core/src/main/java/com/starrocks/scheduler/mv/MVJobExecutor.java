@@ -41,6 +41,12 @@ public class MVJobExecutor extends LeaderDaemon {
     }
 
     @Override
+    public synchronized void start() {
+        super.start();
+        MVManager.getInstance().postReload();
+    }
+
+    @Override
     protected void runAfterCatalogReady() {
         try {
             runImpl();

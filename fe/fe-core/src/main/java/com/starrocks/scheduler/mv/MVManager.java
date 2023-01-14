@@ -78,9 +78,10 @@ public class MVManager {
         try {
             String str = Text.readString(input);
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
+            data.reload();
             if (CollectionUtils.isNotEmpty(data.jobList)) {
                 for (MVMaintenanceJob job : data.jobList) {
-                    restoreJob(job);
+                    jobMap.put(job.getMvId(), job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
                 LOG.debug("reload MV maintenance job details: {}", str);
@@ -95,19 +96,26 @@ public class MVManager {
      * Replay from journal
      */
     public void replay(MVMaintenanceJob job) throws IOException {
-        restoreJob(job);
+        jobMap.put(job.getMvId(), job);
     }
 
-    private boolean restoreJob(MVMaintenanceJob job) {
-        if (!job.restore()) {
-            return false;
+    /**
+     * Post-processing after reload the image and journal
+     */
+    public void postReload() {
+        List<MvId> failedJobs = new ArrayList<>();
+        for (Map.Entry<MvId, MVMaintenanceJob> entry : jobMap.entrySet()) {
+            MVMaintenanceJob job = entry.getValue();
+            if (!job.restore() || job.getState().equals(MVMaintenanceJob.JobState.STOPPED) ||
+                    job.getState().equals(MVMaintenanceJob.JobState.FAILED)) {
+                failedJobs.add(entry.getKey());
+            }
         }
-        if (!job.getState().equals(MVMaintenanceJob.JobState.STOPPED)) {
-            jobMap.putIfAbsent(job.getView().getMvId(), job);
-            LOG.info("Restore MV maintenance jobs: {}", job);
-            return true;
+        failedJobs.forEach(jobMap::remove);
+        if (CollectionUtils.isNotEmpty(failedJobs)) {
+            LOG.warn("[MV] Failed to reload jobs: {}", failedJobs);
         }
-        return false;
+        LOG.info("[MV] Post reload jobs: {}", jobMap.keySet());
     }
 
     /**
@@ -316,6 +324,12 @@ public class MVManager {
     static class SerializedJobs {
         @SerializedName("jobList")
         List<MVMaintenanceJob> jobList;
+
+        public void reload() {
+            for (MVMaintenanceJob job : jobList) {
+                job.reloadState();
+            }
+        }
     }
 
 }
