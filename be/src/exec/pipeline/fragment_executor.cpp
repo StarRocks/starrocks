@@ -568,21 +568,24 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto* prepare_timer =
                     ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
             COUNTER_SET(prepare_timer, profiler.prepare_time);
-            auto* prepare_query_ctx_timer = ADD_CHILD_TIMER(fragment_ctx->runtime_state()->runtime_profile(),
-                                                            "prepare-query-ctx", "FragmentInstancePrepareTime");
+            auto* prepare_query_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-query-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
 
-            auto* prepare_fragment_ctx_timer = ADD_CHILD_TIMER(fragment_ctx->runtime_state()->runtime_profile(),
-                                                               "prepare-fragment-ctx", "FragmentInstancePrepareTime");
+            auto* prepare_fragment_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-fragment-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
 
-            auto* prepare_runtime_state_timer = ADD_CHILD_TIMER(fragment_ctx->runtime_state()->runtime_profile(),
-                                                                "prepare-runtime-state", "FragmentInstancePrepareTime");
+            auto* prepare_runtime_state_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-runtime-state",
+                                             "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
 
             auto* prepare_pipeline_driver_timer =
-                    ADD_CHILD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "prepare-pipeline-driver",
-                                    "FragmentInstancePrepareTime");
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(),
+                                             "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
         } else {
             _fail_cleanup();
