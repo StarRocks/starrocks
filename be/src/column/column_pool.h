@@ -235,7 +235,8 @@ public:
         if (now - _first_push_time > 3) {
             //    ^^^^^^^^^^^^^^^^ read without lock by intention.
             std::lock_guard<std::mutex> l(_free_blocks_lock);
-            int n = implicit_cast<int>(_free_blocks.size() * (1 - free_ratio));
+            int n = implicit_cast<int>(static_cast<base::identity_<int>::type>(
+                    static_cast<double>(_free_blocks.size()) * (1 - free_ratio)));
             tmp.insert(tmp.end(), _free_blocks.begin() + n, _free_blocks.end());
             _free_blocks.resize(n);
         }
