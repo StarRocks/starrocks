@@ -123,6 +123,7 @@ import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
 import io.trino.sql.tree.SearchedCaseExpression;
+import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
 import io.trino.sql.tree.SingleColumn;
@@ -232,13 +233,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitQuery(Query node, ParseTreeContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(node.getQueryBody(), context);
+        // When trino have a simple query specification followed by order by, offset, limit or fetch,
+        // it fold the order by, limit, offset or fetch clauses into the query specification,
+        // no need to do anything else here.
+        if (!(node.getQueryBody() instanceof QuerySpecification)) {
+            if (node.getOrderBy().isPresent()) {
+                queryRelation.setOrderBy(visit(node.getOrderBy().get(), context, OrderByElement.class));
+            } else {
+                queryRelation.setOrderBy(new ArrayList<>());
+            }
+            queryRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
+        }
+
         // fetch
         // offset
         // with
-
         return new QueryStatement(queryRelation);
     }
-
 
     @Override
     protected ParseNode visitQuerySpecification(QuerySpecification node, ParseTreeContext context) {
@@ -412,28 +423,35 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new SubqueryRelation(queryStatement);
     }
 
-    @Override
-    protected ParseNode visitUnion(Union node, ParseTreeContext context) {
+    protected ParseNode visitSetOperation(SetOperation node, ParseTreeContext context) {
         QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
         QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
         SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+
+        if (node instanceof Union) {
+            return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+        } else if (node instanceof Intersect) {
+            return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+        } else if (node instanceof Except) {
+            return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+        } else {
+            throw new IllegalArgumentException("Unsupported set operation: " + node);
+        }
+    }
+
+    @Override
+    protected ParseNode visitUnion(Union node, ParseTreeContext context) {
+        return visitSetOperation(node, context);
     }
 
     @Override
     protected ParseNode visitIntersect(Intersect node, ParseTreeContext context) {
-        QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
-        QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
-        SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+        return visitSetOperation(node, context);
     }
 
     @Override
     protected ParseNode visitExcept(Except node, ParseTreeContext context) {
-        QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
-        QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
-        SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+        return visitSetOperation(node, context);
     }
 
     @Override
