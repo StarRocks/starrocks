@@ -422,26 +422,30 @@ struct VersionInfo {
 void verify_random_result(std::vector<VersionInfo>& versions, std::string& file_path,
                           std::shared_ptr<BinlogFileMetaPB> file_meta) {
     std::shared_ptr<BinlogFileReader> file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
-    Status st = file_reader->seek(1, 0);
+    Status st = file_reader->seek(versions[0].version, 0);
     for (auto& version_info : versions) {
         int64_t version = version_info.version;
         RowsetId rowset_id;
         rowset_id.init(2, version_info.version, 2, 3);
-        int64_t start_seq_id = 0;
-        for (int32_t n = 0; n < version_info.num_entries; n++) {
+        std::shared_ptr<TestLogEntryInfo> expect_entry;
+        if (version_info.num_entries == 0) {
             ASSERT_TRUE(st.ok());
-            bool end_of_version = (n + 1) == version_info.num_entries;
-            std::shared_ptr<TestLogEntryInfo> expect_entry;
-            if (version_info.num_entries > 0) {
-                expect_entry = _build_insert_segment_log_entry(
-                        version, rowset_id, n, start_seq_id, version_info.num_rows_per_entry, end_of_version, version);
-            } else {
-                expect_entry = _build_empty_rowset_log_entry(version, version);
-            }
+            expect_entry = _build_empty_rowset_log_entry(version, version);
             LogEntryInfo* actual_entry = file_reader->log_entry();
             verify_log_entry_info(expect_entry, actual_entry);
             st = file_reader->next();
-            start_seq_id += version_info.num_rows_per_entry;
+        } else {
+            int64_t start_seq_id = 0;
+            for (int32_t n = 0; n < version_info.num_entries; n++) {
+                ASSERT_TRUE(st.ok());
+                bool end_of_version = (n + 1) == version_info.num_entries;
+                expect_entry = _build_insert_segment_log_entry(
+                        version, rowset_id, n, start_seq_id, version_info.num_rows_per_entry, end_of_version, version);
+                LogEntryInfo* actual_entry = file_reader->log_entry();
+                verify_log_entry_info(expect_entry, actual_entry);
+                st = file_reader->next();
+                start_seq_id += version_info.num_rows_per_entry;
+            }
         }
     }
     ASSERT_TRUE(st.is_end_of_file());
@@ -466,7 +470,8 @@ TEST_F(BinlogFileTest, test_random_write_read) {
     while (file_writer->file_size() < expect_file_size && versions.size() < expect_num_versions) {
         VersionInfo version_info;
         version_info.version = versions.size() + 1;
-        version_info.num_entries = std::rand() % avg_entries_per_version * 2;
+        // there is 1/20 to generate empty version
+        version_info.num_entries = (std::rand() % 20 == 0) ? 0 : (std::rand() % avg_entries_per_version * 2 + 1);
         version_info.num_rows_per_entry = std::rand() % 100 + 1;
         versions.push_back(version_info);
         RowsetId rowset_id;
@@ -485,6 +490,10 @@ TEST_F(BinlogFileTest, test_random_write_read) {
 
     std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
     file_writer->copy_file_meta(file_meta.get());
+    ASSERT_EQ(versions[0].version, file_meta->start_version());
+    ASSERT_EQ(0, file_meta->start_seq_id());
+    ASSERT_EQ(versions.back().version, file_meta->end_version());
+    ASSERT_EQ(versions.back().num_entries * versions.back().num_rows_per_entry - 1, file_meta->end_seq_id());
     verify_random_result(versions, file_path, file_meta);
 }
 
@@ -502,7 +511,7 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     ASSERT_OK(file_writer->init());
     std::vector<VersionInfo> versions;
-    for (int i = 1; i <= 2000; i++) {
+    for (int i = 1; i <= 2000 || versions.empty(); i++) {
         VersionInfo version_info;
         version_info.version = i;
         int32_t num_pages = std::rand() % 5;
@@ -530,6 +539,10 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
 
     std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
     file_writer->copy_file_meta(file_meta.get());
+    ASSERT_EQ(versions[0].version, file_meta->start_version());
+    ASSERT_EQ(0, file_meta->start_seq_id());
+    ASSERT_EQ(versions.back().version, file_meta->end_version());
+    ASSERT_EQ(versions.back().num_entries * versions.back().num_rows_per_entry - 1, file_meta->end_seq_id());
     verify_random_result(versions, file_path, file_meta);
 }
 
