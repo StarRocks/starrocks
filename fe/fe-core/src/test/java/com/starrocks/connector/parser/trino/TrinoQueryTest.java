@@ -405,6 +405,46 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSelectSetOperation() throws Exception {
+        String sql = "select * from t0 union select * from t1 union select * from t0";
+        assertPlanContains(sql, "12:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 13: v1, 14: v2, 15: v3\n" +
+                "  |  \n" +
+                "  0:UNION");
+
+        sql = "select * from t0 intersect select * from t1 intersect select * from t0";
+        assertPlanContains(sql, "0:INTERSECT");
+
+        sql = "select v1 from t0 except select v4 from t1 except select v2 from t0";
+        assertPlanContains(sql, "0:EXCEPT");
+
+        sql = "select v1 from t0 union all select v4 from t1 union select v2 from t0 limit 10";
+        assertPlanContains(sql, "0:UNION", "11:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 11: v1\n" +
+                "  |  limit: 10");
+
+        sql = "select * from (select * from t0 union all select * from t1 union all select * from t0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
+                "limit 2;";
+        assertPlanContains(sql, "0:UNION", " 9:TOP-N\n" +
+                "  |  order by: <slot 11> 11: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2");
+
+        sql = "select * from (select v1 from t0 intersect select v4 from t1 intersect select v3 from t0 limit 10) tt " +
+                "order by v1 limit 2;";
+        assertPlanContains(sql, "0:INTERSECT\n" +
+                "  |  limit: 10",
+                "10:TOP-N\n" +
+                "  |  order by: <slot 11> 11: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2");
+    }
+
+    @Test
     public void testSelectGroupBy() throws Exception {
         String sql = "select v1, count(v2) from t0 group by v1";
         assertPlanContains(sql, "output: count(2: v2)\n" +
