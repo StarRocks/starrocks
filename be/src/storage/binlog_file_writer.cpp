@@ -86,8 +86,8 @@ Status BinlogFileWriter::init() {
 
 Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
                                int64_t change_event_timestamp_in_us) {
-    VLOG(3) << "Begin binlog writer: " << _file_path << ", version: " << version << ", rowset_id: "
-            << rowset_id.to_string() << ", start_seq_id: " << start_seq_id;
+    VLOG(3) << "Begin binlog writer: " << _file_path << ", version: " << version
+            << ", rowset_id: " << rowset_id.to_string() << ", start_seq_id: " << start_seq_id;
     RETURN_IF_ERROR(_check_state(WAITING_BEGIN));
     PendingVersionContext* version_context = _pending_version_context.get();
     version_context->version = version;
@@ -117,9 +117,10 @@ Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64
 Status BinlogFileWriter::add_empty() {
     RETURN_IF_ERROR(_check_state(WRITING));
     if (_pending_page_context->num_log_entries != 0) {
-        return Status::InternalError(fmt::format("Empty rowset should only have one empty log entry"
-                    ", version {}, file path {}, , actual number of entries {}", _pending_version_context->version,
-                    _file_path, _pending_page_context->num_log_entries));
+        return Status::InternalError(
+                fmt::format("Empty rowset should only have one empty log entry"
+                            ", version {}, file path {}, , actual number of entries {}",
+                            _pending_version_context->version, _file_path, _pending_page_context->num_log_entries));
     }
 
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
@@ -278,9 +279,9 @@ Status BinlogFileWriter::abort() {
 }
 
 Status BinlogFileWriter::reset(BinlogFileMetaPB* previous_meta) {
-    VLOG(3) << "Reset binlog writer " << _file_path << ", current file meta: "
-            << BinlogUtil::file_meta_to_string(_file_meta.get()) << ", previous file meta: "
-            << BinlogUtil::file_meta_to_string(previous_meta);
+    VLOG(3) << "Reset binlog writer " << _file_path
+            << ", current file meta: " << BinlogUtil::file_meta_to_string(_file_meta.get())
+            << ", previous file meta: " << BinlogUtil::file_meta_to_string(previous_meta);
     RETURN_IF_ERROR(_check_state(WAITING_BEGIN));
     _file_meta->Clear();
     _file_meta->CopyFrom(*previous_meta);
