@@ -2389,7 +2389,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 // if binlog_enable is true when creating table,
                 // then set binlogAvailableVersion without statistics through reportHandler
-                if (olapTable.containsBinlogConfig() && olapTable.enableBinlog()) {
+                if (olapTable.enableBinlog()) {
                     Map<String, String> binlogAvailableVersion = olapTable.buildBinlogAvailableVersion();
                     olapTable.setBinlogAvailableVersion(binlogAvailableVersion);
                     LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",

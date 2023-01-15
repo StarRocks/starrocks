@@ -92,7 +92,7 @@ public class BinlogManager {
                 boolean isPartitionChanged = false;
                 // if partitions is empty indicates that the tablet is
                 // the first tablet of the table to be reported,
-                // no need to check whether the partitions have changed
+                // no need to check whether the partitions have been changed
                 if (!partitions.isEmpty()) {
                     isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
                 }
