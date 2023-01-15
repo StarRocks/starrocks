@@ -216,7 +216,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, file_id);
     std::shared_ptr<BinlogFileWriter> file_writer =
             std::make_shared<BinlogFileWriter>(file_id, file_path, page_size, compression_type);
-    file_writer->init();
+    ASSERT_OK(file_writer->init());
     std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
     RowsetId rowset_id;
     // a rowset contains multiple segments, and write to multiple pages
@@ -411,6 +411,56 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     verify_file_meta(&expect_file_meta, file_meta);
 
     verify_seek_and_next(file_path, file_meta, 3, 0, expect_entries, 0);
+}
+
+TEST_F(BinlogFileTest, test_resize) {
+    std::vector<std::shared_ptr<TestLogEntryInfo>> expect_entries;
+    std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, 1);
+    std::shared_ptr<BinlogFileWriter> file_writer = std::make_shared<BinlogFileWriter>(1, file_path, 50, LZ4_FRAME);
+    ASSERT_OK(file_writer->init());
+
+    RowsetId rowset_id;
+    rowset_id.init(2, 1, 2, 3);
+    ASSERT_OK(file_writer->begin(1, rowset_id, 0, 1));
+    ASSERT_OK(file_writer->add_insert_range(0, 0, 100));
+    ASSERT_OK(file_writer->add_insert_range(1, 0, 50));
+    ASSERT_OK(file_writer->add_insert_range(2, 0, 96));
+    ASSERT_OK(file_writer->commit(true));
+    std::shared_ptr<BinlogFileMetaPB> file_meta_1 = std::make_shared<BinlogFileMetaPB>();
+    file_writer->copy_file_meta(file_meta_1.get());
+    ASSERT_EQ(_fs->get_file_size(file_path).value(), file_meta_1->file_size());
+
+    expect_entries.emplace_back(_build_insert_segment_log_entry(1, rowset_id, 0, 0, 100, false, 1));
+    expect_entries.emplace_back(_build_insert_segment_log_entry(1, rowset_id, 1, 100, 50, false, 1));
+    expect_entries.emplace_back(_build_insert_segment_log_entry(1, rowset_id, 2, 150, 96, true, 1));
+
+    rowset_id.init(2, 2, 2, 3);
+    ASSERT_OK(file_writer->begin(2, rowset_id, 0, 2));
+    ASSERT_OK(file_writer->add_insert_range(0, 0, 32));
+    ASSERT_OK(file_writer->commit(true));
+    std::shared_ptr<BinlogFileMetaPB> file_meta_2 = std::make_shared<BinlogFileMetaPB>();
+    file_writer->copy_file_meta(file_meta_2.get());
+    ASSERT_EQ(_fs->get_file_size(file_path).value(), file_meta_2->file_size());
+    ASSERT_LE(file_meta_1->file_size(), file_meta_2->file_size());
+
+    ASSERT_OK(file_writer->reset(file_meta_1.get()));
+    ASSERT_EQ(_fs->get_file_size(file_path).value(), file_meta_1->file_size());
+    verify_seek_and_next(file_path, file_meta_1, 1, 0, expect_entries, 0);
+
+    rowset_id.init(2, 5, 2, 3);
+    ASSERT_OK(file_writer->begin(5, rowset_id, 0, 5));
+    ASSERT_OK(file_writer->add_insert_range(0, 0, 40));
+    ASSERT_OK(file_writer->add_insert_range(1, 0, 20));
+    ASSERT_OK(file_writer->add_insert_range(2, 0, 30));
+    ASSERT_OK(file_writer->commit(false));
+    std::shared_ptr<BinlogFileMetaPB> file_meta_3 = std::make_shared<BinlogFileMetaPB>();
+    file_writer->copy_file_meta(file_meta_3.get());
+
+    expect_entries.emplace_back(_build_insert_segment_log_entry(5, rowset_id, 0, 0, 40, false, 5));
+    expect_entries.emplace_back(_build_insert_segment_log_entry(5, rowset_id, 1, 40, 20, false, 5));
+    expect_entries.emplace_back(_build_insert_segment_log_entry(5, rowset_id, 2, 60, 30, false, 5));
+
+    verify_seek_and_next(file_path, file_meta_3, 1, 0, expect_entries, 0);
 }
 
 struct VersionInfo {
