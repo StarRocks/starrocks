@@ -176,6 +176,8 @@ vectorized_functions = [
     [10323, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10316, "hex_decode_binary", "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
+    [10317, "hex_decode_string", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
     [10320, "conv", "VARCHAR", ["BIGINT", "TINYINT", "TINYINT"], "MathFunctions::conv_int"],
     [10321, "conv", "VARCHAR", ["VARCHAR", "TINYINT", "TINYINT"], "MathFunctions::conv_string"],
@@ -587,6 +589,8 @@ vectorized_functions = [
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
     [120110, "aes_decrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt", False],
     [120120, "from_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64", False],
+    [120121, "base64_decode_binary", "VARBINARY", ["VARCHAR"], "EncryptionFunctions::from_base64", False],
+    [120122, "base64_decode_string", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64", False],
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64", False],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5", False],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
