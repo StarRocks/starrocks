@@ -351,6 +351,8 @@
     + Cryptographic Functions
       + [aes_encrypt](./sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)
       + [aes_decrypt](./sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)
+      + [base64_decode_binary](./sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)
+      + [base64_decode_string](./sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)
       + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
@@ -514,6 +516,8 @@
       + [find_in_set](./sql-reference/sql-functions/string-functions/find_in_set.md)
       + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [hex](./sql-reference/sql-functions/string-functions/hex.md)
+      + [hex_decode_binary](./sql-reference/sql-functions/string-functions/hex_decode_binary.md)
+      + [hex_decode_string](./sql-reference/sql-functions/string-functions/hex_decode_string.md)
       + [instr](./sql-reference/sql-functions/string-functions/instr.md)
       + [lcase](./sql-reference/sql-functions/string-functions/lcase.md)
       + [left](./sql-reference/sql-functions/string-functions/left.md)
