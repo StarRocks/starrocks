@@ -786,19 +786,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeJoinNode(ExpressionContext context, JoinOperator joinType, ScalarOperator joinOnPredicate) {
         Preconditions.checkState(context.arity() == 2);
 
+        List<ScalarOperator> allJoinPredicate = Utils.extractConjuncts(joinOnPredicate);
         Statistics leftStatistics = context.getChildStatistics(0);
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatistics(leftStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(0)));
-        crossBuilder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
+        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0));
+        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1));
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
         double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
         crossBuilder.setOutputRowCount(crossRowCount);
 
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
-                rightStatistics.getUsedColumns(), Utils.extractConjuncts(joinOnPredicate));
+                rightStatistics.getUsedColumns(), allJoinPredicate);
 
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
@@ -883,10 +884,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         Statistics joinStats = joinStatsBuilder.build();
 
-        List<ScalarOperator> notEqJoin = Utils.extractConjuncts(joinOnPredicate);
-        notEqJoin.removeAll(eqOnPredicates);
+        allJoinPredicate.removeAll(eqOnPredicates);
 
-        Statistics estimateStatistics = estimateStatistics(notEqJoin, joinStats);
+        Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
     }
