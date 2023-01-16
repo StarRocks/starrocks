@@ -286,6 +286,7 @@ import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -1353,6 +1354,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.catalogName);
         String catalogName = identifier.getValue();
         return new DropCatalogStmt(catalogName);
+    }
+
+    @Override
+    public ParseNode visitShowCreateExternalCatalogStatement(StarRocksParser.ShowCreateExternalCatalogStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.catalogName);
+        String catalogName = identifier.getValue();
+        return new ShowCreateExternalCatalogStmt(catalogName);
     }
 
     @Override
