@@ -91,7 +91,7 @@ public class PruneUnionEmptyRule extends TransformationRule {
                 for (int i = 0; i < unionOperator.getOutputColumnRefOp().size(); i++) {
                     ColumnRefOperator unionOutputColumn = unionOperator.getOutputColumnRefOp().get(i);
                     // TODO: if we implement COW in BE, we could remove it
-                    if (unionOutputColumn.isColumnRef() && projectMap.containsValue(childOutputColumn.get(i))) {
+                    if (childOutputColumn.get(i).isColumnRef() && projectMap.containsValue(childOutputColumn.get(i))) {
                         projectMap.put(unionOutputColumn, new CloneOperator(childOutputColumn.get(i)));
                     } else {
                         projectMap.put(unionOutputColumn, childOutputColumn.get(i));
