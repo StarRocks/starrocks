@@ -37,6 +37,8 @@ package com.starrocks.planner;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
@@ -139,5 +141,28 @@ public class HashJoinNode extends JoinNode {
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        if (!joinOp.isSemiJoin() && !joinOp.isInnerJoin()) {
+            return;
+        }
+        for (BinaryPredicate eq : eqJoinConjuncts) {
+            if (!eq.getOp().equals(BinaryPredicate.Operator.EQ)) {
+                continue;
+            }
+            SlotId lhsSlotId = ((SlotRef) eq.getChild(0)).getSlotId();
+            SlotId rhsSlotId = ((SlotRef) eq.getChild(1)).getSlotId();
+            normalizer.getEquivRelation().union(lhsSlotId, rhsSlotId);
+        }
+    }
+
+    @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        if (!joinOp.isInnerJoin() && joinOp.isSemiJoin()) {
+            return false;
+        }
+        return super.extractConjunctsToNormalize(normalizer);
     }
 }
