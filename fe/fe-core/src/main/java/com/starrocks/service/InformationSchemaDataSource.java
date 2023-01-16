@@ -39,6 +39,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCompressionType;
@@ -61,7 +62,7 @@ import java.util.Set;
 
 
 public class InformationSchemaDataSource {
-    
+
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
 
     private static final String DEF = "def";
@@ -93,8 +94,14 @@ public class InformationSchemaDataSource {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
         for (String fullName : dbNames) {
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                continue;
+            if (globalStateMgr.isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                    continue;
+                }
+            } else {
+                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
 
             final String db = ClusterNamespace.getNameFromFullName(fullName);
@@ -107,8 +114,9 @@ public class InformationSchemaDataSource {
     }
 
     // tables_config
-    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request) throws TException {
-        
+    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
+            throws TException {
+
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
@@ -123,8 +131,8 @@ public class InformationSchemaDataSource {
                         TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
-                        
-                        if (table.isOlapOrLakeTable() || 
+
+                        if (table.isOlapOrLakeTable() ||
                                 table.getType() == TableType.OLAP_EXTERNAL ||
                                 table.getType() == TableType.MATERIALIZED_VIEW) {
                             // OLAP (done)
@@ -138,8 +146,8 @@ public class InformationSchemaDataSource {
                     });
                 } finally {
                     db.readUnlock();
-                }                
-            }            
+                }
+            }
         });
         resp.tables_config_infos = tList;
         return resp;
@@ -153,14 +161,15 @@ public class InformationSchemaDataSource {
         }
 
         OlapTable olapTable = (OlapTable) table;
-        Map<String, String> propsMap = new HashMap<>(); 
-        
+        Map<String, String> propsMap = new HashMap<>();
+
         propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(olapTable.getDefaultReplicationNum()));
-        
+
         // bloom filter
         Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
         if (bfColumnNames != null) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(olapTable.getCopiedBfColumns()));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ")
+                    .join(olapTable.getCopiedBfColumns()));
         }
 
         // colocateTable
@@ -171,7 +180,8 @@ public class InformationSchemaDataSource {
 
         // dynamic partition
         if (olapTable.dynamicPartitionExists()) {
-            propsMap.put("dynamic_partition", olapTable.getTableProperty().getDynamicPartitionProperty().getPropString());
+            propsMap.put("dynamic_partition", olapTable.getTableProperty()
+                    .getDynamicPartitionProperty().getPropString());
         }
 
         // in memory
@@ -180,22 +190,23 @@ public class InformationSchemaDataSource {
         // enable storage cache && cache ttl
         if (table.isLakeTable()) {
             Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, 
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, 
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK));
         }
 
         // storage type
         propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, olapTable.getStorageFormat().name());
-        
+
         // enable_persistent_index
-        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(olapTable.enablePersistentIndex()));
+        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                String.valueOf(olapTable.enablePersistentIndex()));
 
         // compression type
-        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME || 
+        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME ||
                 olapTable.getCompressionType() == TCompressionType.LZ4) {
             propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "LZ4");
         } else {
@@ -205,7 +216,7 @@ public class InformationSchemaDataSource {
         // storage media
         Map<String, String> properties = olapTable.getTableProperty().getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, 
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
                     properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
         }
         return propsMap;
@@ -234,7 +245,7 @@ public class InformationSchemaDataSource {
             } catch (NotImplementedException e) {
                 partitionKeySb.append(DEFAULT_EMPTY_STRING);
                 LOG.warn("The partition of type range seems not implement getPartitionColumns");
-            }            
+            }
         } else {
             partitionKeySb.append(DEFAULT_EMPTY_STRING);
         }
@@ -253,7 +264,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
-        
+
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
         if (index.getSortKeyIdxes() != null) {
@@ -269,7 +280,7 @@ public class InformationSchemaDataSource {
 
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
-        
+
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
         List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
@@ -302,7 +313,7 @@ public class InformationSchemaDataSource {
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isOlapOrLakeTable() || 
+                        if (table.isOlapOrLakeTable() ||
                                 table.getType() == TableType.OLAP_EXTERNAL ||
                                 table.getType() == TableType.MATERIALIZED_VIEW) {
                             // OLAP (done)
@@ -322,15 +333,16 @@ public class InformationSchemaDataSource {
                     });
                 } finally {
                     db.readUnlock();
-                }                
-            }            
-        });    
+                }
+            }
+        });
         response.setTables_infos(infos);
         return response;
     }
 
     private static String transferTableTypeToAdaptMysql(TableType tableType) {
-        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
+        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW',
+        // 'FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
         switch (tableType) {
             case MYSQL:
             case HIVE:
@@ -355,7 +367,7 @@ public class InformationSchemaDataSource {
     }
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
-        
+
         OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
         long lastUpdateTime = 0L;
@@ -372,7 +384,7 @@ public class InformationSchemaDataSource {
         info.setTable_rows(totalRowsOfTable);
         // AVG_ROW_LENGTH
         if (totalRowsOfTable == 0) {
-            info.setAvg_row_length(0L);    
+            info.setAvg_row_length(0L);
         } else {
             info.setAvg_row_length(totalBytesOfTable / totalRowsOfTable);
         }

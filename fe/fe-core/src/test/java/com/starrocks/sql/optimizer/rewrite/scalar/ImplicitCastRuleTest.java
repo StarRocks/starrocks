@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -34,6 +35,7 @@ import mockit.Expectations;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.Month;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -118,7 +120,7 @@ public class ImplicitCastRuleTest {
     }
 
     @Test
-    public void testEqualForNullBinaryPredicate() {
+    public void testEqualForNullBinaryPredicateWithConstNull() {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("a"),
@@ -136,6 +138,35 @@ public class ImplicitCastRuleTest {
 
             assertEquals(PrimitiveType.VARCHAR, result.getChild(0).getType().getPrimitiveType());
             assertEquals(PrimitiveType.VARCHAR, result.getChild(1).getType().getPrimitiveType());
+        }
+    }
+
+    @Test
+    public void testEqualForNullBinaryPredicateWithoutConstNull() {
+        BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createDate(LocalDateTime.of(2022, Month.JANUARY, 01, 0, 0, 0)),
+                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                ),
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        ConstantOperator.createInt(20220111)
+                ),
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createVarchar("2022-01-01"),
+                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                ),
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        ConstantOperator.createVarchar("2022-01-01")
+                ),
+        };
+        for (BinaryPredicateOperator op : ops) {
+            ImplicitCastRule rule = new ImplicitCastRule();
+            ScalarOperator result = rule.apply(op, null);
+
+            assertEquals(PrimitiveType.DATE, result.getChild(0).getType().getPrimitiveType());
+            assertEquals(PrimitiveType.DATE, result.getChild(1).getType().getPrimitiveType());
         }
     }
 

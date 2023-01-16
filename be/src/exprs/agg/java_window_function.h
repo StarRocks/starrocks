@@ -23,7 +23,7 @@
 #include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 

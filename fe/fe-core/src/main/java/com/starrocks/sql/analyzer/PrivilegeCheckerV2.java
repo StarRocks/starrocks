@@ -620,7 +620,6 @@ public class PrivilegeCheckerV2 {
                 return visit(node.getQueryStatement());
             }
 
-            // TODO(yiming): check mv privilege if needed
             @Override
             public Void visitView(ViewRelation node, Void context) {
                 // if user has select privilege for the view, then there's no need to check base table
@@ -1066,7 +1065,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             UserIdentity user = statement.getUserIdent();
-            if (user != null && !user.equals(context.getCurrentUserIdentity())
+            if ((user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll())
                     && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }

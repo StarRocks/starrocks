@@ -2,7 +2,7 @@
 
 ## Description
 
-The statement is used to set the properties of the specified database. (Administrators only)
+Configures the properties of the specified database. (Administrator only)
 
 1. Set database data quota in B/K/KB/M/MB/G/GB/T/TB/P/PB unit.
 

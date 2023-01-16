@@ -132,6 +132,7 @@
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
       + [SHOW COMPUTE NODES](./sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
+      + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [SHOW FRONTENDS](./sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md)
       + [SHOW FULL COLUMNS](./sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](./sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
@@ -140,7 +141,6 @@
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](./sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
-      + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
     + DDL
       + [ALTER DATABASE](./sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
@@ -351,6 +351,8 @@
     + Cryptographic Functions
       + [aes_encrypt](./sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)
       + [aes_decrypt](./sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)
+      + [base64_decode_binary](./sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)
+      + [base64_decode_string](./sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)
       + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
@@ -514,6 +516,8 @@
       + [find_in_set](./sql-reference/sql-functions/string-functions/find_in_set.md)
       + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [hex](./sql-reference/sql-functions/string-functions/hex.md)
+      + [hex_decode_binary](./sql-reference/sql-functions/string-functions/hex_decode_binary.md)
+      + [hex_decode_string](./sql-reference/sql-functions/string-functions/hex_decode_string.md)
       + [instr](./sql-reference/sql-functions/string-functions/instr.md)
       + [lcase](./sql-reference/sql-functions/string-functions/lcase.md)
       + [left](./sql-reference/sql-functions/string-functions/left.md)

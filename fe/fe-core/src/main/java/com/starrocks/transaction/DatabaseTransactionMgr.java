@@ -377,8 +377,8 @@ public class DatabaseTransactionMgr {
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
     public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                                List<TabletFailInfo> tabletFailInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -501,8 +501,8 @@ public class DatabaseTransactionMgr {
      * 4. persistent transactionState
      */
     public void prepareTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                   List<TabletFailInfo> tabletFailInfos,
+                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -811,7 +811,7 @@ public class DatabaseTransactionMgr {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
-                            // which means publish version task finished in replica  
+                            // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
@@ -1230,7 +1230,8 @@ public class DatabaseTransactionMgr {
     }
 
     public void abortTransaction(long transactionId, String reason,
-            TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets) throws UserException {
+                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
+            throws UserException {
         abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
@@ -1454,14 +1455,16 @@ public class DatabaseTransactionMgr {
                     Table tbl = db.getTable(tblId);
                     if (tbl != null) {
                         // won't check privilege in new RBAC framework
-                        if (!GlobalStateMgr.getCurrentState().getAuth()
-                                .checkTblPriv(ConnectContext.get(), db.getFullName(),
-                                        tbl.getName(), PrivPredicate.SHOW)) {
-                            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                    "SHOW TRANSACTION",
-                                    ConnectContext.get().getQualifiedUser(),
-                                    ConnectContext.get().getRemoteIP(),
-                                    tbl.getName());
+                        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            if (!GlobalStateMgr.getCurrentState().getAuth()
+                                    .checkTblPriv(ConnectContext.get(), db.getFullName(),
+                                            tbl.getName(), PrivPredicate.SHOW)) {
+                                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                                        "SHOW TRANSACTION",
+                                        ConnectContext.get().getQualifiedUser(),
+                                        ConnectContext.get().getRemoteIP(),
+                                        tbl.getName());
+                            }
                         }
                     }
                 }

@@ -37,14 +37,25 @@ using namespace starrocks;
 using VSchema = starrocks::VectorizedSchema;
 using VChunk = starrocks::Chunk;
 
-class LinkedSchemaChangeTest : public testing::Test {
+class SchemaChangeTest : public testing::Test {
 public:
-    LinkedSchemaChangeTest() {
+    SchemaChangeTest(const std::string& test_dir) {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
+        _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
+    }
 
+protected:
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<FixedLocationProvider> _location_provider;
+    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+};
+
+class LinkedSchemaChangeTest : public SchemaChangeTest {
+public:
+    LinkedSchemaChangeTest() : SchemaChangeTest(kTestGroupPath) {
         // base tablet
         _base_tablet_metadata = std::make_shared<TabletMetadata>();
         _base_tablet_metadata->set_id(next_id());
@@ -131,7 +142,6 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_lake_linked_schema_change";
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -140,15 +150,7 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }
 
-    void TearDown() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
-        (void)fs::remove_all(kTestGroupPath);
-    }
-
-    std::unique_ptr<MemTracker> _mem_tracker;
-    TabletManager* _tablet_manager;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    LocationProvider* _backup_location_provider;
+    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
 
     std::shared_ptr<TabletMetadata> _base_tablet_metadata;
     std::shared_ptr<TabletSchema> _base_tablet_schema;
@@ -190,7 +192,8 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -200,7 +203,8 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         txn_id++;
     }
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -219,7 +223,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
     request.alter_version = version;
     request.txn_id = txn_id;
 
-    SchemaChangeHandler handler;
+    SchemaChangeHandler handler(_tablet_manager.get());
     ASSERT_OK(handler.process_alter_tablet(request));
     ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
@@ -253,14 +257,9 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-class DirectSchemaChangeTest : public testing::Test {
+class DirectSchemaChangeTest : public SchemaChangeTest {
 public:
-    DirectSchemaChangeTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
-
+    DirectSchemaChangeTest() : SchemaChangeTest(kTestGroupPath) {
         // base tablet
         _base_tablet_metadata = std::make_shared<TabletMetadata>();
         _base_tablet_metadata->set_id(next_id());
@@ -337,7 +336,6 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change";
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -346,15 +344,7 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }
 
-    void TearDown() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
-        (void)fs::remove_all(kTestGroupPath);
-    }
-
-    std::unique_ptr<MemTracker> _mem_tracker;
-    TabletManager* _tablet_manager;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    LocationProvider* _backup_location_provider;
+    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
 
     std::shared_ptr<TabletMetadata> _base_tablet_metadata;
     std::shared_ptr<TabletSchema> _base_tablet_schema;
@@ -396,7 +386,8 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -406,7 +397,8 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
         txn_id++;
     }
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -425,7 +417,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
     request.alter_version = version;
     request.txn_id = txn_id;
 
-    SchemaChangeHandler handler;
+    SchemaChangeHandler handler(_tablet_manager.get());
     ASSERT_OK(handler.process_alter_tablet(request));
     ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
@@ -457,14 +449,9 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-class SortedSchemaChangeTest : public testing::Test {
+class SortedSchemaChangeTest : public SchemaChangeTest {
 public:
-    SortedSchemaChangeTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
-
+    SortedSchemaChangeTest() : SchemaChangeTest(kTestGroupPath) {
         // base tablet
         _base_tablet_metadata = std::make_shared<TabletMetadata>();
         _base_tablet_metadata->set_id(next_id());
@@ -561,7 +548,6 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_lake_sorted_schema_change";
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -570,15 +556,7 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }
 
-    void TearDown() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
-        (void)fs::remove_all(kTestGroupPath);
-    }
-
-    std::unique_ptr<MemTracker> _mem_tracker;
-    TabletManager* _tablet_manager;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    LocationProvider* _backup_location_provider;
+    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
 
     std::shared_ptr<TabletMetadata> _base_tablet_metadata;
     std::shared_ptr<TabletSchema> _base_tablet_schema;
@@ -626,7 +604,8 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -636,7 +615,8 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
         txn_id++;
     }
     {
-        auto delta_writer = DeltaWriter::create(base_tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -655,7 +635,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
     request.alter_version = version;
     request.txn_id = txn_id;
 
-    SchemaChangeHandler handler;
+    SchemaChangeHandler handler(_tablet_manager.get());
     ASSERT_OK(handler.process_alter_tablet(request));
     ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;

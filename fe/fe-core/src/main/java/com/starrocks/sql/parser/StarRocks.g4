@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 grammar StarRocks;
 import StarRocksLex;
 
@@ -96,7 +95,7 @@ statement
     | updateStatement
     | deleteStatement
 
-    //Routine Statement
+    // Routine Statement
     | createRoutineLoadStatement
     | alterRoutineLoadStatement
     | stopRoutineLoadStatement
@@ -105,7 +104,7 @@ statement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
 
-    //StreamLoad Statement
+    // StreamLoad Statement
     | showStreamLoadStatement
 
     // Admin Statement
@@ -1568,7 +1567,7 @@ relation
 
 relationPrimary
     : qualifiedName temporalClause? partitionNames? tabletList? (
-        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+        AS? alias=identifier)? bracketHint?                                             #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias

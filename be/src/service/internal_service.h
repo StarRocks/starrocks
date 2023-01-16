@@ -39,6 +39,8 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/countdown_latch.h"
@@ -51,6 +53,7 @@ class Controller;
 namespace starrocks {
 
 class TExecPlanFragmentParams;
+class TMVCommitEpochTask;
 class ExecEnv;
 
 template <typename T>
@@ -158,7 +161,12 @@ private:
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
+    // MV Maintenance task
     Status _submit_mv_maintenance_task(brpc::Controller* cntl);
+    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
+    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
 protected:
     ExecEnv* _exec_env;
@@ -167,7 +175,7 @@ protected:
     // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
     // In this way, the available pthread become less and the scheduling of bthread would be influenced.
     // So, we should execute the function that may use pthread block primitive in a specific thread pool.
-    // More detail: https://github.com/apache/incubator-brpc/blob/master/docs/cn/bthread.md
+    // More detail: https://github.com/apache/brpc/blob/master/docs/cn/bthread.md
 
     // Thread pool for executing task  asynchronously in BRPC call.
     PriorityThreadPool _async_thread_pool;

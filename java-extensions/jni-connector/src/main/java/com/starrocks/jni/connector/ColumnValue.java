@@ -31,6 +31,8 @@ public interface ColumnValue {
 
     public String getString();
 
+    public byte[] getBytes();
+
     public void unpackArray(List<ColumnValue> values);
 
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);

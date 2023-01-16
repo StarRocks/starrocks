@@ -332,6 +332,11 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
+    // For some columns equals will be overwritten for more efficient
+    virtual bool equals(size_t left, const Column& rhs, size_t right) const {
+        return compare_at(left, right, rhs, -1) == 0;
+    }
+
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
@@ -339,9 +344,9 @@ public:
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
 
-    virtual void crc32_hash_at(uint32_t* seed, int32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
+    virtual void crc32_hash_at(uint32_t* seed, uint32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 
-    virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
+    virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
@@ -362,7 +367,7 @@ public:
     [[nodiscard]] virtual bool set_null(size_t idx __attribute__((unused))) { return false; }
 
     // Only used for debug one item in this column
-    virtual std::string debug_item(uint32_t idx) const { return ""; }
+    virtual std::string debug_item(size_t idx) const { return ""; }
 
     virtual std::string debug_string() const { return {}; }
 

@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -52,7 +53,6 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -205,7 +205,7 @@ public class Coordinator {
         this.jobId = jobId;
         this.queryId = queryId;
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setPipelineDop(0);
@@ -620,8 +620,8 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
-                                    accTabletSinkDop, tabletSinkTotalDop);
+                            params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
+                                    accTabletSinkDop, tabletSinkTotalDop, false);
                     if (enablePipelineTableSinkDop) {
                         for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {

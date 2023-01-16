@@ -46,7 +46,7 @@ public class AuthUpgraderTest {
     private ConnectContext ctx;
     private long roleUserId = 0;
 
-    private UtFrameUtils.PseudoImage executeAndUpgrade(boolean onlyUpgradeJournal, String...sqls) throws Exception {
+    private UtFrameUtils.PseudoImage executeAndUpgrade(boolean onlyUpgradeJournal, String... sqls) throws Exception {
         GlobalStateMgr.getCurrentState().initAuth(false);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -56,7 +56,7 @@ public class AuthUpgraderTest {
         }
         Map<String, Set<String>> resolvedIPsMap = new HashMap<>();
         resolvedIPsMap.put("localhost", new HashSet<>(Arrays.asList("127.0.0.1")));
-        ctx.getGlobalStateMgr().getAuth().refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+        ctx.getGlobalStateMgr().getAuth().refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
         // 2. save image
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         ctx.getGlobalStateMgr().getAuth().saveAuth(image.getDataOutputStream(), -1);
@@ -90,7 +90,7 @@ public class AuthUpgraderTest {
         auth.readAsGson(dis, -1);
         ctx.getGlobalStateMgr().setAuth(auth);
         AuthUpgradeInfo info = (AuthUpgradeInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
-                OperationType.OP_AUTH_UPGRDE_V2);
+                OperationType.OP_AUTH_UPGRADE_V2);
         ctx.getGlobalStateMgr().replayAuthUpgrade(info);
     }
 
@@ -142,8 +142,8 @@ public class AuthUpgraderTest {
                 "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
         starRocksAssert.withResource(createResourceStmt);
 
-        for (int i = 0; i != 2; ++ i) {
-            for (int j = 0; j != 2; ++ j) {
+        for (int i = 0; i != 2; ++i) {
+            for (int j = 0; j != 2; ++j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
                         + "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                         + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
@@ -183,7 +183,7 @@ public class AuthUpgraderTest {
                 "create role viewSelect",
                 "GRANT select_priv on db0.view TO role viewSelect");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -247,7 +247,7 @@ public class AuthUpgraderTest {
             ctx.getGlobalStateMgr().replayOldAuthJournal(op, UtFrameUtils.PseudoJournalReplayer.replayNextJournal(op));
         }
         AuthUpgradeInfo info = (AuthUpgradeInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
-                OperationType.OP_AUTH_UPGRDE_V2);
+                OperationType.OP_AUTH_UPGRADE_V2);
         ctx.getGlobalStateMgr().replayAuthUpgrade(info);
 
         // check upgrade success
@@ -268,7 +268,7 @@ public class AuthUpgraderTest {
                 "GRANT impersonate on gregory TO ROLE harry");
 
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -291,7 +291,7 @@ public class AuthUpgraderTest {
                 "GRANT select_priv on db1.tbl1 TO domain_user@['localhost']");
 
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -317,7 +317,7 @@ public class AuthUpgraderTest {
                 "create role oneUsageResourceRole",
                 "GRANT usage_priv on resource hive0 TO role oneUsageResourceRole");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -360,7 +360,7 @@ public class AuthUpgraderTest {
                 "create role viewCreate",
                 "grant create_priv on db0.view to role viewCreate");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -440,7 +440,7 @@ public class AuthUpgraderTest {
                 "create role viewDrop",
                 "grant drop_priv on db0.view to role viewDrop");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -535,7 +535,7 @@ public class AuthUpgraderTest {
                 "create role viewAlter",
                 "grant alter_priv on db0.view to role viewAlter");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -625,7 +625,7 @@ public class AuthUpgraderTest {
                 "create role adminrole",
                 "GRANT admin_priv on *.* to role adminrole");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -648,7 +648,7 @@ public class AuthUpgraderTest {
             sqlList.addAll(Arrays.asList(
                     "admin set frontend config (\"key\" = \"value\");",
                     "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
-                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                            "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
                     "ADMIN SHOW FRONTEND CONFIG;",
                     "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
                     "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
@@ -667,9 +667,9 @@ public class AuthUpgraderTest {
             ));
             // select, create
             sqlList.addAll(Arrays.asList(
-                     "select * from db1.tbl1",
-                     "select * from db0.tbl0",
-                     createResourceStmt
+                    "select * from db1.tbl1",
+                    "select * from db0.tbl0",
+                    createResourceStmt
             ));
             checkPrivilegeAsUser(user, sqlList.toArray(new String[0]));
             user = createUserByRole("adminrole");
@@ -702,7 +702,7 @@ public class AuthUpgraderTest {
             List<String> allowGrantSQLs,
             List<String> denyGrantSQLs) throws Exception {
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -861,7 +861,7 @@ public class AuthUpgraderTest {
                 "create role pluginRole",
                 "GRANT admin_priv on *.* TO role pluginRole");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -888,7 +888,7 @@ public class AuthUpgraderTest {
                 "create role blacklistRole",
                 "GRANT admin_priv on *.* TO role blacklistRole");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }
@@ -923,7 +923,7 @@ public class AuthUpgraderTest {
                 "create role fileTblRole",
                 "GRANT select_priv on db1.tbl1 TO role fileTblRole");
         // check twice, the second time is as follower
-        for (int i = 0; i != 2; ++ i) {
+        for (int i = 0; i != 2; ++i) {
             if (i == 1) {
                 replayUpgrade(image);
             }

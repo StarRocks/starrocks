@@ -25,7 +25,6 @@ import java.util.List;
  * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
 public class OffHeapColumnVector {
-
     private long nulls;
     private long data;
 
@@ -158,7 +157,7 @@ public class OffHeapColumnVector {
                 c.reserveInternal(newCapacity);
             }
         } else {
-            throw new RuntimeException("Unhandled " + type);
+            throw new RuntimeException("Unhandled type: " + type);
         }
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
@@ -318,6 +317,10 @@ public class OffHeapColumnVector {
         return appendByteArray(bytes, 0, str.length());
     }
 
+    public int appendBinary(byte[] binary) {
+        return appendByteArray(binary, 0, binary.length);
+    }
+
     private int appendByteArray(byte[] value, int offset, int length) {
         int copiedOffset = arrayData().appendBytes(length, value, offset);
         reserve(elementsAppended + 1);
@@ -441,8 +444,12 @@ public class OffHeapColumnVector {
             case DOUBLE:
                 appendDouble(o.getDouble());
                 break;
+            case BINARY:
+                appendBinary(o.getBytes());
+                break;
             case STRING:
             case DATE:
+            case DATETIME:
             case DECIMAL:
                 appendString(o.getString());
                 break;
@@ -498,8 +505,12 @@ public class OffHeapColumnVector {
             case DOUBLE:
                 sb.append(getDouble(i));
                 break;
+            case BINARY:
+                sb.append("<binary>");
+                break;
             case STRING:
             case DATE:
+            case DATETIME:
             case DECIMAL:
                 sb.append(getUTF8String(i));
                 break;

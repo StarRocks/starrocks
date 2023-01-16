@@ -382,6 +382,39 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
+bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
+    const auto& rhs_array = down_cast<const ArrayColumn&>(rhs);
+
+    size_t lhs_offset = _offsets->get_data()[left];
+    size_t lhs_end = _offsets->get_data()[left + 1];
+
+    size_t rhs_offset = rhs_array._offsets->get_data()[right];
+    size_t rhs_end = rhs_array._offsets->get_data()[right + 1];
+
+    if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
+        return false;
+    }
+    auto lhs_elements = ColumnHelper::get_data_column(_elements.get());
+    auto rhs_elements = ColumnHelper::get_data_column(rhs_array._elements.get());
+    while (lhs_offset < lhs_end) {
+        if (_elements->is_null(lhs_offset)) {
+            if (!rhs_array._elements->is_null(rhs_offset)) {
+                return false;
+            }
+        } else {
+            if (rhs_array._elements->is_null(rhs_offset)) {
+                return false;
+            }
+            if (!lhs_elements->equals(lhs_offset, *rhs_elements, rhs_offset)) {
+                return false;
+            }
+        }
+        lhs_offset++;
+        rhs_offset++;
+    }
+    return true;
+}
+
 void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
     CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
 
@@ -392,7 +425,7 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     }
 }
 
-void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
+void ArrayColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -404,7 +437,7 @@ void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
     }
 }
 
-void ArrayColumn::crc32_hash_at(uint32_t* hash, int32_t idx) const {
+void ArrayColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -514,7 +547,7 @@ void ArrayColumn::reset_column() {
     _elements->reset_column();
 }
 
-std::string ArrayColumn::debug_item(uint32_t idx) const {
+std::string ArrayColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;

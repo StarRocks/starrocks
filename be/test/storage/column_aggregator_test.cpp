@@ -20,8 +20,8 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "storage/aggregate_type.h"
-#include "storage/array_type_info.h"
 #include "storage/column_aggregate_func.h"
+#include "types/array_type_info.h"
 
 namespace starrocks {
 
@@ -382,8 +382,9 @@ TEST(ColumnAggregator, testNullBooleanMin) {
     ASSERT_EQ("0", agg->debug_item(2));
 
     // check agg data and null column
-    ASSERT_EQ("[1, 1, 0]", agg->data_column()->debug_string());
     ASSERT_EQ("[1, 0, 0]", agg->null_column()->debug_string());
+    ASSERT_TRUE(agg->data_column()->get(1).get_uint8());
+    ASSERT_FALSE(agg->data_column()->get(2).get_uint8());
 }
 
 TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {

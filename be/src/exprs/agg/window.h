@@ -85,12 +85,12 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 };
 
-template <LogicalType PT, typename State, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename State, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<PT>;
 
-    // The dst column has been resized.
+    /// The dst column has been resized.
     void get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
         DCHECK_GT(end, start);
         DCHECK(dst->is_nullable());
@@ -106,12 +106,37 @@ public:
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
         auto value = AggregateFunctionStateHelper<State>::data(state).value;
         for (size_t i = start; i < end; ++i) {
-            // TODO: do not hack the string type
-            if constexpr (pt_is_string<PT>) {
-                AggDataTypeTraits<PT>::append_value(column, value);
-            } else {
-                AggDataTypeTraits<PT>::assign_value(column, i, value);
-            }
+            AggDataTypeTraits<PT>::assign_value(column, i, value);
+        }
+    }
+};
+
+template <LogicalType PT, typename State, typename T>
+class ValueWindowFunction<PT, State, T, StringPTGuard<PT>> : public WindowFunction<State> {
+public:
+    using InputColumnType = RunTimeColumnType<PT>;
+
+    /// TODO: do not hack the string type
+    /// The dst BinaryColumn hasn't been resized, because the underlying _bytes and _offsets column couldn't be resized.
+    void get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
+        DCHECK_GT(end, start);
+        DCHECK(dst->is_nullable());
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        if (AggregateFunctionStateHelper<State>::data(state).is_null) {
+            nullable_column->append_nulls(end - start);
+            return;
+        }
+
+        NullData& null_data = nullable_column->null_column_data();
+        for (size_t i = start; i < end; ++i) {
+            null_data.emplace_back(0);
+        }
+
+        Column* data_column = nullable_column->mutable_data_column();
+        InputColumnType* column = down_cast<InputColumnType*>(data_column);
+        auto value = AggregateFunctionStateHelper<State>::data(state).value;
+        for (size_t i = start; i < end; ++i) {
+            AggDataTypeTraits<PT>::append_value(column, value);
         }
     }
 };

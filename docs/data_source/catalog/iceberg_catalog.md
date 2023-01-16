@@ -47,7 +47,7 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
 | iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. If you use Hive metastore, you need to configure HiveCatalog for your Iceberg cluster. Therefore, set the value to `HIVE`. |
-| iceberg.catalog.hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+| iceberg.catalog.hive.metastore.uris    | Yes          | The URI of the Hive metastore. Format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
 #### Custom metadata service
 

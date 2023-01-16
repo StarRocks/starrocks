@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -160,6 +161,16 @@ public class AstToStringBuilder {
                 sb.append(stringStringPair.first + " = " + stringStringPair.second);
                 idx++;
             }
+            return sb.toString();
+        }
+
+        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(")");
             return sb.toString();
         }
 
@@ -380,9 +391,19 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")"
-                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias().getTbl());
+        public String visitSubquery(SubqueryRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+            return sqlBuilder.toString();
         }
 
         @Override
@@ -495,7 +516,16 @@ public class AstToStringBuilder {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias().getTbl());
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
 
             return sqlBuilder.toString();
         }
@@ -514,9 +544,9 @@ public class AstToStringBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
-                if (node.getColumnNames() != null) {
+                if (node.getColumnOutputNames() != null) {
                     sqlBuilder.append("(");
-                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnOutputNames()));
                     sqlBuilder.append(")");
                 }
             }

@@ -43,6 +43,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -193,6 +194,34 @@ public:
         _enable_persistent_index = enable_persistent_index;
     }
 
+    std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
+
+    void set_binlog_config(const TBinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config, "
+                         << "current version is " << _binlog_config->version << ", update version is "
+                         << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config to " << _binlog_config->to_string();
+    }
+
+    void set_binlog_config(const BinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config, "
+                         << "current version is " << _binlog_config->version << ", update version is "
+                         << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config to " << _binlog_config->to_string();
+    }
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -235,6 +264,8 @@ private:
     // A reference to TabletUpdates, so update related meta
     // can be serialized with tablet meta automatically
     TabletUpdates* _updates = nullptr;
+
+    std::shared_ptr<BinlogConfig> _binlog_config;
 
     std::shared_mutex _meta_lock;
 };

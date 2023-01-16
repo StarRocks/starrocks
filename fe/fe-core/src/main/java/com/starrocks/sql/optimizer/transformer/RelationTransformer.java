@@ -675,10 +675,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
             String colName;
-            if (node.getColumnNames() == null) {
+            if (node.getColumnOutputNames() == null) {
                 colName = tableFunction.getDefaultColumnNames().get(i);
             } else {
-                colName = node.getColumnNames().get(i);
+                colName = node.getColumnOutputNames().get(i);
             }
 
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));

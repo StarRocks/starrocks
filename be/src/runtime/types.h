@@ -1,4 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
+// Copyright 2023-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,11 +37,12 @@
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
-#include "runtime/primitive_type.h"
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -310,6 +311,8 @@ struct TypeDescriptor {
     /// Recursive implementation of ToThrift() that populates 'thrift_type' with the
     /// TTypeNodes for this type and its children.
     void to_thrift(TTypeDesc* thrift_type) const;
+
+    size_t get_array_depth_limit() const;
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

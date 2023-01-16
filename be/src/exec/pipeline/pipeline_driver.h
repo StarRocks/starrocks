@@ -33,6 +33,7 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+
 namespace query_cache {
 class MultilaneOperator;
 using MultilaneOperatorRawPtr = MultilaneOperator*;
@@ -46,6 +47,7 @@ using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+class DriverQueue;
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -203,6 +205,8 @@ public:
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
+    void increment_schedule_times();
+
     void set_driver_state(DriverState state) {
         if (state == _state) {
             return;
@@ -338,6 +342,9 @@ public:
         if (sink_operator()->is_finished()) {
             return true;
         }
+        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
+            return true;
+        }
 
         // PRECONDITION_BLOCK
         if (_state == DriverState::PRECONDITION_BLOCK) {
@@ -381,6 +388,7 @@ public:
     const workgroup::WorkGroup* workgroup() const;
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
+    void set_in_queue(DriverQueue* in_queue) { _in_queue = in_queue; }
     size_t get_driver_queue_level() const { return _driver_queue_level; }
     void set_driver_queue_level(size_t driver_queue_level) { _driver_queue_level = driver_queue_level; }
 
@@ -391,9 +399,25 @@ public:
 
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
+    // Whether the driver's state is already `EPOCH_FINISH`.
     bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
+    // Whether the driver's state is already `EPOCH_PENDING_FINISH`.
+    bool is_epoch_finishing() { return _state == DriverState::EPOCH_PENDING_FINISH; }
+    // Whether the driver is at finishing state in one epoch. when the driver is in `EPOCH_PENDING_FINISH` state,
+    // use `is_still_epoch_finishing` method to check whether the driver has changed yet.
+    bool is_still_epoch_finishing() {
+        return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
+    }
 
 protected:
+    PipelineDriver()
+            : _operators(),
+              _query_ctx(nullptr),
+              _fragment_ctx(nullptr),
+              _pipeline(nullptr),
+              _source_node_id(0),
+              _driver_id(0) {}
+
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
@@ -409,6 +433,7 @@ protected:
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
+    void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_overhead_timer();
 
@@ -443,6 +468,7 @@ protected:
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    DriverQueue* _in_queue = nullptr;
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};

@@ -53,6 +53,12 @@ public enum JoinOperator {
     NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN",
             TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN);
 
+    public static final String HINT_BUCKET = "BUCKET";
+    public static final String HINT_SHUFFLE = "SHUFFLE";
+    public static final String HINT_COLOCATE = "COLOCATE";
+    public static final String HINT_BROADCAST = "BROADCAST";
+    public static final String HINT_UNREORDER = "UNREORDER";
+
     private final String description;
     private final TJoinOp thriftJoinOp;
 

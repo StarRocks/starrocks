@@ -16,15 +16,18 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.UserPropertyProcNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // Show Property Stmt
@@ -56,8 +59,17 @@ public class ShowUserPropertyStmt extends ShowStmt {
         this.pattern = pattern;
     }
 
-    public List<List<String>> getRows() throws AnalysisException {
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getUserProperties(user);
+    public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
+        List<List<String>> rows = new ArrayList<>();
+        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+            AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+
+            // Currently only "max_user_connections" is supported
+            long maxConn = authenticationManager.getMaxConn(user);
+            rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
+        } else {
+            rows.addAll(GlobalStateMgr.getCurrentState().getAuth().getUserProperties(user));
+        }
 
         if (pattern == null) {
             return rows;

@@ -18,7 +18,7 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

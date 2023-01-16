@@ -35,8 +35,8 @@
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {

@@ -1,5 +1,18 @@
 # StarRocks version 2.5
 
+## 2.5.0 RC03
+
+Release date: January 10, 2023
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Incorrect column mapping causes queries with JOIN on multiple information_schema tables to return empty results.  [# 13276](https://github.com/StarRocks/starrocks/issues/13279)
+- When a BE is restarted after it is stopped for a period of time, tablets on the BE may be out of date and incremental clones are triggered to commit data versions. Multiple versions are committed within a short period of time, causing metadata bloat. [# 15844](https://github.com/StarRocks/starrocks/issues/15844)
+- When users try to drop tablets from a Primary Key table, the drop operation fails because some expired rowsets are still referenced by other threads and cannot be released. [# 15959](https://github.com/StarRocks/starrocks/pull/15959)
+- Null pointer exceptions cause "Unknown Error" when users run DROP MATERIALIZED VIEW. [# 15906](https://github.com/StarRocks/starrocks/issues/15906) [# 15911](https://github.com/StarRocks/starrocks/pull/15911)
+
 ## 2.5.0 RC02
 
 Release date: December 28, 2022
