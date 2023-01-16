@@ -410,9 +410,7 @@ The query cache occupies a small amount of memory provided by the BE to save com
 
 ## Metrics
 
-The profiles of queries for which the query cache works contain `CacheOperator` statistics, as shown in the following figure.
-
-![Query Cache - Metrics Overview](../assets/query-cache-metrics-overview.png)
+The profiles of queries for which the query cache works contain `CacheOperator` statistics.
 
 In the source plan of a query, if the pipeline contains `OlapScanOperator`, the names of `OlapScanOperator` and aggregate operators are prefixed with `ML_` to denote that the pipeline uses `MultilaneOperator` to perform per-tablet computations. `CacheOperator` is inserted preceding `ML_CONJUGATE_AGGREGATE` to process the logic that controls how the query cache runs in Passthrough, Populate, and Probe modes. The profile of the query contains the following `CacheOperator` metrics that help you understand the query cache usage.
 
@@ -645,7 +643,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 1 - Metrics](../assets/query-cache-stage1.png)
+![Query Cache - Stage 1 - Metrics](../assets/query_cache_stage1_agg_with_cache_en.png)
 
 #### Query cache does not work for remote aggregations at stage 1
 
@@ -697,7 +695,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 2 - Metrics](../assets/query-cache-stage2.png)
+![Query Cache - Stage 2 - Metrics](../assets/query_cache_stage2_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 3
 
@@ -728,7 +726,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 3 - Metrics](../assets/query-cache-stage3.png)
+![Query Cache - Stage 3 - Metrics](../assets/query_cache_stage3_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 4
 
@@ -748,7 +746,7 @@ WHERE
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 4 - Metrics](../assets/query-cache-stage4.png)
+![Query Cache - Stage 4 - Metrics](../assets/query_cache_stage4_agg_with_cache_en.png)
 
 #### Cached results are reused for two queries whose first aggregations are semantically equivalent
 
@@ -797,11 +795,11 @@ Use the following two queries, Q1 and Q2, as an example. Q1 and Q2 both include 
 
 The following figure shows the `CachePopulate` metrics for Q1.
 
-![Query Cache - Q1 - Metrics](../assets/query-cache-Q1-metrics.png)
+![Query Cache - Q1 - Metrics](../assets/query_cache_reuse_Q1_en.png)
 
 The following figure shows the `CacheProbe` metrics for Q2.
 
-![Query Cache - Q2 - Metrics](../assets/query-cache-Q2-metrics.png)
+![Query Cache - Q2 - Metrics](../assets/query_cache_reuse_Q2_en.png)
 
 #### Query cache does not work for DISTINCT queries for which CTE optimizations are enabled
 
@@ -819,7 +817,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 1](../assets/query-cache-CTE-1.png)
+![Query Cache - CTE - 1](../assets/query_cache_distinct_with_cte_Q1_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that reference the same column:
 
@@ -835,7 +833,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 2](../assets/query-cache-CTE-2.png)
+![Query Cache - CTE - 2](../assets/query_cache_distinct_with_cte_Q2_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that each reference a different column:
 
@@ -850,4 +848,4 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 3](../assets/query-cache-CTE-3.png)
+![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_en.png)
