@@ -327,8 +327,11 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
+    // retain the query_ctx reference to avoid call destructors while holding a lock
+    // we should define them before hold the write lock
     QueryContextPtr query_ctx;
     std::vector<QueryContextPtr> del_list;
+
     std::unique_lock<std::shared_mutex> write_lock(mutex);
     _clean_slot_unlocked(i, del_list);
     // return directly if query_ctx is absent
