@@ -1992,5 +1992,5 @@ public class Config extends ConfigBase {
     public static long binlog_ttl_second = 60 * 30; // 30min
 
     @ConfField
-    public static long binlog_max_size = Integer.MAX_VALUE; // no limit
+    public static long binlog_max_size = Long.MAX_VALUE; // no limit
 }

@@ -641,14 +641,14 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n," +
                         "\"binlog_max_size\" = \"100\"\n," +
                         "\"binlog_enable\" = \"true\"\n," +
-                        "\"binlog_ttl\" = \"100\"\n" +
+                        "\"binlog_ttl_second\" = \"100\"\n" +
                         ");"
         ));
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_table");
         Assert.assertNotNull(table.getCurBinlogConfig());
-        Assert.assertTrue(table.enableBinlog());
+        Assert.assertTrue(table.isBinlogEnabled());
 
         long version = table.getBinlogVersion();
         Assert.assertEquals(0, version);
@@ -660,7 +660,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.binlog_table SET " +
                         "(\"binlog_enable\" = \"false\",\"binlog_max_size\" = \"200\")"));
-        Assert.assertFalse(table.enableBinlog());
+        Assert.assertFalse(table.isBinlogEnabled());
         Assert.assertEquals(1, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
 
@@ -685,12 +685,12 @@ public class CreateTableTest {
         OlapTable table = (OlapTable) db.getTable("not_binlog_table");
 
         Assert.assertFalse(table.containsBinlogConfig());
-        Assert.assertFalse(table.enableBinlog());
+        Assert.assertFalse(table.isBinlogEnabled());
 
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.not_binlog_table SET " +
                         "(\"binlog_enable\" = \"true\",\"binlog_max_size\" = \"200\")"));
-        Assert.assertTrue(table.enableBinlog());
+        Assert.assertTrue(table.isBinlogEnabled());
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
     }

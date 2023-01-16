@@ -2179,20 +2179,21 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
-        boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
         if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
             try {
-                Long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
+                boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
+                long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
-                Long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
+                long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
                 BinlogConfig binlogConfig = new BinlogConfig(0, enableBinlog,
                         binlogTtl, binlogMaxSize);
                 olapTable.setCurBinlogConfig(binlogConfig);
-                LOG.info("create table set binlog config, binlogTtl = " + binlogTtl +
-                        " ,binlog_max_size =" + " ,binlog_enable = " + enableBinlog);
+                LOG.info("create table {} set binlog config, enable_binlog = {}, binlogTtl = {}, binlog_max_size = {}",
+                        tableName, enableBinlog, binlogTtl, binlogMaxSize);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -2396,6 +2397,14 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else {
                     throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
+                }
+                // if binlog_enable is true when creating table,
+                // then set binlogAvailableVersion without statistics through reportHandler
+                if (olapTable.isBinlogEnabled()) {
+                    Map<String, String> binlogAvailableVersion = olapTable.buildBinlogAvailableVersion();
+                    olapTable.setBinlogAvailableVersion(binlogAvailableVersion);
+                    LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
+                            tableName, binlogAvailableVersion.toString());
                 }
             }
 
@@ -4196,8 +4205,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
-                    olapTable.setCurBinlogConfig(tableProperty.getBinlogConfig());
-                    if (!olapTable.enableBinlog()) {
+                    if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
                 }
