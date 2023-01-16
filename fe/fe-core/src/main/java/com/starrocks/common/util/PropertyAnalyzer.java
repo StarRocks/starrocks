@@ -117,8 +117,6 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 
-    public static final String PROPERTIES_BINLOG_TXN_ID = "binlog_txn_id";
-
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
