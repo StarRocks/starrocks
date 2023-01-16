@@ -143,9 +143,9 @@ struct AggrAutoContext {
     constexpr static int ForcePreaggLimit = 3;
     constexpr static int PreaggLimit = 100;
     constexpr static int AdjustLimit = 100;
-    constexpr static double LowReduction = 0.3;
-    constexpr static double HighReduction = 0.8;
-    constexpr static size_t MaxHtSize = 128 * 1024 * 1024; // 128 MB
+    constexpr static double LowReduction = 0.2;
+    constexpr static double HighReduction = 0.9;
+    constexpr static size_t MaxHtSize = 64 * 1024 * 1024; // 64 MB
     constexpr static int StableLimit = 5;
     std::string get_auto_state_string(const AggrAutoState& state);
     size_t get_continuous_limit();
@@ -158,7 +158,7 @@ struct AggrAutoContext {
     size_t force_preagg_count = 0;
     size_t preagg_count = 0;
     size_t selective_preagg_count = 0;
-    size_t continuous_limit = 1000;
+    size_t continuous_limit = 100;
 };
 
 struct StreamingHtMinReductionEntry {
