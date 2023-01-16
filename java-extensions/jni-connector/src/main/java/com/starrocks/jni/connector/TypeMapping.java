@@ -22,13 +22,16 @@ public class TypeMapping {
     static {
         hiveTypeMappings.put("byte", OffHeapColumnVector.OffHeapColumnType.BYTE);
         hiveTypeMappings.put("bool", OffHeapColumnVector.OffHeapColumnType.BOOLEAN);
+        hiveTypeMappings.put("boolean", OffHeapColumnVector.OffHeapColumnType.BOOLEAN);
         hiveTypeMappings.put("short", OffHeapColumnVector.OffHeapColumnType.SHORT);
         hiveTypeMappings.put("int", OffHeapColumnVector.OffHeapColumnType.INT);
         hiveTypeMappings.put("float", OffHeapColumnVector.OffHeapColumnType.FLOAT);
         hiveTypeMappings.put("bigint", OffHeapColumnVector.OffHeapColumnType.LONG);
         hiveTypeMappings.put("double", OffHeapColumnVector.OffHeapColumnType.DOUBLE);
         hiveTypeMappings.put("string", OffHeapColumnVector.OffHeapColumnType.STRING);
+        hiveTypeMappings.put("binary", OffHeapColumnVector.OffHeapColumnType.BINARY);
         hiveTypeMappings.put("date", OffHeapColumnVector.OffHeapColumnType.DATE);
+        hiveTypeMappings.put("timestamp", OffHeapColumnVector.OffHeapColumnType.DATETIME);
         hiveTypeMappings.put("decimal", OffHeapColumnVector.OffHeapColumnType.DECIMAL);
     }
 }

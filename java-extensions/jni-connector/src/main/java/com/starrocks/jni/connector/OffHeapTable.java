@@ -122,8 +122,12 @@ public class OffHeapTable {
             case DOUBLE:
                 column.appendDouble((double) o);
                 break;
+            case BINARY:
+                column.appendBinary((byte[]) o);
+                break;
             case STRING:
             case DATE:
+            case DATETIME:
             case DECIMAL:
                 column.appendString(o.toString());
                 break;
@@ -199,6 +203,7 @@ public class OffHeapTable {
                         break;
                     case STRING:
                     case DATE:
+                    case DATETIME:
                     case DECIMAL:
                         sb.append(column.getUTF8String(i)).append(", ");
                         break;
