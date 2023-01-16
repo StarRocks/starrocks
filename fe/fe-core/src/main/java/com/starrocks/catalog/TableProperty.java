@@ -80,6 +80,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+    // This property only applies to materialized views,
+    // The mv which base table is external table would be query rewrite even the mv data is not up to date
+    // when this property is set to true.
+    private boolean forceExternalTableQueryRewrite = false;
+
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
@@ -217,6 +222,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildForceExternalTableQueryRewrite() {
+        forceExternalTableQueryRewrite =
+                Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                        "false"));
+        return this;
+    }
+
     public TableProperty buildInMemory() {
         isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
         return this;
@@ -305,6 +317,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
+    public boolean getForceExternalTableQueryRewrite() {
+        return this.forceExternalTableQueryRewrite;
+    }
+
+    public void setForceExternalTableQueryRewrite(boolean forceExternalTableQueryRewrite) {
+        this.forceExternalTableQueryRewrite = forceExternalTableQueryRewrite;
+    }
+
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -376,5 +396,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
+        buildForceExternalTableQueryRewrite();
     }
 }

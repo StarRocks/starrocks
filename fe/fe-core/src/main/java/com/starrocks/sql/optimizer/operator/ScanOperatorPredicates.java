@@ -71,6 +71,16 @@ public class ScanOperatorPredicates {
         return minMaxColumnRefMap;
     }
 
+    public void clear() {
+        idToPartitionKey.clear();
+        selectedPartitionIds.clear();
+        partitionConjuncts.clear();
+        noEvalPartitionConjuncts.clear();
+        nonPartitionConjuncts.clear();
+        minMaxConjuncts.clear();
+        minMaxColumnRefMap.clear();
+    }
+
     @Override
     public boolean equals(Object o) {
         ScanOperatorPredicates targetPredicts = (ScanOperatorPredicates) o;
