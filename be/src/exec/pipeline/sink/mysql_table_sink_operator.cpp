@@ -31,7 +31,11 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+<<<<<<< HEAD
     void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) override;
+=======
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
 
     Status _open_mysql_table_writer();
 
@@ -50,9 +54,15 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
+<<<<<<< HEAD
     _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
     int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(
             _exec_queue_id.get(), &options, &MysqlTableSinkIOBuffer::execute_io_task, this);
+=======
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &MysqlTableSinkIOBuffer::execute_io_task, this);
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -66,20 +76,26 @@ void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
+<<<<<<< HEAD
 void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+=======
+void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
     --_num_pending_chunks;
     if (_is_finished) {
         return;
     }
 
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 0) {
+            close(_state);
+        }
         return;
     }
 
     if (_writer == nullptr) {
         if (Status status = _open_mysql_table_writer(); !status.ok()) {
-            close(_state);
+            LOG(WARNING) << "open mysql table writer failed, error: " << status.to_string();
             _fragment_ctx->cancel(status);
             return;
         }
@@ -88,11 +104,12 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectoriz
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 0);
         close(_state);
         return;
     }
     if (Status status = _writer->append(chunk.get()); !status.ok()) {
-        close(_state);
+        LOG(WARNING) << "add chunk to mysql table writer failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
         return;
     }

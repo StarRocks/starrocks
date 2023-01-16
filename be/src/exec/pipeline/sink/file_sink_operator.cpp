@@ -33,7 +33,11 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+<<<<<<< HEAD
     void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) override;
+=======
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -60,9 +64,15 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
+<<<<<<< HEAD
     _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
     int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(_exec_queue_id.get(), &options,
                                                                          &FileSinkIOBuffer::execute_io_task, this);
+=======
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &FileSinkIOBuffer::execute_io_task, this);
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -102,7 +112,11 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
+<<<<<<< HEAD
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+=======
+void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+>>>>>>> 7afb2c3fe ([BugFix] fix issues in export sink operator (#15915))
     --_num_pending_chunks;
     // close is already done, just skip
     if (_is_finished) {
@@ -111,14 +125,16 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Ch
 
     // cancelling has happened but close is not invoked
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 0) {
+            close(_state);
+        }
         return;
     }
 
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
-            set_io_status(status);
-            close(_state);
+            LOG(WARNING) << "open file writer failed, error: " << status.to_string();
+            _fragment_ctx->cancel(status);
             return;
         }
         _is_writer_opened = true;
@@ -126,12 +142,14 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Ch
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 0);
         close(_state);
         return;
     }
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        set_io_status(status);
-        close(_state);
+        LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
+        _fragment_ctx->cancel(status);
+        return;
     }
 }
 
