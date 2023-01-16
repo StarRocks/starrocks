@@ -189,7 +189,8 @@ public class Optimizer {
         }
     }
 
-    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree, ColumnRefFactory columnRefFactory) {
+    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree,
+                         ColumnRefFactory columnRefFactory) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();

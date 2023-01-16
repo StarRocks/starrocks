@@ -106,9 +106,11 @@ public class InsertPlanner {
 
         //2. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, session).transform(
-                        insertStmt.getQueryStatement().getQueryRelation());
+        LogicalPlan logicalPlan;
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Transform")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, session).transform(
+                    insertStmt.getQueryStatement().getQueryRelation());
+        }
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
@@ -135,19 +137,26 @@ public class InsertPlanner {
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
             LOG.info("property" + requiredPropertySet.toString());
-            OptExpression optimizedPlan = optimizer.optimize(
-                    session,
-                    logicalPlan.getRoot(),
-                    requiredPropertySet,
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+            OptExpression optimizedPlan;
+
+            try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Optimizer")) {
+                optimizedPlan = optimizer.optimize(
+                        session,
+                        logicalPlan.getRoot(),
+                        requiredPropertySet,
+                        new ColumnRefSet(logicalPlan.getOutputColumn()),
+                        columnRefFactory);
+            }
 
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
-            ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            ExecPlan execPlan;
+            try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("PlanBuilder")) {
+                execPlan = PlanFragmentBuilder.createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();

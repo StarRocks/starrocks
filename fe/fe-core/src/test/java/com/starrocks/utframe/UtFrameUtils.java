@@ -618,9 +618,13 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         Map<String, Database> dbs = null;
         try {
+            PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse");
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable()).get(0);
+            st.close();
+            PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Anazlye");
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            st1.close();
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);

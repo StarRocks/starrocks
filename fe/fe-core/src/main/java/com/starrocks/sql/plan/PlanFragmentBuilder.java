@@ -541,7 +541,7 @@ public class PlanFragmentBuilder {
             Statistics statistics = optExpression.getStatistics();
             Statistics.Builder b = Statistics.builder();
             b.setOutputRowCount(statistics.getOutputRowCount());
-            b.addColumnStatistics(statistics.getOutputColumnsStatistics(new ColumnRefSet(node.getOutputColumns())));
+            b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
             projectNode.computeStatistics(b.build());
 
             for (SlotId sid : projectMap.keySet()) {

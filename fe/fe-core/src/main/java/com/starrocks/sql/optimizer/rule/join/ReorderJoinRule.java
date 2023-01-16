@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -84,8 +85,11 @@ public class ReorderJoinRule extends Rule {
 
     void enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
                    MultiJoinNode multiJoinNode) {
-        reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
-                multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
+                reorderAlgorithm.getClass().getSimpleName())) {
+            reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
+                    multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+        }
 
         List<OptExpression> reorderTopKResult = reorderAlgorithm.getResult();
         LogicalJoinOperator oldRoot = (LogicalJoinOperator) innerJoinRoot.getOp();
