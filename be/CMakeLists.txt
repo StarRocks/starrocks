@@ -693,6 +693,7 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 
 install(FILES
     ${BASE_DIR}/../bin/common.sh
+    ${BASE_DIR}/../bin/start_backend.sh
     ${BASE_DIR}/../bin/start_be.sh
     ${BASE_DIR}/../bin/stop_be.sh
     ${BASE_DIR}/../bin/show_be_version.sh
