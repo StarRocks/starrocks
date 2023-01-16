@@ -168,7 +168,7 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
-            sizes[i] += sizeof(bool) + (1 - null_masks[i]) * sizeof(T);
+            sizes[i] += static_cast<uint32_t>(sizeof(bool) + (1 - null_masks[i]) * sizeof(T));
         }
     }
 }
@@ -216,7 +216,7 @@ void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_
     for (uint32_t i = from; i < to; ++i) {
         if constexpr (IsDate<T> || IsTimestamp<T>) {
             std::string str = _data[i].to_string();
-            hash[i] = HashUtil::zlib_crc_hash(str.data(), str.size(), hash[i]);
+            hash[i] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[i]);
         } else if constexpr (IsDecimal<T>) {
             int64_t int_val = _data[i].int_value();
             int32_t frac_val = _data[i].frac_value();
@@ -248,8 +248,8 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
         const T* src = reinterpret_cast<const T*>(_data.data());
         for (size_t i = from; i < to; ++i) {
             if constexpr (std::is_same_v<T, int128_t>) {
-                xor_checksum ^= (src[i] >> 64);
-                xor_checksum ^= (src[i] & ULLONG_MAX);
+                xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
+                xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
             } else {
                 xor_checksum ^= src[i];
             }

@@ -25,7 +25,8 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     if (!has_null) {
         for (size_t i = 0; i < chunk_size; ++i) {
             memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
-            sizes[i] += sizeof(bool) + serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
+            sizes[i] += static_cast<uint32_t>(sizeof(bool)) +
+                        serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
         }
     } else {
         for (size_t i = 0; i < chunk_size; ++i) {
