@@ -1337,6 +1337,19 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 16> : <string id 15>"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
+
+        // COW Case
+        sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 14> : 8\n" +
+                "  |  <slot 15> : clone(8)\n" +
+                "  |  \n" +
+                "  2:Decode\n" +
+                "  |  <dict id 16> : <string id 8>\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 16: S_ADDRESS");
     }
 
     @Test
