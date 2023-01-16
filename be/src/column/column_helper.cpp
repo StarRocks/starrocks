@@ -45,7 +45,7 @@ Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
         size_t num_rows = sel_vec.size();
         // we treat null(1) as false(0)
         for (size_t i = 0; i < num_rows; ++i) {
-            selected[i] &= !nulls[i];
+            selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
         }
         return sel_vec;
     } else {
@@ -63,7 +63,7 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Column::Filter* __
         auto num_rows = nullable_column->size();
         // we treat null(1) as false(0)
         for (size_t j = 0; j < num_rows; ++j) {
-            (*filter)[j] &= (!nulls[j]) & datas[j];
+            (*filter)[j] = static_cast<uint8_t>((*filter)[j] & (!nulls[j]) & datas[j]);
         }
     } else {
         size_t num_rows = column->size();
@@ -145,8 +145,8 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
         const Buffer<uint8_t>& null_data = tmp->null_column_data();
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
 
-        int null_count = SIMD::count_nonzero(null_data);
-        int true_count = SIMD::count_nonzero(bool_data);
+        size_t null_count = SIMD::count_nonzero(null_data);
+        size_t true_count = SIMD::count_nonzero(bool_data);
 
         if (null_count == col->size()) {
             return 0;
@@ -177,8 +177,8 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
         const Buffer<uint8_t>& null_data = tmp->null_column_data();
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
 
-        int null_count = SIMD::count_nonzero(null_data);
-        int false_count = SIMD::count_zero(bool_data);
+        size_t null_count = SIMD::count_nonzero(null_data);
+        size_t false_count = SIMD::count_zero(bool_data);
 
         if (null_count == col->size()) {
             return 0;

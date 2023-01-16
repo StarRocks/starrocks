@@ -204,7 +204,7 @@ public:
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
-        return append_selective(src, indexes.data(), 0, indexes.size());
+        return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
