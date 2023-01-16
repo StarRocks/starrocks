@@ -348,6 +348,7 @@ public class AlterTest {
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -450,6 +451,7 @@ public class AlterTest {
         alterMaterializedView(alterStmt, false);
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
