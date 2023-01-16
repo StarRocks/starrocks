@@ -84,6 +84,10 @@ public class CallOperator extends ScalarOperator {
         return fn;
     }
 
+    public List<ScalarOperator> getArguments() {
+        return arguments;
+    }
+
     public boolean isDistinct() {
         return isDistinct;
     }

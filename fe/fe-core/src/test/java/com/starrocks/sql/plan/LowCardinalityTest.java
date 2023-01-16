@@ -1454,13 +1454,13 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(16: upper), min(16: upper), max(15: S_ADDRESS), sum(CAST(1: S_SUPPKEY AS BIGINT) + 1)\n" +
+                "  |  output: count(*), max(19: upper), min(19: upper), max(18: S_ADDRESS), sum(15: S_SUPPKEY)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 1> : 1: S_SUPPKEY\n" +
-                "  |  <slot 15> : 15: S_ADDRESS\n" +
-                "  |  <slot 16> : DictExpr(15: S_ADDRESS,[upper(<place-holder>)])");
+                "  |  <slot 15> : 1: S_SUPPKEY\n" +
+                "  |  <slot 18> : 18: S_ADDRESS\n" +
+                "  |  <slot 19> : DictExpr(18: S_ADDRESS,[upper(<place-holder>)])");
     }
 
     @Test
