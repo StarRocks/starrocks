@@ -26,6 +26,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
@@ -41,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -199,5 +201,13 @@ public class LakeTable extends OlapTable {
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
         return backendsPerBucketSeq;
+    }
+
+    public List<Long> getShardGroupIds() {
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            shardGroupIds.add(p.getShardGroupId());
+        }
+        return shardGroupIds;
     }
 }

@@ -48,6 +48,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -202,7 +203,8 @@ public class ColocateTableIndex implements Writable {
 
             if (tbl.isLakeTable()) {
                 if (!isReplay) { // leader create or update meta group
-                    List<Long> shardGroupIds = tbl.getShardGroupIds();
+                    LakeTable ltbl = (LakeTable) tbl;
+                    List<Long> shardGroupIds = ltbl.getShardGroupIds();
                     if (!groupAlreadyExist) {
                         GlobalStateMgr.getCurrentStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {
@@ -275,7 +277,8 @@ public class ColocateTableIndex implements Writable {
             GroupId groupId = table2Group.remove(tableId);
 
             if (tbl != null && tbl.isLakeTable() && !isReplay) {
-                List<Long> shardGroupIds = tbl.getShardGroupIds();
+                LakeTable ltbl = (LakeTable) tbl;
+                List<Long> shardGroupIds = ltbl.getShardGroupIds();
                 try {
                     GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
                             false /* isJoin */);
