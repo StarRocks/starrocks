@@ -563,7 +563,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
         }
         String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
-        // 如果导入格式是avro_confluent, 那么一定要保证设置了confluentSchemaRegistryUrlString 
         if (confluentSchemaRegistryUrlString == null) {
             if (format == null) {
                 format = jobProperties.get(FORMAT);
