@@ -65,13 +65,38 @@ enum WriterState {
     CLOSED
 };
 
-// Build the binlog file. A binlog file contains multiple pages, each page contains multiple log entries,
-// and each entry contains one or more change events(INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE). Change
-// events from multiple ingestion are written to the file sequentially. The order is the same as that they
-// are committed. FE will assign a version for each ingestion when publishing, and each change event will
-// use this version to denote which ingestion they are generated in. A page only contains change events from
-// one version, and can not be shared among versions. The log entry is defined as a protobuf message, and
-// currently there are four types of log entries, and you can refer to binlog.proto for details.
+// Build the binlog file which records the information of change events (INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE).
+// Change events from multiple ingestion are written to the file sequentially and the order is the same as that
+// ingestion is published. A change event has several metas
+// +-----------+----------------------------------------------------------------------------------------------+
+// | Name      | Description                                                                                  |
+// +===========+==============================================================================================+
+// | op        | Operation type of the change event, including INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE    |
+// +-----------+----------------------------------------------------------------------------------------------+
+// | version   | The version of ingestion to generate the change event, it's same as the publish version      |
+// +-----------+----------------------------------------------------------------------------------------------+
+// | seq_id    | The unique sequence number of the change event in the ingestion generating it                |
+// +-----------+----------------------------------------------------------------------------------------------+
+// | timestamp | The timestamp to generate the change event                                                   |
+// +-----------+----------------------------------------------------------------------------------------------+
+// | lsn       | The unique sequence number of the change event across all the ingestion. It's a combination  |
+// |           | of <version, seq_id>                                                                         |
+// +-----------+----------------------------------------------------------------------------------------------+
+//
+// A binlog file contains multiple pages, each page contains multiple log entries, and each entry contains one or
+// more change events. The file layout is as following
+//  +----------------------+------+--------+------+------------------------+
+//  |      File Header     | Page | ...... | Page | File Footer [optional] |
+//  | (BinlogFileHeaderPB) |      |        |      |   (BinlogFileMetaPB)   |
+//  +----------------------+------+--------+------+------------------------+
+//  The page layout is as following
+//  +----------------------------+----------------------------------------------------------+
+//  | Page Header (PageHeaderPB) |               Page Content (PageContentPB)               |
+//  |                            +------------------------+--------+------------------------+
+//  |                            | Log Entry (LogEntryPB) | ...... | Log Entry (LogEntryPB) |
+//  +----------------------------+------------------------+--------+------------------------+
+// A page only contains change events from one version, and can not be shared among versions. The log entry is defined
+// as a protobuf message, and currently there are four types of log entries.
 //    +--------------+------------------------------------------------------------------------------------------+
 //    | Type         | Description                                                                              |
 //    +==============+==========================================================================================+
@@ -85,7 +110,7 @@ enum WriterState {
 //    | EMPTY        | There is no data change in an ingestion                                                        |
 //    +--------------+------------------------------------------------------------------------------------------+
 //
-// How to use
+// How to use the writer
 //  std::shared_ptr<BinlogFileWriter> file_writer;
 //  file_writer->init();
 //  // prepare when starting to write data of a new version
