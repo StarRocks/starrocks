@@ -42,6 +42,7 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TConfiguration;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
@@ -140,7 +141,7 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
                 LOG.debug("before create socket hostname={} key.port={} timeoutMs={}",
                         key.hostname, key.port, timeoutMs);
             }
-            TTransport transport = new TSocket(key.hostname, key.port, timeoutMs);
+            TTransport transport = new TSocket(TConfiguration.DEFAULT, key.hostname, key.port, timeoutMs);
             transport.open();
             TProtocol protocol = new TBinaryProtocol(transport);
             VALUE client = (VALUE) newInstance(className, protocol);
