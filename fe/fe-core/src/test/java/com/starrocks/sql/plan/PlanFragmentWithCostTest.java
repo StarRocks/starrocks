@@ -1187,7 +1187,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("lineitem_partition");
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
