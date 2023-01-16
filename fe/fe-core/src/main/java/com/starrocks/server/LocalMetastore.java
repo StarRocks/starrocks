@@ -2389,7 +2389,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 // if binlog_enable is true when creating table,
                 // then set binlogAvailableVersion without statistics through reportHandler
-                if (olapTable.enableBinlog()) {
+                if (olapTable.isBinlogEnabled()) {
                     Map<String, String> binlogAvailableVersion = olapTable.buildBinlogAvailableVersion();
                     olapTable.setBinlogAvailableVersion(binlogAvailableVersion);
                     LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
@@ -4191,7 +4191,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
-                    if (!olapTable.enableBinlog()) {
+                    if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
                 }

@@ -1701,7 +1701,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
-    public Boolean enableBinlog() {
+    public Boolean isBinlogEnabled() {
         if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
             return false;
         }

@@ -69,7 +69,7 @@ public class BinlogManagerTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
         boolean result = binlogManager.tryDisableBinlog(db, table.getId());
-        Assert.assertFalse(table.enableBinlog());
+        Assert.assertFalse(table.isBinlogEnabled());
     }
 
     @Test

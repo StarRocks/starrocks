@@ -269,7 +269,7 @@ public class BinlogManager {
                 try {
                     List<Table> tables = db.getTables();
                     for (Table table : tables) {
-                        if (table.isOlapTable() && ((OlapTable) table).enableBinlog()) {
+                        if (table.isOlapTable() && ((OlapTable) table).isBinlogEnabled()) {
                             allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
                         }
                     }
