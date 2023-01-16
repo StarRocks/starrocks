@@ -74,6 +74,13 @@ Status RepeatOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+Status RepeatOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    _curr_chunk.reset();
+    _repeat_times_last = _repeat_times_required;
+    _is_finished = false;
+    return Status::OK();
+}
+
 Status RepeatOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));

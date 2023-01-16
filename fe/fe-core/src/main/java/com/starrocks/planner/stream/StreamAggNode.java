@@ -111,6 +111,14 @@ public class StreamAggNode extends PlanNode {
     }
 
     @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts,
+                FragmentNormalizer.getSlotIdSet(aggInfo.getGroupingExprs()));
+        return true;
+    }
+
+    @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalSortAggregationNode sortAggregationNode = new TNormalSortAggregationNode();
         sortAggregationNode.setGrouping_exprs(normalizer.normalizeExprs(aggInfo.getGroupingExprs()));

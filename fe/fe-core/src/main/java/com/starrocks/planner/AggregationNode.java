@@ -68,8 +68,10 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -86,6 +88,14 @@ public class AggregationNode extends PlanNode {
     private boolean useSortAgg = false;
     
     private boolean withLocalShuffle = false;
+
+    // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
+    // 1. bucket shuffle join,
+    // 2. colocate join,
+    // 3. one-phase agg,
+    // 4. 1st phaes of three-phase-agg(2nd phase of four-phase agg eliminated).
+    // OlapScanNode and these PlanNodes have the same data partition policy.
+    private boolean identicallyDistributed = false;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -166,6 +176,14 @@ public class AggregationNode extends PlanNode {
         }
         sb.append(")");
         setPlanNodeName(sb.toString());
+    }
+
+    public void setIdenticallyDistributed(boolean identicallyDistributed) {
+        this.identicallyDistributed = identicallyDistributed;
+    }
+
+    public boolean isIdenticallyDistributed() {
+        return identicallyDistributed;
     }
 
     @Override
@@ -353,6 +371,14 @@ public class AggregationNode extends PlanNode {
         if (!stringColumnStatistics.isEmpty()) {
             normalizer.setUncacheable(true);
         }
+    }
+
+    @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts,
+                FragmentNormalizer.getSlotIdSet(aggInfo.getGroupingExprs()));
+        return false;
     }
 
     @Override
