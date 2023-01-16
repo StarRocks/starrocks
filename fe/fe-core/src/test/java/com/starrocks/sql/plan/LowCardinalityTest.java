@@ -226,6 +226,22 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 9> : <string id 3>"));
         Assert.assertTrue(
                 plan.contains("PREDICATES: DictExpr(9: S_ADDRESS,[<place-holder> LIKE '%Customer%Complaints%'])"));
+
+        sql = "select S_ADDRESS, count(distinct s_comment) from supplier group by " +
+                "S_ADDRESS order by if(ascii(S_ADDRESS) > 1, rand(), 0) limit 5";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:TOP-N\n" +
+                "  |  order by: <slot 10> 10: if ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 5\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 3> : 3\n" +
+                "  |  <slot 9> : 9: count\n" +
+                "  |  <slot 10> : if(ascii(3: S_ADDRESS) > 1, rand(), 0.0)\n" +
+                "  |  \n" +
+                "  2:Decode\n" +
+                "  |  <dict id 11> : <string id 3>");
     }
 
     @Test
@@ -668,10 +684,10 @@ public class LowCardinalityTest extends PlanTestBase {
                 "WHERE (NOT (true));";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
-                "  |  <dict id 34> : <string id 33>\n" +
+                "  |  <dict id 35> : <string id 33>\n" +
                 "  |  \n" +
                 "  4:Project\n" +
-                "  |  <slot 34> : 34: S_ADDRESS"));
+                "  |  <slot 35> : 34: S_ADDRESS"));
     }
 
     @Test
@@ -1330,13 +1346,39 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testProjectWithUnionEmptySet() throws Exception {
-        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
-                "  |  <dict id 16> : <string id 15>"));
-        Assert.assertTrue(plan.contains("  2:Project\n" +
-                "  |  <slot 16> : 16: t1a"));
+    public void testProjectWithUnion() throws Exception {
+        String sql;
+        String plan;
+
+        // Union with empty set
+        sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
+        assertContains("  3:Decode\n" +
+                "  |  <dict id 17> : <string id 15>\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 17> : 16: t1a");
+
+        // Union multi columns with empty set
+        sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 17> : <string id 14>\n" +
+                "  |  <dict id 18> : <string id 15>\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 17> : 16: S_ADDRESS\n" +
+                "  |  <slot 18> : 16: S_ADDRESS");
+
+        // Union multi columns with projection
+        sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, upper(S_ADDRESS) from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 16> : <string id 7>\n" +
+                "  |  <dict id 17> : <string id 13>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 17> : DictExpr(16: S_ADDRESS,[upper(<place-holder>)])");
     }
 
     @Test

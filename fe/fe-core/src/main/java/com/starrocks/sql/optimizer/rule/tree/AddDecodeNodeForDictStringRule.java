@@ -330,7 +330,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (needRewrite) {
                     PhysicalTopNOperator newTopN = rewriteTopNOperator(topN, context);
                     newTopN.getUsedColumns();
-                    LogicalProperty logicalProperty = optExpression.getLogicalProperty();
                     OptExpression result = OptExpression.create(newTopN, newChildExpr);
                     result.setStatistics(optExpression.getStatistics());
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -529,6 +528,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     operator.isEnforced(), predicate, operator.getProjection());
         }
 
+        private static void copyGlobalDict(DecodeContext context, int dictId, int newDictId) {
+            for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
+                if (globalDict.first.equals(dictId)) {
+                    context.globalDicts.add(new Pair<>(newDictId, globalDict.second));
+                    break;
+                }
+            }
+        }
+
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
                                                            DecodeContext context,
                                                            Map<ColumnRefOperator, ScalarOperator> newProjectMap,
@@ -539,10 +547,19 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     Integer columnId = context.stringColumnIdToDictColumnIds.get(stringColumn.getId());
                     ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
-                    newProjectMap.put(dictColumn, dictColumn);
-                    newProjectMap.remove(keyColumn);
+                    if (stringColumn.getId() == keyColumn.getId()) {
+                        newProjectMap.put(dictColumn, dictColumn);
+                        newProjectMap.remove(keyColumn);
 
-                    newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
+                        newStringToDicts.put(keyColumn.getId(), dictColumn.getId());
+                    } else {
+                        ColumnRefOperator newDictColumn = createNewDictColumn(context, dictColumn);
+                        copyGlobalDict(context, dictColumn.getId(), newDictColumn.getId());
+                        newProjectMap.put(newDictColumn, dictColumn);
+                        newProjectMap.remove(keyColumn);
+
+                        newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
+                    }
                 }
                 return;
             }
