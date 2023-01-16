@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
+import static com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule.isSupportScalarOperator;
 
 public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression, MaterializedViewRule.RewriteContext> {
 
@@ -68,11 +70,34 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
 
+        Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+        replaceMap.put(context.queryColumnRef, context.mvColumnRef);
+        ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
+
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
             if (kv.getValue().getUsedColumns().contains(context.queryColumnRef)) {
                 if (kv.getValue() instanceof ColumnRefOperator) {
                     newProjectMap.put(context.mvColumnRef, context.mvColumnRef);
+                } else if (isSupportScalarOperator(kv.getValue())) {
+                    if (kv.getValue().equals(context.conditionCall)) {
+                        if (kv.getValue() instanceof CaseWhenOperator) {
+                            CaseWhenOperator caseWhenOperator =
+                                    new CaseWhenOperator((CaseWhenOperator) kv.getValue(), kv.getValue().getChildren());
+                            caseWhenOperator.setType(Type.BITMAP);
+                            newProjectMap.put(kv.getKey(), replaceColumnRefRewriter.rewrite(caseWhenOperator));
+                        } else {
+                            Type[] newArgsType = new Type[] {Type.BOOLEAN, Type.BITMAP, Type.BITMAP};
+                            CallOperator callOperator = new CallOperator(((CallOperator) kv.getValue()).getFnName(),
+                                    Type.BITMAP,
+                                    kv.getValue().getChildren(),
+                                    Expr.getBuiltinFunction(((CallOperator) kv.getValue()).getFnName(), newArgsType,
+                                            IS_IDENTICAL));
+                            newProjectMap.put(kv.getKey(), replaceColumnRefRewriter.rewrite(callOperator));
+                        }
+                    } else {
+                        newProjectMap.put(kv.getKey(), kv.getValue());
+                    }
                 } else {
                     newProjectMap.put(kv.getKey(), context.mvColumnRef);
                 }
@@ -181,6 +206,15 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                     newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 }
+            } else if (context.mvColumn.getAggregationType() == AggregateType.BITMAP_UNION &&
+                    (functionName.equals(FunctionSet.COUNT) && kv.getValue().isDistinct()) &&
+                    context.conditionCall != null) {
+                CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
+                        kv.getValue().getType(),
+                        kv.getValue().getChildren(),
+                        Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                                IS_IDENTICAL));
+                newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
             }
         }
         return OptExpression.create(new LogicalAggregationOperator(

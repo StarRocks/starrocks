@@ -51,6 +51,13 @@ public class ColumnRefSet implements Cloneable {
         return columnRefSet;
     }
 
+    public ColumnRefSet(ColumnRefSet...refs) {
+        bitSet = new RoaringBitmap();
+        for (ColumnRefSet ref : refs) {
+            bitSet.or(ref.bitSet);
+        }
+    }
+
     public int[] getColumnIds() {
         return bitSet.toArray();
     }

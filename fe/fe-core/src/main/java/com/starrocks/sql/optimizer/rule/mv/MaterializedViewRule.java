@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -674,11 +675,16 @@ public class MaterializedViewRule extends Rule {
 
         ColumnRefSet aggregateColumns = new ColumnRefSet();
         ColumnRefSet keyColumns = new ColumnRefSet();
+        Map<Integer, Integer> bitmapUnionRefColumn = Maps.newHashMap();
         for (Column column : candidateIndexMeta.getSchema()) {
             if (!column.isAggregated()) {
                 keyColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
             } else {
                 aggregateColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
+                if (AggregateType.BITMAP_UNION.equals(column.getAggregationType()) && column.getRefColumn() != null) {
+                    bitmapUnionRefColumn.put(columnToIds.get(column.getName()),
+                            columnToIds.get(column.getRefColumn().getColumnName()));
+                }
             }
         }
 
@@ -699,7 +705,8 @@ public class MaterializedViewRule extends Rule {
         for (CallOperator queryExpr : queryExprList) {
             boolean match = false;
             for (CallOperator mvExpr : mvColumnExprList) {
-                if (isMVMatchAggFunctions(indexId, queryExpr, mvExpr, mvColumnExprList, keyColumns, aggregateColumns)) {
+                if (isMVMatchAggFunctions(indexId, queryExpr, mvExpr, mvColumnExprList, keyColumns, aggregateColumns,
+                        bitmapUnionRefColumn)) {
                     match = true;
                     break;
                 }
@@ -735,10 +742,13 @@ public class MaterializedViewRule extends Rule {
 
     public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn, CallOperator mvColumnFn,
                                          List<CallOperator> mvColumnExprList, ColumnRefSet keyColumns,
-                                         ColumnRefSet aggregateColumns) {
+                                         ColumnRefSet aggregateColumns,
+                                         Map<Integer, Integer> bitmapRefColumn) {
         String queryFnName = queryFn.getFnName();
+        boolean isDistinctCount = false;
         if (queryFn.getFnName().equals(FunctionSet.COUNT) && queryFn.isDistinct()) {
             queryFnName = FunctionSet.MULTI_DISTINCT_COUNT;
+            isDistinctCount = true;
         }
 
         if (!COLUMN_AGG_TYPE_MATCH_FN_NAME.get(mvColumnFn.getFnName())
@@ -762,7 +772,11 @@ public class MaterializedViewRule extends Rule {
         ScalarOperator mvColumnFnChild0 = mvColumnFn.getChild(0);
 
         if (!queryFnChild0.isColumnRef()) {
-            IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
+            ColumnRefSet aggregateRefColumns = new ColumnRefSet();
+            bitmapRefColumn.values().forEach(aggregateColumns::union);
+            aggregateRefColumns.union(aggregateColumns);
+            IsNoCallChildrenValidator validator =
+                    new IsNoCallChildrenValidator(keyColumns, aggregateRefColumns);
             if (!(isSupportScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
                 ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
                 Column mvColumn = factory.getColumn(mvColumnRef);
@@ -790,7 +804,20 @@ public class MaterializedViewRule extends Rule {
                     .collect(Collectors.toSet());
             for (int queryColumnId : queryColumnIds) {
                 if (!mvColumnIdSet.contains(queryColumnId)) {
-                    return false;
+                    if (isDistinctCount &&
+                            mvColumnFnChild0 instanceof ColumnRefOperator &&
+                            queryColumnId == bitmapRefColumn.get(((ColumnRefOperator) mvColumnFnChild0).getId())) {
+                        if (!rewriteContexts.containsKey(indexId)) {
+                            rewriteContexts.put(indexId, Lists.newArrayList());
+                        }
+                        rewriteContexts.get(indexId)
+                                .add(new RewriteContext(queryFn, factory.getColumnRef(queryColumnId),
+                                        (ColumnRefOperator) mvColumnFnChild0,
+                                        factory.getColumn((ColumnRefOperator) mvColumnFnChild0),
+                                        (CallOperator) queryFnChild0));
+                    } else {
+                        return false;
+                    }
                 }
             }
             return true;
@@ -822,6 +849,7 @@ public class MaterializedViewRule extends Rule {
         ColumnRefOperator mvColumnRef;
         Column mvColumn;
         CallOperator aggCall;
+        CallOperator conditionCall;
 
         RewriteContext(CallOperator aggCall,
                        ColumnRefOperator queryColumnRef,
@@ -832,9 +860,21 @@ public class MaterializedViewRule extends Rule {
             this.mvColumnRef = mvColumnRef;
             this.mvColumn = mvColumn;
         }
+
+        RewriteContext(CallOperator aggCall,
+                       ColumnRefOperator queryColumnRef,
+                       ColumnRefOperator mvColumnRef,
+                       Column mvColumn,
+                       CallOperator conditionCall) {
+            this.aggCall = aggCall;
+            this.queryColumnRef = queryColumnRef;
+            this.mvColumnRef = mvColumnRef;
+            this.mvColumn = mvColumn;
+            this.conditionCall = conditionCall;
+        }
     }
 
-    private boolean isSupportScalarOperator(ScalarOperator operator) {
+    public static boolean isSupportScalarOperator(ScalarOperator operator) {
         if (operator instanceof CaseWhenOperator) {
             return true;
         }

@@ -1181,6 +1181,59 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testCaseWhenOfDistinctCount() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select empid, deptno, name, bitmap_union(to_bitmap(salary)) from " +
+                EMPS_TABLE_NAME + " group by empid, deptno, name;";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL);
+        queryCaseWhenOfDistinctCount();
+
+        createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select empid, deptno, name, bitmap_union(to_bitmap(salary)), bitmap_union(to_bitmap(commission))  from " +
+                EMPS_TABLE_NAME + " group by empid, deptno, name;";
+        starRocksAssert.dropMaterializedView(EMPS_MV_NAME).withMaterializedView(createEmpsMVSQL);
+        queryCaseWhenOfDistinctCount();
+
+        String query = "select deptno, count(distinct case when name = '1' then salary end)," +
+                "count(distinct case when empid = 1 then salary end) from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(EMPS_MV_NAME,
+                "if(3: name = '1', 7: mv_bitmap_union_salary, NULL)",
+                "if(2: empid = 1, 7: mv_bitmap_union_salary, NULL)");
+
+        query = "select deptno, count(distinct case when name = '1' then salary end)," +
+                "count(distinct case when empid = 1 then commission end) from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(EMPS_MV_NAME,
+                "if(3: name = '1', 7: mv_bitmap_union_salary, NULL)",
+                "if(2: empid = 1, 8: mv_bitmap_union_commission, NULL)");
+
+        query = "select deptno, count(distinct case when deptno = 1 then commission end) as scommission from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(EMPS_MV_NAME, "mv_bitmap_union_commission");
+
+    }
+
+    private void queryCaseWhenOfDistinctCount() throws Exception {
+        String query =
+                "select count(distinct case when empid=1 and deptno=2 then salary end) as ssalary,name from " + EMPS_TABLE_NAME +
+                        " group by name";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, count(distinct case deptno when 1 then salary when 2 then salary end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, count(distinct case deptno when 1 then salary when 2 then commission end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, count(distinct case deptno when 1 then salary when 2 then empid end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
     public void testCaseWhenAggWithPartialOrderBy() throws Exception {
         String query = "select k6, k7 from all_type_table where k6 = 1 group by k6, k7";
 

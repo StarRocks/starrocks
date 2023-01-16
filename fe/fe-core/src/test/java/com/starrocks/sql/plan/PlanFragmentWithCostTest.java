@@ -545,6 +545,28 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testMVWithCaseWhen() throws Exception {
+        String sql = "select count(distinct case k4 when 'a' then k7 when 'b' then k7 end)" +
+                "from duplicate_table_with_null group by k1";
+        String planFragment = getCostExplain(sql);
+        Assert.assertTrue(planFragment
+                .contains("aggregate: bitmap_union_count[([16: case, BITMAP, true]); args: BITMAP; result: BITMAP;"));
+        Assert.assertTrue(planFragment.contains(
+                "16 <-> CASE 4: k4 WHEN 'a' THEN 14: mv_bitmap_union_k7 WHEN 'b' THEN 14: mv_bitmap_union_k7 END"));
+        Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
+
+        sql = "select count(distinct case when k4='a' and k1 = '2023-01-16' then k7 end)" +
+                "from duplicate_table_with_null group by k1";
+        planFragment = getCostExplain(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("bitmap_union_count[([16: case, BITMAP, true]); args: BITMAP; result: BITMAP;"));
+        Assert.assertTrue(planFragment.contains(
+                "if[((4: k4 = 'a') AND (1: k1 = '2023-01-16'), [14: mv_bitmap_union_k7, BITMAP, true], NULL); " +
+                        "args: BOOLEAN,BITMAP,BITMAP; result: BITMAP;"));
+        Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
+    }
+
+    @Test
     @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
