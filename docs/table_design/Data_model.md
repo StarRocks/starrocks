@@ -367,7 +367,7 @@ PROPERTIES("replication_num" = "3",
 
       In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
 
-- `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is true.
+- `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is false.
 
   > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
   > - It is recommended to set this property to true if the disk is SSD.
