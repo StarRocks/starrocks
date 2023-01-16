@@ -78,10 +78,14 @@ public abstract class ConnectorScanner {
      *                      to {@link com.starrocks.jni.connector.OffHeapColumnVector.OffHeapColumnType}
      */
     protected void initOffHeapTableWriter(String[] requiredTypes, int fetchSize,
-                                          Map<String, OffHeapColumnVector.OffHeapColumnType> typeMappings) {
+                                          Map<String, OffHeapColumnVector.OffHeapColumnType> typeMappings)
+            throws IOException {
         this.tableSize = fetchSize;
         this.types = new OffHeapColumnVector.OffHeapColumnType[requiredTypes.length];
         for (int i = 0; i < requiredTypes.length; i++) {
+            if (!typeMappings.containsKey(requiredTypes[i])) {
+                throw new IOException("Unsupported column type: " + requiredTypes[i]);
+            }
             types[i] = typeMappings.get(requiredTypes[i]);
         }
     }
