@@ -120,8 +120,6 @@ export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP
 
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
-export_cachelib_lib_path
-
 
 # ================== kill/start =======================
 if [ ! -d $LOG_DIR ]; then
