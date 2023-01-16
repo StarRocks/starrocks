@@ -1777,7 +1777,6 @@ public class Config extends ConfigBase {
     public static String starmgr_assume_role_credential_arn = "";
     @ConfField
     public static String starmgr_assume_role_credential_external_id = "";
-    
 
     /**
      * empty shard group clean threshold (by create time).
@@ -1907,7 +1906,7 @@ public class Config extends ConfigBase {
     public static int experimental_lake_publish_version_threads = 16;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = true;
+    public static boolean enable_new_publish_mechanism = false;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
