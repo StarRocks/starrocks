@@ -95,8 +95,8 @@ enum WriterState {
 //  |                            +------------------------+--------+------------------------+
 //  |                            | Log Entry (LogEntryPB) | ...... | Log Entry (LogEntryPB) |
 //  +----------------------------+------------------------+--------+------------------------+
-// A page only contains change events from one version, and can not be shared among versions. The log entry is defined
-// as a protobuf message, and currently there are four types of log entries.
+// A page only contains change events from one version, and can not be shared among versions. Page is the unit of I/O
+// and compression. The log entry is defined as a protobuf message, and currently there are four types of log entries.
 //    +--------------+------------------------------------------------------------------------------------------+
 //    | Type         | Description                                                                              |
 //    +==============+==========================================================================================+
