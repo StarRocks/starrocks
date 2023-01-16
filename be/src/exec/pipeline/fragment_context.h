@@ -116,8 +116,6 @@ public:
 
     bool enable_cache() const { return _enable_cache; }
 
-    PerDriverScanRangesMap& scan_ranges_per_driver() { return _scan_ranges_per_driver_seq; }
-
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
     size_t next_driver_id() { return _next_driver_id++; }
@@ -167,7 +165,6 @@ private:
 
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
-    PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
 

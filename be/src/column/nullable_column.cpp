@@ -88,7 +88,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-    uint32_t orig_size = _null_column->size();
+    size_t orig_size = _null_column->size();
 
     if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
@@ -108,7 +108,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
 
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-    uint32_t orig_size = _null_column->size();
+    size_t orig_size = _null_column->size();
 
     if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
@@ -379,7 +379,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     for (size_t i = 0; i < num; ++i) {
         xor_checksum ^= src[i];
         if (!src[i]) {
-            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+            xor_checksum ^= _data_column->xor_checksum(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1));
         }
     }
     return xor_checksum;

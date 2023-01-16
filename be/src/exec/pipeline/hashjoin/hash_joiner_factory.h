@@ -29,51 +29,75 @@ using HashJoinerFactoryPtr = std::shared_ptr<HashJoinerFactory>;
 
 class HashJoinerFactory {
 public:
-    HashJoinerFactory(starrocks::HashJoinerParam& param, int dop) : _param(param), _hash_joiners(dop) {}
+    HashJoinerFactory(starrocks::HashJoinerParam& param, int dop)
+            : _param(param), _hash_joiners(dop), _read_only_probers(dop) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
 
-    HashJoinerPtr create_prober(int driver_sequence) {
-        if (!_hash_joiners[driver_sequence]) {
-            _param._is_buildable = is_buildable(driver_sequence);
-            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param, _read_only_probers);
+    HashJoinerPtr create_prober(int degree_of_parallelism, int driver_sequence) {
+        const auto [num_build_drivers, num_probe_drivers_per_build] = _calc_build_and_probe_size(degree_of_parallelism);
+        const auto [build_driver_idx, probe_driver_idx] =
+                _calc_build_and_probe_idx(degree_of_parallelism, driver_sequence);
+        DCHECK(_hash_joiners.size() > 0);
+        if (num_probe_drivers_per_build > _hash_joiners[build_driver_idx].size()) {
+            _hash_joiners[build_driver_idx].resize(num_probe_drivers_per_build);
         }
 
-        if (!_hash_joiners[driver_sequence]->is_buildable()) {
-            _read_only_probers.emplace_back(_hash_joiners[driver_sequence]);
+        auto& joiner = _hash_joiners[build_driver_idx][probe_driver_idx];
+        if (!joiner) {
+            _param._is_buildable = (probe_driver_idx == BUILD_JOINER_INDEX);
+            joiner = std::make_shared<HashJoiner>(_param, _read_only_probers[build_driver_idx]);
         }
 
-        return _hash_joiners[driver_sequence];
+        if (!joiner->is_buildable()) {
+            _read_only_probers[build_driver_idx].emplace_back(joiner);
+        }
+        return joiner;
     }
 
-    HashJoinerPtr create_builder(int driver_sequence) {
-        if (_param._distribution_mode == TJoinDistributionMode::BROADCAST) {
-            driver_sequence = BROADCAST_BUILD_DRIVER_SEQUENCE;
+    HashJoinerPtr create_builder(int degree_of_parallelism, int driver_sequence) {
+        DCHECK(_hash_joiners.size() > 0);
+        const auto [_, num_probe_drivers_per_build] = _calc_build_and_probe_size(degree_of_parallelism);
+        const auto [build_driver_idx, __] = _calc_build_and_probe_idx(degree_of_parallelism, driver_sequence);
+        if (_hash_joiners[build_driver_idx].empty()) {
+            _hash_joiners[build_driver_idx].resize(num_probe_drivers_per_build);
         }
-        if (!_hash_joiners[driver_sequence]) {
+        auto& joiner = _hash_joiners[build_driver_idx][BUILD_JOINER_INDEX];
+        if (!joiner) {
             _param._is_buildable = true;
-            _hash_joiners[driver_sequence] = std::make_shared<HashJoiner>(_param, _read_only_probers);
+            joiner = std::make_shared<HashJoiner>(_param, _read_only_probers[build_driver_idx]);
         }
-
-        return _hash_joiners[driver_sequence];
+        return joiner;
     }
 
-    bool is_buildable(int driver_sequence) const {
-        return _param._distribution_mode != TJoinDistributionMode::BROADCAST ||
-               driver_sequence == BROADCAST_BUILD_DRIVER_SEQUENCE;
-    }
-
-    const HashJoiners& get_read_only_probers() const { return _read_only_probers; }
+    const HashJoiners& get_read_only_probers(int driver_sequence) const { return _read_only_probers[driver_sequence]; }
 
 private:
     // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
     // use the same hash table with their own different probe states.
     static constexpr int BROADCAST_BUILD_DRIVER_SEQUENCE = 0;
+    static constexpr int BUILD_JOINER_INDEX = 0;
+
+    std::pair<int, int> _calc_build_and_probe_idx(int degree_of_parallelism, int driver_sequence) {
+        const auto [num_build_drivers, num_probe_drivers_per_build] = _calc_build_and_probe_size(degree_of_parallelism);
+        const auto build_driver_idx = driver_sequence / num_probe_drivers_per_build;
+        const auto probe_driver_idx = driver_sequence % num_probe_drivers_per_build;
+        return std::make_pair(build_driver_idx, probe_driver_idx);
+    }
+
+    std::pair<int, int> _calc_build_and_probe_size(int degree_of_parallelism) {
+        if (_param._distribution_mode == TJoinDistributionMode::BROADCAST) {
+            return std::make_pair(BROADCAST_BUILD_DRIVER_SEQUENCE, degree_of_parallelism);
+        } else {
+            int num_build_drivers = static_cast<int>(_hash_joiners.size());
+            return std::make_pair(num_build_drivers, degree_of_parallelism / num_build_drivers);
+        }
+    }
 
     starrocks::HashJoinerParam _param;
-    HashJoiners _hash_joiners;
-    HashJoiners _read_only_probers;
+    std::vector<HashJoiners> _hash_joiners;
+    std::vector<HashJoiners> _read_only_probers;
 };
 
 } // namespace starrocks::pipeline

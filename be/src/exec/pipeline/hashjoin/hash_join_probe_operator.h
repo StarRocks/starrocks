@@ -47,7 +47,10 @@ public:
     }
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     const HashJoinerPtr _join_prober;
@@ -55,7 +58,6 @@ private:
     // For broadcast join, _join_prober references the hash table owned by _join_builder,
     // so increase the reference number of _join_builder to prevent it closing early.
     const HashJoinerPtr _join_builder;
-    bool _is_finished = false;
 };
 
 class HashJoinProbeOperatorFactory final : public OperatorFactory {

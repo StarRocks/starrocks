@@ -114,6 +114,7 @@ public:
     ChunkPtr& pull();
     void finalize();
     void reset();
+    void reset_state();
 
     bool has_output() const;
     bool need_input() const;

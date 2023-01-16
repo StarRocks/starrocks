@@ -37,6 +37,7 @@ enum PerLaneBufferState {
     PLBS_PASSTHROUGH,
 };
 struct PerLaneBuffer {
+    LaneOwnerType lane_owner{-1};
     int lane;
     PerLaneBufferState state;
     TabletSharedPtr tablet;
@@ -486,12 +487,43 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
     for (auto i = 0; i < _multilane_operators.size() - 1; ++i) {
         RETURN_IF_ERROR(_multilane_operators[i]->reset_lane(state, lane_owner, {}));
     }
+
     auto& buffer = _per_lane_buffers[_owner_to_lanes[lane_owner]];
+    _owner_to_lanes.erase(buffer->lane_owner);
+    buffer->lane_owner = lane_owner;
+
     if (buffer->state == PLBS_HIT_PARTIAL) {
         RETURN_IF_ERROR(_multilane_operators.back()->reset_lane(state, lane_owner, buffer->chunks));
         buffer->clear_chunks();
     } else {
         RETURN_IF_ERROR(_multilane_operators.back()->reset_lane(state, lane_owner, {}));
+    }
+
+    // When build-side of HashJoin/NLJoin is empty, the Driver should set operators to finished from
+    // the source operator till the prematurely-finished HashJoinProbeOperator/NLJoinProbeOperator
+    // in short-circuit style.
+
+    // seek for the index of the prematurely-finished operator in _multilane_operators.
+    size_t premature_finished_idx = 0;
+    for (auto i = 0; i < _multilane_operators.size() - 1; ++i) {
+        auto& multi_op = _multilane_operators[i];
+        auto op = multi_op->get_internal_op(_owner_to_lanes[lane_owner]);
+        if (op->is_finished()) {
+            premature_finished_idx = i;
+        }
+    }
+
+    // if we found the prematurely-finished operator, we invoke set-finished method of the operators from source
+    // to prematurely-finished operator.
+    // NOTICE: the source operator ScanOperator is not wrapped in MultilaneOperator, so we must process
+    // ScanOperator and MultilaneOperators.
+    if (premature_finished_idx > 0) {
+        _lane_arbiter->enable_passthrough_mode();
+        for (auto i = 0; i <= premature_finished_idx; ++i) {
+            auto& multi_op = _multilane_operators[i];
+            multi_op->set_finished(state);
+        }
+        _scan_operator->set_finished(state);
     }
     return Status::OK();
 }
