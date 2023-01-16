@@ -645,7 +645,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 1](../assets/query-cache-stage1.png)
+![Query Cache - Stage 1](../assets/query_cache_stage1_agg_with_cache_zh.png)
 
 #### 一阶段远程聚合不使用 Query Cache
 
@@ -697,7 +697,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 2](../assets/query-cache-stage2.png)
+![Query Cache - Stage 2](../assets/query_cache_stage2_agg_with_cache_zh.png)
 
 #### 三阶段聚合的本地聚合使用 Query Cache
 
@@ -728,7 +728,7 @@ GROUP BY
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 3](../assets/query-cache-stage3.png)
+![Query Cache - Stage 3](../assets/query_cache_stage3_agg_with_cache_zh.png)
 
 #### 四阶段聚合的本地聚合使用 Query Cache
 
@@ -748,7 +748,7 @@ WHERE
 
 Profile 中 Query Cache 相关指标统计如下图所示。
 
-![Query Cache - Stage 4](../assets/query-cache-stage4.png)
+![Query Cache - Stage 4](../assets/query_cache_stage4_agg_with_cache_zh.png)
 
 #### 两个查询的第一次聚合语义等价复用 Query Cache 缓存结果
 
@@ -797,11 +797,11 @@ Profile 中 Query Cache 相关指标统计如下图所示。
 
 Q1 查询 CachePopulate 类指标的统计结果如下图所示。
 
-![Query Cache - Q1 Metrics](../assets/query-cache-Q1-metrics.png)
+![Query Cache - Q1 Metrics](../assets/query_cache_reuse_Q1_zh.png)
 
 Q2 查询 CacheProbe 类指标的统计结果如下图所示。
 
-![Query Cache - Q2 Metrics](../assets/query-cache-Q2-metrics.png)
+![Query Cache - Q2 Metrics](../assets/query_cache_reuse_Q2_zh.png)
 
 #### 采用 CTE 优化的 DISTINCT 查询不使用 Query Cache
 
@@ -819,7 +819,7 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 1](../assets/query-cache-CTE-1.png)
+![Query Cache - CTE - 1](../assets/query_cache_distinct_with_cte_Q1_zh.png)
 
 - 查询包含针对同一列的多个 DISTINCT 聚合函数。
 
@@ -835,7 +835,7 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 2](../assets/query-cache-CTE-2.png)
+![Query Cache - CTE - 2](../assets/query_cache_distinct_with_cte_Q2_zh.png)
 
 - 查询包含针对不同列的多个 DISTINCT 聚合函数。
 
@@ -850,4 +850,4 @@ Q2 查询 CacheProbe 类指标的统计结果如下图所示。
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 3](../assets/query-cache-CTE-3.png)
+![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_zh.png)
