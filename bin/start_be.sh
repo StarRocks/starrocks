@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,29 +18,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-MACHINE_TYPE=$(uname -m)
-
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
-
-OPTS=$(getopt \
-  -n $0 \
-  -o '' \
-  -l 'daemon' \
-  -- "$@")
-
-eval set -- "$OPTS"
-
-RUN_DAEMON=0
-while true; do
-    case "$1" in
-        --daemon) RUN_DAEMON=1 ; shift ;;
-        --) shift ;  break ;;
-        *) ehco "Internal error" ; exit 1 ;;
-    esac
-done
-
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
+<<<<<<< HEAD
 # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
 export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
@@ -126,3 +109,6 @@ if [ ${RUN_DAEMON} -eq 1 ]; then
 else
     ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
 fi
+=======
+bash ${STARROCKS_HOME}/bin/start_backend.sh --be $@
+>>>>>>> dac4935e5 ([BugFix] Fix backend start script (#16559))
