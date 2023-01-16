@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -667,5 +668,13 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt node, ConnectContext context) {
+            String catalogName = node.getCatalogName();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+            return null;
+        }
     }
 }
