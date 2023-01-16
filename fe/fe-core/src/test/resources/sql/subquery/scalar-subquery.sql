@@ -627,7 +627,7 @@ INNER JOIN (join-predicate [1: v1 = 23: cast] post-join-predicate [null])
                                     AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
                                         EXCHANGE SHUFFLE[22]
                                             AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(4194304)) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]
@@ -646,7 +646,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
                                 AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
                                     EXCHANGE SHUFFLE[22]
                                         AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(4194304)) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]

@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -424,7 +425,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testEqStringCast() throws Exception {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + ")) = 'a'\n"));
     }
 
     @Test
@@ -457,7 +458,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testNotEqStringCast() throws Exception {
         String sql = "select 'a' != v1 from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) != 'a'\n"));
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + ")) != 'a'\n"));
     }
 
     @Test

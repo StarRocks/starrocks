@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -715,7 +716,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select if(S_SUPPKEY='kks', upper(S_ADDRESS), S_COMMENT), upper(S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(
-                "  |  9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', " +
+                "  |  9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR("
+                        + ScalarType.MAX_VARCHAR_LENGTH + ")) = 'kks', " +
                         "DictExpr(11: S_ADDRESS,[upper(<place-holder>)]), DictExpr(12: S_COMMENT,[<place-holder>])); " +
                         "args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
                         "  |  13 <-> DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));

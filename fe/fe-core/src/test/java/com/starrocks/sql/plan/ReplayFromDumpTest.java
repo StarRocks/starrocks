@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
@@ -429,7 +430,7 @@ public class ReplayFromDumpTest {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
                 "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1', " +
-                "(2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
+                "(2: v2 = CAST(8: v2 AS VARCHAR(" + ScalarType.MAX_VARCHAR_LENGTH + "))) OR (3: v3 = 8: v2)\n"));
     }
 
     @Test
