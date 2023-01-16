@@ -18,8 +18,10 @@ public class OffHeapColumnVector {
         FLOAT,
         LONG,
         DOUBLE,
+        BINARY,
         STRING,
         DATE,
+        DATETIME,
         DECIMAL
     }
     private long nulls;
@@ -71,6 +73,15 @@ public class OffHeapColumnVector {
         reset();
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isArray(OffHeapColumnType type) {
+        return type == OffHeapColumnType.BINARY || type == OffHeapColumnType.STRING
+                || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DATETIME
+                || type == OffHeapColumnType.DECIMAL;
+    }
+
+>>>>>>> fbf3c31c4 ([Feature] Support binary/timestamp column type for hudi MOR (#16594))
     public long nullsNativeAddress() {
         return nulls;
     }
@@ -140,7 +151,7 @@ public class OffHeapColumnVector {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
-            throw new RuntimeException("Unhandled " + type);
+            throw new RuntimeException("Unhandled type: " + type);
         }
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
@@ -307,6 +318,10 @@ public class OffHeapColumnVector {
     public int appendString(String str) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         return appendByteArray(bytes, 0, str.length());
+    }
+
+    public int appendBinary(byte[] binary) {
+        return appendByteArray(binary, 0, binary.length);
     }
 
     private int appendByteArray(byte[] value, int offset, int length) {
