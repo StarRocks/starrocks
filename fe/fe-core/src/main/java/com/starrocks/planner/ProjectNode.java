@@ -210,4 +210,13 @@ public class ProjectNode extends PlanNode {
     public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
         return slotMap.keySet().stream().sorted(Comparator.comparing(SlotId::asInt)).collect(Collectors.toList());
     }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        slotMap.forEach((k, v) -> {
+            if (v instanceof SlotRef) {
+                normalizer.getEquivRelation().union(k, ((SlotRef) v).getSlotId());
+            }
+        });
+    }
 }

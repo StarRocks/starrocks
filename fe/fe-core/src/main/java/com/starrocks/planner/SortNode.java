@@ -342,6 +342,14 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        if (!useTopN) {
+            return super.extractConjunctsToNormalize(normalizer);
+        }
+        return false;
+    }
+
+    @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalSortNode sortNode = new TNormalSortNode();
         TNormalSortInfo sortInfo = new TNormalSortInfo();

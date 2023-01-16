@@ -81,12 +81,23 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         split_morsel_queue->set_ticket_checker(ticket_checker);
     }
 
+    const auto use_cache = _fragment_ctx->enable_cache();
     source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
     LocalRFWaitingSet all_local_rf_set;
-    for (auto& op : _operators) {
+    for (auto& op_ref : _operators) {
+        auto op = op_ref;
+        if (use_cache) {
+            // For MultilaneOperator<HashJoinProbeOperator> and MultilaneOperator<NLJoinProbeOperator>, we must use the
+            // internal operators wrapped in MultiOperators to construct _dependencies.
+            if (auto multilane_op = std::dynamic_pointer_cast<query_cache::MultilaneOperator>(op_ref);
+                multilane_op != nullptr) {
+                op = multilane_op->get_internal_op(0);
+            }
+        }
+
         if (auto* op_with_dep = dynamic_cast<DriverDependencyPtr>(op.get())) {
             _dependencies.push_back(op_with_dep);
         }
@@ -111,29 +122,33 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    ssize_t cache_op_idx = -1;
-    query_cache::CacheOperatorPtr cache_op = nullptr;
-    for (auto i = 0; i < _operators.size(); ++i) {
-        if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
-            cache_op_idx = i;
-            break;
-        }
-    }
-
-    if (cache_op != nullptr) {
-        query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
-        query_cache::MultilaneOperators multilane_operators;
-        for (auto i = 0; i < cache_op_idx; ++i) {
-            auto& op = _operators[i];
-            if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get()); multilane_op != nullptr) {
-                multilane_op->set_lane_arbiter(lane_arbiter);
-                multilane_operators.push_back(multilane_op);
-            } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
-                olap_scan_op->set_lane_arbiter(lane_arbiter);
-                olap_scan_op->set_cache_operator(cache_op);
+    if (use_cache) {
+        ssize_t cache_op_idx = -1;
+        query_cache::CacheOperatorPtr cache_op = nullptr;
+        for (auto i = 0; i < _operators.size(); ++i) {
+            if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
+                cache_op_idx = i;
+                break;
             }
         }
-        cache_op->set_multilane_operators(std::move(multilane_operators));
+
+        if (cache_op != nullptr) {
+            query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
+            query_cache::MultilaneOperators multilane_operators;
+            for (auto i = 0; i < cache_op_idx; ++i) {
+                auto& op = _operators[i];
+                if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get());
+                    multilane_op != nullptr) {
+                    multilane_op->set_lane_arbiter(lane_arbiter);
+                    multilane_operators.push_back(multilane_op);
+                } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
+                    olap_scan_op->set_lane_arbiter(lane_arbiter);
+                    olap_scan_op->set_cache_operator(cache_op);
+                    cache_op->set_scan_operator(olap_scan_op);
+                }
+            }
+            cache_op->set_multilane_operators(std::move(multilane_operators));
+        }
     }
 
     for (auto& op : _operators) {

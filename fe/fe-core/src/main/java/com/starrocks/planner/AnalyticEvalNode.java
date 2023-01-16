@@ -308,6 +308,13 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts, FragmentNormalizer.getSlotIdSet(partitionExprs));
+        return false;
+    }
+
+    @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalAnalyticNode analyticNode = new TNormalAnalyticNode();
         analyticNode.setPartition_exprs(normalizer.normalizeOrderedExprs(substitutedPartitionExprs));

@@ -156,7 +156,8 @@ public class PartitionPredicatePrune extends TransformationRule {
 
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         return Lists.newArrayList(OptExpression.create(
-                builder.withOperator(logicalOlapScanOperator).setPredicate(Utils.compoundAnd(allPredicate)).build(),
+                builder.withOperator(logicalOlapScanOperator).setPredicate(Utils.compoundAnd(allPredicate))
+                        .setPrunedPartitionPredicates(removePredicate).build(),
                 input.getInputs()));
     }
 }

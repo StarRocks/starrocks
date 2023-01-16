@@ -395,6 +395,22 @@ Status JoinHashTable::build(RuntimeState* state) {
     return Status::OK();
 }
 
+Status JoinHashTable::reset_probe_state(starrocks::RuntimeState* state) {
+    _hash_map_type = _choose_join_hash_map();
+    switch (_hash_map_type) {
+#define M(NAME)                                                                                                       \
+    case JoinHashMapType::NAME:                                                                                       \
+        _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
+        _##NAME->probe_prepare(state);                                                                                \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        assert(false);
+    }
+    return Status::OK();
+}
+
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                             bool* eos) {
     switch (_hash_map_type) {

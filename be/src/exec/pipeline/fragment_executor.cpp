@@ -334,29 +334,31 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
         cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
         cache_param.keys_type = tcache_param.keys_type;
+        if (tcache_param.__isset.cached_plan_node_ids) {
+            cache_param.cached_plan_node_ids.insert(tcache_param.cached_plan_node_ids.begin(),
+                                                    tcache_param.cached_plan_node_ids.end());
+        }
         _fragment_ctx->set_enable_cache(true);
     }
 
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
-
-        PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
-        if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
-            for (auto k = 0; k < scan_ranges.size(); ++k) {
-                scan_ranges_per_driver[k % dop].push_back(scan_ranges[k]);
-            }
-        }
-
-        const auto& scan_ranges_per_driver_seq = !scan_ranges_per_driver.empty()
-                                                         ? scan_ranges_per_driver
-                                                         : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
-
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
         _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
 
-        for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
-            for (auto& scan_range : scan_ranges) {
-                if (scan_range.scan_range.__isset.internal_scan_range && fragment.__isset.cache_param) {
+        if (scan_ranges_per_driver_seq.empty()) {
+            _fragment_ctx->set_enable_cache(false);
+        }
+
+        bool should_compute_cache_key_prefix = _fragment_ctx->enable_cache() &&
+                                               _fragment_ctx->cache_param().cached_plan_node_ids.count(scan_node->id());
+        if (should_compute_cache_key_prefix) {
+            for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
+                for (auto& scan_range : scan_ranges) {
+                    if (!scan_range.scan_range.__isset.internal_scan_range) {
+                        continue;
+                    }
                     const auto& tcache_param = fragment.cache_param;
                     auto& internal_scan_range = scan_range.scan_range.internal_scan_range;
                     auto tablet_id = internal_scan_range.tablet_id;
@@ -377,9 +379,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             }
         }
 
-        if (scan_ranges_per_driver_seq.empty()) {
-            _fragment_ctx->set_enable_cache(false);
-        }
         // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
         //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {

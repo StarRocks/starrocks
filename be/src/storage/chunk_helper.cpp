@@ -518,13 +518,17 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
 }
 
 void ChunkPipelineAccumulator::reset() {
-    _finalized = false;
     _in_chunk.reset();
     _out_chunk.reset();
 }
 
 void ChunkPipelineAccumulator::finalize() {
     _finalized = true;
+}
+
+void ChunkPipelineAccumulator::reset_state() {
+    reset();
+    _finalized = false;
 }
 
 ChunkPtr& ChunkPipelineAccumulator::pull() {

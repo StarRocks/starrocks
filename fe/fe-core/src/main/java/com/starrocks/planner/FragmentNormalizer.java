@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.clearspring.analytics.util.Lists;
@@ -39,6 +38,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -46,6 +46,7 @@ import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -55,8 +56,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.Stack;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
 // is normalized, FragmentNormalizer draws out required information as follows from the fragment.
@@ -89,6 +93,15 @@ public class FragmentNormalizer {
 
     private boolean processingLeftNode = false;
 
+    private boolean notRemappingSlotId = false;
+
+    private Stack<Boolean> shouldRemovePartColRangePredicates = new Stack<>();
+
+    private Map<SlotId, List<Expr>> slotId2PartColRangePredicates = Maps.newHashMap();
+    private Map<SlotId, Set<String>> slotId2DerivedPredicates = Maps.newHashMap();
+
+    private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
+    private boolean assignScanRangesAcrossDrivers = false;
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -131,6 +144,18 @@ public class FragmentNormalizer {
         return this.processingLeftNode;
     }
 
+    void beginNotRemappingSlotId(boolean v) {
+        this.notRemappingSlotId = v;
+    }
+
+    void endNotRemappingSlotId() {
+        this.notRemappingSlotId = false;
+    }
+
+    public boolean isNotRemappingSlotId() {
+        return this.notRemappingSlotId;
+    }
+
     public boolean isCanUseMultiVersion() {
         return canUseMultiVersion;
     }
@@ -158,6 +183,9 @@ public class FragmentNormalizer {
     }
 
     public List<Integer> remapTupleIds(List<TupleId> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Lists.newArrayList();
+        }
         return ids.stream().map(id -> remapTupleId(id).asInt()).collect(Collectors.toList());
     }
 
@@ -174,10 +202,16 @@ public class FragmentNormalizer {
     }
 
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
+        if (slotIds == null || slotIds.isEmpty()) {
+            return Lists.newArrayList();
+        }
         return slotIds.stream().map(this::remapSlotId).map(SlotId::asInt).collect(Collectors.toList());
     }
 
     public List<Integer> remapIntegerSlotIds(List<Integer> slotIds) {
+        if (slotIds == null || slotIds.isEmpty()) {
+            return Lists.newArrayList();
+        }
         return slotIds.stream().map(this::remapSlotId).collect(Collectors.toList());
     }
 
@@ -192,13 +226,51 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
-        TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
+        //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
+        TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
         try {
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
         }
         return null;
+    }
+
+    public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+        @Override
+        public String visitBinaryPredicate(BinaryPredicate node, Void context) {
+            String lhs = visit(node.getChild(0), context);
+            String rhs = visit(node.getChild(1), context);
+            if (lhs == null || rhs == null) {
+                return null;
+            }
+            return String.format("(%s %s %s)", node.getOp().getName(), lhs, rhs);
+        }
+
+        @Override
+        public String visitBetweenPredicate(BetweenPredicate node, Void context) {
+            String lhs = visit(node.getChild(0));
+            List<String> rhsList = node.getChildren().stream().skip(1).map(this::visit).collect(Collectors.toList());
+            if (lhs == null || rhsList.stream().anyMatch(Objects::isNull)) {
+                return null;
+            }
+            String rhsCsv = rhsList.stream().sorted(String::compareTo).collect(Collectors.joining(", "));
+            return String.format("(%s %s (%s))", node.isNotBetween() ? "not_in" : "in", lhs, rhsCsv);
+        }
+
+        @Override
+        public String visitSlot(SlotRef node, Void context) {
+            return String.format("(slot %d)", node.getSlotId().asInt());
+        }
+
+        @Override
+        public String visitLiteral(LiteralExpr node, Void context) {
+            return String.format("(literal %s %s)", node.getStringValue(), node.getType().getPrimitiveType().name());
+        }
+    }
+
+    public String normalizeSimpleRangePredicate(Expr expr) {
+        return expr.accept(new SimpleRangePredicateVisitor(), null);
     }
 
     public Pair<List<Integer>, List<ByteBuffer>> normalizeSlotIdsAndExprs(Map<SlotId, Expr> exprMap) {
@@ -230,11 +302,20 @@ public class FragmentNormalizer {
                 return false;
             }
             TSerializer serializer = new TSerializer(new TCompactProtocol.Factory());
+            //TSerializer serializer1 = new TSerializer(new TJSONProtocol.Factory());
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            //MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
                 byte[] data = serializer.serialize(node);
                 digest.update(data);
+                /*
+                String s = new String(serializer1.serialize(node));
+                digest2.update(data);
+                System.out.println(String.format("%d.%s:%s,%s", node.getNode_id(), node.getNode_type().toString(),
+                        toHexString(digest2.digest()), s));
+                digest2.reset();
+                 */
             }
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
@@ -249,6 +330,7 @@ public class FragmentNormalizer {
             cacheParam.setRegion_map(selectedRangeMap);
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
+            cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -256,12 +338,38 @@ public class FragmentNormalizer {
         }
     }
 
-    public void normalizeSubTree(Set<PlanNodeId> leftNodeIds, PlanNode node) {
+    // At present, ScanNode except OlapScanNode can not provides version to indicates
+    // that the underlying table is modified.
+    private boolean isCacheable(PlanNode node) {
+        if (node instanceof ScanNode) {
+            return node instanceof OlapScanNode;
+        } else if (node instanceof JoinNode) {
+            return (node instanceof HashJoinNode) || (node instanceof NestLoopJoinNode);
+        } else {
+            return true;
+        }
+    }
+
+    private void normalizeSubTree(Set<PlanNodeId> leftNodeIds, PlanNode node,
+                                  Set<PlanFragmentId> visitedMultiCastFragments) {
+        if (!isCacheable(node)) {
+            setUncacheable(true);
+            return;
+        }
+        boolean isExchange = node instanceof ExchangeNode;
         for (PlanNode child : node.getChildren()) {
             if (uncacheable) {
                 return;
             }
-            normalizeSubTree(leftNodeIds, child);
+            boolean isMultiCast = isExchange && (child.getFragment() instanceof MultiCastPlanFragment);
+            boolean isVisited = isMultiCast && visitedMultiCastFragments.contains(child.getFragmentId());
+            // Do not re-visit MultiCastPlanFragment along different ExchangeNodes
+            if (isVisited) {
+                continue;
+            } else if (isMultiCast) {
+                visitedMultiCastFragments.add(child.getFragmentId());
+            }
+            normalizeSubTree(leftNodeIds, child, visitedMultiCastFragments);
         }
 
         if (uncacheable) {
@@ -411,6 +519,11 @@ public class FragmentNormalizer {
                 continue;
             }
             if (isSimpleRegionPredicate(e)) {
+                SlotRef child0 = (SlotRef) e.getChild(0);
+                List<Expr> exprList =
+                        slotId2PartColRangePredicates.computeIfAbsent(child0.getSlotId(),
+                                slotId -> Lists.newArrayList());
+                exprList.add(e);
                 boundSimpleRegionExprs.add(e);
             } else {
                 boundOtherExprs.add(e);
@@ -485,10 +598,16 @@ public class FragmentNormalizer {
     }
 
     public void setSlotsUseAggColumns(Set<SlotId> slotsUseAggColumns) {
+        if (!isProcessingLeftNode()) {
+            return;
+        }
         this.slotsUseAggColumns = slotsUseAggColumns;
     }
 
     public void addSlotsUseAggColumns(Map<SlotId, Expr> exprs) {
+        if (!isProcessingLeftNode()) {
+            return;
+        }
         exprs.forEach((slotId, expr) -> {
             List<SlotRef> slotRefs = Lists.newArrayList();
             expr.collect(SlotRef.class, slotRefs);
@@ -500,7 +619,7 @@ public class FragmentNormalizer {
     }
 
     public void disableMultiversionIfExprsUseAggColumns(List<Expr> exprs) {
-        if (exprs == null || exprs.isEmpty()) {
+        if (!isProcessingLeftNode() || exprs == null || exprs.isEmpty()) {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
@@ -535,61 +654,94 @@ public class FragmentNormalizer {
         }
     }
 
-    public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings) {
+    public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
+                                                    Set<PlanFragmentId> visitedMultiCastFragments) {
         if (root.getChildren().isEmpty()) {
             return;
         }
 
         if (root instanceof ExchangeNode) {
-            root.getChildren().forEach(child -> siblings.add(child.getFragment()));
+            for (PlanNode child : root.getChildren()) {
+                PlanFragment childFrag = child.getFragment();
+                boolean isMultiCast = child.getFragment() instanceof MultiCastPlanFragment;
+                if (!isMultiCast || !visitedMultiCastFragments.contains(child.getFragmentId())) {
+                    if (isMultiCast) {
+                        visitedMultiCastFragments.add(childFrag.fragmentId);
+                    }
+                    siblings.add(child.getFragment());
+                    collectRightSiblingFragments(child, siblings, visitedMultiCastFragments);
+                }
+            }
+        } else {
+            root.getChildren()
+                    .forEach(child -> collectRightSiblingFragments(child, siblings, visitedMultiCastFragments));
         }
-        root.getChildren().forEach(child -> collectRightSiblingFragments(child, siblings));
     }
 
-    public static boolean isTransformJoin(PlanNode joinNode) {
+    public static boolean isTransformJoin(JoinNode joinNode) {
         if (joinNode instanceof NestLoopJoinNode) {
             return true;
         } else if (joinNode instanceof HashJoinNode) {
-            HashJoinNode hashJoinNode = (HashJoinNode) joinNode;
-            return hashJoinNode.getJoinOp().isLeftTransform() && !hashJoinNode.getDistrMode().areBothSidesShuffled();
+            return joinNode.getJoinOp().isLeftTransform() && !joinNode.getDistrMode().areBothSidesShuffled();
         } else {
             return false;
         }
+    }
+
+    public static boolean canAssignScanRangesAcrossDrivers(List<PlanNode> participateNodes) {
+        for (PlanNode planNode : participateNodes) {
+            if (planNode instanceof HashJoinNode) {
+                HashJoinNode hashJoinNode = (HashJoinNode) planNode;
+                JoinNode.DistributionMode distMode = hashJoinNode.getDistrMode();
+                if (distMode.equals(JoinNode.DistributionMode.COLOCATE) ||
+                        distMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) {
+                    return false;
+                }
+            } else if (planNode instanceof AggregationNode) {
+                AggregationNode aggregationNode = (AggregationNode) planNode;
+                if (aggregationNode.isIdenticallyDistributed()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public boolean normalize() {
         PlanNode root = fragment.getPlanRoot();
 
         // Get leftmost path
-        List<PlanNode> leftNodes = Lists.newArrayList();
+        List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
                 currNode = currNode.getChild(0)) {
-            leftNodes.add(currNode);
+            leftNodesTopDown.add(currNode);
         }
 
-        Preconditions.checkState(!leftNodes.isEmpty());
+        Preconditions.checkState(!leftNodesTopDown.isEmpty());
         // Not cacheable unless the leftmost PlanNode is OlapScanNode
-        if (!(leftNodes.get(leftNodes.size() - 1) instanceof OlapScanNode)) {
+        if (!(leftNodesTopDown.get(leftNodesTopDown.size() - 1) instanceof OlapScanNode)) {
             return false;
         }
 
         AggregationNode firstAggNode = null;
-        List<JoinNode> joinNodes = Lists.newArrayList();
+        int firstAggNodeIdx = 0;
+        List<JoinNode> joinNodesBottomUp = Lists.newArrayList();
         PlanNode topMostDigestNode = null;
-        for (int i = leftNodes.size() - 1; i >= 0; --i) {
-            PlanNode node = leftNodes.get(i);
+        for (int i = leftNodesTopDown.size() - 1; i >= 0; --i) {
+            PlanNode node = leftNodesTopDown.get(i);
             if (!isAllowedInLeftMostPath(node)) {
                 break;
             }
 
             if (firstAggNode == null && (node instanceof AggregationNode)) {
                 firstAggNode = (AggregationNode) node;
+                firstAggNodeIdx = i;
                 continue;
             }
 
             if (node instanceof JoinNode) {
                 JoinNode joinNode = (JoinNode) node;
-                joinNodes.add(joinNode);
+                joinNodesBottomUp.add(joinNode);
                 // JoinNode below aggNode must be a transform one
                 if (firstAggNode == null && !isTransformJoin(joinNode)) {
                     return false;
@@ -620,7 +772,7 @@ public class FragmentNormalizer {
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
-            collectRightSiblingFragments(root, rightSiblings);
+            collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
             Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
                     frag -> frag.getBuildRuntimeFilters().values().stream().map(
                             RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
@@ -629,8 +781,166 @@ public class FragmentNormalizer {
                 return false;
             }
         }
-        Set<PlanNodeId> leftNodeIds = leftNodes.stream().map(PlanNode::getId).collect(Collectors.toSet());
-        normalizeSubTree(leftNodeIds, topMostDigestNode);
+        if (!joinNodesBottomUp.isEmpty()) {
+            OlapScanNode olapScanNode = (OlapScanNode) leftNodesTopDown.get(leftNodesTopDown.size() - 1);
+            Set<SlotId> slotIds = olapScanNode.getSlotIdsOfPartitionColumns(this);
+            List<Expr> conjuncts = Lists.newArrayList();
+            conjuncts.addAll(olapScanNode.getConjuncts());
+            conjuncts.addAll(olapScanNode.getPrunedPartitionPredicates());
+            List<Expr> rangePredicates = conjuncts.stream()
+                    .filter(e -> isSimpleRegionPredicate(e) && slotIds.contains(((SlotRef) e.getChild(0)).getSlotId()))
+                    .collect(Collectors.toList());
+            setPartColRangePredicates(rangePredicates);
+            for (JoinNode joinNode : joinNodesBottomUp) {
+                collectEquivRelation(joinNode);
+                Map<SlotId, Set<SlotId>> eqSlots = equivRelation.getEquivGroups(slotIds);
+                inferDerivedPartColRangePredicates(eqSlots);
+                extractConjunctsToNormalize(joinNode);
+            }
+        }
+        Set<PlanNodeId> leftNodeIds = leftNodesTopDown.stream().map(PlanNode::getId).collect(Collectors.toSet());
+        normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
+        List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
+        fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node->node.getId().asInt()).collect(Collectors.toSet());
         return computeDigest(firstAggNode);
+    }
+
+    public static class SlotEquivRelation {
+        private Map<SlotId, Integer> slotId2Group = Maps.newHashMap();
+        private Map<Integer, Set<SlotId>> eqGroupMap = Maps.newHashMap();
+
+        public Map<SlotId, Set<SlotId>> getEquivGroups(Set<SlotId> slotIds) {
+            Map<SlotId, Set<SlotId>> slotId2EqSlots = Maps.newHashMap();
+            for (SlotId slotId : slotIds) {
+                if (!slotId2Group.containsKey(slotId)) {
+                    continue;
+                }
+                Set<SlotId> eqSlots = eqGroupMap.get(slotId2Group.get(slotId));
+                if (eqSlots.size() > 1) {
+                    slotId2EqSlots.put(slotId, eqSlots);
+                }
+            }
+            return slotId2EqSlots;
+        }
+
+        public void add(List<SlotId> slotIds) {
+            slotIds.forEach(s -> {
+                if (!find(s)) {
+                    slotId2Group.put(s, s.asInt());
+                    eqGroupMap.put(s.asInt(), Sets.newHashSet(s));
+                }
+            });
+        }
+
+        public void union(SlotId lhs, SlotId rhs) {
+            add(Arrays.asList(lhs, rhs));
+            Integer lhsGroupId = slotId2Group.get(lhs);
+            Integer rhsGroupId = slotId2Group.get(rhs);
+            if (!lhsGroupId.equals(rhsGroupId)) {
+                Set<SlotId> lhsGroup = eqGroupMap.get(lhsGroupId);
+                Set<SlotId> rhsGroup = eqGroupMap.get(rhsGroupId);
+                Set<SlotId> newGroup = Sets.union(lhsGroup, rhsGroup);
+                rhsGroup.forEach(s -> {
+                    slotId2Group.put(s, lhsGroupId);
+                });
+                eqGroupMap.put(lhsGroupId, newGroup);
+                eqGroupMap.remove(rhsGroupId);
+            }
+        }
+
+        private boolean find(SlotId slotId) {
+            return slotId2Group.containsKey(slotId);
+        }
+    }
+
+    private SlotEquivRelation equivRelation = new SlotEquivRelation();
+
+    public SlotEquivRelation getEquivRelation() {
+        return equivRelation;
+    }
+
+    private void collectEquivRelation(PlanNode planNode) {
+        for (PlanNode child : planNode.getChildren()) {
+            collectEquivRelation(child);
+        }
+        planNode.collectEquivRelation(this);
+    }
+
+    private void setPartColRangePredicates(List<Expr> exprList) {
+        exprList.stream().map(e -> Pair.create(e, normalizeSimpleRangePredicate(e))).forEach(p -> {
+            Expr expr = p.first;
+            //ByteBuffer norm = p.second;
+            String norm = p.second;
+            SlotId slotId = ((SlotRef) expr.getChild(0)).getSlotId();
+            slotId2PartColRangePredicates.computeIfAbsent(slotId, id -> Lists.newArrayList()).add(expr);
+            slotId2DerivedPredicates.computeIfAbsent(slotId, i -> Sets.newHashSet()).add(norm);
+        });
+    }
+
+    private void inferDerivedPartColRangePredicates(Map<SlotId, Set<SlotId>> partColEqSlots) {
+        if (partColEqSlots.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<SlotId, Set<SlotId>> entry : partColEqSlots.entrySet()) {
+            SlotId partColSlotId = entry.getKey();
+            Set<SlotId> eqSlots = entry.getValue();
+            if (!slotId2PartColRangePredicates.containsKey(partColSlotId)) {
+                continue;
+            }
+            List<Expr> exprList = slotId2PartColRangePredicates.get(partColSlotId);
+            for (SlotId eqSlotId : eqSlots) {
+                if (eqSlotId.equals(partColSlotId)) {
+                    continue;
+                }
+                SlotRef eqSlotRef = new SlotRef(eqSlotId);
+                List<String> derivedExprs = exprList.stream().map(e -> {
+                    Expr newExpr = e.clone();
+                    newExpr.setChild(0, eqSlotRef.clone());
+                    return normalizeSimpleRangePredicate(newExpr);
+                }).collect(Collectors.toList());
+                slotId2DerivedPredicates.computeIfAbsent(eqSlotId, id -> Sets.newHashSet()).addAll(derivedExprs);
+            }
+        }
+    }
+
+    private Map<PlanNodeId, List<Expr>> planNodeId2Conjuncts = Maps.newHashMap();
+
+    public void extractConjunctsToNormalize(PlanNode root) {
+        if (!root.extractConjunctsToNormalize(this)) {
+            return;
+        }
+        for (PlanNode child : root.getChildren()) {
+            extractConjunctsToNormalize(child);
+        }
+    }
+
+    public List<Expr> getConjunctsByPlanNodeId(PlanNode node) {
+        return planNodeId2Conjuncts.getOrDefault(node.getId(), node.getConjuncts());
+    }
+
+    public static Set<SlotId> getSlotIdSet(List<Expr> exprs) {
+        return exprs.stream()
+                .flatMap(e -> e instanceof SlotRef ? Stream.of(((SlotRef) e).getSlotId()) : Stream.empty())
+                .collect(Collectors.toSet());
+    }
+
+    public void filterOutPartColRangePredicates(PlanNodeId planNodeId, List<Expr> conjuncts,
+                                                Set<SlotId> selectedSlotIdSet) {
+        List<Expr> remainConjuncts = conjuncts.stream().filter(e -> {
+            if (!isSimpleRegionPredicate(e)) {
+                return true;
+            }
+            SlotId slotId = ((SlotRef) e.getChild(0)).getSlotId();
+            if (!selectedSlotIdSet.isEmpty() && !selectedSlotIdSet.contains(slotId)) {
+                return true;
+            }
+            if (!slotId2DerivedPredicates.containsKey(slotId)) {
+                return true;
+            }
+            String norm = normalizeSimpleRangePredicate(e);
+            return !slotId2DerivedPredicates.get(slotId).contains(norm);
+        }).collect(Collectors.toList());
+        planNodeId2Conjuncts.put(planNodeId, remainConjuncts);
     }
 }

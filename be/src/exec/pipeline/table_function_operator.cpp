@@ -210,4 +210,12 @@ void TableFunctionOperator::_process_table_function() {
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
     }
 }
+Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    _input_chunk.reset();
+    _remain_repeat_times = 0;
+    _input_chunk_index = 0;
+    _table_function_result_eos = false;
+    _is_finished = false;
+    return Status::OK();
+}
 } // namespace starrocks::pipeline

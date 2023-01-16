@@ -149,9 +149,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
-    private boolean hasJoinNode = false;
-    private boolean hasOlapScanNode = false;
-
     private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
     private boolean forceSetTableSinkDop = false;
@@ -498,11 +495,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setPlanRoot(PlanNode root) {
         planRoot = root;
-        if (root instanceof JoinNode) {
-            hasJoinNode = true;
-        } else if (root instanceof OlapScanNode) {
-            hasOlapScanNode = true;
-        }
         setFragmentInPlanTree(planRoot);
     }
 
@@ -619,14 +611,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
         }
         return false;
-    }
-
-    public boolean hasJoinNode() {
-        return hasJoinNode;
-    }
-
-    public boolean hasOlapScanNode() {
-        return hasOlapScanNode;
     }
 
     public TCacheParam getCacheParam() {
