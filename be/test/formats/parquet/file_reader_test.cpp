@@ -1438,26 +1438,26 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     // --------------init context---------------
     auto ctx = _create_scan_context();
 
-    TypeDescriptor c1 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+    TypeDescriptor c1 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
-    TypeDescriptor c2 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
+    TypeDescriptor c2 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
 
-    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     c2.field_names.emplace_back("f1");
     c2.selected_fields.emplace_back(true);
 
-    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     c2.field_names.emplace_back("f2");
     c2.selected_fields.emplace_back(true);
 
-    TypeDescriptor f3 = TypeDescriptor::from_primtive_type(LogicalType::TYPE_ARRAY);
-    f3.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    TypeDescriptor f3 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    f3.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     c2.children.emplace_back(f3);
     c2.field_names.emplace_back("f3");
     c2.selected_fields.emplace_back(true);
 
-    c2.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     c2.field_names.emplace_back("not_existed");
     c2.selected_fields.emplace_back(true);
 
