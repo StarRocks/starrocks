@@ -18,43 +18,67 @@
 # specific language governing permissions and limitations
 # under the License.
 
+MACHINE_TYPE=$(uname -m)
+
+# ================== parse opts =======================
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
+
+OPTS=$(getopt \
+    -n $0 \
+    -o '' \
+    -l 'daemon' \
+    -l 'cn' \
+    -l 'be' \
+-- "$@")
+
+eval set -- "$OPTS"
+
+RUN_DAEMON=0
+RUN_CN=0
+RUN_BE=0
+
+while true; do
+    case "$1" in
+        --daemon) RUN_DAEMON=1 ; shift ;;
+        --cn) RUN_CN=1; RUN_BE=0; shift ;;
+        --be) RUN_BE=1; RUN_CN=0; shift ;;
+        --) shift ;  break ;;
+        *) ehco "Internal error" ; exit 1 ;;
+    esac
+done
+
+
+# ================== conf section =======================
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-<<<<<<< HEAD
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# ===================================================================================
-# initialization of environment variables before exporting env variables from be.conf
-# For most cases, you should put default environment variables in this section.
-#
-# UDF_RUNTIME_DIR
-# LOG_DIR
-# PID_DIR
-export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
-export LOG_DIR=${STARROCKS_HOME}/log
-export PID_DIR=`cd "$curdir"; pwd`
-
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
-# ===================================================================================
-
-export_env_from_conf $STARROCKS_HOME/conf/be.conf
-export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
+export_shared_envvars
+if [ ${RUN_BE} -eq 1 ] ; then
+    export_env_from_conf $STARROCKS_HOME/conf/be.conf
+    export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
+fi
+if [ ${RUN_CN} -eq 1 ]; then
+    export_env_from_conf $STARROCKS_HOME/conf/cn.conf
+    export_mem_limit_from_conf $STARROCKS_HOME/conf/cn.conf
+fi
 
 if [ $? -ne 0 ]; then
     exit 1
 fi
 
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
+# enable coredump when BE build with ASAN
+export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
+
+
+# ================== jvm section =======================
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
 
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
-# this is only for starting be
 jvm_arch="amd64"
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     jvm_arch="aarch64"
@@ -66,31 +90,40 @@ else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
         export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
-    # JAVA_HOME is jdk
+        # JAVA_HOME is jdk
     elif [[ -d "$JAVA_HOME/jre"  ]]; then
         export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
-    # JAVA_HOME is jre
+        # JAVA_HOME is jre
     else
         export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
     fi
 fi
-
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
     if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
-    final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
+        final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
     fi
 fi
+
 export LIBHDFS_OPTS=$final_java_opt
+# Prevent JVM from handling any internally or externally generated signals.
+# Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
+export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
-export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH
 
+
+# ================= native section =====================
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export_cachelib_lib_path
+
+
+# ================== kill/start =======================
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
@@ -103,7 +136,12 @@ if [ ! -z ${UDF_RUNTIME_DIR} ]; then
     rm -f ${UDF_RUNTIME_DIR}/*
 fi
 
-pidfile=$PID_DIR/be.pid
+if [ ${RUN_BE} -eq 1 ]; then
+    pidfile=$PID_DIR/be.pid
+fi
+if [ ${RUN_CN} -eq 1 ]; then
+    pidfile=$PID_DIR/cn.pid
+fi
 
 if [ -f $pidfile ]; then
     if kill -0 $(cat $pidfile) > /dev/null 2>&1; then
@@ -115,21 +153,28 @@ if [ -f $pidfile ]; then
 fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
-echo "start time: "$(date) >> $LOG_DIR/be.out
 
 if [[ $(ulimit -n) -lt 60000 ]]; then
-  ulimit -n 65535
+    ulimit -n 65535
 fi
 
-# Prevent JVM from handling any internally or externally generated signals.
-# Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
-export LIBHDFS_OPTS="$LIBHDFS_OPTS -Xrs"
-
-if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
-else
-    ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
+if [ ${RUN_BE} -eq 1 ]; then
+    echo "start time: "$(date) >> $LOG_DIR/be.out
+    if [ ${RUN_DAEMON} -eq 1 ]; then
+        nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
+    else
+        ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
+    fi
 fi
-=======
-bash ${STARROCKS_HOME}/bin/start_backend.sh --be $@
->>>>>>> dac4935e5 ([BugFix] Fix backend start script (#16559))
+
+if [ ${RUN_CN} -eq 1 ]; then
+    echo "start time: "$(date) >> $LOG_DIR/cn.out
+    if [ ${RUN_DAEMON} -eq 1 ]; then
+        nohup ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null &
+    else
+        exec ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null
+    fi
+fi
+
+
+
