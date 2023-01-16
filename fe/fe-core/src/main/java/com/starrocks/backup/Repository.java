@@ -69,7 +69,7 @@ import java.util.List;
  * Repository represents a remote storage for backup to or restore from
  * File organization in repository is:
  *
- * * __palo_repository_repo_name/
+ * * __starrocks_repository_repo_name/
  *   * __repo_info
  *   * __ss_my_ss1/
  *     * __meta__DJdwnfiu92n
@@ -93,7 +93,7 @@ import java.util.List;
 public class Repository implements Writable {
     private static final Logger LOG = LogManager.getLogger(Repository.class);
 
-    public static final String PREFIX_REPO = "__palo_repository_";
+    public String prefixRepo = "__starrocks_repository_";
     public static final String PREFIX_SNAPSHOT_DIR = "__ss_";
     public static final String PREFIX_DB = "__db_";
     public static final String PREFIX_TBL = "__tbl_";
@@ -169,6 +169,15 @@ public class Repository implements Writable {
 
     // create repository dir and repo info file
     public Status initRepository() {
+        Status st = initRepositoryInternal("__palo_repository_");
+        if (st.ok()) {
+            return Status.OK;
+        }
+        return initRepositoryInternal("__starrocks_repository_");
+    }
+
+    public Status initRepositoryInternal(String path) {
+        prefixRepo = path;
         String repoInfoFilePath = assembleRepoInfoFilePath();
         // check if the repo is already exist in remote
         List<RemoteFile> remoteFiles = Lists.newArrayList();
@@ -214,7 +223,10 @@ public class Repository implements Writable {
             return new Status(ErrCode.COMMON_ERROR,
                     "Invalid repository dir. expected one repo info file. get more: " + remoteFiles);
         } else {
-            // repo is already exist, get repo info
+            if (path == "__palo_repository_") {
+                return new Status(ErrCode.COMMON_ERROR, "Use new repository prefix");
+            }
+            // repo is not exist, get repo info
             JSONObject root = new JSONObject();
             root.put("name", name);
             root.put("create_time", TimeUtils.longToTimeString(createTime));
@@ -223,31 +235,31 @@ public class Repository implements Writable {
         }
     }
 
-    // eg: location/__palo_repository_repo_name/__repo_info
+    // eg: location/__starrocks_repository_repo_name/__repo_info
     public String assembleRepoInfoFilePath() {
         return Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(PREFIX_REPO, name),
+                joinPrefix(prefixRepo, name),
                 FILE_REPO_INFO);
     }
 
-    // eg: location/__palo_repository_repo_name/__my_sp1/__meta
+    // eg: location/__starrocks_repository_repo_name/__my_sp1/__meta
     public String assembleMetaInfoFilePath(String label) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PREFIX_REPO, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 FILE_META_INFO);
     }
 
-    // eg: location/__palo_repository_repo_name/__my_sp1/__info_2018-01-01-08-00-00
+    // eg: location/__starrocks_repository_repo_name/__my_sp1/__info_2018-01-01-08-00-00
     public String assembleJobInfoFilePath(String label, long createTime) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PREFIX_REPO, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 jobInfoFileNameWithTimestamp(createTime));
     }
 
     // eg:
-    // __palo_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10020/__10022/
+    // __starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10020/__10022/
     public String getRepoTabletPathBySnapshotInfo(String label, SnapshotInfo info) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PREFIX_REPO, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 joinPrefix(PREFIX_DB, info.getDbId()),
@@ -258,7 +270,7 @@ public class Repository implements Writable {
     }
 
     public String getRepoPath(String label, String childPath) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PREFIX_REPO, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 childPath);
@@ -268,7 +280,7 @@ public class Repository implements Writable {
     // If failed to connect this repo, set errMsg and return false.
     public boolean ping() {
         String checkPath = Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(PREFIX_REPO, name));
+                joinPrefix(prefixRepo, name));
         Status st = storage.checkPathExist(checkPath);
         if (!st.ok()) {
             errMsg = TimeUtils.longToTimeString(System.currentTimeMillis()) + ": " + st.getErrMsg();
@@ -284,8 +296,8 @@ public class Repository implements Writable {
     // Visit the repository, and list all existing snapshot names
     public Status listSnapshots(List<String> snapshotNames) {
         // list with prefix:
-        // eg. __palo_repository_repo_name/__ss_*
-        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PREFIX_REPO, name), PREFIX_SNAPSHOT_DIR)
+        // eg. __starrocks_repository_repo_name/__ss_*
+        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name), PREFIX_SNAPSHOT_DIR)
                 + "*";
         List<RemoteFile> result = Lists.newArrayList();
         Status st = storage.list(listPath, result);
@@ -311,10 +323,10 @@ public class Repository implements Writable {
 
     // create remote tablet snapshot path
     // eg:
-    // /location/__palo_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10032/__10023/__3481721
+    // /location/__starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10032/__10023/__3481721
     public String assembleRemoteSnapshotPath(String label, SnapshotInfo info) {
         String path = Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(PREFIX_REPO, name),
+                joinPrefix(prefixRepo, name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 joinPrefix(PREFIX_DB, info.getDbId()),
@@ -593,7 +605,7 @@ public class Repository implements Writable {
         List<String> info = Lists.newArrayList();
         if (Strings.isNullOrEmpty(timestamp)) {
             // get all timestamp
-            // path eg: /location/__palo_repository_repo_name/__ss_my_snap/__info_*
+            // path eg: /location/__starrocks_repository_repo_name/__ss_my_snap/__info_*
             String infoFilePath = assembleJobInfoFilePath(snapshotName, -1);
             LOG.debug("assemble infoFilePath: {}, snapshot: {}", infoFilePath, snapshotName);
             List<RemoteFile> results = Lists.newArrayList();
