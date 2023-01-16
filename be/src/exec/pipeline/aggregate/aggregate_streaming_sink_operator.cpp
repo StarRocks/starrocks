@@ -181,8 +181,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
         }
 
-        size_t agg_count = SIMD::count_zero(_aggregator->streaming_selection());
-        if (_auto_context.adjust_count < continuous_limit && _auto_context.is_low_reduction(agg_count, chunk_size)) {
+        size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
+        if (_auto_context.adjust_count < continuous_limit && _auto_context.is_low_reduction(hit_count, chunk_size)) {
             RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
             _auto_context.pass_through_count++;
             _auto_context.preagg_count = 0;
@@ -190,13 +190,13 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             if (_auto_context.pass_through_count == AggrAutoContext::StableLimit) {
                 _auto_state = AggrAutoState::PASS_THROUGH;
                 VLOG_ROW << "auto agg: continuous " << AggrAutoContext::StableLimit << " low reduction "
-                         << agg_count * 1.0 / chunk_size << " "
+                         << hit_count * 1.0 / chunk_size << " "
                          << _auto_context.get_auto_state_string(AggrAutoState::ADJUST) << " -> "
                          << _auto_context.get_auto_state_string(_auto_state);
             }
 
         } else if (_auto_context.adjust_count < continuous_limit &&
-                   _auto_context.is_high_reduction(agg_count, chunk_size) &&
+                   _auto_context.is_high_reduction(hit_count, chunk_size) &&
                    allocated_bytes < AggrAutoContext::MaxHtSize) {
             RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk_size));
 
@@ -207,7 +207,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
                 _auto_state = AggrAutoState::PREAGG;
                 _auto_context.preagg_count = 0;
                 VLOG_ROW << "auto agg: continuous " << AggrAutoContext::StableLimit << " high reduction "
-                         << agg_count * 1.0 / chunk_size << " "
+                         << hit_count * 1.0 / chunk_size << " "
                          << _auto_context.get_auto_state_string(AggrAutoState::ADJUST) << " -> "
                          << _auto_context.get_auto_state_string(_auto_state);
             }
