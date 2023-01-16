@@ -93,6 +93,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         for (ColumnDef columnDef : columnDefs) {
             if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName()))  {
                 PartitionExprAnalyzer.analyzePartitionExpr(this.expr, columnDef.getType());
+                slotRef.setType(columnDef.getType());
                 hasExprAnalyze = true;
             }
         }

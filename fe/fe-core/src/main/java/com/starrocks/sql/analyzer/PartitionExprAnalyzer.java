@@ -31,7 +31,7 @@ public class PartitionExprAnalyzer {
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
-                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR};
+                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR, Type.VARCHAR};
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             }

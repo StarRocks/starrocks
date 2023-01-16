@@ -156,6 +156,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
                 for (Column partitionColumn : partitionColumns) {
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
+                        slotRef.setType(partitionColumn.getType());
                     }
                 }
             }
