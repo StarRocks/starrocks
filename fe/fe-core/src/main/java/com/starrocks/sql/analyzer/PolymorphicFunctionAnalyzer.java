@@ -34,6 +34,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
@@ -159,6 +161,14 @@ public class PolymorphicFunctionAnalyzer {
             return new StructType(Arrays.asList(types));
         }
     }
+    
+    private static class NamedStructDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return new StructType(IntStream.range(0, types.length / 2).boxed().map(i -> types[i * 2 + 1])
+                    .collect(Collectors.toList()));
+        }
+    }
 
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
@@ -166,6 +176,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_values", new MapValuesDeduce())
             .put("map_from_arrays", new MapFromArraysDeduce())
             .put("row", new RowDeduce())
+            .put("named_struct", new NamedStructDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
