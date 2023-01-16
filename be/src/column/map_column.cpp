@@ -103,7 +103,7 @@ void MapColumn::append_datum(const Datum& datum) {
         _keys->append_datum(convert2Datum(it.first));
         _values->append_datum(it.second);
     }
-    _offsets->append(_offsets->get_data().back() + map_size);
+    _offsets->append(_offsets->get_data().back() + static_cast<uint32_t>(map_size));
 }
 
 void MapColumn::append(const Column& src, size_t offset, size_t count) {
@@ -117,7 +117,7 @@ void MapColumn::append(const Column& src, size_t offset, size_t count) {
     _values->append(map_column.values(), src_offset, src_count);
 
     for (size_t i = offset; i < offset + count; i++) {
-        size_t l = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
+        uint32_t l = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
         _offsets->append(_offsets->get_data().back() + l);
     }
 }
@@ -163,7 +163,7 @@ void MapColumn::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1 && get_map_size(i) > 0) {
-            indexes.push_back(i);
+            indexes.push_back(static_cast<uint32_t>(i));
         }
     }
     auto default_column = clone_empty();
@@ -205,7 +205,7 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
             new_map_column->append(src, i, 1);
             idx_begin = indexes[i] + 1;
         }
-        int32_t remain_count = _offsets->size() - idx_begin - 1;
+        int64_t remain_count = _offsets->size() - idx_begin - 1;
         if (remain_count > 0) {
             new_map_column->append(*this, idx_begin, remain_count);
         }
@@ -225,7 +225,7 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
         ser_size += _keys->serialize(offset + i, pos + ser_size);
         ser_size += _values->serialize(offset + i, pos + ser_size);
     }
-    return ser_size;
+    return static_cast<uint32_t>(ser_size);
 }
 
 uint32_t MapColumn::serialize_default(uint8_t* pos) {
@@ -434,12 +434,13 @@ bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) 
 
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    size_t offset = _offsets->get_data()[idx];
+    uint32_t offset = _offsets->get_data()[idx];
+    // Should use size_t not uint32_t for compatible
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
-    *hash = HashUtil::fnv_hash(&map_size, sizeof(map_size), *hash);
+    *hash = HashUtil::fnv_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t ele_offset = offset + i;
+        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
         _keys->fnv_hash_at(hash, ele_offset);
         _values->fnv_hash_at(hash, ele_offset);
     }
@@ -447,10 +448,11 @@ void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
 
 void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    size_t offset = _offsets->get_data()[idx];
+    uint32_t offset = _offsets->get_data()[idx];
+    // Should use size_t not uint32_t for compatible
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
-    *hash = HashUtil::zlib_crc_hash(&map_size, sizeof(map_size), *hash);
+    *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
     for (size_t i = 0; i < map_size; ++i) {
         uint32_t ele_offset = offset + i;
         _keys->crc32_hash_at(hash, ele_offset);
@@ -558,8 +560,8 @@ void MapColumn::reset_column() {
 
 std::string MapColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
-    size_t offset = _offsets->get_data()[idx];
-    size_t map_size = _offsets->get_data()[idx + 1] - offset;
+    uint32_t offset = _offsets->get_data()[idx];
+    uint32_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     std::stringstream ss;
     ss << "{";

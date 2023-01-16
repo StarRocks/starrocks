@@ -132,7 +132,7 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
     dest_bytes.resize(total_size);
     dest_offsets.resize(dest_offsets.size() + offsets.back());
 
-    auto pos = 0;
+    T pos = 0;
     for (auto i = 0; i < src_size; ++i) {
         auto bytes_size = _offsets[i + 1] - _offsets[i];
         for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
@@ -242,10 +242,10 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
 #ifdef __AVX2__
     if constexpr (std::is_same_v<T, uint32_t>) {
         if ((bytes_size + fixed_length * size) < std::numeric_limits<uint32_t>::max()) {
-            const int times = size / 8;
+            const int times = static_cast<const int>(size / 8);
 
 #define FX(m) (m * fixed_length)
-#define BFX(m) (bytes_size + m * fixed_length)
+#define BFX(m) (static_cast<int>(bytes_size + m * fixed_length))
             __m256i base = _mm256_set_epi32(BFX(8), BFX(7), BFX(6), BFX(5), BFX(4), BFX(3), BFX(2), BFX(1));
             __m256i delta = _mm256_set_epi32(FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8));
             for (int t = 0; t < times; t++) {
@@ -261,7 +261,7 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
 #endif
     for (; i < size; i++) {
         bytes_size += fixed_length;
-        *(off_data++) = bytes_size;
+        *(off_data++) = static_cast<T>(bytes_size);
     }
     return true;
 }
@@ -302,7 +302,7 @@ void BinaryColumnBase<T>::fill_default(const Filter& filter) {
     for (size_t i = 0; i < filter.size(); i++) {
         size_t len = _offsets[i + 1] - _offsets[i];
         if (filter[i] == 1 && len > 0) {
-            indexes.push_back(i);
+            indexes.push_back(static_cast<uint32_t>(i));
         }
     }
     if (indexes.empty()) {
@@ -511,7 +511,7 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
 template <typename T>
 uint32_t BinaryColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
     // max size of one string is 2^32, so use uint32_t not T
-    uint32_t binary_size = _offsets[idx + 1] - _offsets[idx];
+    auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
     T offset = _offsets[idx];
 
     strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
@@ -563,7 +563,8 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
 template <typename T>
 void BinaryColumnBase<T>::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
-        hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i], hashes[i]);
+        hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
+                                       static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
     }
 }
 
@@ -571,7 +572,8 @@ template <typename T>
 void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     // keep hash if _bytes is empty
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
-        hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i], hashes[i]);
+        hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
+                                            static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
     }
 }
 
@@ -694,7 +696,7 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::downgrade() {
             new_column->get_bytes().swap(_bytes);
 
             for (size_t i = 0; i < _offsets.size(); i++) {
-                new_column->get_offset()[i] = _offsets[i];
+                new_column->get_offset()[i] = static_cast<uint32_t>(_offsets[i]);
             }
             _offsets.resize(0);
             return new_column;

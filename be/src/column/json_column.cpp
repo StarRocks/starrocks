@@ -78,11 +78,11 @@ const uint8_t* JsonColumn::deserialize_and_append(const uint8_t* data) {
 }
 
 uint32_t JsonColumn::serialize_size(size_t idx) const {
-    return get_object(idx)->serialize_size();
+    return static_cast<uint32_t>(get_object(idx)->serialize_size());
 }
 
 uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) {
-    return get_object(idx)->serialize(pos);
+    return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
 } // namespace starrocks

@@ -231,9 +231,9 @@ size_t VectorizedSchema::get_field_index_by_name(const std::string& name) const 
 }
 
 void VectorizedSchema::convert_to(VectorizedSchema* new_schema, const std::vector<LogicalType>& new_types) const {
-    int num_fields = _fields.size();
+    size_t num_fields = _fields.size();
     new_schema->_fields.resize(num_fields);
-    for (int i = 0; i < num_fields; ++i) {
+    for (size_t i = 0; i < num_fields; ++i) {
         auto cid = _fields[i]->id();
         auto new_type = new_types[cid];
         if (_fields[i]->type()->type() == new_type) {

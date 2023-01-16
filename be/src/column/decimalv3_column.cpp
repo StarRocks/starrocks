@@ -109,8 +109,8 @@ int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
 
     for (size_t i = from; i < to; ++i) {
         if constexpr (std::is_same_v<T, int128_t>) {
-            xor_checksum ^= (src[i] >> 64);
-            xor_checksum ^= (src[i] & ULLONG_MAX);
+            xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
+            xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
         } else {
             xor_checksum ^= src[i];
         }
