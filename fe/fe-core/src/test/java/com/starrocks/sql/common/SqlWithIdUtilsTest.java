@@ -28,8 +28,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import javax.xml.crypto.Data;
-
 public class SqlWithIdUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
