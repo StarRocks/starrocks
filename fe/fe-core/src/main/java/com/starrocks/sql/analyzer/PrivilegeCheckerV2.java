@@ -714,6 +714,11 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (statement.isSetIfExists() && globalStateMgr.getDb(statement.getDbName()) == null) {
+                return null;
+            }
+
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
             return null;
         }
@@ -1155,6 +1160,12 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (statement.isSetIfExists() &&
+                    globalStateMgr.getDb(statement.getDbName()).getTable(statement.getTableName()) == null) {
+                return null;
+            }
+
             if (statement.isView()) {
                 checkViewAction(session, statement.getTbl(), PrivilegeType.ViewAction.DROP);
             } else {

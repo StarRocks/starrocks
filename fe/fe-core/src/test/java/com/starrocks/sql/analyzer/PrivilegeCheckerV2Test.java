@@ -914,6 +914,13 @@ public class PrivilegeCheckerV2Test {
                         "revoke select on table db1.tbl1 from test"
                 ),
                 "Access denied for user 'test' to database 'db1'");
+
+        // check drop non-existed table
+        statement = UtFrameUtils.parseStmtWithNewParser(
+                "drop table if exists db1.tbl_not_exist1", ctx);
+        ctxToRoot();
+        DDLStmtExecutor.execute(statement, ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 
     @Test
@@ -1389,6 +1396,14 @@ public class PrivilegeCheckerV2Test {
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // check drop non-existed database
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                "drop database if exists db_not_exist1", ctx);
+        ctxToRoot();
+        DDLStmtExecutor.execute(statement, ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 
     @Test
