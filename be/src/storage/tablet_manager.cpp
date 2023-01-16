@@ -1333,6 +1333,15 @@ void TabletManager::_remove_tablet_from_partition(const Tablet& tablet) {
     }
 }
 
+void TabletManager::get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos) {
+    std::shared_lock rlock(_partition_tablet_map_lock);
+    auto search = _partition_tablet_map.find(partition_id);
+    if (search != _partition_tablet_map.end()) {
+        tablet_infos.reserve(search->second.size());
+        tablet_infos.assign(search->second.begin(), search->second.end());
+    }
+}
+
 std::shared_mutex& TabletManager::_get_tablets_shard_lock(TTabletId tabletId) {
     return _get_tablets_shard(tabletId).lock;
 }
