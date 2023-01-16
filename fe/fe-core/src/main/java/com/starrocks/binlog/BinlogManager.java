@@ -71,14 +71,14 @@ public class BinlogManager {
 
     private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<Partition> curPartitions) {
         if (prePartitions.size() != curPartitions.size()) {
-            return false;
+            return true;
         }
         for (Partition partition : curPartitions) {
             if (!prePartitions.contains(partition.getId())) {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     // the caller should not hold the write lock of Database
@@ -89,7 +89,14 @@ public class BinlogManager {
                 // check if partitions has changed
                 db.readLock();
                 Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
-                boolean isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
+                boolean isPartitionChanged = false;
+                // if partitions is empty indicates that the tablet is
+                // the first tablet of the table to be reported,
+                // no need to check whether the partitions have been changed
+                if (!partitions.isEmpty()) {
+                    isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
+                }
+
                 if (isPartitionChanged) {
                     // for the sake of simplicity, if the partition have been changed, re-statistics
                     partitions.clear();
@@ -262,7 +269,7 @@ public class BinlogManager {
                 try {
                     List<Table> tables = db.getTables();
                     for (Table table : tables) {
-                        if (table.isOlapTable() && ((OlapTable) table).enableBinlog()) {
+                        if (table.isOlapTable() && ((OlapTable) table).isBinlogEnabled()) {
                             allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
                         }
                     }

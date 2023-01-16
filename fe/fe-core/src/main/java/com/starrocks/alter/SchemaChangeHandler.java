@@ -1396,15 +1396,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("table {} binlog config is same as the previous version, so nothing need to do", olapTable.getName());
             return true;
         }
-
-        if (olapTable.getCurBinlogConfig() != null) {
-            LOG.info("update binlog config of table {}, the current binlog is : {}",
-                    olapTable.getName(), olapTable.getCurBinlogConfig().toString());
-        } else {
-            LOG.info("update binlog config of table {}, it has no binlog config previously",
-                    olapTable.getName());
-        }
-
+        
         db.writeLock();
         // check for concurrent modifications by version
         if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
@@ -1417,10 +1409,22 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         newBinlogConfig.incVersion();
         try {
+            BinlogConfig oldBinlogConfig = olapTable.getCurBinlogConfig();
             GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
+            if (oldBinlogConfig != null) {
+                LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, " +
+                        "previous is {}",
+                        olapTable.getName(),
+                        olapTable.getCurBinlogConfig().toString(),
+                        oldBinlogConfig.toString());
+            } else {
+                LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, ",
+                        olapTable.getName(), olapTable.getCurBinlogConfig().toString());
+            }
         } catch (Exception e) {
             // defensive programming, it normally should not throw an exception,
             // here is just to ensure that a correct result can be returned
+            LOG.warn("update binlog config of table {} failed", olapTable.getName());
             isModifiedSuccess = false;
         } finally {
             db.writeUnlock();

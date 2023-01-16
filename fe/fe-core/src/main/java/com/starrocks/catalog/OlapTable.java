@@ -274,24 +274,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (tableProperty == null) {
             tableProperty = new TableProperty(Maps.newHashMap());
         }
-        Map<String, String> properties = curBinlogConfig.toProperties();
-
-        // log binlogAvilableVerison when it's valid
-        // need't log if it's invalid
-        // for replay updateBinlogConfigInfo will invalidate binlogAvailableVersion
-        if (curBinlogConfig.getBinlogEnable()) {
-            Collection<Partition> allPartitions = getAllPartitions();
-            Map<String, String> partitonIdToAvailableVersion = new HashMap<>();
-            allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(
-                    TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion())));
-            properties.putAll(partitonIdToAvailableVersion);
-        }
-        tableProperty.modifyTableProperties(properties);
+        tableProperty.modifyTableProperties(curBinlogConfig.toProperties());
         tableProperty.setBinlogConfig(curBinlogConfig);
-        if (curBinlogConfig.getBinlogEnable()) {
-            tableProperty.buildBinlogAvailableVersion();
-        }
     }
 
     public boolean containsBinlogConfig() {
@@ -1722,7 +1706,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
-    public Boolean enableBinlog() {
+    public Boolean isBinlogEnabled() {
         if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
             return false;
         }
