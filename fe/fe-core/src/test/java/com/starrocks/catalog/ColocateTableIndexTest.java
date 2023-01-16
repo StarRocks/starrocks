@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -238,7 +239,7 @@ public class ColocateTableIndexTest {
     }
 
     @Test
-    public void testLakeTableColocation(@Mocked OlapTable olapTable, @Mocked StarOSAgent starOSAgent) throws Exception {
+    public void testLakeTableColocation(@Mocked LakeTable olapTable, @Mocked StarOSAgent starOSAgent) throws Exception {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
         new MockUp<GlobalStateMgr>() {
@@ -256,11 +257,6 @@ public class ColocateTableIndexTest {
             }
 
             @Mock
-            public List<Long> getShardGroupIds() {
-                return new ArrayList<>();
-            }
-
-            @Mock
             public boolean isLakeTable() {
                 return true;
             }
@@ -271,8 +267,15 @@ public class ColocateTableIndexTest {
             }
         };
 
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return new ArrayList<>();
+            }
+        };
+
         colocateTableIndex.addTableToGroup(
-                100, olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
+                100, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
         Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
 
         Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
