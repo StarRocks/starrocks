@@ -1482,11 +1482,11 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1:0,f2:'a',f3:[0,1,2],not_existed:NULL}]", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1:1,f2:'a',f3:[1,2,3],not_existed:NULL}]", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1:2,f2:'a',f3:[2,3,4],not_existed:NULL}]", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1:3,f2:'c',f3:[3,4,5],not_existed:NULL}]", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1:4,f2:'c',f3:[4,5,6],not_existed:NULL}]", chunk->debug_row(4));
+    EXPECT_EQ("[0, {f1: 0, f2: 'a', f3: [0, 1, 2], not_existed: NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1: 1, f2: 'a', f3: [1, 2, 3], not_existed: NULL}]", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1: 2, f2: 'a', f3: [2, 3, 4], not_existed: NULL}]", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1: 3, f2: 'c', f3: [3, 4, 5], not_existed: NULL}]", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1: 4, f2: 'c', f3: [4, 5, 6], not_existed: NULL}]", chunk->debug_row(4));
 }
 
 TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
