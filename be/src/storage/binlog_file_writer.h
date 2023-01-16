@@ -23,7 +23,12 @@
 namespace starrocks {
 
 struct RowsetSegInfo {
-    RowsetId& rowset_id;
+    RowsetSegInfo(RowsetId* id, int index) {
+        rowset_id = id;
+        seg_index = index;
+    }
+
+    RowsetId* rowset_id;
     int seg_index;
 };
 
@@ -43,7 +48,6 @@ struct PendingPageContext {
 // Binlog context for the current version to write
 struct PendingVersionContext {
     int64_t version;
-    RowsetId rowset_id;
     int64_t start_seq_id;
     int64_t change_event_timestamp_in_us;
     int64_t num_pages;
@@ -131,8 +135,7 @@ public:
     Status init();
 
     // Begin to write binlog for a new version.
-    Status begin(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
-                 int64_t change_event_timestamp_in_us);
+    Status begin(int64_t version, int64_t start_seq_id, int64_t change_event_timestamp_in_us);
 
     // Add an empty log entry when there is no data in an ingestion.
     // An empty version can only have one log entry, and it must be
@@ -142,11 +145,11 @@ public:
 
     // Add an INSERT_RANGE log entry. abort() should be called if
     // the returned status is not Status::OK().
-    Status add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows);
+    Status add_insert_range(const RowsetSegInfo& seg_info, int32_t start_row_id, int32_t num_rows);
 
     // Add an UPDATE log entry. abort() should be called if
     // the returned status is not Status::OK().
-    Status add_update(const RowsetSegInfo& before_info, int32_t before_row_id, int32_t after_seg_index,
+    Status add_update(const RowsetSegInfo& before_info, int32_t before_row_id, const RowsetSegInfo& after_info,
                       int after_row_id);
 
     // Add an DELETE log entry. abort() should be called if
@@ -192,6 +195,7 @@ private:
     Status _check_state(WriterState expect_state);
     Status _switch_page_if_full();
     Status _flush_page(bool end_of_version);
+    Status _append_page(bool end_of_version);
     void _append_file_meta();
     Status _truncate_file(int64_t file_size);
     void _reset_pending_context();

@@ -150,9 +150,9 @@ void verify_log_entry_info(const std::shared_ptr<TestLogEntryInfo>& expect, LogE
     ASSERT_EQ(expect->timestamp, actual->timestamp_in_us);
 }
 
-void verify_seek_and_next(std::string file_path, std::shared_ptr<BinlogFileMetaPB> file_meta, int64_t seek_version,
-                          int64_t seek_seq_id, std::vector<std::shared_ptr<TestLogEntryInfo>>& expected,
-                          int expected_first_entry_index) {
+void verify_seek_and_next(const std::string& file_path, std::shared_ptr<BinlogFileMetaPB> file_meta,
+                          int64_t seek_version, int64_t seek_seq_id,
+                          std::vector<std::shared_ptr<TestLogEntryInfo>>& expected, int expected_first_entry_index) {
     std::shared_ptr<BinlogFileReader> file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
     Status st = file_reader->seek(seek_version, seek_seq_id);
     for (int i = expected_first_entry_index; i < expected.size(); i++) {
@@ -221,10 +221,10 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     RowsetId rowset_id;
     // a rowset contains multiple segments, and write to multiple pages
     rowset_id.init(2, 1, 2, 3);
-    ASSERT_OK(file_writer->begin(1, rowset_id, 0, 1));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 100));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 50));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 96));
+    ASSERT_OK(file_writer->begin(1, 0, 1));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 100));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 50));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 96));
     ASSERT_OK(file_writer->commit(true));
 
     expect_file_meta.set_start_version(1);
@@ -245,8 +245,8 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
 
     // a rowset contains one segment, and write to one page
     rowset_id.init(2, 2, 2, 3);
-    ASSERT_OK(file_writer->begin(2, rowset_id, 0, 2));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 32));
+    ASSERT_OK(file_writer->begin(2, 0, 2));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 32));
     ASSERT_OK(file_writer->commit(true));
 
     expect_file_meta.set_end_version(2);
@@ -262,7 +262,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
 
     // a rowset contains no segment
     rowset_id.init(2, 3, 2, 3);
-    ASSERT_OK(file_writer->begin(3, rowset_id, 0, 3));
+    ASSERT_OK(file_writer->begin(3, 0, 3));
     ASSERT_OK(file_writer->add_empty());
     ASSERT_OK(file_writer->commit(true));
 
@@ -278,9 +278,9 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
 
     // a rowset contains multiple segments, but cross two binlog files, and commit with end_of_version false
     rowset_id.init(2, 4, 2, 3);
-    ASSERT_OK(file_writer->begin(4, rowset_id, 0, 4));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 40));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 20));
+    ASSERT_OK(file_writer->begin(4, 0, 4));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 40));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 20));
     ASSERT_OK(file_writer->commit(false));
 
     expect_file_meta.set_end_version(4);
@@ -336,24 +336,24 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     RowsetId rowset_id;
     rowset_id.init(2, 1, 2, 3);
     // prepare failed, then abort
-    ASSERT_OK(file_writer->begin(1, rowset_id, 0, 1));
+    ASSERT_OK(file_writer->begin(1, 0, 1));
     ASSERT_OK(file_writer->abort());
 
     // write some pages but not committed, then abort
     rowset_id.init(2, 2, 2, 3);
     int64_t before_file_size = file_writer->file_size();
-    ASSERT_OK(file_writer->begin(2, rowset_id, 0, 2));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 100));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 50));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 96));
+    ASSERT_OK(file_writer->begin(2, 0, 2));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 100));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 50));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 96));
     // ensue there is something durable, and will be truncated when aborting
     ASSERT_LE(before_file_size, file_writer->file_size());
     ASSERT_OK(file_writer->abort());
 
     // write binlog successfully
     rowset_id.init(2, 3, 2, 3);
-    ASSERT_OK(file_writer->begin(3, rowset_id, 0, 3));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 3));
+    ASSERT_OK(file_writer->begin(3, 0, 3));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 3));
     ASSERT_OK(file_writer->commit(true));
 
     expect_file_meta.set_start_version(3);
@@ -373,10 +373,10 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     // add some log entries, then abort
     rowset_id.init(2, 4, 2, 3);
     before_file_size = file_writer->file_size();
-    ASSERT_OK(file_writer->begin(4, rowset_id, 0, 4));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 100));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 50));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 96));
+    ASSERT_OK(file_writer->begin(4, 0, 4));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 100));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 50));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 96));
     ASSERT_LE(before_file_size, file_writer->file_size());
     ASSERT_OK(file_writer->abort());
 
@@ -385,10 +385,10 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
 
     // write binlog successfully
     rowset_id.init(2, 5, 2, 3);
-    ASSERT_OK(file_writer->begin(5, rowset_id, 0, 5));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 40));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 20));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 30));
+    ASSERT_OK(file_writer->begin(5, 0, 5));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 40));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 20));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 30));
     ASSERT_OK(file_writer->commit(false));
 
     expect_file_meta.set_end_version(5);
@@ -403,9 +403,9 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
 
     // test begin without commit/abort
     rowset_id.init(2, 6, 2, 3);
-    ASSERT_OK(file_writer->begin(6, rowset_id, 0, 6));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 40));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 20));
+    ASSERT_OK(file_writer->begin(6, 0, 6));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 40));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 20));
 
     file_writer->copy_file_meta(file_meta.get());
     verify_file_meta(&expect_file_meta, file_meta);
@@ -421,10 +421,10 @@ TEST_F(BinlogFileTest, test_resize) {
 
     RowsetId rowset_id;
     rowset_id.init(2, 1, 2, 3);
-    ASSERT_OK(file_writer->begin(1, rowset_id, 0, 1));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 100));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 50));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 96));
+    ASSERT_OK(file_writer->begin(1, 0, 1));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 100));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 50));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 96));
     ASSERT_OK(file_writer->commit(true));
     std::shared_ptr<BinlogFileMetaPB> file_meta_1 = std::make_shared<BinlogFileMetaPB>();
     file_writer->copy_file_meta(file_meta_1.get());
@@ -435,8 +435,8 @@ TEST_F(BinlogFileTest, test_resize) {
     expect_entries.emplace_back(_build_insert_segment_log_entry(1, rowset_id, 2, 150, 96, true, 1));
 
     rowset_id.init(2, 2, 2, 3);
-    ASSERT_OK(file_writer->begin(2, rowset_id, 0, 2));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 32));
+    ASSERT_OK(file_writer->begin(2, 0, 2));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 32));
     ASSERT_OK(file_writer->commit(true));
     std::shared_ptr<BinlogFileMetaPB> file_meta_2 = std::make_shared<BinlogFileMetaPB>();
     file_writer->copy_file_meta(file_meta_2.get());
@@ -448,10 +448,10 @@ TEST_F(BinlogFileTest, test_resize) {
     verify_seek_and_next(file_path, file_meta_1, 1, 0, expect_entries, 0);
 
     rowset_id.init(2, 5, 2, 3);
-    ASSERT_OK(file_writer->begin(5, rowset_id, 0, 5));
-    ASSERT_OK(file_writer->add_insert_range(0, 0, 40));
-    ASSERT_OK(file_writer->add_insert_range(1, 0, 20));
-    ASSERT_OK(file_writer->add_insert_range(2, 0, 30));
+    ASSERT_OK(file_writer->begin(5, 0, 5));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 0), 0, 40));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 1), 0, 20));
+    ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, 2), 0, 30));
     ASSERT_OK(file_writer->commit(false));
     std::shared_ptr<BinlogFileMetaPB> file_meta_3 = std::make_shared<BinlogFileMetaPB>();
     file_writer->copy_file_meta(file_meta_3.get());
@@ -526,12 +526,13 @@ TEST_F(BinlogFileTest, test_random_write_read) {
         versions.push_back(version_info);
         RowsetId rowset_id;
         rowset_id.init(2, version_info.version, 2, 3);
-        ASSERT_OK(file_writer->begin(version_info.version, rowset_id, 0, version_info.version));
+        ASSERT_OK(file_writer->begin(version_info.version, 0, version_info.version));
         if (version_info.num_entries == 0) {
             ASSERT_OK(file_writer->add_empty());
         } else {
             for (int32_t n = 0; n < version_info.num_entries; n++) {
-                ASSERT_OK(file_writer->add_insert_range(n, 0, version_info.num_rows_per_entry));
+                ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, n), 0,
+                                                        version_info.num_rows_per_entry));
             }
         }
         ASSERT_OK(file_writer->commit(true));
@@ -569,12 +570,13 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
         version_info.num_rows_per_entry = std::rand() % 100 + 1;
         RowsetId rowset_id;
         rowset_id.init(2, version_info.version, 2, 3);
-        ASSERT_OK(file_writer->begin(version_info.version, rowset_id, 0, version_info.version));
+        ASSERT_OK(file_writer->begin(version_info.version, 0, version_info.version));
         if (version_info.num_entries == 0) {
             ASSERT_OK(file_writer->add_empty());
         } else {
             for (int32_t n = 0; n < version_info.num_entries; n++) {
-                ASSERT_OK(file_writer->add_insert_range(n, 0, version_info.num_rows_per_entry));
+                ASSERT_OK(file_writer->add_insert_range(RowsetSegInfo(&rowset_id, n), 0,
+                                                        version_info.num_rows_per_entry));
             }
         }
         bool abort = std::rand() % 3;

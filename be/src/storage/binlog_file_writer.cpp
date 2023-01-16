@@ -84,19 +84,15 @@ Status BinlogFileWriter::init() {
     return Status::OK();
 }
 
-Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
-                               int64_t change_event_timestamp_in_us) {
-    VLOG(3) << "Begin binlog writer: " << _file_path << ", version: " << version
-            << ", rowset_id: " << rowset_id.to_string() << ", start_seq_id: " << start_seq_id;
+Status BinlogFileWriter::begin(int64_t version, int64_t start_seq_id, int64_t change_event_timestamp_in_us) {
+    VLOG(3) << "Begin binlog writer: " << _file_path << ", version: " << version << ", start_seq_id: " << start_seq_id;
     RETURN_IF_ERROR(_check_state(WAITING_BEGIN));
     PendingVersionContext* version_context = _pending_version_context.get();
     version_context->version = version;
-    version_context->rowset_id.init(rowset_id.to_string());
     version_context->start_seq_id = start_seq_id;
     version_context->change_event_timestamp_in_us = change_event_timestamp_in_us;
     version_context->num_pages = 0;
     version_context->rowsets.clear();
-    version_context->rowsets.emplace(rowset_id);
 
     PendingPageContext* page_context = _pending_page_context.get();
     page_context->start_seq_id = start_seq_id;
@@ -106,9 +102,9 @@ Status BinlogFileWriter::begin(int64_t version, const RowsetId& rowset_id, int64
     page_context->last_segment_index = -1;
     page_context->last_row_id = -1;
     page_context->estimated_page_size = 0;
+    page_context->rowsets.clear();
     page_context->page_header.Clear();
     page_context->page_content.Clear();
-    page_context->rowsets.emplace(rowset_id);
 
     _writer_state = WRITING;
     return Status::OK();
@@ -126,9 +122,6 @@ Status BinlogFileWriter::add_empty() {
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
     log_entry->set_entry_type(EMPTY_PB);
 
-    // No need to add rowset
-    _pending_version_context->rowsets.clear();
-    _pending_page_context->rowsets.clear();
     PendingPageContext* page_context = _pending_page_context.get();
     page_context->num_log_entries += 1;
     // TODO reduce estimation cost
@@ -136,7 +129,7 @@ Status BinlogFileWriter::add_empty() {
     return Status::OK();
 }
 
-Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows) {
+Status BinlogFileWriter::add_insert_range(const RowsetSegInfo& seg_info, int32_t start_row_id, int32_t num_rows) {
     RETURN_IF_ERROR(_check_state(WRITING));
     RETURN_IF_ERROR(_switch_page_if_full());
     PendingPageContext* page_context = _pending_page_context.get();
@@ -146,8 +139,8 @@ Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_i
     bool in_one_segment = false;
     // if the last and current log entries are in the same segment, no need to set file id.
     // When reading and iterating the page, we can get the file id from the last log entry
-    if (page_context->last_segment_index != seg_index) {
-        _set_file_id_pb(_pending_version_context->rowset_id, seg_index, entry_data->mutable_file_id());
+    if (page_context->last_segment_index != seg_info.seg_index) {
+        _set_file_id_pb(*(seg_info.rowset_id), seg_info.seg_index, entry_data->mutable_file_id());
     } else {
         in_one_segment = true;
     }
@@ -159,17 +152,21 @@ Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_i
     }
     entry_data->set_num_rows(num_rows);
 
+    // only add rowset id for the first time
+    if (UNLIKELY(page_context->last_segment_index == -1)) {
+        page_context->rowsets.emplace(*(seg_info.rowset_id));
+    }
     page_context->end_seq_id += num_rows;
     page_context->num_log_entries += 1;
-    page_context->last_segment_index = seg_index;
+    page_context->last_segment_index = seg_info.seg_index;
     page_context->last_row_id = start_row_id + num_rows - 1;
     // TODO reduce estimation cost
     page_context->estimated_page_size += log_entry->ByteSizeLong();
     return Status::OK();
 }
 
-Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t before_row_id, int32_t after_seg_index,
-                                    int after_row_id) {
+Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t before_row_id,
+                                    const RowsetSegInfo& after_info, int after_row_id) {
     RETURN_IF_ERROR(_check_state(WRITING));
     RETURN_IF_ERROR(_switch_page_if_full());
 
@@ -179,13 +176,13 @@ Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t be
     UpdatePB* entry_data = log_entry->mutable_update_data();
 
     // set update before
-    _set_file_id_pb(before_info.rowset_id, before_info.seg_index, entry_data->mutable_before_file_id());
+    _set_file_id_pb(*(before_info.rowset_id), before_info.seg_index, entry_data->mutable_before_file_id());
     entry_data->set_before_row_id(before_row_id);
 
     // set update after
     bool in_one_segment = false;
-    if (page_context->last_segment_index != after_seg_index) {
-        _set_file_id_pb(_pending_version_context->rowset_id, after_seg_index, entry_data->mutable_after_file_id());
+    if (page_context->last_segment_index != after_info.seg_index) {
+        _set_file_id_pb(*(after_info.rowset_id), after_info.seg_index, entry_data->mutable_after_file_id());
     } else {
         in_one_segment = true;
     }
@@ -193,14 +190,17 @@ Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t be
         entry_data->set_after_row_id(after_row_id);
     }
 
+    // only add rowset id for the first time
+    if (UNLIKELY(page_context->last_segment_index == -1)) {
+        page_context->rowsets.emplace(*(after_info.rowset_id));
+    }
+    page_context->rowsets.emplace(*(before_info.rowset_id));
     page_context->end_seq_id += 2;
     page_context->num_log_entries += 1;
-    page_context->last_segment_index = after_seg_index;
+    page_context->last_segment_index = after_info.seg_index;
     page_context->last_row_id = after_row_id;
     // TODO reduce estimation cost
     page_context->estimated_page_size += log_entry->ByteSizeLong();
-    _pending_version_context->rowsets.emplace(before_info.rowset_id);
-    page_context->rowsets.emplace(before_info.rowset_id);
     return Status::OK();
 }
 
@@ -212,15 +212,15 @@ Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t ro
     LogEntryPB* log_entry = page_context->page_content.add_entries();
     log_entry->set_entry_type(DELETE_PB);
     DeletePB* entry_data = log_entry->mutable_delete_data();
-    _set_file_id_pb(delete_info.rowset_id, delete_info.seg_index, entry_data->mutable_file_id());
+    _set_file_id_pb(*(delete_info.rowset_id), delete_info.seg_index, entry_data->mutable_file_id());
     entry_data->set_row_id(row_id);
 
     page_context->end_seq_id += 1;
     page_context->num_log_entries += 1;
     // TODO reduce estimation cost
     page_context->estimated_page_size += log_entry->ByteSizeLong();
-    _pending_version_context->rowsets.emplace(delete_info.rowset_id);
-    page_context->rowsets.emplace(delete_info.rowset_id);
+    _pending_version_context->rowsets.emplace(*(delete_info.rowset_id));
+    page_context->rowsets.emplace(*(delete_info.rowset_id));
     return Status::OK();
 }
 
@@ -319,8 +319,15 @@ Status BinlogFileWriter::_switch_page_if_full() {
     if (page_context->estimated_page_size < _max_page_size) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_flush_page(false));
+    return _flush_page(false);
+}
 
+Status BinlogFileWriter::_flush_page(bool end_of_version) {
+    RETURN_IF_ERROR(_append_page(end_of_version));
+
+    PendingPageContext* page_context = _pending_page_context.get();
+    _pending_version_context->num_pages += 1;
+    _pending_version_context->rowsets.insert(page_context->rowsets.begin(), page_context->rowsets.end());
     page_context->start_seq_id = page_context->end_seq_id + 1;
     // no need to set end_seq_id
     page_context->num_log_entries = 0;
@@ -328,23 +335,21 @@ Status BinlogFileWriter::_switch_page_if_full() {
     page_context->last_row_id = -1;
     page_context->estimated_page_size = 0;
     page_context->rowsets.clear();
-    page_context->rowsets.emplace(_pending_version_context->rowset_id);
     page_context->page_header.Clear();
     page_context->page_content.Clear();
 
     return Status::OK();
 }
 
-Status BinlogFileWriter::_flush_page(bool end_of_version) {
+Status BinlogFileWriter::_append_page(bool end_of_version) {
     // 1. compress page content
     PageContentPB& page_content = _pending_page_context->page_content;
     // TODO reuse serialized_page_content
     std::string serialized_page_content;
     if (!page_content.SerializeToString(&serialized_page_content)) {
-        LOG(WARNING) << "Failed to serialize page content for version " << _pending_version_context->version
-                     << ", rowset " << _pending_version_context->rowset_id << ", num entries "
-                     << _pending_page_context->num_log_entries << ", file id " << _file_id << ", file name "
-                     << _file_path;
+        LOG(WARNING) << "Failed to serialize page content for version: " << _pending_version_context->version
+                     << ", num entries: " << _pending_page_context->num_log_entries << ", file id: " << _file_id
+                     << ", file path: " << _file_path;
         return Status::InternalError("Failed to serialize page content");
     }
     Status status;
@@ -353,10 +358,9 @@ Status BinlogFileWriter::_flush_page(bool end_of_version) {
     faststring compressed_body;
     status = PageIO::compress_page_body(_compress_codec, 0.1, slices, &compressed_body);
     if (!status.ok()) {
-        LOG(WARNING) << "Failed to compress page content for version " << _pending_version_context->version
-                     << ", rowset " << _pending_version_context->rowset_id << ", num entries "
-                     << page_content.entries_size() << ", file id " << _file_id << ", file name " << _file_path << ", "
-                     << status;
+        LOG(WARNING) << "Failed to compress page content for version: " << _pending_version_context->version
+                     << ", num entries: " << page_content.entries_size() << ", file id: " << _file_id
+                     << ", file name: " << _file_path << ", " << status;
         return status;
     }
 
@@ -395,10 +399,9 @@ Status BinlogFileWriter::_flush_page(bool end_of_version) {
     // TODO reuse serialized_page_header
     std::string serialized_page_header;
     if (!page_header.SerializeToString(&serialized_page_header)) {
-        LOG(WARNING) << "Failed to serialize page header for version " << _pending_version_context->version
-                     << ", rowset " << _pending_version_context->rowset_id << ", num entries "
-                     << _pending_page_context->num_log_entries << ", file id " << _file_id << ", file name "
-                     << _file_path;
+        LOG(WARNING) << "Failed to serialize page header for version: " << _pending_version_context->version
+                     << ", num entries: " << _pending_page_context->num_log_entries << ", file id: " << _file_id
+                     << ", file path: " << _file_path;
         return Status::InternalError("Failed to serialize page header");
     }
 
@@ -418,12 +421,10 @@ Status BinlogFileWriter::_flush_page(bool end_of_version) {
     // sync file when commit
     status = _file->appendv(&data[0], data.size());
     if (!status.ok()) {
-        LOG(WARNING) << "Failed to write page for version " << _pending_version_context->version << ", rowset "
-                     << _pending_version_context->rowset_id << ", num entries "
-                     << _pending_page_context->num_log_entries << ", file id " << _file_id << ", file name "
-                     << _file_path << ", " << status;
+        LOG(WARNING) << "Failed to write page for version: " << _pending_version_context->version
+                     << ", num entries: " << _pending_page_context->num_log_entries << ", file id: " << _file_id
+                     << ", file path: " << _file_path << ", " << status;
     }
-    _pending_version_context->num_pages += 1;
     return status;
 }
 
