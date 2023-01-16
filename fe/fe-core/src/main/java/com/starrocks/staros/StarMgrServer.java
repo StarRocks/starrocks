@@ -135,6 +135,8 @@ public class StarMgrServer {
         com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.starmgr_assume_role_credential_arn;
         com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.starmgr_assume_role_credential_external_id;
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
+        com.staros.util.Config.ENABLE_BUILTIN_RESOURCE_PROVISIONER_FOR_TEST = true;
+        com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
 
         com.staros.util.Config.HDFS_URL = Config.hdfs_url;
 

@@ -39,6 +39,8 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -51,6 +53,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -451,44 +454,40 @@ public class StarOSAgent {
         return backendIds;
     }
 
-    public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
-        prepare();
-
+    // Mocked
+    public long createWorkerGroup(String size) throws DdlException {
+        // size should be S, M, L, XL...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
         try {
-            CreateMetaGroupInfo createInfo = CreateMetaGroupInfo.newBuilder()
-                    .setMetaGroupId(metaGroupId)
-                    .setPlacementPolicy(PlacementPolicy.PACK)
-                    .addAllShardGroupIds(shardGroupIds)
-                    .build();
-            client.createMetaGroup(serviceId, createInfo);
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap());
         } catch (StarClientException e) {
-            throw new DdlException("Failed to create meta group. error: " + e.getMessage());
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
         }
     }
 
-    public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) throws DdlException {
-        prepare();
-
+    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
+        WorkerGroupDetailInfo updatedInfo = null;
+        WorkerGroupSpec newSpec = WorkerGroupSpec.newBuilder().setSize(size).build();
         try {
-            UpdateMetaGroupInfo.Builder builder = UpdateMetaGroupInfo.newBuilder();
-
-            if (isJoin) {
-                JoinMetaGroupInfo joinInfo = JoinMetaGroupInfo.newBuilder()
-                        .setMetaGroupId(metaGroupId)
-                        .build();
-                builder.setJoinInfo(joinInfo);
-            } else {
-                QuitMetaGroupInfo quitInfo = QuitMetaGroupInfo.newBuilder()
-                        .setMetaGroupId(metaGroupId)
-                        .build();
-                builder.setQuitInfo(quitInfo);
-            }
-
-            builder.addAllShardGroupIds(shardGroupIds);
-
-            client.updateMetaGroup(serviceId, builder.build());
+            updatedInfo = client.alterWorkerGroupSpec(serviceId, groupId, newSpec);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to update meta group. error: " + e.getMessage());
+            LOG.warn("Failed to update worker group size. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group size. error: " + e.getMessage());
         }
     }
 }

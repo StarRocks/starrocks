@@ -29,12 +29,14 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.OpWarehouseLog;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -148,8 +150,7 @@ public class WarehouseManager implements Writable {
         }
     }
 
-
-    public void suspendWarehouse(SuspendWarehouseStmt stmt) {
+    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
         String whName = stmt.getFullWhName();
         readLock();
         Warehouse warehouse = null;
@@ -163,7 +164,7 @@ public class WarehouseManager implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logSuspendWh(log);
     }
 
-    public void replaySuspendWarehouse(String whName) {
+    public void replaySuspendWarehouse(String whName) throws DdlException {
         readLock();
         Warehouse warehouse = null;
         try {
@@ -174,7 +175,7 @@ public class WarehouseManager implements Writable {
         warehouse.suspendSelf(true);
     }
 
-    public void resumeWarehouse(ResumeWarehouseStmt stmt) {
+    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
         String whName = stmt.getFullWhName();
         Warehouse warehouse = null;
         readLock();
@@ -183,23 +184,24 @@ public class WarehouseManager implements Writable {
         } finally {
             readUnlock();
         }
-        warehouse.resumeSelf(false);
-        OpWarehouseLog log = new OpWarehouseLog(whName);
+        warehouse.resumeSelf();
+        ResumeWarehouseLog log = new ResumeWarehouseLog(whName, warehouse.getClusters());
         GlobalStateMgr.getCurrentState().getEditLog().logResumeWh(log);
     }
 
-    public void replayResumeWarehouse(String whName) {
+    public void replayResumeWarehouse(String whName, Map<Long, Cluster> clusters) throws DdlException {
         readLock();
         Warehouse warehouse = null;
         try {
             warehouse = fullNameToWh.get(whName);
+            warehouse.setClusters(clusters);
+            warehouse.setState(Warehouse.WarehouseState.RUNNING);
         } finally {
             readUnlock();
         }
-        warehouse.resumeSelf(true);
     }
 
-    public void dropWarehouse(DropWarehouseStmt stmt) {
+    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
         String whName = stmt.getFullWhName();
         writeLock();
         try {

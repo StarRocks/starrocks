@@ -865,7 +865,6 @@ public class DDLStmtExecutor {
             return null;
         }
 
-
         @Override
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {

@@ -184,11 +184,11 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_RESUME_WH: {
-                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    // long whId = log.getId();
+                    ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
                     String warehouseName = log.getWhName();
+                    Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayResumeWarehouse(warehouseName);
+                    warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
                     break;
                 }
                 case OperationType.OP_DROP_WH: {
@@ -1123,7 +1123,7 @@ public class EditLog {
         logEdit(OperationType.OP_SUSPEND_WH, log);
     }
 
-    public void logResumeWh(OpWarehouseLog log) {
+    public void logResumeWh(ResumeWarehouseLog log) {
         logEdit(OperationType.OP_RESUME_WH, log);
     }
 

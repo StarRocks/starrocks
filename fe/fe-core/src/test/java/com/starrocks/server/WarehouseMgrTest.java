@@ -76,7 +76,7 @@ public class WarehouseMgrTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }
@@ -102,7 +102,7 @@ public class WarehouseMgrTest {
         warehouseMgr.replaySuspendWarehouse("warehouse_1");
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("warehouse_1").getState());
 
-        warehouseMgr.replayResumeWarehouse("warehouse_1");
+        warehouseMgr.replayResumeWarehouse("warehouse_1", null);
         Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("warehouse_1").getState());
     }
 
@@ -132,7 +132,7 @@ public class WarehouseMgrTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }

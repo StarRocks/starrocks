@@ -68,7 +68,7 @@ public class ShowClusterStmtTest {
 
         new Expectations() {
             {
-                starOSAgent.createWorkerGroup();
+                starOSAgent.createWorkerGroup(anyString);
                 result = -1L;
                 minTimes = 0;
             }
