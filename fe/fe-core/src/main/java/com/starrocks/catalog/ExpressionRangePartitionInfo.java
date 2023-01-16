@@ -14,10 +14,11 @@
 
 package com.starrocks.catalog;
 
-import com.aliyun.datalake20200710.external.google.gson.reflect.TypeToken;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
+Fimport com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
