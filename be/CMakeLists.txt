@@ -825,6 +825,7 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib)
 
 install(FILES
     ${BASE_DIR}/../bin/common.sh
+    ${BASE_DIR}/../bin/start_backend.sh
     ${BASE_DIR}/../bin/start_be.sh
     ${BASE_DIR}/../bin/start_cn.sh
     ${BASE_DIR}/../bin/stop_be.sh
