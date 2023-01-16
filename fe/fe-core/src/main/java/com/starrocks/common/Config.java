@@ -1138,7 +1138,7 @@ public class Config extends ConfigBase {
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
-    public static boolean enable_replicated_storage_as_default_engine = true;
+    public static boolean enable_single_leader_replication_as_default = true;
 
     /**
      * FOR BeLoadBalancer:
