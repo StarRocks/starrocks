@@ -23,18 +23,22 @@ import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
+import com.staros.proto.CreateMetaGroupInfo;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.PlacementPolicy;
+import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
+import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -426,5 +430,46 @@ public class StarOSAgent {
             }
         }
         return backendIds;
+    }
+
+    public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
+        prepare();
+
+        try {
+            CreateMetaGroupInfo createInfo = CreateMetaGroupInfo.newBuilder()
+                    .setMetaGroupId(metaGroupId)
+                    .setPlacementPolicy(PlacementPolicy.PACK)
+                    .addAllShardGroupIds(shardGroupIds)
+                    .build();
+            client.createMetaGroup(serviceId, createInfo);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create meta group. error: " + e.getMessage());
+        }
+    }
+
+    public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) throws DdlException {
+        prepare();
+
+        try {
+            UpdateMetaGroupInfo.Builder builder = UpdateMetaGroupInfo.newBuilder();
+
+            if (isJoin) {
+                JoinMetaGroupInfo joinInfo = JoinMetaGroupInfo.newBuilder()
+                        .setMetaGroupId(metaGroupId)
+                        .build();
+                builder.setJoinInfo(joinInfo);
+            } else {
+                QuitMetaGroupInfo quitInfo = QuitMetaGroupInfo.newBuilder()
+                        .setMetaGroupId(metaGroupId)
+                        .build();
+                builder.setQuitInfo(quitInfo);
+            }
+
+            builder.addAllShardGroupIds(shardGroupIds);
+
+            client.updateMetaGroup(serviceId, builder.build());
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update meta group. error: " + e.getMessage());
+        }
     }
 }

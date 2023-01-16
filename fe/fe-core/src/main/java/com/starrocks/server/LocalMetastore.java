@@ -1964,6 +1964,28 @@ public class LocalMetastore implements ConnectorMetadata {
         return colocateTableIndex;
     }
 
+    private void processColocationProperties(String colocateGroup, Database db, OlapTable olapTable, boolean expectLakeTable)
+            throws DdlException {
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            return;
+        }
+
+        if (olapTable.isLakeTable() != expectLakeTable) {
+            return;
+        }
+
+        String fullGroupName = db.getId() + "_" + colocateGroup;
+        ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+        if (groupSchema != null) {
+            // group already exist, check if this table can be added to this group
+            groupSchema.checkColocateSchema(olapTable);
+        }
+        // add table to this group, if group does not exist, create a new one
+        colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
+                null /* generate group id inside */, false /* isReplay */);
+        olapTable.setColocateGroup(colocateGroup);
+    }
+
     // Create olap|lake table and related base index synchronously.
     // Currently, there are two differences between lake table and olap table
     // 1. Lake table needs to get storage group from StarMgr.
@@ -2227,23 +2249,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // check colocation properties
+        String colocateGroup = null;
         try {
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (!Strings.isNullOrEmpty(colocateGroup)) {
-                if (olapTable.isLakeTable()) {
-                    throw new DdlException("Does not support collocate group in lake table");
-                }
-                String fullGroupName = db.getId() + "_" + colocateGroup;
-                ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-                if (groupSchema != null) {
-                    // group already exist, check if this table can be added to this group
-                    groupSchema.checkColocateSchema(olapTable);
-                }
-                // add table to this group, if group does not exist, create a new one
-                colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
-                        null /* generate group id inside */);
-                olapTable.setColocateGroup(colocateGroup);
-            }
+            colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            processColocationProperties(colocateGroup, db, olapTable, false /* expectLakeTable */);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -2390,6 +2399,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            // process lake table colocation properties, after partition and tablet creation
+            processColocationProperties(colocateGroup, db, olapTable, true /* expectLakeTable */);
+
             // check database exists again, because database can be dropped when creating table
             if (!tryLock(false)) {
                 throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2436,7 +2448,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             // only remove from memory, because we have not persist it
             if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
-                colocateTableIndex.removeTable(tableId);
+                colocateTableIndex.removeTable(tableId, olapTable, false /* isReplay */);
             }
         }
     }
@@ -4847,7 +4859,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public void onEraseTable(@NotNull OlapTable olapTable) {
+    public void onEraseTable(@NotNull OlapTable olapTable, boolean isReplay) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
         for (Partition partition : allPartitions) {
@@ -4858,7 +4870,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        colocateTableIndex.removeTable(olapTable.getId());
+        colocateTableIndex.removeTable(olapTable.getId(), olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {

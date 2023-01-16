@@ -15,6 +15,11 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -22,12 +27,16 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -209,12 +218,12 @@ public class ColocateTableIndexTest {
         table.id = 4001;
         table.name = "goodTableOfBadDb";
         colocateTableIndex.addTableToGroup(
-                badDbId, table, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 4002));
+                badDbId, table, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 4002), false);
         // create a bad table in good db
         table.id = 4003;
         table.name = "badTable";
         colocateTableIndex.addTableToGroup(
-                goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 4004));
+                goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 4004), false);
 
         Map<String, List<String>> map = groupByName(GlobalStateMgr.getCurrentColocateIndex().getInfos());
         Assert.assertTrue(map.containsKey("goodGroup"));
@@ -229,4 +238,50 @@ public class ColocateTableIndexTest {
         Assert.assertFalse(map.containsKey("badGroupOfBadTable"));
     }
 
+    @Test
+    public void testLakeTableColocation(@Mocked LakeTable olapTable, @Mocked StarOSAgent starOSAgent) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long tableId = 200;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isLakeTable() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new HashDistributionInfo();
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return new ArrayList<>();
+            }
+        };
+
+        colocateTableIndex.addTableToGroup(
+                100, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
+        Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
+
+        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
+        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10001)));
+
+        colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
+        Assert.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
+    }
 }
