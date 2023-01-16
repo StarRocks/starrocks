@@ -39,7 +39,6 @@ public class FrontendServiceProxy {
                     isConnValid = true;
                     return t;
                 } catch (TTransportException te) {
-                    LOG.warn("call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
                     // The frontendPool may return a broken conn,
                     // because there is no validation of the conn in the frontendPool.
                     // In this case we should reopen the conn and retry the rpc call,
@@ -49,7 +48,10 @@ public class FrontendServiceProxy {
                     if (i == retryTimes - 1 ||
                             !isConnValid ||
                             (te.getCause() instanceof SocketTimeoutException)) {
+                        LOG.warn("call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
                         throw te;
+                    } else {
+                        LOG.debug("call frontend thrift rpc failed, addr: {}, retried: {}", address, i, te);
                     }
                 }
             }
