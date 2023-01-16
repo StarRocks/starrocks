@@ -56,6 +56,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
+#include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -554,28 +555,66 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
-    int64_t prepare_time = 0;
-    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+    struct {
+        int64_t prepare_time = 0;
+        int64_t prepare_query_ctx_time = 0;
+        int64_t prepare_fragment_ctx_time = 0;
+        int64_t prepare_runtime_state_time = 0;
+        int64_t prepare_pipeline_driver_time = 0;
+    } profiler;
+
+    DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* prepare_timer =
                     ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
-            COUNTER_SET(prepare_timer, prepare_time);
+            COUNTER_SET(prepare_timer, profiler.prepare_time);
+            auto* prepare_query_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-query-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
+
+            auto* prepare_fragment_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-fragment-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
+
+            auto* prepare_runtime_state_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-runtime-state",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
+
+            auto* prepare_pipeline_driver_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(),
+                                             "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
         } else {
             _fail_cleanup();
         }
     });
-    SCOPED_RAW_TIMER(&prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
-    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
-    RETURN_IF_ERROR(_prepare_fragment_ctx(request));
-    RETURN_IF_ERROR(_prepare_workgroup(request));
-    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
-    RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
-    RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
-    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    SCOPED_RAW_TIMER(&profiler.prepare_time);
+    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
+        RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_fragment_ctx_time);
+        RETURN_IF_ERROR(_prepare_fragment_ctx(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_runtime_state_time);
+        RETURN_IF_ERROR(_prepare_workgroup(request));
+        RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
+        RETURN_IF_ERROR(_prepare_global_dict(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
+        RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+        RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
