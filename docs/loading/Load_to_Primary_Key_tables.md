@@ -571,6 +571,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - Partial updates and conditional updates cannot be used simultaneously.
+> - Only Stream Load and Routine Load support conditional updates.
 
 ### Data examples
 
@@ -621,23 +622,6 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -H "merge_condition:version" \
       -T example5.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
-  ```
-
-- Run a Broker Load job:
-
-  ```SQL
-  LOAD LABEL test_db.table10
-  (
-      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
-      into table table5
-      format as "csv"
-      (id, version, score)
-  )
-  with broker
-  properties
-  (
-      "merge_condition" = "version"
-  );
   ```
 
 - Run a Routine Load job:
