@@ -67,7 +67,6 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -111,7 +110,7 @@ import java.util.zip.Adler32;
  * Note: when you add a new olap table property, you should modify TableProperty class
  * ATTN: serialize by gson is used by MaterializedView
  */
-public class OlapTable extends Table implements GsonPostProcessable {
+public class OlapTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
     public enum OlapTableState {
