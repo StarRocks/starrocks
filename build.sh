@@ -133,7 +133,7 @@ if [ -e /proc/cpuinfo ] ; then
 fi
 
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
-	WITH_BLOCK_CACHE=OFF
+    WITH_BLOCK_CACHE=OFF
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
@@ -416,11 +416,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
     if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib/deps
-        cp -r -p ${CACHELIB_DIR}/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/
-        cp -r -p ${CACHELIB_DIR}/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-        cp -r -p ${CACHELIB_DIR}/deps/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
+        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
 
     # note: do not use oracle jdk to avoid commercial dispute

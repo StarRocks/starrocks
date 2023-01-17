@@ -23,8 +23,7 @@ namespace starrocks {
 
 Status FbCacheLib::init(const CacheOptions& options) {
     Cache::Config config;
-    config.setCacheSize(options.mem_space_size).setCacheName("default cache").setAccessConfig({25, 10});
-    config.enableCachePersistence(options.meta_path).validate();
+    config.setCacheSize(options.mem_space_size).setCacheName("default cache").setAccessConfig({25, 10}).validate();
 
     std::vector<std::string> nvm_files;
     if (!options.disk_spaces.empty()) {
@@ -44,26 +43,8 @@ Status FbCacheLib::init(const CacheOptions& options) {
         config.enableNvmCache(nvmConfig);
     }
 
-    try {
-        _cache = std::make_unique<Cache>(Cache::SharedMemAttach, config);
-        LOG(INFO) << "block cache is restored successfully";
-    } catch (const std::exception& e) {
-        // Attaching failed. Create a new one but make sure that
-        // the old cache is destroyed before creating a new one.
-        // This allows us to release any held resources (such as
-        // open file descriptors and associated fcntl locks).
-        _cache.reset();
-        LOG(INFO) << "couldn't attach to block cache: " << e.what() << ", creating a new one";
-
-        // Clean meta and data files
-        nvm_files.emplace_back(options.meta_path + "/metadata");
-        nvm_files.emplace_back(options.meta_path + "/NvmCacheState");
-        FileSystemUtil::remove_paths(nvm_files);
-
-        _cache = std::make_unique<Cache>(Cache::SharedMemNew, config);
-        _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
-    }
-
+    _cache = std::make_unique<Cache>(config);
+    _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
     return Status::OK();
 }
 

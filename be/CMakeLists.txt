@@ -144,9 +144,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options filesystem context)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -154,14 +154,9 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
-    add_library(gflags STATIC IMPORTED)
-    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib/libgflags_debug.a)
-else()
-    add_library(gflags STATIC IMPORTED)
-    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
-endif()
+
+add_library(gflags STATIC IMPORTED)
+set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
 
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
@@ -332,6 +327,45 @@ set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THI
 
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
+
+# cachelib
+set(CACHELIB_DEPENDENCIES
+    cachelib_common
+    cachelib_allocator
+    cachelib_datatype
+    cachelib_navy
+    cachelib_shm
+    folly
+    fmtd
+    thriftcpp2
+    thrift-core
+    thriftmetadata
+    thriftfrozen2
+    thriftprotocol
+    thrifttype
+    transport
+    rpcmetadata
+    thriftanyrep
+    thrifttyperep
+    thriftannotation
+    concurrency
+    async
+    wangle
+)
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/libunwind.so)
+    LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/liblzma.so)
+    foreach(dep ${CACHELIB_DEPENDENCIES})
+        add_library(${dep} STATIC IMPORTED)
+        set(location "${THIRDPARTY_DIR}/cachelib/lib/lib${dep}.a")
+        if(NOT EXISTS ${location})
+            set(location "${THIRDPARTY_DIR}/cachelib/lib64/lib${dep}.a")
+        endif()
+        set_target_properties(${dep} PROPERTIES IMPORTED_LOCATION "${location}")
+        message(STATUS "add cachelib dependency: ${location}")
+    endforeach()
+endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
      find_package(protobuf CONFIG REQUIRED)
@@ -657,6 +691,16 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
 )
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        ${Boost_LIBRARIES}
+        ${CACHELIB_DEPENDENCIES}
+        ${WL_END_GROUP}
+    )
+endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES

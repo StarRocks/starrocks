@@ -168,5 +168,5 @@ export_shared_envvars() {
 # Export cachelib libraries
 export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
