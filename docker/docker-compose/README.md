@@ -61,7 +61,7 @@ The comments in the above example defines the mount paths and volumes that FE an
 
 ## Check cluster status
 
-After StarRocks is started, you need to check the cluster status:
+After StarRocks is deployed, check the cluster status:
 
 1. Connect to the cluster with the IP address of the FE instance. You can get the IP address of an instance using `docker inspect`.
 
