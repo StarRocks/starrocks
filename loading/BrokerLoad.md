@@ -110,7 +110,7 @@ Broker Load 支持从如下外部存储系统导入数据：
    200,'北京'
    ```
 
-3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、Amazon S3 存储空间 `bucket_s3` 里的 `/input/` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `/input/` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `/input/` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `/input/` 文件夹下。
+3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、Amazon S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
 
 #### 从 HDFS 导入
 
@@ -142,7 +142,7 @@ PROPERTIES
 
 #### 从 Amazon S3 导入
 
-可以通过如下语句，把 Amazon S3 存储空间 `bucket_s3` 里 `/input/` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把 Amazon S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -160,7 +160,7 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)
+);
 ```
 
 > **说明**
@@ -170,7 +170,7 @@ WITH BROKER "mybroker"
 
 #### 从 Google GCS 导入
 
-可以通过如下语句，把 Google GCS 存储空间 `bucket_gcs` 里 `/input/` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把 Google GCS 存储空间 `bucket_gcs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -188,7 +188,7 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "storage.googleapis.com"
-)
+);
 ```
 
 > **说明**
@@ -197,7 +197,7 @@ WITH BROKER "mybroker"
 
 #### 从 阿里云 OSS 导入
 
-可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `/input/` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label4
@@ -215,12 +215,12 @@ WITH BROKER "mybroker"
     "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
-)
+);
 ```
 
 #### 从腾讯云 COS 导入
 
-可以通过如下语句，把腾讯云 COS 存储空间 `bucket_cos` 里 `/input/` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把腾讯云 COS 存储空间 `bucket_cos` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label5
@@ -238,12 +238,12 @@ WITH BROKER "mybroker"
     "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxx",
     "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyy",
     "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
-)
+);
 ```
 
 #### 从 华为云 OBS 导入
 
-可以通过如下语句，把华为云 OBS 存储空间 `bucket_obs` 里 `/input/` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把华为云 OBS 存储空间 `bucket_obs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label6
@@ -261,14 +261,14 @@ WITH BROKER "mybroker"
     "fs.obs.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "fs.obs.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.obs.endpoint" = "obs.cn-east-3.myhuaweicloud.com"
-)
+);
 ```
 
 > **说明**
 >
 > 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
-### 查询数据
+#### 查询数据
 
 从 HDFS、Amazon S3、Google GCS、阿里云 OSS、腾讯云 COS、或者华为云 OBS 导入完成后，您可以使用 SELECT 语句来查看 StarRocks 表的数据，验证数据已经成功导入。
 
@@ -298,6 +298,46 @@ WITH BROKER "mybroker"
       +------+--------+
       4 rows in set (0.01 sec)
       ```
+
+#### 使用说明
+
+以上导入操作以导入多个数据文件到多个目标表为例。您还可以指定导入一个数据文件或者一个路径下所有数据文件到一个目标表。这里假设您的 Amazon S3 存储空间 `bucket_s3` 里 `input` 文件夹下包含多个数据文件，其中一个数据文件名为 `file1.csv`。这些数据文件与目标表 `table1` 包含的列数相同、并且这些列能按顺序一一对应到目标表 `table1` 中的列。
+
+如果要把数据文件 `file1.csv` 导入到目标表 `table1` 中，可以执行如下语句:
+
+```SQL
+LOAD LABEL test_db.label_7
+(
+    DATA INFILE("s3a://bucket_s3/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
+
+如果要把 `input` 文件夹下的所有数据文件都导入到目标表 `table1` 中，可以执行如下语句:
+
+```SQL
+LOAD LABEL test_db.label_8
+(
+    DATA INFILE("s3a://bucket_s3/input/*")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
 
 ### 查看导入作业
 
