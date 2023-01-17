@@ -14,6 +14,18 @@
 
 #pragma once
 
+// The following macros only used to avoid some variable and function conflicts
+// caused by cachelib and related dependencies, and these macros will be removed
+// once the cachelib be deprecated.
+
+#ifndef MAP_HUGE_SHIFT
+#define MAP_HUGE_SHIFT 0
+#endif
+
+#ifndef JEMALLOC_NO_RENAME
+#define JEMALLOC_NO_RENAME 1
+#endif
+
 #include <cachelib/allocator/CacheAllocator.h>
 
 #include "block_cache/kv_cache.h"
