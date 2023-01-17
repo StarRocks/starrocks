@@ -96,6 +96,8 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_fragment_instance_id(fragment_ctx->fragment_instance_id());
         CurrentThread::current().set_pipeline_driver_id(driver->driver_id());
 
+        driver->increment_schedule_times();
+
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
