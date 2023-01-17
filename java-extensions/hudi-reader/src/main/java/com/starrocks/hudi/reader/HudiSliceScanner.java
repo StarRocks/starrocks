@@ -61,7 +61,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final String instantTime;
     private final String[] deltaFilePaths;
     private final String dataFilePath;
-    private final long dataFileLenth;
+    private final long dataFileLength;
     private final String serde;
     private final String inputFormat;
     private RecordReader<NullWritable, ArrayWritable> reader;
@@ -86,7 +86,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             this.deltaFilePaths = params.get("delta_file_paths").split(",");
         }
         this.dataFilePath = params.get("data_file_path");
-        this.dataFileLenth = Long.parseLong(params.get("data_file_length"));
+        this.dataFileLength = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
         this.inputFormat = params.get("input_format");
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
@@ -151,8 +151,8 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     private void initReader(JobConf jobConf, Properties properties) throws Exception {
         // dataFileLenth==-1 or dataFilePath == "" means logs only scan
-        String realtimePath = dataFileLenth != -1 ? dataFilePath : deltaFilePaths[0];
-        long realtimeLength = dataFileLenth != -1 ? dataFileLenth : 0;
+        String realtimePath = dataFileLength != -1 ? dataFilePath : deltaFilePaths[0];
+        long realtimeLength = dataFileLength != -1 ? dataFileLength : 0;
         Path path = new Path(realtimePath);
         FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
         List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
@@ -275,7 +275,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         sb.append(dataFilePath);
         sb.append("\n");
         sb.append("dataFileLenth: ");
-        sb.append(dataFileLenth);
+        sb.append(dataFileLength);
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);

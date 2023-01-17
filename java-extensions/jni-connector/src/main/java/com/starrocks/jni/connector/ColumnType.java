@@ -148,29 +148,39 @@ public class ColumnType {
         scanner.moveTo(p);
 
         // assume there is no blank char in `type`.
-        if (t.equals("array")) {
-            // array<TYPE>
-            typeValue = TypeValue.ARRAY;
-            childTypes = new ArrayList<>();
-            parseArray(childTypes, scanner);
-        } else if (t.equals("map")) {
-            // map<TYPE1,TYPE2>
-            typeValue = TypeValue.MAP;
-            childTypes = new ArrayList<>();
-            parseArray(childTypes, scanner);
-        } else if (t.equals("struct")) {
-            // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
-            typeValue = TypeValue.STRUCT;
-            childNames = new ArrayList<>();
-            childTypes = new ArrayList<>();
-            parseStruct(childNames, childTypes, scanner);
-        } else {
-            // convert decimal(x,y) to decimal
-            if (t.startsWith("decimal")) {
-                t = "decimal";
+        typeValue = null;
+        switch (t) {
+            case "array": {
+                // array<TYPE>
+                typeValue = TypeValue.ARRAY;
+                childTypes = new ArrayList<>();
+                parseArray(childTypes, scanner);
             }
-            typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+            break;
+            case "map": {
+                // map<TYPE1,TYPE2>
+                typeValue = TypeValue.MAP;
+                childTypes = new ArrayList<>();
+                parseArray(childTypes, scanner);
+            }
+            break;
+            case "struct": {
+                // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
+                typeValue = TypeValue.STRUCT;
+                childNames = new ArrayList<>();
+                childTypes = new ArrayList<>();
+                parseStruct(childNames, childTypes, scanner);
+            }
+            break;
+            default: {
+                // convert decimal(x,y) to decimal
+                if (t.startsWith("decimal")) {
+                    t = "decimal";
+                }
+                typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+            }
         }
+
         if (typeValue == null) {
             throw new RuntimeException("Unknown type: " + t);
         }

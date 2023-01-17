@@ -81,7 +81,7 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public void unpackArray(List<ColumnValue> values) {
         ListObjectInspector inspector = (ListObjectInspector) fieldInspector;
-        List items = inspector.getList(fieldData);
+        List<?> items = inspector.getList(fieldData);
         ObjectInspector itemInspector = inspector.getListElementObjectInspector();
         for (Object item : items) {
             HudiColumnValue cv = null;
