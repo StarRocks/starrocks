@@ -2,6 +2,7 @@
 
 package com.starrocks.jni.connector;
 
+// @formatter:off
 /**
  * We use off-heap memory to save the off-heap table data
  * and a custom memory layout to be parsed by Starrocks BE written in C++.
@@ -55,6 +56,8 @@ package com.starrocks.jni.connector;
  *                                       |                               |
  *                 column start address + offset of row 0    column start address + offset of row 1
  */
+// @formatter:on
+
 public class OffHeapTable {
     public OffHeapColumnVector[] vectors;
     public OffHeapColumnVector.OffHeapColumnType[] types;
@@ -69,8 +72,7 @@ public class OffHeapTable {
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
             vectors[i] = new OffHeapColumnVector(capacity, types[i]);
-            if (types[i] == OffHeapColumnVector.OffHeapColumnType.STRING
-                    || types[i] == OffHeapColumnVector.OffHeapColumnType.DATE) {
+            if (OffHeapColumnVector.isArray(types[i])) {
                 metaSize += 3;
             } else {
                 metaSize += 2;
@@ -138,9 +140,7 @@ public class OffHeapTable {
         for (int i = 0; i < types.length; i++) {
             OffHeapColumnVector.OffHeapColumnType type = types[i];
             OffHeapColumnVector column = vectors[i];
-            if (type == OffHeapColumnVector.OffHeapColumnType.STRING ||
-                    type == OffHeapColumnVector.OffHeapColumnType.DATE ||
-                    type == OffHeapColumnVector.OffHeapColumnType.DECIMAL) {
+            if (OffHeapColumnVector.isArray(type)) {
                 meta.appendLong(column.nullsNativeAddress());
                 meta.appendLong(column.arrayOffsetNativeAddress());
                 meta.appendLong(column.arrayDataNativeAddress());
@@ -184,6 +184,9 @@ public class OffHeapTable {
                         break;
                     case DOUBLE:
                         sb.append(column.getDouble(i)).append(", ");
+                        break;
+                    case BINARY:
+                        sb.append("<binary>").append(", ");
                         break;
                     case STRING:
                     case DATE:
