@@ -1,0 +1,17 @@
+FROM arm64v8/ubuntu:22.04
+ARG TARGETARCH
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y  --no-install-recommends curl  binutils \
+        openssl vim gzip tar mysql-client openjdk-11-jdk \
+    && apt-get install -y tzdata
+
+RUN useradd --create-home --no-log-init --shell /bin/bash starrocks
+USER starrocks
+COPY --chown=starrocks:starrocks output/fe /opt/starrocks/fe/
+RUN chown starrocks:starrocks /opt/starrocks &&  mkdir -p  /opt/starrocks/fe/meta/
+ENV JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-arm64/
+
+ENV STARROCKS_ROOT=/opt/starrocks
+Workdir /opt/starrocks
