@@ -57,7 +57,7 @@ services:
       #- ./data/starrocks-be1/storage:/opt/starrocks/be/storage
 ```
 
-The comments in the above example defines the mount paths and volumes that FE and BE can acceess. You need to use the root user to deploy StarRocks with Docker. Therefore, you must delete the comments in the example if you use mount volumes to deploy StarRocks with mount volumes.
+The commented-out sections in the above example YAML file define the mount paths and volumes that FE and BE use to persist data. Note that root privilege is required to deploy StarRocks with Docker with persistent volume. 
 
 ## Check cluster status
 
