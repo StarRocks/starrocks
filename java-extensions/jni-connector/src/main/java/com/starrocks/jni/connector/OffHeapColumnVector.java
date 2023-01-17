@@ -17,27 +17,14 @@ package com.starrocks.jni.connector;
 import com.starrocks.utils.Platform;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reference to Apache Spark with some customization
  * see https://github.com/apache/spark/blob/master/sql/core/src/main/java/org/apache/spark/sql/execution/vectorized/WritableColumnVector.java
  */
 public class OffHeapColumnVector {
-    public enum OffHeapColumnType {
-        BYTE,
-        BOOLEAN,
-        SHORT,
-        INT,
-        FLOAT,
-        LONG,
-        DOUBLE,
-        BINARY,
-        STRING,
-        DATE,
-        DATETIME,
-        DECIMAL
-    }
-
     private long nulls;
     private long data;
 
@@ -46,7 +33,7 @@ public class OffHeapColumnVector {
 
     private int capacity;
 
-    private OffHeapColumnType type;
+    private ColumnType type;
 
     /**
      * Upper limit for the maximum capacity for this column.
@@ -63,10 +50,7 @@ public class OffHeapColumnVector {
      */
     private int numNulls;
 
-    /**
-     * Default size of each array length value. This grows as necessary.
-     */
-    private static final int DEFAULT_ARRAY_LENGTH = 4;
+    private static final int DEFAULT_STRING_LENGTH = 4;
 
     /**
      * Current write cursor (row index) when appending data.
@@ -75,7 +59,7 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
-    public OffHeapColumnVector(int capacity, OffHeapColumnType type) {
+    public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
         this.nulls = 0;
@@ -83,14 +67,7 @@ public class OffHeapColumnVector {
         this.offsetData = 0;
 
         reserveInternal(capacity);
-        reserveChildColumn();
         reset();
-    }
-
-    public static boolean isArray(OffHeapColumnType type) {
-        return type == OffHeapColumnType.BINARY || type == OffHeapColumnType.STRING
-                || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DATETIME
-                || type == OffHeapColumnType.DECIMAL;
     }
 
     public long nullsNativeAddress() {
@@ -150,32 +127,41 @@ public class OffHeapColumnVector {
 
     private void reserveInternal(int newCapacity) {
         int oldCapacity = (nulls == 0L) ? 0 : capacity;
-        if (type == OffHeapColumnType.BOOLEAN || type == OffHeapColumnType.BYTE) {
-            this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
-        } else if (type == OffHeapColumnType.SHORT) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 2L, newCapacity * 2L);
-        } else if (type == OffHeapColumnType.INT || type == OffHeapColumnType.FLOAT) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
-        } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
-            this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (isArray(type)) {
-            this.offsetData =
-                    Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+        long oldOffsetSize = (nulls == 0) ? 0 : (capacity + 1) * 4L;
+        long newOffsetSize = (newCapacity + 1) * 4L;
+        int typeSize = type.getPrimitiveTypeValueSize();
+        if (typeSize != -1) {
+            this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
+        } else if (type.isString()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+            int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                    ColumnType.TypeValue.BYTE));
+        } else if (type.isArray()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
+        } else if (type.isMap()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+            this.childColumns = new OffHeapColumnVector[2];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
+            this.childColumns[1] = new OffHeapColumnVector(newCapacity, type.childTypes.get(1));
+        } else if (type.isStruct()) {
+            this.childColumns = new OffHeapColumnVector[type.childTypes.size()];
+            for (int i = 0; i < this.childColumns.length; i++) {
+                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+            }
+            for (OffHeapColumnVector c : childColumns) {
+                c.reserveInternal(newCapacity);
+            }
         } else {
             throw new RuntimeException("Unhandled type: " + type);
         }
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
-    }
-
-    private void reserveChildColumn() {
-        if (isArray(type)) {
-            int childCapacity = capacity;
-            childCapacity *= DEFAULT_ARRAY_LENGTH;
-            this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, OffHeapColumnType.BYTE);
-        }
     }
 
     private void reset() {
@@ -338,11 +324,11 @@ public class OffHeapColumnVector {
     private int appendByteArray(byte[] value, int offset, int length) {
         int copiedOffset = arrayData().appendBytes(length, value, offset);
         reserve(elementsAppended + 1);
-        putArray(elementsAppended, copiedOffset, length);
+        putOffset(elementsAppended, copiedOffset, length);
         return elementsAppended++;
     }
 
-    private void putArray(int rowId, int offset, int length) {
+    private void putOffset(int rowId, int offset, int length) {
         Platform.putInt(null, offsetData + 4L * rowId, offset);
         Platform.putInt(null, offsetData + 4L * (rowId + 1), offset + length);
     }
@@ -353,11 +339,251 @@ public class OffHeapColumnVector {
         }
         int start = getArrayOffset(rowId);
         int end = getArrayOffset(rowId + 1);
-        byte[] bytes = arrayData().getBytes(start, end - start);
+        int size = end - start;
+        byte[] bytes = arrayData().getBytes(start, size);
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
     private int getArrayOffset(int rowId) {
         return Platform.getInt(null, offsetData + 4L * rowId);
+    }
+
+    private int getArraySize(int rowId) {
+        return getArrayOffset(rowId + 1) - getArrayOffset(rowId);
+    }
+
+    private int appendArray(List<ColumnValue> values) {
+        int size = values.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue v : values) {
+            childColumns[0].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
+    private int appendMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        int size = keys.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue k : keys) {
+            childColumns[0].appendValue(k);
+        }
+        for (ColumnValue v : values) {
+            childColumns[1].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
+    private int appendStruct(List<ColumnValue> values) {
+        for (int i = 0; i < childColumns.length; i++) {
+            childColumns[i].appendValue(values.get(i));
+        }
+        return elementsAppended++;
+    }
+
+    public void updateMeta(OffHeapColumnVector meta) {
+        if (type.isString()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            meta.appendLong(arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+        } else if (type.isMap()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+            childColumns[1].updateMeta(meta);
+        } else if (type.isStruct()) {
+            meta.appendLong(nullsNativeAddress());
+            for (OffHeapColumnVector c : childColumns) {
+                c.updateMeta(meta);
+            }
+        } else {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(valuesNativeAddress());
+        }
+    }
+
+    public void appendValue(ColumnValue o) {
+        // TODO(yanz): FIXME.
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        if (o == null) {
+            appendNull();
+            // NOTE(yan): for struct need to fill
+            if (type.isStruct()) {
+                List<ColumnValue> values = new ArrayList<>();
+                for (int i = 0; i < type.childTypes.size(); i++) {
+                    values.add(null);
+                }
+                appendStruct(values);
+            }
+            return;
+        }
+
+        switch (typeValue) {
+            case BOOLEAN:
+                appendBoolean(o.getBoolean());
+                break;
+            case SHORT:
+                appendShort(o.getShort());
+                break;
+            case INT:
+                appendInt(o.getInt());
+                break;
+            case FLOAT:
+                appendFloat(o.getFloat());
+                break;
+            case LONG:
+                appendLong(o.getLong());
+                break;
+            case DOUBLE:
+                appendDouble(o.getDouble());
+                break;
+            case BINARY:
+                appendBinary(o.getBytes());
+                break;
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DECIMAL:
+                appendString(o.getString());
+                break;
+            case ARRAY: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackArray(values);
+                appendArray(values);
+                break;
+            }
+            case MAP: {
+                List<ColumnValue> keys = new ArrayList<>();
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackMap(keys, values);
+                appendMap(keys, values);
+                break;
+            }
+            case STRUCT: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackStruct(type.getStructFieldIndex(), values);
+                appendStruct(values);
+                break;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        return;
+    }
+
+    // for test only.
+    public void dump(StringBuilder sb, int i) {
+        if (isNullAt(i)) {
+            sb.append("NULL");
+            return;
+        }
+
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case BOOLEAN:
+                sb.append(getBoolean(i));
+                break;
+            case SHORT:
+                sb.append(getShort(i));
+                break;
+            case INT:
+                sb.append(getInt(i));
+                break;
+            case FLOAT:
+                sb.append(getFloat(i));
+                break;
+            case LONG:
+                sb.append(getLong(i));
+                break;
+            case DOUBLE:
+                sb.append(getDouble(i));
+                break;
+            case BINARY:
+                sb.append("<binary>");
+                break;
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DECIMAL:
+                sb.append(getUTF8String(i));
+                break;
+            case ARRAY: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(',');
+                    }
+                    childColumns[0].dump(sb, rowId);
+                }
+                sb.append("]");
+                break;
+            }
+            case MAP: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(",");
+                    }
+                    sb.append("{");
+                    childColumns[0].dump(sb, rowId);
+                    sb.append(":");
+                    childColumns[1].dump(sb, rowId);
+                    sb.append("}");
+                }
+                sb.append("]");
+                break;
+            }
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                sb.append("{");
+                for (int c = 0; c < names.size(); c++) {
+                    if (c != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(names.get(c)).append(":");
+                    childColumns[c].dump(sb, i);
+                }
+                sb.append("}");
+                break;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        return;
+    }
+
+    // for test only.
+    public void checkMeta(OffHeapTable.MetaChecker checker) {
+        String context = type.name;
+        String contextOffset = context + "#offset";
+        checker.check(context + "#null", nulls);
+        if (type.isString()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            checker.check(context + "#data", arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+        } else if (type.isMap()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+            childColumns[1].checkMeta(checker);
+        } else if (type.isStruct()) {
+            for (OffHeapColumnVector c : childColumns) {
+                c.checkMeta(checker);
+            }
+        } else {
+            checker.check(context, data);
+        }
     }
 }

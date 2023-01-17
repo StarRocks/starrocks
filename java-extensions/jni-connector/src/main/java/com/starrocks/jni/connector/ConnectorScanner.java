@@ -15,7 +15,6 @@
 package com.starrocks.jni.connector;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * The parent class of JNI scanner, developers need to inherit this class and implement the following methods:
@@ -27,7 +26,7 @@ import java.util.Map;
  * 1. int: the chunk size
  * 2. Map<String, String>: the custom parameters
  * <p>
- * {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} need be called to initialize
+ * {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], String[], int)} need be called to initialize
  * {@link ConnectorScanner#tableSize} and {@link ConnectorScanner#types}
  * before calling {@link ConnectorScanner#getNext()} (maybe in constructor or {@link ConnectorScanner#open()})
  * <p>
@@ -44,12 +43,13 @@ import java.util.Map;
  */
 public abstract class ConnectorScanner {
     private OffHeapTable offHeapTable;
-    private OffHeapColumnVector.OffHeapColumnType[] types;
+    private String[] fields;
+    private ColumnType[] types;
     private int tableSize;
 
     /**
      * Initialize the reader with parameters passed by the class constructor and allocate necessary resources.
-     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} method here
+     * Developers can call {@link ConnectorScanner#initOffHeapTableWriter(ColumnType[], String[], int)} method here
      * to allocate memory spaces.
      */
     public abstract void open() throws IOException;
@@ -63,7 +63,7 @@ public abstract class ConnectorScanner {
      * Scan original data and save it to off-heap table.
      *
      * @return The number of rows scanned.
-     * The specific implementation needs to call the {@link ConnectorScanner#scanData(int, Object)} method
+     * The specific implementation needs to call the {@link ConnectorScanner#appendData(int, Object)} method
      * to save data to off-heap table.
      * The number of rows scanned must less than or equal to {@link ConnectorScanner#tableSize}
      */
@@ -72,25 +72,17 @@ public abstract class ConnectorScanner {
     /**
      * This method need be called before {@link ConnectorScanner#getNext()}
      *
-     * @param requiredTypes column types
-     * @param fetchSize     number of rows
-     * @param typeMappings  mappings of requiredTypes from {@link String}
-     *                      to {@link com.starrocks.jni.connector.OffHeapColumnVector.OffHeapColumnType}
+     * @param requiredTypes  column types
+     * @param requiredFields
+     * @param fetchSize      number of rows
      */
-    protected void initOffHeapTableWriter(String[] requiredTypes, int fetchSize,
-                                          Map<String, OffHeapColumnVector.OffHeapColumnType> typeMappings)
-            throws IOException {
+    protected void initOffHeapTableWriter(ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {
         this.tableSize = fetchSize;
-        this.types = new OffHeapColumnVector.OffHeapColumnType[requiredTypes.length];
-        for (int i = 0; i < requiredTypes.length; i++) {
-            if (!typeMappings.containsKey(requiredTypes[i])) {
-                throw new IOException("Unsupported column type: " + requiredTypes[i]);
-            }
-            types[i] = typeMappings.get(requiredTypes[i]);
-        }
+        this.types = requiredTypes;
+        this.fields = requiredFields;
     }
 
-    protected void scanData(int index, Object value) {
+    protected void appendData(int index, ColumnValue value) {
         offHeapTable.appendData(index, value);
     }
 
@@ -115,7 +107,7 @@ public abstract class ConnectorScanner {
     }
 
     private void initOffHeapTable() {
-        offHeapTable = new OffHeapTable(types, tableSize);
+        offHeapTable = new OffHeapTable(types, fields, tableSize);
     }
 
     private long finishOffHeapTable(int numRows) {
