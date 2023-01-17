@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 // Execute a basic task of SQL\
 public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
+
+    private static final Logger LOG = LogManager.getLogger(SqlTaskRunProcessor.class);
 
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
@@ -37,13 +37,8 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
             ctx.getPlannerProfile().reset();
-            String definition = context.getDefinition();
-            StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
-            sqlStmt.setOrigStmt(new OriginStatement(definition, 0));
-            executor = new StmtExecutor(ctx, sqlStmt);
-            ctx.setExecutor(executor);
-            ctx.setThreadLocalInfo();
-            executor.execute();
+
+            executor = ctx.executeSql(context.getDefinition());
         } finally {
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());

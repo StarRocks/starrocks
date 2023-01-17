@@ -27,4 +27,8 @@ public class MockTaskRunProcessor implements TaskRunProcessor {
     public void processTaskRun(TaskRunContext context) throws Exception {
         LOG.info("running a task. currentTime:" + LocalDateTime.now());
     }
+
+    @Override
+    public void postTaskRun(TaskRunContext context) throws Exception {
+    }
 }
