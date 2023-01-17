@@ -11,7 +11,7 @@ Views the last BACKUP task in a specified database. For more information, see [d
 ## Syntax
 
 ```SQL
-SHOW BACKUP [FROM db_name]
+SHOW BACKUP [FROM <db_name>]
 ```
 
 ## Parameters

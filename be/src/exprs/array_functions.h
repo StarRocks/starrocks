@@ -78,14 +78,6 @@ public:
     DEFINE_ARRAY_SLICE_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SLICE_FN
 
-#define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_concat_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayConcat<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
-    DEFINE_ARRAY_CONCAT_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_CONCAT_FN
-
 #define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                               \
     static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
         return ArrayOverlap<PT>::process(context, columns);                                             \
@@ -180,6 +172,8 @@ public:
     DEFINE_VECTORIZED_FN(array_max_date);
     DEFINE_VECTORIZED_FN(array_max_datetime);
     DEFINE_VECTORIZED_FN(array_max_varchar);
+
+    DEFINE_VECTORIZED_FN(concat);
 
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
     DEFINE_VECTORIZED_FN(array_cum_sum_double);

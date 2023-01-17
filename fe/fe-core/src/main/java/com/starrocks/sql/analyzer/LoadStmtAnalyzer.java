@@ -108,7 +108,8 @@ public class LoadStmtAnalyzer {
                 if (resourceDesc != null) {
                     resourceDesc.analyze();
                     etlJobType = resourceDesc.getEtlJobType();
-                    // check resource usage privilege
+                    // check resource usage privilege, for new RBAC privilege framework, resource privilege is checked
+                    // in PrivilegeCheckerV2.
                     if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
                                                                                           resourceDesc.getName(),

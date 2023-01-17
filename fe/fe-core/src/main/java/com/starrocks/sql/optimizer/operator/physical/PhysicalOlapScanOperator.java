@@ -54,6 +54,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
+    private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
+
     public PhysicalOlapScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     HashDistributionSpec hashDistributionDesc,
@@ -62,12 +64,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     long selectedIndexId,
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
+                                    List<ScalarOperator> prunedPartitionPredicates,
                                     Projection projection) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.hashDistributionSpec = hashDistributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.selectedTabletId = selectedTabletId;
+        this.prunedPartitionPredicates = prunedPartitionPredicates;
     }
 
     public long getSelectedIndexId() {
@@ -118,6 +122,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public Map<Integer, Integer> getDictStringIdToIntIds() {
         return dictStringIdToIntIds;
+    }
+
+    public List<ScalarOperator> getPrunedPartitionPredicates() {
+        return prunedPartitionPredicates;
     }
 
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {

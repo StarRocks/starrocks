@@ -218,6 +218,7 @@ public class Partition extends MetaObject implements Writable {
         this.visibleVersionTime = visibleVersionTime;
     }
 
+
     public PartitionState getState() {
         return this.state;
     }

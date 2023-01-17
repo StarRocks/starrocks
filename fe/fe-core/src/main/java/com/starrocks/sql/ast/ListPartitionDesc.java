@@ -98,7 +98,8 @@ public class ListPartitionDesc extends PartitionDesc {
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }
                     if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
-                        throw new AnalysisException("The partition column could not be aggregated column");
+                        throw new AnalysisException("The partition column could not be aggregated column"
+                                + " and unique table's partition column must be key column");
                     }
                     found = true;
                     partitionColumns.add(columnDef);

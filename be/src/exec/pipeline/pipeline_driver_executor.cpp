@@ -106,6 +106,8 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
 
+        driver->increment_schedule_times();
+
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
@@ -121,6 +123,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
+                    _blocked_driver_poller->add_blocked_driver(driver);
+                } else if (driver->is_still_epoch_finishing()) {
+                    driver->set_driver_state(DriverState::EPOCH_PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
                     _finalize_driver(driver, runtime_state, DriverState::CANCELED);
@@ -142,7 +147,7 @@ void GlobalDriverExecutor::_worker_thread() {
             this->_driver_queue->update_statistics(driver);
 
             // Check big query
-            if (status.ok() && driver->workgroup()) {
+            if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
                 status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
@@ -181,6 +186,7 @@ void GlobalDriverExecutor::_worker_thread() {
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
+            case EPOCH_PENDING_FINISH:
             case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
@@ -253,12 +259,42 @@ size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredica
     return _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
 
+size_t GlobalDriverExecutor::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+    return _blocked_driver_poller->calculate_parked_driver(predicate_func);
+}
+
 void GlobalDriverExecutor::_finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     DCHECK(down_cast<StreamPipelineDriver*>(driver));
     StreamPipelineDriver* stream_driver = down_cast<StreamPipelineDriver*>(driver);
     stream_driver->epoch_finalize(runtime_state, state);
 }
+
+void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
+                                        std::vector<FragmentContext*> fragment_ctxs) {
+    DCHECK_LT(0, fragment_ctxs.size());
+    auto params = ExecStateReporter::create_report_epoch_params(query_ctx, fragment_ctxs);
+    // TODO(lism): Check all fragment_ctx's fe_addr are the same.
+    auto fe_addr = fragment_ctxs[0]->fe_addr();
+    auto query_id = query_ctx->query_id();
+    auto report_task = [=]() {
+        auto status = ExecStateReporter::report_epoch(params, exec_env, fe_addr);
+        if (!status.ok()) {
+            if (status.is_not_found()) {
+                LOG(INFO) << "[Driver] Fail to report epoch exec state due to query not found: query_id="
+                          << print_id(query_id);
+            } else {
+                LOG(WARNING) << "[Driver] Fail to report epoch exec state: query_id=" << print_id(query_id)
+                             << ", status: " << status.to_string();
+            }
+        } else {
+            LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+        }
+    };
+
+    this->_exec_state_reporter->submit(std::move(report_task));
+}
+
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
     _blocked_driver_poller->iterate_immutable_driver(call);
 }

@@ -36,17 +36,21 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -67,6 +71,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
@@ -364,5 +369,12 @@ public class StarRocksAssert {
             }
             Assert.fail();
         }
+    }
+
+    public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
+        TableName tableName = new TableName(db, table);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
+        return showExecutor.execute();
     }
 }

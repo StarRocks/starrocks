@@ -139,9 +139,10 @@ OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, 
     if (_string_key_columns.empty()) {
         _string_key_columns.resize(degree_of_parallelism);
     }
-    return std::make_shared<HashJoinBuildOperator>(
-            this, _id, _name, _plan_node_id, driver_sequence, _hash_joiner_factory->create_builder(driver_sequence),
-            _hash_joiner_factory->get_read_only_probers(), _partial_rf_merger.get(), _distribution_mode);
+    auto joiner = _hash_joiner_factory->create_builder(degree_of_parallelism, driver_sequence);
+    const auto& read_only_probers = joiner->get_read_only_join_probers();
+    return std::make_shared<HashJoinBuildOperator>(this, _id, _name, _plan_node_id, driver_sequence, joiner,
+                                                   read_only_probers, _partial_rf_merger.get(), _distribution_mode);
 }
 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, Columns&& columns) {

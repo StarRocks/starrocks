@@ -1135,6 +1135,12 @@ public class Config extends ConfigBase {
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
      * FOR BeLoadBalancer:
      * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
      * this backend will be marked as LOW load, if load score is 10% higher than average score, HIGH load
@@ -1771,7 +1777,6 @@ public class Config extends ConfigBase {
     public static String starmgr_assume_role_credential_arn = "";
     @ConfField
     public static String starmgr_assume_role_credential_external_id = "";
-    
 
     /**
      * empty shard group clean threshold (by create time).
@@ -1897,8 +1902,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField
+    public static int experimental_lake_publish_version_threads = 16;
+
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = true;
+    public static boolean enable_new_publish_mechanism = false;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
@@ -1979,4 +1987,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+
+    @ConfField
+    public static long binlog_ttl_second = 60 * 30; // 30min
+
+    @ConfField
+    public static long binlog_max_size = Long.MAX_VALUE; // no limit
 }

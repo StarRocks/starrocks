@@ -315,6 +315,21 @@ void HashJoiner::set_prober_finished() {
     }
 }
 
+Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {
+    _phase = HashJoinPhase::PROBE;
+    // _short_circuit_break maybe set _phase to HashJoinPhase::EOS
+    _short_circuit_break();
+    if (_phase == HashJoinPhase::EOS) {
+        return Status::OK();
+    }
+
+    _probe_input_chunk.reset();
+    _ht_has_remain = false;
+    _key_columns.resize(0);
+    _ht.reset_probe_state(state);
+    return Status::OK();
+}
+
 bool HashJoiner::_has_null(const ColumnPtr& column) {
     if (column->is_nullable()) {
         const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();

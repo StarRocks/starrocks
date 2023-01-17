@@ -245,7 +245,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // Set 'CONTENT_TYPE' header if it havn't been set.
+    // Set 'CONTENT_TYPE' header if it hasn't been set.
     protected void checkDefaultContentTypeHeader(BaseResponse response, Object responseOj) {
         if (!Strings.isNullOrEmpty(response.getContentType())) {
             response.updateHeader(HttpHeaderNames.CONTENT_TYPE.toString(), response.getContentType());
@@ -298,11 +298,8 @@ public abstract class BaseAction implements IAction {
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType.SystemAction... systemActions)
             throws UnauthorizedException {
-        ConnectContext tmpContext = new ConnectContext();
-        tmpContext.setGlobalStateMgr(globalStateMgr);
-        tmpContext.setCurrentUserIdentity(currentUser);
         for (PrivilegeType.SystemAction systemAction : systemActions) {
-            if (!PrivilegeManager.checkSystemAction(tmpContext, systemAction)) {
+            if (!PrivilegeManager.checkSystemAction(currentUser, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");
             }

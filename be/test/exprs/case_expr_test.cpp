@@ -27,7 +27,7 @@
 #include "common/object_pool.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

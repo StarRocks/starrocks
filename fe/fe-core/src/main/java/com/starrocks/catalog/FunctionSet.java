@@ -667,37 +667,10 @@ public class FunctionSet {
     }
 
     private void addVectorizedBuiltin(Function fn) {
-        if (findVectorizedFunction(fn) != null) {
-            return;
-        }
         fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
         fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
-    }
-
-    private Function findVectorizedFunction(Function desc) {
-        List<Function> fns = vectorizedFunctions.get(desc.functionName());
-
-        if (fns == null) {
-            return null;
-        }
-
-        // First check for identical
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return f;
-            }
-        }
-
-        // Next check for indistinguishable
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_INDISTINGUISHABLE)) {
-                return f;
-            }
-        }
-        return null;
-
     }
 
     /**

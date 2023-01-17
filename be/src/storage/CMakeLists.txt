@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
-    array_type_info.cpp
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -178,4 +177,7 @@ add_library(Storage STATIC
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    binlog_util.cpp
+    binlog_file_writer.cpp
+    binlog_file_reader.cpp
 )

@@ -15,8 +15,8 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/stream/retract_maxmin.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 

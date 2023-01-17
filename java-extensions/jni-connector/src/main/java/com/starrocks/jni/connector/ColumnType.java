@@ -30,7 +30,9 @@ public class ColumnType {
         LONG,
         DOUBLE,
         STRING,
+        BINARY,
         DATE,
+        DATETIME,
         DECIMAL,
         ARRAY,
         MAP,
@@ -49,13 +51,16 @@ public class ColumnType {
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bool", TypeValue.BOOLEAN);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
@@ -114,7 +119,7 @@ public class ColumnType {
         int idx = 0;
         while (scanner.peek() != '>') {
             scanner.next(); // '<', or ','
-            ColumnType x = new ColumnType(this.name + '.' + idx);
+            ColumnType x = new ColumnType(this.name + '#' + idx, TypeValue.BYTE);
             idx += 1;
             x.parse(scanner);
             childTypeValues.add(x);
@@ -128,9 +133,9 @@ public class ColumnType {
             int p = scanner.indexOf(':');
             String name = scanner.substr(p);
             childNames.add(name);
-            String fieldName = this.name + '.' + name;
+            String fieldName = this.name + ':' + name;
             scanner.moveTo(p + 1);
-            ColumnType x = new ColumnType(fieldName);
+            ColumnType x = new ColumnType(fieldName, TypeValue.BYTE);
             x.parse(scanner);
             childTypeValues.add(x);
         }
@@ -143,36 +148,46 @@ public class ColumnType {
         scanner.moveTo(p);
 
         // assume there is no blank char in `type`.
-        if (t.equals("array")) {
-            // array<TYPE>
-            typeValue = TypeValue.ARRAY;
-            childTypes = new ArrayList<>();
-            parseArray(childTypes, scanner);
-        } else if (t.equals("map")) {
-            // map<TYPE1,TYPE2>
-            typeValue = TypeValue.MAP;
-            childTypes = new ArrayList<>();
-            parseArray(childTypes, scanner);
-        } else if (t.equals("struct")) {
-            // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
-            typeValue = TypeValue.STRUCT;
-            childNames = new ArrayList<>();
-            childTypes = new ArrayList<>();
-            parseStruct(childNames, childTypes, scanner);
-        } else {
-            // convert decimal(x,y) to decimal
-            if (t.startsWith("decimal")) {
-                t = "decimal";
+        typeValue = null;
+        switch (t) {
+            case "array": {
+                // array<TYPE>
+                typeValue = TypeValue.ARRAY;
+                childTypes = new ArrayList<>();
+                parseArray(childTypes, scanner);
             }
-            typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+            break;
+            case "map": {
+                // map<TYPE1,TYPE2>
+                typeValue = TypeValue.MAP;
+                childTypes = new ArrayList<>();
+                parseArray(childTypes, scanner);
+            }
+            break;
+            case "struct": {
+                // struct<F1:TYPE1,F2:TYPE2,F3:TYPE3..>
+                typeValue = TypeValue.STRUCT;
+                childNames = new ArrayList<>();
+                childTypes = new ArrayList<>();
+                parseStruct(childNames, childTypes, scanner);
+            }
+            break;
+            default: {
+                // convert decimal(x,y) to decimal
+                if (t.startsWith("decimal")) {
+                    t = "decimal";
+                }
+                typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+            }
         }
+
         if (typeValue == null) {
             throw new RuntimeException("Unknown type: " + t);
         }
     }
 
-    public ColumnType(String name) {
-        this.name = name;
+    public ColumnType(String type) {
+        this("null", type);
     }
 
     public ColumnType(String name, ColumnType.TypeValue value) {
@@ -187,7 +202,8 @@ public class ColumnType {
     }
 
     public boolean isString() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL;
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL ||
+                typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME;
     }
 
     public boolean isArray() {

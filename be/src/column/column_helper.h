@@ -30,7 +30,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

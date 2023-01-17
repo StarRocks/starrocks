@@ -38,10 +38,10 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
-#include "storage/array_type_info.h"
 #include "storage/types.h"
+#include "types/array_type_info.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -393,6 +393,16 @@ int TypeDescriptor::get_slot_size() const {
     }
     // For llvm complain
     return -1;
+}
+
+size_t TypeDescriptor::get_array_depth_limit() const {
+    int depth = 1;
+    const TypeDescriptor* type = this;
+    while (type->children.size() > 0) {
+        type = &type->children[0];
+        depth++;
+    }
+    return depth;
 }
 
 } // namespace starrocks

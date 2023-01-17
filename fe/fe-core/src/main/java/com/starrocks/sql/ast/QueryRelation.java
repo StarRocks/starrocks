@@ -31,8 +31,13 @@ public abstract class QueryRelation extends Relation {
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
 
+    @Override
     public List<String> getColumnOutputNames() {
-        return getScope().getRelationFields().getAllFields().stream().map(Field::getName).collect(Collectors.toList());
+        if (explicitColumnNames != null) {
+            return explicitColumnNames;
+        } else {
+            return getScope().getRelationFields().getAllFields().stream().map(Field::getName).collect(Collectors.toList());
+        }
     }
 
     public Map<Expr, FieldId> getColumnReferences() {

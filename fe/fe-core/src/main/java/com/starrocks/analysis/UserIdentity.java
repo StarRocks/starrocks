@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -44,7 +45,6 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TUserIdentity;
@@ -76,7 +76,7 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     public static final UserIdentity ROOT;
 
     static {
-        ROOT = new UserIdentity(Auth.ROOT_USER, "%");
+        ROOT = new UserIdentity(AuthenticationManager.ROOT_USER, "%");
         ROOT.setIsAnalyzed();
     }
 

@@ -425,7 +425,9 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 
                 auto it = field_name_2_pos.find(required_subfield_name);
                 if (it == field_name_2_pos.end()) {
-                    return Status::NotFound("Struct subfield name: " + required_subfield_name + " not found.");
+                    LOG(WARNING) << "Struct subfield name: " + required_subfield_name + " not found.";
+                    children_readers.emplace_back(nullptr);
+                    continue;
                 }
 
                 size_t parquet_pos = it->second;

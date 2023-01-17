@@ -177,11 +177,11 @@ void Chunk::remove_column_by_index(size_t idx) {
 
 [[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
-    for (int i = indexes.size(); i > 0; i--) {
+    for (size_t i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);
     }
     if (_schema != nullptr && !indexes.empty()) {
-        for (int i = indexes.size(); i > 0; i--) {
+        for (size_t i = indexes.size(); i > 0; i--) {
             _schema->remove(indexes[i - 1]);
         }
         rebuild_cid_index();
@@ -366,7 +366,7 @@ void Chunk::check_or_die() {
 }
 #endif
 
-std::string Chunk::debug_row(uint32_t index) const {
+std::string Chunk::debug_row(size_t index) const {
     std::stringstream os;
     os << "[";
     for (size_t col = 0; col < _columns.size() - 1; ++col) {

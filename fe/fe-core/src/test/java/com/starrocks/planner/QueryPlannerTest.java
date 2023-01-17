@@ -176,7 +176,7 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
         stmtExecutor0.execute();
 
-        String addBlackListSql = "add sqlblacklist \"((?!where).)*\"";
+        String addBlackListSql = "add sqlblacklist \"( where )\"";
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
         stmtExecutor1.execute();
 
@@ -184,8 +184,14 @@ public class QueryPlannerTest {
         long id = -1;
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
             id = entry.getValue().id;
-            Assert.assertEquals("((?!where).)*", entry.getKey());
+            Assert.assertEquals("( where )", entry.getKey());
         }
+
+        String sql4 = "select k1 as awhere from test.baseall";
+        StatementBase statementBase4 = SqlParser.parse(sql4, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statementBase4);
+        stmtExecutor4.execute();
+        Assert.assertEquals("", connectContext.getState().getErrorMessage());
 
         String sql = "select k1 from test.baseall where k1 > 0";
         StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);

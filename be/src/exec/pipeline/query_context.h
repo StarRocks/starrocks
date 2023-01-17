@@ -21,18 +21,22 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_epoch_manager.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+
+class StreamEpochManager;
+
+namespace pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
@@ -228,7 +232,7 @@ private:
     void _stop_clean_func() { _stop.store(true); }
     bool _is_stopped() { return _stop; }
     size_t _slot_idx(const TUniqueId& query_id);
-    void _clean_slot_unlocked(size_t i);
+    void _clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del);
 
 private:
     const size_t _num_slots;
@@ -244,4 +248,5 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

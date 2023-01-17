@@ -46,6 +46,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -191,6 +192,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    protected BinlogConfig curBinlogConfig;
+
+    // After ensuring that all binlog config of tablets in BE have taken effect,
+    // apply for a transaction id as binlogtxnId.
+    // The purpose is to ensure that in the case of concurrent imports,
+    // need to wait for the completion of concurrent imports,
+    // that is, all transactions which id is smaller than binlogTxnId have been finished/aborted,
+    // then binlog is available
+    protected long binlogTxnId = -1;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -252,6 +263,37 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.tableProperty = null;
     }
 
+    public BinlogConfig getCurBinlogConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getBinlogConfig();
+        }
+        return null;
+    }
+
+    public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        tableProperty.modifyTableProperties(curBinlogConfig.toProperties());
+        tableProperty.setBinlogConfig(curBinlogConfig);
+    }
+
+    public boolean containsBinlogConfig() {
+        if (tableProperty == null ||
+                tableProperty.getBinlogConfig() == null ||
+                tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public long getBinlogTxnId() {
+        return binlogTxnId;
+    }
+
+    public void setBinlogTxnId(long binlogTxnId) {
+        this.binlogTxnId = binlogTxnId;
+    }
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
     }
@@ -909,6 +951,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitions;
     }
 
+    public List<Long> getAllPartitionIds() {
+        return new ArrayList<>(idToPartition.keySet());
+    }
+
     public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         Collections.sort(partitions, new Comparator<Partition>() {
@@ -994,7 +1040,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (colocateMaterializedViewNames.contains(mvName)) {
             if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
                 ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-                colocateTableIndex.removeTable(this.id);
+                colocateTableIndex.removeTable(this.id, null, false /* isReplay */);
                 setInColocateMvGroup(false);
                 setColocateGroup(null);
             }
@@ -1008,7 +1054,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
             String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
             String groupName = dbName + ":" + rollupIndexName;
-            colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
+            try {
+                colocateTableIndex.addTableToGroup(dbId, this, groupName, null, false /* isReplay */);
+            } catch (DdlException e) {
+                // should not happen, just log an error here
+                LOG.error(e.getMessage());
+            }
             setInColocateMvGroup(true);
             setColocateGroup(groupName);
 
@@ -1222,7 +1273,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             out.writeBoolean(true);
             tableProperty.write(out);
         }
-
         tempPartitions.write(out);
     }
 
@@ -1349,7 +1399,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 tableProperty = TableProperty.read(in);
             }
         }
-
         // temp partitions
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             tempPartitions = TempPartitions.read(in);
@@ -1657,6 +1706,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
+    public Boolean isBinlogEnabled() {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+            return false;
+        }
+        return tableProperty.getBinlogConfig().getBinlogEnable();
+    }
+
+    public long getBinlogVersion() {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+            return BinlogConfig.INVALID;
+        }
+        return tableProperty.getBinlogConfig().getVersion();
+    }
+
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1922,6 +1985,37 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
+    public Map<String, String> buildBinlogAvailableVersion() {
+        Map<String, String> result = new HashMap<>();
+        Collection<Partition> partitions =  getPartitions();
+        for (Partition partition : partitions) {
+            result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
+                    String.valueOf(partition.getVisibleVersion()));
+        }
+        return result;
+    }
+
+    public void setBinlogAvailableVersion(Map<String, String> properties) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.buildBinlogAvailableVersion();
+    }
+
+    public Map<Long, Long> getBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return new HashMap<>();
+        }
+        return tableProperty.getBinlogAvailaberVersions();
+    }
+
+    public void clearBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.clearBinlogAvailableVersion();
+    }
 
     @Override
     public void onCreate() {
@@ -1945,7 +2039,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }
 

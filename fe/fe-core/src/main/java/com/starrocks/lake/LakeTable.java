@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
@@ -26,6 +26,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
@@ -41,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +69,12 @@ public class LakeTable extends OlapTable {
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
+    }
+
+    public static LakeTable read(DataInput in) throws IOException {
+        // type is already read in Table
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
     }
 
     public String getStorageGroup() {
@@ -120,12 +128,6 @@ public class LakeTable extends OlapTable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
-    }
-
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         dropAllTempPartitions();
@@ -133,7 +135,7 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
         return replay ? null : new DeleteLakeTableTask(this);
     }
 
@@ -184,5 +186,28 @@ public class LakeTable extends OlapTable {
             index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
+    }
+
+    @Override
+    public Short getDefaultReplicationNum() {
+        if (tableProperty != null) {
+            return tableProperty.getReplicationNum();
+        }
+        return 1;
+    }
+
+    // used in colocate table index, return an empty list for LakeTable
+    @Override
+    public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
+        return backendsPerBucketSeq;
+    }
+
+    public List<Long> getShardGroupIds() {
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            shardGroupIds.add(p.getShardGroupId());
+        }
+        return shardGroupIds;
     }
 }

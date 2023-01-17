@@ -26,8 +26,8 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "glog/logging.h"
-#include "runtime/primitive_type.h"
 #include "simd/selector.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

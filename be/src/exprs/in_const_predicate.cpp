@@ -15,7 +15,7 @@
 #include "exprs/in_const_predicate.hpp"
 
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
