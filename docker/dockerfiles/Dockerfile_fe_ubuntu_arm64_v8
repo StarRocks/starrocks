@@ -9,7 +9,7 @@ RUN apt-get update \
 
 RUN useradd --create-home --no-log-init --shell /bin/bash starrocks
 USER starrocks
-COPY --chown=starrocks:starrocks /fe /opt/starrocks/fe/
+COPY --chown=starrocks:starrocks output/fe /opt/starrocks/fe/
 RUN chown starrocks:starrocks /opt/starrocks &&  mkdir -p  /opt/starrocks/fe/meta/
 ENV JAVA_HOME=/usr/lib/jvm/java-1.11.0-openjdk-arm64/
 

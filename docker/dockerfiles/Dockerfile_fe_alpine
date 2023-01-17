@@ -6,10 +6,11 @@ RUN apk update \
     && apk upgrade  \
     && apk add --update openjdk11 tzdata curl unzip bash mysql-client procps vim  eudev-dev \
     && rm -rf /var/cache/apk/*
+
 ENV JAVA_HOME=/usr/lib/jvm/default-jvm/
 ENV STARROCKS_ROOT=/opt/starrocks  
 USER root
 RUN mkdir -p /opt/starrocks/fe/meta/
-COPY ../../output/fe /opt/starrocks/fe/
-Copy ../bin/fe_entrypoint.sh ../bin/fe_prestop.sh /opt/starrocks/ 
+COPY output/fe /opt/starrocks/fe/
+Copy docker/bin/fe_entrypoint.sh docker/bin/fe_prestop.sh /opt/starrocks/ 
 Workdir /opt/starrocks
