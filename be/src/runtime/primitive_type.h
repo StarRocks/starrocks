@@ -81,6 +81,11 @@ inline bool is_enumeration_type(PrimitiveType type) {
     }
 }
 
+constexpr bool is_object_type(PrimitiveType type) {
+    return type == PrimitiveType::TYPE_HLL || type == PrimitiveType::TYPE_OBJECT || type == PrimitiveType::TYPE_JSON ||
+           type == PrimitiveType::TYPE_PERCENTILE;
+}
+
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
     if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION) {
         return false;

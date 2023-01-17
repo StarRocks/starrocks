@@ -292,11 +292,8 @@ struct FirstValueState {
     bool is_null = false;
 };
 
-<<<<<<< HEAD
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
-=======
 // TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT>
+template <PrimitiveType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
@@ -304,8 +301,7 @@ struct FirstValueState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
+template <PrimitiveType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -344,23 +340,15 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-<<<<<<< HEAD
-template <PrimitiveType PT, typename = guard::Guard>
-=======
-template <LogicalType PT, bool ignoreNulls, typename = guard::Guard>
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
+template <PrimitiveType PT, bool ignoreNulls, typename = guard::Guard>
 struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
     bool is_null = ignoreNulls;
 };
 
-<<<<<<< HEAD
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
-class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT>, T> {
-=======
 // TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
+template <PrimitiveType PT, bool ignoreNulls>
 struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
@@ -368,9 +356,8 @@ struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <PrimitiveType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT, ignoreNulls>, T> {
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
@@ -465,24 +452,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
     std::string get_name() const override { return "lead-lag"; }
 };
 
-<<<<<<< HEAD
-template <PrimitiveType PT>
-struct FirstValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool has_value = false;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <PrimitiveType PT>
-class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
-=======
 // TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
+template <PrimitiveType PT, bool ignoreNulls>
 class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<FirstValueState<PT>> {
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).is_null = false;
@@ -498,14 +471,6 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             return;
         }
 
-<<<<<<< HEAD
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
-        Slice slice = column->get_slice(frame_start);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-        this->data(state).has_value = true;
-=======
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
@@ -518,7 +483,6 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
             this->data(state).is_null = false;
         }
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -529,23 +493,10 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-<<<<<<< HEAD
-template <PrimitiveType PT>
-struct LastValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <PrimitiveType PT>
-class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
-=======
 // TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
+template <PrimitiveType PT, bool ignoreNulls>
 class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<LastValueState<PT, ignoreNulls>> {
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).is_null = ignoreNulls;
@@ -563,12 +514,6 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
                 !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
-<<<<<<< HEAD
-        Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).buffer.clear();
-        this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-=======
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
         } else {
@@ -578,7 +523,6 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             this->data(state).buffer.clear();
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
         }
->>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
