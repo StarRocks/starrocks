@@ -211,7 +211,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 clonedElseClause = clonedOperators.get(clonedOperators.size() - 1);
             }
 
-            int whenThenEndIdx = operator.getElseClause() == null ? clonedOperators.size() : clonedOperators.size() - 1;
+            int whenThenEndIdx = operator.hasElse() ? clonedOperators.size() - 1 : clonedOperators.size();
             clonedWhenThenClauses = clonedOperators.subList(operator.getWhenStart(), whenThenEndIdx);
 
             return new CaseWhenOperator(operator.getType(), clonedCaseClause, clonedElseClause, clonedWhenThenClauses);

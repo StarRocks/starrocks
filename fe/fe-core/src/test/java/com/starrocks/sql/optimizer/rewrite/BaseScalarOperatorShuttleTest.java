@@ -137,6 +137,10 @@ class BaseScalarOperatorShuttleTest {
                 new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
+        CaseWhenOperator otherOperator =
+                new CaseWhenOperator(Type.VARCHAR, null, null,
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
         BaseScalarOperatorShuttle testShuttle = new BaseScalarOperatorShuttle() {
             @Override
             public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
@@ -145,6 +149,8 @@ class BaseScalarOperatorShuttleTest {
         };
         ScalarOperator newOperator = testShuttle.visitCaseWhenOperator(operator, null);
         assertNotEquals(operator, newOperator);
+        newOperator = testShuttle.visitCaseWhenOperator(otherOperator, null);
+        assertNotEquals(otherOperator, newOperator);
 
     }
 }
