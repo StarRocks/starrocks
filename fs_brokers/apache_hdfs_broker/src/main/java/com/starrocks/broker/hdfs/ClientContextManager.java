@@ -41,7 +41,9 @@ public class ClientContextManager {
         clientContexts = new ConcurrentHashMap<>();
         fdToClientMap = new ConcurrentHashMap<>();
         this.executorService = executorService;
-        this.executorService.schedule(new CheckClientExpirationTask(), 0, TimeUnit.SECONDS);
+        if (!BrokerConfig.disable_broker_client_expiration_checking) {
+            this.executorService.schedule(new CheckClientExpirationTask(), 0, TimeUnit.SECONDS);
+        }
     }
     
     public void onPing(String clientId) {
