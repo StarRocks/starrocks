@@ -168,6 +168,23 @@ public class StructType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        for (int pos = selectedFields.length - 1; pos >= 0; pos--) {
+            StructField structField = fields.get(pos);
+            if (!selectedFields[pos]) {
+                fields.remove(pos);
+                fieldMap.remove(structField.getName());
+            }
+        }
+
+        for (StructField structField : fields) {
+            Type type = structField.getType();
+            if (type.isComplexType()) {
+                type.pruneUnusedSubfields();
+            }
+        }
+    }
+
     @Override
     public void selectAllFields() {
         Arrays.fill(selectedFields, true);
@@ -210,8 +227,6 @@ public class StructType extends Type {
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
-        Preconditions.checkArgument(selectedFields.length == fields.size());
-        node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);
         }

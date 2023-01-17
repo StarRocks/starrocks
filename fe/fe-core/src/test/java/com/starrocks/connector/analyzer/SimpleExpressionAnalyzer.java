@@ -215,14 +215,19 @@ public class SimpleExpressionAnalyzer {
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             Preconditions.checkArgument(child.getType().isStructType(),
                     String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
-            StructType structType = (StructType) child.getType();
-            StructField structField = structType.getField(node.getFieldName());
 
-            if (structField == null) {
-                throw new SemanticException("Struct subfield '%s' cannot be resolved", node.getFieldName());
+            List<String> fieldNames = node.getFieldNames();
+            Type tmpType = child.getType();
+            for (String fieldName : fieldNames) {
+                StructType structType = (StructType) tmpType;
+                StructField structField = structType.getField(fieldName);
+                if (structField == null) {
+                    throw new SemanticException("Struct subfield '%s' cannot be resolved", fieldName);
+                }
+                tmpType = structField.getType();
             }
 
-            node.setType(structField.getType());
+            node.setType(tmpType);
             return null;
         }
 
