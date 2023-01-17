@@ -127,6 +127,12 @@ public class ArrayType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        if (itemType.isComplexType()) {
+            itemType.pruneUnusedSubfields();
+        }
+    }
+
     /**
      * @return 33 (utf8_general_ci) if type is array
      * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition

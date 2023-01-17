@@ -88,8 +88,6 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     type_map_int_int.type = LogicalType::TYPE_MAP;
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.selected_fields.emplace_back(true);
-    type_map_int_int.selected_fields.emplace_back(true);
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
@@ -203,8 +201,6 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     type_map_varchar_int.children[0].type = LogicalType::TYPE_VARCHAR;
     type_map_varchar_int.children[0].len = 10;
     type_map_varchar_int.children[1].type = LogicalType::TYPE_INT;
-    type_map_varchar_int.selected_fields.emplace_back(true);
-    type_map_varchar_int.selected_fields.emplace_back(true);
 
     TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;

@@ -226,7 +226,7 @@ struct TExprNode {
   29: optional TPlaceHolder vslot_ref;
 
   // Used for SubfieldExpr
-  30: optional string used_subfield_name;
+  30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
 
   // For vector query engine
