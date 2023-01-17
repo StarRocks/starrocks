@@ -1397,6 +1397,18 @@ public class PrivilegeCheckerV2Test {
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
 
+        // Test `create database`: check CREATE_DATABASE on catalog
+        verifyGrantRevoke(
+                "create database db8;",
+                "grant CREATE_DATABASE on catalog default_catalog to test",
+                "revoke CREATE_DATABASE on catalog default_catalog from test",
+                "Access denied for user 'test' to catalog 'default_catalog'");
+        verifyGrantRevoke(
+                "create database if not exists db8;",
+                "grant CREATE_DATABASE on catalog default_catalog to test",
+                "revoke CREATE_DATABASE on catalog default_catalog from test",
+                "Access denied for user 'test' to catalog 'default_catalog'");
+
         // check drop non-existed database
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(

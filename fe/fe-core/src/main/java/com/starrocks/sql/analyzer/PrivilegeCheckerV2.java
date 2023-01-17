@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -694,8 +695,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
-            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
-            // Also need to check the `CREATE_DATABASE` action on corresponding catalog
+            // Need to check the `CREATE_DATABASE` action on corresponding catalog
             checkCatalogAction(context, statement.getCatalogName(), PrivilegeType.CatalogAction.CREATE_DATABASE);
             return null;
         }
@@ -720,6 +720,12 @@ public class PrivilegeCheckerV2 {
             }
 
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
+            checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CatalogAction.CREATE_DATABASE);
             return null;
         }
 
@@ -1202,7 +1208,6 @@ public class PrivilegeCheckerV2 {
                 catalog = context.getCurrentCatalog();
             }
             checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.DbAction.CREATE_TABLE);
-            checkTableAction(context, tableName, PrivilegeType.TableAction.DROP);
             return null;
         }
 
