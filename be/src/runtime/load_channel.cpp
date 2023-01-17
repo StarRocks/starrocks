@@ -256,7 +256,8 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk&
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
+                StatusOr<vectorized::Chunk> res = Status::OK();
+                TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
                 if (!res.ok()) return res.status();
                 chunk = std::move(res).value();
             });
