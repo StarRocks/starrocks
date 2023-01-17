@@ -178,6 +178,10 @@ void FunctionContext::set_error(const char* error_msg) {
     _impl->set_error(error_msg);
 }
 
+void FunctionContext::set_constant_columns(std::vector<starrocks::vectorized::ColumnPtr> columns) {
+    _impl->set_constant_columns(std::move(columns));
+}
+
 bool FunctionContext::add_warning(const char* warning_msg) {
     if (_impl->_num_warnings++ >= MAX_WARNINGS) {
         return false;
