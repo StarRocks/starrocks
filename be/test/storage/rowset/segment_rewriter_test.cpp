@@ -80,7 +80,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto partial_schema = ChunkHelper::convert_schema_to_format_v2(*partial_tablet_schema);
+    auto partial_schema = ChunkHelper::convert_schema(*partial_tablet_schema);
     auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -132,7 +132,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();

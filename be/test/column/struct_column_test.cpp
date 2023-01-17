@@ -190,6 +190,50 @@ TEST(StructColumnTest, test_append_defaults) {
     ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(2));
 }
 
+TEST(StructColumnTest, equals) {
+    // lhs: {1, 2}, {1, null}, {4, 5}, {2, 1}
+    // rhs: {1, 2}, {1, 2}, {6, 7}, {2, 1}
+    StructColumn::Ptr lhs;
+    {
+        auto field1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto field2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        Columns fields{field1, field2};
+        lhs = StructColumn::create(fields);
+    }
+    lhs->_fields[0]->append_datum(Datum(1));
+    lhs->_fields[0]->append_datum(Datum(1));
+    lhs->_fields[0]->append_datum(Datum(4));
+    lhs->_fields[0]->append_datum(Datum(2));
+
+    lhs->_fields[1]->append_datum(Datum(2));
+    lhs->_fields[1]->append_nulls(1);
+    lhs->_fields[1]->append_datum(Datum(5));
+    lhs->_fields[1]->append_datum(Datum(1));
+
+    StructColumn::Ptr rhs;
+    {
+        auto field1 = Int32Column::create();
+        auto field2 = Int32Column::create();
+        Columns fields{field1, field2};
+        rhs = StructColumn::create(fields);
+    }
+    rhs->_fields[0]->append_datum(Datum(1));
+    rhs->_fields[0]->append_datum(Datum(1));
+    rhs->_fields[0]->append_datum(Datum(6));
+    rhs->_fields[0]->append_datum(Datum(2));
+
+    rhs->_fields[1]->append_datum(Datum(2));
+    rhs->_fields[1]->append_datum(Datum(2));
+    rhs->_fields[1]->append_datum(Datum(7));
+    rhs->_fields[1]->append_datum(Datum(1));
+
+    ASSERT_TRUE(lhs->equals(0, *rhs, 0));
+    ASSERT_TRUE(lhs->equals(0, *rhs, 1));
+    ASSERT_FALSE(lhs->equals(1, *rhs, 1));
+    ASSERT_FALSE(lhs->equals(2, *rhs, 2));
+    ASSERT_TRUE(lhs->equals(3, *rhs, 3));
+}
+
 TEST(StructColumnTest, test_resize) {
     std::vector<std::string> field_name{"id", "name"};
     auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
@@ -482,6 +526,28 @@ TEST(StructColumnTest, test_assign) {
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
     ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(1));
+}
+
+TEST(StructColumnTest, test_unnamed) {
+    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    Columns fields{id, name};
+    auto column = StructColumn::create(fields);
+
+    ASSERT_TRUE(column->is_struct());
+    ASSERT_FALSE(column->is_nullable());
+    ASSERT_EQ(0, column->size());
+
+    DatumStruct struct1{uint64_t(1), Slice("smith")};
+    DatumStruct struct2{uint64_t(2), Slice("cruise")};
+    column->append_datum(struct1);
+    column->append_datum(struct2);
+
+    ASSERT_EQ(column->size(), 2);
+    ASSERT_EQ("{1,'smith'}", column->debug_item(0));
+    ASSERT_EQ("{2,'cruise'}", column->debug_item(1));
+
+    ASSERT_EQ("{1,'smith'}, {2,'cruise'}", column->debug_string());
 }
 
 } // namespace starrocks

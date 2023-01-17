@@ -150,7 +150,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
-            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldName());
+            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldNames());
         }
 
         @Override
@@ -483,6 +483,7 @@ public class ScalarOperatorToExpr {
                     }
                     Preconditions.checkNotNull(call.getFunction());
                     callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }
             callExpr.setType(call.getType());

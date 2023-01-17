@@ -46,8 +46,6 @@
 #include "segment_chunk_iterator_adapter.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
-#include "storage/column_predicate.h"
-#include "storage/column_predicate_rewriter.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -328,7 +326,6 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
 
 void Segment::_prepare_adapter_info() {
     ColumnId num_columns = _tablet_schema->num_columns();
-    _needs_block_adapter = false;
     _needs_chunk_adapter = false;
     std::vector<LogicalType> types(num_columns);
     for (ColumnId cid = 0; cid < num_columns; ++cid) {
@@ -344,11 +341,8 @@ void Segment::_prepare_adapter_info() {
         if (TypeUtils::specific_type_of_format_v1(type)) {
             _needs_chunk_adapter = true;
         }
-        if (type != _tablet_schema->column(cid).type()) {
-            _needs_block_adapter = true;
-        }
     }
-    if (_needs_block_adapter || _needs_chunk_adapter) {
+    if (_needs_chunk_adapter) {
         _column_storage_types = std::make_unique<std::vector<LogicalType>>(std::move(types));
     }
 }

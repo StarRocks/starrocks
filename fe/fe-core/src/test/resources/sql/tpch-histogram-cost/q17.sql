@@ -37,6 +37,7 @@ RESULT SINK
 |  * expr-->[128.71428571428572, 14992.785714285714, 0.0, 8.0, 1.0] ESTIMATE
 |
 12:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F03)
@@ -90,6 +91,8 @@ OutPut Exchange Id: 12
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
 |
 6:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [18: P_PARTKEY, INT, false]
 cardinality: 614017
 
 PLAN FRAGMENT 2(F00)
@@ -123,6 +126,7 @@ OutPut Exchange Id: 06
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 20467
 |
 0:OlapScanNode

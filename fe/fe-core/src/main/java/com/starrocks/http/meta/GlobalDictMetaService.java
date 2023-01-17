@@ -16,6 +16,7 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -56,7 +57,12 @@ public class GlobalDictMetaService {
             if (redirectToLeader(request, response)) {
                 return;
             }
-            checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+            UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                checkUserOwnsAdminRole(currentUser);
+            } else {
+                checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+            }
             executeInLeaderWithAdmin(request, response);
         }
 

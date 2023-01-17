@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -63,7 +64,12 @@ public class MetaReplayerCheckAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkUserOwnsAdminRole(currentUser);
+        } else {
+            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+        }
 
         Map<String, String> resultMap = GlobalStateMgr.getCurrentState().getMetaReplayState().getInfo();
 

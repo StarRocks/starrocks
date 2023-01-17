@@ -118,8 +118,24 @@ public class FunctionPEntryObject implements PEntryObject {
     }
 
     @Override
-    public int compareTo(PEntryObject o) {
-        return 0;
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof FunctionPEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+        FunctionPEntryObject o = (FunctionPEntryObject) obj;
+        if (this.databaseId > o.databaseId) {
+            return 1;
+        } else if (this.databaseId < o.databaseId) {
+            return -1;
+        } else {
+            if (functionSig.equals(ALL_FUNCTIONS_SIG)) {
+                return -1;
+            } else if (o.functionSig.equals(ALL_FUNCTIONS_SIG)) {
+                return 1;
+            } else {
+                return functionSig.compareTo(o.functionSig);
+            }
+        }
     }
 
     @Override

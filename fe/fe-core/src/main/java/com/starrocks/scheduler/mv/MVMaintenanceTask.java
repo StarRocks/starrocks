@@ -25,7 +25,10 @@ import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,29 +44,26 @@ import java.util.Optional;
  * 2. The execution of task is coordinated by EpochCoordinator on FE
  */
 public class MVMaintenanceTask {
+    private static final Logger LOG = LogManager.getLogger(MVMaintenanceTask.class);
 
     // Job information of the job
     private MVMaintenanceJob job;
     private String dbName;
 
     // Task specific information
-    private long beId;
-    private TNetworkAddress beHost;
     private long taskId;
+    private TNetworkAddress beRpcAddr;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
-    // TODO(murphy) maintain this state during epoch execution
     private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
-    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
+    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
         task.job = job;
-        task.beId = beId;
-        task.beHost = beHost;
+        task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;
         task.fragmentInstances = fragmentInstances;
-
         return task;
     }
 
@@ -98,20 +98,16 @@ public class MVMaintenanceTask {
         this.dbName = dbName;
     }
 
-    public long getBeId() {
-        return beId;
-    }
-
-    public void setBeId(long beId) {
-        this.beId = beId;
-    }
-
     public long getTaskId() {
         return taskId;
     }
 
     public void setTaskId(long taskId) {
         this.taskId = taskId;
+    }
+
+    public TNetworkAddress getBeRpcAddr() {
+        return beRpcAddr;
     }
 
     public void addFragmentInstance(TExecPlanFragmentParams instance) {
@@ -127,6 +123,22 @@ public class MVMaintenanceTask {
     }
 
     public synchronized Map<TUniqueId, Map<Integer, List<TScanRange>>> getBinlogConsumeState() {
+        // TODO(lism): how to initialize binlog consume state at first?
+        if (binlogConsumeState.isEmpty()) {
+            for (TExecPlanFragmentParams params : fragmentInstances) {
+                Map<Integer, List<TScanRange>> nodeScanRangesMapping = new HashMap<>();
+                for (Map.Entry<Integer, List<TScanRangeParams>> entry : params.params.getPer_node_scan_ranges().entrySet()) {
+                    List<TScanRange> scanRanges = new ArrayList<>();
+                    for (TScanRangeParams scanRangeParams : entry.getValue()) {
+                        if (scanRangeParams.scan_range.isSetBinlog_scan_range()) {
+                            scanRanges.add(scanRangeParams.scan_range);
+                        }
+                    }
+                    nodeScanRangesMapping.putIfAbsent(entry.getKey(), scanRanges);
+                }
+                binlogConsumeState.put(params.params.getFragment_instance_id(), nodeScanRangesMapping);
+            }
+        }
         return binlogConsumeState;
     }
 
@@ -169,8 +181,7 @@ public class MVMaintenanceTask {
         return "MVMaintenanceTask{" +
                 "job=" + job +
                 ", dbName='" + dbName + '\'' +
-                ", beId=" + beId +
-                ", host=" + beHost +
+                ", host=" + beRpcAddr +
                 ", taskId=" + taskId +
                 '}';
     }

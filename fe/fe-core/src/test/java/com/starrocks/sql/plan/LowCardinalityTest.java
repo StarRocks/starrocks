@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -794,34 +793,34 @@ public class LowCardinalityTest extends PlanTestBase {
         // Test Predicate with if predicate
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', true, false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(
-                plan.contains("PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
+        Assert.assertTrue(plan,
+                plan.contains("PREDICATES: DictExpr(12: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
 
         // Test single input Expression
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', cast(S_ADDRESS as boolean), false)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', CAST(<place-holder> AS BOOLEAN), FALSE)])"));
+                "PREDICATES: DictExpr(12: S_ADDRESS,[if(<place-holder> = 'kks', CAST(<place-holder> AS BOOLEAN), FALSE)])"));
 
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), " +
-                        "DictExpr(11: S_COMMENT,[CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
+        Assert.assertTrue(plan, plan.contains(
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), " +
+                        "DictExpr(13: S_COMMENT,[CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
 
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
         sql = "select count(*) from supplier where S_ADDRESS = 'kks' and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), NOT (7: S_COMMENT LIKE '%kks%')"));
+                "PREDICATES: DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), NOT (7: S_COMMENT LIKE '%kks%')"));
 
         // Test Two input column. one could apply the other couldn't apply
         // Two Predicate, The first expression that can accept a partial rewrite.
@@ -829,7 +828,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), " +
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), " +
                         "CAST(7: S_COMMENT AS BOOLEAN), FALSE), NOT (7: S_COMMENT LIKE '%kks%')"));
 
     }
@@ -1384,6 +1383,51 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testMetaScan3() throws Exception {
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type\n" +
+                "     <id 16> : dict_merge_t1a\n" +
+                "     <id 14> : max_t1c\n" +
+                "     <id 15> : min_t1d");
+    }
+
+    @Test
+    public void testMetaScan4() throws Exception {
+        String sql = "select sum(t1c), min(t1d), t1a from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(3: t1c), min(4: t1d), any_value(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : t1a\n" +
+                "  |  <slot 3> : t1c\n" +
+                "  |  <slot 4> : t1d\n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type");
+        sql = "select sum(t1c) from test_all_type [_META_] group by t1a";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(3: t1c)\n" +
+                "  |  group by: 1: t1a\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : t1a\n" +
+                "  |  <slot 3> : t1c\n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type");
+    }
+
+    @Test
     public void testHasGlobalDictButNotFound() throws Exception {
         IDictManager dictManager = IDictManager.getInstance();
 
@@ -1403,6 +1447,23 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testExtractProject() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), max(19: upper), min(19: upper), max(18: S_ADDRESS), sum(15: S_SUPPKEY)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : 1: S_SUPPKEY\n" +
+                "  |  <slot 18> : 18: S_ADDRESS\n" +
+                "  |  <slot 19> : DictExpr(18: S_ADDRESS,[upper(<place-holder>)])");
+    }
+
+    @Test
     public void testCompoundPredicate() throws Exception {
         String sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
@@ -1414,7 +1475,6 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan,
                 "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
                         "AND (<place-holder> < 'b'), TRUE, FALSE)])");

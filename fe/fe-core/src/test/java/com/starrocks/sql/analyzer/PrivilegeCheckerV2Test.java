@@ -255,6 +255,7 @@ public class PrivilegeCheckerV2Test {
     private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
                                           String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         // 1. before grant: access denied
@@ -1246,6 +1247,8 @@ public class PrivilegeCheckerV2Test {
 
         sql = "show authentication for test2";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        sql = "show all authentication";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
         PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show authentication", ctx), ctx);
 
@@ -1513,7 +1516,7 @@ public class PrivilegeCheckerV2Test {
                 "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
 
         // CancelAlterSystemStmt
-        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";",
+        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"127.0.0.1:9010\", \"127.0.0.1:9011\";",
                 "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
     }
 
@@ -1694,6 +1697,7 @@ public class PrivilegeCheckerV2Test {
                 "WITH RESOURCE 'my_spark'" +
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createSql, starRocksAssert.getCtx());
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -1726,7 +1730,9 @@ public class PrivilegeCheckerV2Test {
                 "WITH RESOURCE 'my_spark'" +
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
         starRocksAssert.withLoad(createSql);
+        ctxToTestUser();
 
         // ALTER LOAD STMT
         String alterLoadSql = "ALTER LOAD FOR db1.job_name1 PROPERTIES ('priority' = 'LOW');";

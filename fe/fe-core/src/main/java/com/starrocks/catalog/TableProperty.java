@@ -39,6 +39,8 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -57,6 +59,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +72,9 @@ import java.util.Map;
 public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
     public static final int INVALID = -1;
+
+    public static final String BINLOG_PROPERTY_PREFIX = "binlog";
+    public static final String BINLOG_PARTITION = "binlog_partition_";
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -132,6 +138,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
+    // partitionId -> binlogAvailabeVersion
+    private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
+
+    private BinlogConfig binlogConfig;
+
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -168,6 +179,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+                buildBinlogConfig();
+                break;
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
+                buildBinlogAvailableVersion();
+                break;
             default:
                 break;
         }
@@ -182,6 +199,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildBinlogConfig() {
+        long binlogVersion = Long.parseLong(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION,
+                String.valueOf(INVALID)));
+        boolean binlogEnable = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE,
+                "false"));
+        long binlogTtlSecond = Long.parseLong(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_BINLOG_TTL,
+                String.valueOf(Config.binlog_ttl_second)));
+        long binlogMaxSize = Long.parseLong(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE,
+                String.valueOf(Config.binlog_max_size)));
+        binlogConfig = new BinlogConfig(binlogVersion, binlogEnable, binlogTtlSecond, binlogMaxSize);
+        return this;
+    }
+
+    // just modify binlogConfig, not properties
+    public void setBinlogConfig(BinlogConfig binlogConfig) {
+        this.binlogConfig = binlogConfig;
+    }
+
     public TableProperty buildDynamicProperty() {
         HashMap<String, String> dynamicPartitionProperties = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -190,6 +225,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
             }
         }
         dynamicPartitionProperty = new DynamicPartitionProperty(dynamicPartitionProperties);
+        return this;
+    }
+
+
+    public TableProperty buildBinlogAvailableVersion() {
+        binlogAvailabeVersions = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
+                long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
+                binlogAvailabeVersions.put(partitionId, Long.parseLong(entry.getValue()));
+            }
+        }
         return this;
     }
 
@@ -386,6 +433,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageInfo;
     }
 
+    public BinlogConfig getBinlogConfig() {
+        return binlogConfig;
+    }
+
+    public Map<Long, Long> getBinlogAvailaberVersions() {
+        return binlogAvailabeVersions;
+    }
+
+    public void clearBinlogAvailableVersion() {
+        binlogAvailabeVersions.clear();
+        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext();) {
+            Map.Entry<String, String> entry = it.next();
+            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
+                it.remove();
+            }
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -410,5 +475,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildReplicatedStorage();
         buildForceExternalTableQueryRewrite();
+        buildBinlogConfig();
+        buildBinlogAvailableVersion();
     }
 }

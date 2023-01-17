@@ -21,6 +21,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
@@ -31,7 +32,11 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+
+class StreamEpochManager;
+
+namespace pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
@@ -152,6 +157,9 @@ public:
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
+    // STREAM MV
+    StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -190,6 +198,9 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
+
+    // STREAM MV
+    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 };
 
 class QueryContextManager {
@@ -221,7 +232,7 @@ private:
     void _stop_clean_func() { _stop.store(true); }
     bool _is_stopped() { return _stop; }
     size_t _slot_idx(const TUniqueId& query_id);
-    void _clean_slot_unlocked(size_t i);
+    void _clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del);
 
 private:
     const size_t _num_slots;
@@ -237,4 +248,5 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

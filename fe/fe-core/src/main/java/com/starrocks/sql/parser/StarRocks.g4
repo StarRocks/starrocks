@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 grammar StarRocks;
 import StarRocksLex;
 
@@ -90,13 +89,14 @@ statement
     | createExternalCatalogStatement
     | dropExternalCatalogStatement
     | showCatalogsStatement
+    | showCreateExternalCatalogStatement
 
     // DML Statement
     | insertStatement
     | updateStatement
     | deleteStatement
 
-    //Routine Statement
+    // Routine Statement
     | createRoutineLoadStatement
     | alterRoutineLoadStatement
     | stopRoutineLoadStatement
@@ -105,7 +105,7 @@ statement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
 
-    //StreamLoad Statement
+    // StreamLoad Statement
     | showStreamLoadStatement
 
     // Admin Statement
@@ -565,7 +565,7 @@ syncStatement
     : SYNC
     ;
 
-// ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
+// ------------------------------------------- Cluster Management Statement ---------------------------------------------
 
 alterSystemStatement
     : ALTER SYSTEM alterClause
@@ -583,6 +583,10 @@ showComputeNodesStatement
 
 createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    ;
+
+showCreateExternalCatalogStatement
+    : SHOW CREATE CATALOG catalogName=identifierOrString
     ;
 
 dropExternalCatalogStatement
@@ -1568,7 +1572,7 @@ relation
 
 relationPrimary
     : qualifiedName temporalClause? partitionNames? tabletList? (
-        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+        AS? alias=identifier)? bracketHint?                                             #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
@@ -1680,6 +1684,11 @@ booleanExpression
 
 predicate
     : valueExpression (predicateOperations[$valueExpression.ctx])?
+    | tupleInSubquery
+    ;
+
+tupleInSubquery
+    : '(' expression (',' expression)+ ')' NOT? IN '(' queryRelation ')'
     ;
 
 predicateOperations [ParserRuleContext value]
@@ -1826,8 +1835,8 @@ windowFunction
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
 
 whenClause
@@ -1840,6 +1849,10 @@ over
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
+    ;
+
+ignoreNulls
+    : IGNORE NULLS
     ;
 
 windowFrame
@@ -2041,16 +2054,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameColonType
-    : identifier ':' type comment?
+subfieldDesc
+    : identifier type
     ;
 
-columnNameColonTypeList
-    : columnNameColonType (',' columnNameColonType)*
+subfieldDescs
+    : subfieldDesc (',' subfieldDesc)*
     ;
 
 structType
-    : STRUCT '<' columnNameColonTypeList '>'
+    : STRUCT '<' subfieldDescs '>'
     ;
 
 typeParameter
@@ -2146,16 +2159,16 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
+    | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

@@ -45,6 +45,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 30:MERGING-EXCHANGE
+distribution type: GATHER
 limit: 100
 cardinality: 100
 column statistics:
@@ -75,6 +76,8 @@ OutPut Exchange Id: 30
 |  * count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |
 27:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [2: s_name, VARCHAR, true]
 cardinality: 40000
 
 PLAN FRAGMENT 2(F12)
@@ -162,17 +165,25 @@ OutPut Exchange Id: 27
 |    |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |    |
 |    |    |----19:EXCHANGE
+|    |    |       distribution type: SHUFFLE
+|    |    |       partition exprs: [8: l_orderkey, INT, true]
 |    |    |       cardinality: 12000758
 |    |    |
 |    |    7:EXCHANGE
+|    |       distribution type: SHUFFLE
+|    |       partition exprs: [54: l_orderkey, INT, true]
 |    |       cardinality: 300018951
 |    |
 |    4:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [37: l_orderkey, INT, true]
 |       cardinality: 600037902
 |       probe runtime filters:
 |       - filter_id = 3, probe_expr = (37: l_orderkey)
 |
 2:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [24: o_orderkey, INT, true]
 cardinality: 50000000
 probe runtime filters:
 - filter_id = 4, probe_expr = (24: o_orderkey)
@@ -208,6 +219,7 @@ OutPut Exchange Id: 19
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |
 |----16:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 40000
 |
 9:Project
@@ -263,6 +275,7 @@ OutPut Exchange Id: 16
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----13:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 10:HdfsScanNode

@@ -215,8 +215,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-    CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+    int connector_num_io_threads =
+            config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
@@ -482,7 +483,6 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
-    SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
@@ -492,6 +492,7 @@ void ExecEnv::_destroy() {
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_query_context_mgr);
+    SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

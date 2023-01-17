@@ -48,6 +48,9 @@ public class CallOperator extends ScalarOperator {
     // The flag for distinct function
     private final boolean isDistinct;
 
+    // Ignore nulls.
+    private boolean ignoreNulls = false;
+
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
     }
@@ -65,12 +68,24 @@ public class CallOperator extends ScalarOperator {
         this.isDistinct = isDistinct;
     }
 
+    public void setIgnoreNulls(boolean ignoreNulls) {
+        this.ignoreNulls = ignoreNulls;
+    }
+
+    public boolean getIgnoreNulls() {
+        return ignoreNulls;
+    }
+
     public String getFnName() {
         return fnName;
     }
 
     public Function getFunction() {
         return fn;
+    }
+
+    public List<ScalarOperator> getArguments() {
+        return arguments;
     }
 
     public boolean isDistinct() {

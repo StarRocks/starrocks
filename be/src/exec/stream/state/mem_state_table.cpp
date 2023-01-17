@@ -172,11 +172,11 @@ Status MemStateTable::flush(RuntimeState* state, StreamChunk* chunk) {
     if (StreamChunkConverter::has_ops_column(chunk)) {
         auto ops = StreamChunkConverter::ops(chunk);
         for (auto i = 0; i < chunk_size; i++) {
-            if (ops[i] == StreamRowOp::UPDATE_BEFORE) {
+            if (ops[i] == StreamRowOp::OP_UPDATE_BEFORE) {
                 continue;
             }
             auto k = _make_datum_key_row(chunk, 0, _k_num, i);
-            if (ops[i] == StreamRowOp::DELETE) {
+            if (ops[i] == StreamRowOp::OP_DELETE) {
                 _kv_mapping.erase(k);
                 continue;
             }

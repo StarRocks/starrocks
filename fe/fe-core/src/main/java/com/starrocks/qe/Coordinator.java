@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -52,7 +53,6 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -71,6 +71,7 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -204,7 +205,7 @@ public class Coordinator {
         this.jobId = jobId;
         this.queryId = queryId;
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setPipelineDop(0);
@@ -483,11 +484,11 @@ public class Coordinator {
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
                     coordinatorPreprocessor.getAddressToBackendID().get(execBeAddr),
-                    coordinatorPreprocessor.toBrpcHost(execBeAddr),
+                    SystemInfoService.toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, coordinatorPreprocessor.toBrpcHost(execBeAddr));
+            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcHost(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -619,8 +620,8 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
-                                    accTabletSinkDop, tabletSinkTotalDop);
+                            params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
+                                    accTabletSinkDop, tabletSinkTotalDop, false);
                     if (enablePipelineTableSinkDop) {
                         for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
@@ -1069,7 +1070,7 @@ public class Coordinator {
                 for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
-                    probeParam.setFragment_instance_address(coordinatorPreprocessor.toBrpcHost(instance.host));
+                    probeParam.setFragment_instance_address(SystemInfoService.toBrpcHost(instance.host));
                     probeParamList.add(probeParam);
                 }
                 if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
@@ -1788,7 +1789,7 @@ public class Coordinator {
                     return false;
                 }
 
-                TNetworkAddress brpcAddress = coordinatorPreprocessor.toBrpcHost(address);
+                TNetworkAddress brpcAddress = SystemInfoService.toBrpcHost(address);
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,

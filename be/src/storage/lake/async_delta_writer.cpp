@@ -38,9 +38,9 @@ public:
     // Undocemented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
-    AsyncDeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_id, txn_id, partition_id, slots, mem_tracker)),
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker)),
               _queue_id{kInvalidQueueId},
               _open_mtx(),
               _status(),
@@ -107,13 +107,13 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         if (st.ok() && iter->chunk != nullptr && iter->indexes_size > 0) {
             st = delta_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
-            LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id=" << delta_writer->tablet_id()
-                                    << " txn_id=" << delta_writer->txn_id() << ": " << st;
+            LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
+                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
-            LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id=" << delta_writer->tablet_id()
-                                    << " txn_id=" << delta_writer->txn_id() << ": " << st;
+            LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         iter->cb(st);
     }
@@ -226,10 +226,11 @@ int64_t AsyncDeltaWriter::txn_id() const {
     return _impl->txn_id();
 }
 
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
                                                            const std::vector<SlotDescriptor*>* slots,
                                                            MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker);
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker);
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

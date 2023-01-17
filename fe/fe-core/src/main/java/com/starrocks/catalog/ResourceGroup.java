@@ -27,6 +27,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -136,7 +137,10 @@ public class ResourceGroup implements Writable {
     }
 
     public List<List<String>> show() {
-        return classifiers.stream().map(c -> this.showClassifier(c)).collect(Collectors.toList());
+        if (classifiers.isEmpty()) {
+            return Collections.singletonList(showClassifier(new ResourceGroupClassifier()));
+        }
+        return classifiers.stream().map(this::showClassifier).collect(Collectors.toList());
     }
 
     public String getName() {

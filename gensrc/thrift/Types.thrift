@@ -135,9 +135,6 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
-
-    // Marking which subfield will be used, this value will be set in FE. Used for MapType and StructType.
-    4: optional list<bool> selected_fields;
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -348,6 +345,9 @@ struct TFunction {
   30: optional i64 fid
   31: optional TTableFunction table_fn
   32: optional bool could_apply_dict_optimize
+
+  // Ignore nulls
+  33: optional bool ignore_nulls
 }
 
 enum TLoadJobState {

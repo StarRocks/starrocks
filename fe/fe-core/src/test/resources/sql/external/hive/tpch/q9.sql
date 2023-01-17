@@ -38,6 +38,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 28:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 98
 column statistics:
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -69,6 +70,8 @@ OutPut Exchange Id: 28
 |  * sum-->[-49189.1, 104948.5, 0.0, 16.0, 98.4375] ESTIMATE
 |
 25:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [48: n_name, VARCHAR, true], [51: year, SMALLINT, true]
 cardinality: 98
 
 PLAN FRAGMENT 2(F12)
@@ -122,6 +125,8 @@ OutPut Exchange Id: 25
 |  * expr-->[-49189.1, 104948.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 |----21:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [34: ps_suppkey, INT, true]
 |       cardinality: 80000000
 |
 19:Project
@@ -161,11 +166,15 @@ OutPut Exchange Id: 25
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----17:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [10: s_suppkey, INT, true]
 |       cardinality: 1000000
 |       probe runtime filters:
 |       - filter_id = 3, probe_expr = (10: s_suppkey)
 |
 11:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [19: l_suppkey, INT, true]
 cardinality: 150009476
 probe runtime filters:
 - filter_id = 3, probe_expr = (19: l_suppkey)
@@ -218,6 +227,7 @@ OutPut Exchange Id: 17
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----14:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 25
 |
 12:HdfsScanNode
@@ -288,9 +298,13 @@ OutPut Exchange Id: 11
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |
 |----8:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [38: o_orderkey, INT, true]
 |       cardinality: 150000000
 |
 6:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [17: l_orderkey, INT, true]
 cardinality: 150009476
 
 PLAN FRAGMENT 7(F04)
@@ -350,6 +364,7 @@ OutPut Exchange Id: 06
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5000000
 |
 0:HdfsScanNode

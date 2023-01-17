@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
@@ -88,7 +89,7 @@ public class LogicalApplyOperator extends LogicalOperator {
     }
 
     public boolean isQuantified() {
-        return subqueryOperator instanceof InPredicateOperator;
+        return subqueryOperator instanceof InPredicateOperator || subqueryOperator instanceof MultiInPredicateOperator;
     }
 
     public boolean isExistential() {

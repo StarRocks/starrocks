@@ -396,12 +396,6 @@ under the License.
             <artifactId>validation-api</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/log4j/log4j -->
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -833,9 +827,12 @@ under the License.
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
-                                <mkdir dir="${starrocks.home}/gensrc/build/python/vectorized"/>
-                                <exec executable="${ant.python}" dir="${starrocks.home}/gensrc/build/python/vectorized">
-                                    <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py"/>
+                                <exec executable="${ant.python}">
+                                    <arg value="${starrocks.home}/gensrc/script/gen_functions.py"/>
+                                    <arg value="--cpp"/>
+                                    <arg value="${starrocks.home}/gensrc/build/gen_cpp"/>
+                                    <arg value="--java"/>
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
                             </tasks>
                         </configuration>

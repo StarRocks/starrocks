@@ -62,10 +62,6 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
     DCHECK(desc.is_complex_type());
     if (desc.is_struct_type()) {
         for (size_t i = 0; i < desc.children.size(); i++) {
-            if (!desc.selected_fields[i]) {
-                continue;
-            }
-
             const TypeDescriptor& child_type = desc.children[i];
             if (child_type.is_complex_type()) {
                 RETURN_IF_ERROR(set_include_column_id_by_type(mapping->get_column_id_or_child_mapping(i).orc_mapping,
@@ -83,11 +79,11 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             column_id_list->push_back(mapping->get_column_id_or_child_mapping(0).orc_column_id);
         }
     } else if (desc.is_map_type()) {
-        if (desc.selected_fields[0]) {
+        if (!desc.children[0].is_unknown_type()) {
             // Map's key must be primitive type, we just include it.
             column_id_list->push_back(mapping->get_column_id_or_child_mapping(0).orc_column_id);
         }
-        if (desc.selected_fields[1]) {
+        if (!desc.children[1].is_unknown_type()) {
             const TypeDescriptor& child_value_type = desc.children[1];
             // Only value will be complex type
             if (child_value_type.is_complex_type()) {
@@ -250,7 +246,11 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
                                              const orc::Type& orc_type, const bool case_sensitive) {
     DCHECK(origin_type.is_complex_type());
     if (origin_type.type == LogicalType::TYPE_STRUCT) {
-        DCHECK(orc_type.getKind() == orc::TypeKind::STRUCT);
+        if (orc_type.getKind() != orc::TypeKind::STRUCT) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is STRUCT, actual type is $0, ",
+                    orc_type.toString()));
+        }
 
         std::unordered_map<std::string, size_t> tmp_orc_fieldname_2_pos;
         for (size_t i = 0; i < orc_type.getSubtypeCount(); i++) {
@@ -283,7 +283,11 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             mapping->add_mapping(index, need_add_column_id, need_add_child_mapping);
         }
     } else if (origin_type.type == LogicalType::TYPE_ARRAY) {
-        DCHECK(orc_type.getKind() == orc::TypeKind::LIST);
+        if (orc_type.getKind() != orc::TypeKind::LIST) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is LIST, actual type is $0, ",
+                    orc_type.toString()));
+        }
         const orc::Type& orc_child_type = *orc_type.getSubtype(0);
         const TypeDescriptor& origin_child_type = origin_type.children[0];
         // Check Array's element can be converted
@@ -300,12 +304,22 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
         mapping->add_mapping(0, need_add_column_id, need_add_child_mapping);
     } else if (origin_type.type == LogicalType::TYPE_MAP) {
-        DCHECK(orc_type.getKind() == orc::TypeKind::MAP);
+        if (orc_type.getKind() != orc::TypeKind::MAP) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc nest type check error: expect type in this layer is MAP, actual type is $0, ",
+                    orc_type.toString()));
+        }
 
         // Check Map's key can be converted
-        RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
+        if (!origin_type.children[0].is_unknown_type()) {
+            RETURN_IF_ERROR(
+                    _check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
+        }
         // Check Map's value can be converted
-        RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(1), origin_type.children[1]));
+        if (!origin_type.children[1].is_unknown_type()) {
+            RETURN_IF_ERROR(
+                    _check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(1), origin_type.children[1]));
+        }
 
         // Map's key must be primitivte type
         mapping->add_mapping(0, orc_type.getSubtype(0)->getColumnId(), nullptr);

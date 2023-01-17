@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -49,6 +51,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -743,6 +746,7 @@ public class PlanTestBase {
                         "COMMENT \"OLAP\"\n" +
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
                         "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"false\",\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");")
                 .withTable("CREATE TABLE test.`bigtable` (\n" +
@@ -1046,6 +1050,7 @@ public class PlanTestBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"false\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
@@ -1178,6 +1183,7 @@ public class PlanTestBase {
         StringBuilder fragmentStatistics = new StringBuilder();
         StringBuilder dumpInfoString = new StringBuilder();
         StringBuilder planEnumerate = new StringBuilder();
+        StringBuilder exceptString = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -1267,9 +1273,21 @@ public class PlanTestBase {
                         mode = "dump";
                         isDump = true;
                         continue;
+                    case "[except]":
+                        exceptString = new StringBuilder();
+                        mode = "except";
+                        continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        Pair<String, ExecPlan> pair = null;
+                        try {
+                            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        } catch (Exception ex) {
+                            if (!exceptString.toString().isEmpty()) {
+                                Assert.assertEquals(ex.getMessage(), exceptString.toString());
+                                continue;
+                            }
+                            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+                        }
 
                         try {
                             String fra = null;
@@ -1341,6 +1359,9 @@ public class PlanTestBase {
                         break;
                     case "enum":
                         planEnumerate.append(tempStr).append("\n");
+                        break;
+                    case "except":
+                        exceptString.append(tempStr);
                         break;
                 }
             }
@@ -1472,5 +1493,14 @@ public class PlanTestBase {
 
     public OlapTable getOlapTable(String t) {
         return (OlapTable) getTable(t);
+    }
+
+    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+        Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
+        List<Pair<String, String>> zips = Lists.newArrayList();
+        for (int i = 0; i < sqls.size(); i++) {
+            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+        }
+        return zips;
     }
 }

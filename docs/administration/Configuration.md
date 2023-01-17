@@ -76,7 +76,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows            | -    | 200000       | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size                   | -    | 64           | The default bucket number for a histogram.                   |
-| histogram_mcv_size                       | -    | 100          | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size                       | -    | 100          | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio                   | -    | 0.1          | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count           | -    | 10000000     | The maximum number of rows to collect for a histogram.       |
 | statistics_manager_sleep_time_sec        | s    | 60           | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:<ul><li>Create tables for storing statistics. </li><li>Delete statistics that have been deleted.</li><li>Delete expired statistics.</li></ul>|
@@ -442,6 +442,12 @@ BE static parameters are as follows.
 | enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
 | mem_limit | 90% | N/A | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB"). |
 | flush_thread_num_per_store | 2 | N/A | Number of threads that are used for flushing MemTable in each store. |
+| block_cache_enable  | false | N/A   | Whether to enable block cache.<ul><li>`true`: Block cache is enabled.</li><li>`false`: Block cache is disabled. </li></ul>To enable block cache, set the value of this parameter to `true`. |
+| block_cache_disk_path | N/A | N/A  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
+| block_cache_meta_path | N/A  | N/A   | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
+| block_cache_block_size | 1048576  | Bytes | The size of each block. Unit: bytes. The default value is `1048576`, which is 1 MB. |
+| block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
+| block_cache_disk_size  | 0 | Bytes | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
@@ -563,7 +569,7 @@ BE static parameters are as follows.
 | path_gc_check | 1 | N/A | |
 | path_gc_check_interval_second | 86400 | N/A | |
 | pipeline_exec_thread_pool_thread_num | 0 | N/A | |
-| pipeline_hdfs_scan_thread_pool_thread_num | 48 | N/A | |
+| pipeline_connector_scan_thread_num_per_cpu | 8 | N/A | The thread number per cpu of connector scanner  |
 | pipeline_max_num_drivers_per_exec_thread | 10240 | N/A | |
 | pipeline_prepare_thread_pool_queue_size | 102400 | N/A | |
 | pipeline_prepare_thread_pool_thread_num | 0 | N/A | |

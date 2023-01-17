@@ -564,18 +564,19 @@ public class InsertPlanTest extends PlanTestBase {
                 "LEFT JOIN  (SELECT  distinct_id,tag_value  FROM user_tag_bq004 WHERE base_time ='2021-06-23' )  a3   " +
                 "ON a.distinct_id =  a3.distinct_id;";
         String plan = getInsertExecPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 1: distinct_id = 49: distinct_id"));
+                "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
         Assert.assertTrue(plan.contains("  7:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 1: distinct_id = 45: distinct_id"));
+                "  |  equal join conjunct: 1: distinct_id = 49: distinct_id"));
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
+                "  |  equal join conjunct: 1: distinct_id = 45: distinct_id"));
         FeConstants.runningUnitTest = false;
     }
 

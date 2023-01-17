@@ -62,7 +62,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         }
         DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
-        RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
@@ -184,8 +184,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     context->add_pipeline(ops_with_sink);
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        ops_with_source.emplace_back(
-                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+        may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
     if (limit() != -1) {

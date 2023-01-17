@@ -169,6 +169,8 @@ public:
     void set_builder_finished();
     void set_prober_finished();
     Columns string_key_columns() { return _string_key_columns; }
+    Status reset_probe(RuntimeState* state);
+    const std::vector<HashJoinerPtr>& get_read_only_join_probers() { return _read_only_join_probers; }
 
 private:
     static bool _has_null(const ColumnPtr& column);

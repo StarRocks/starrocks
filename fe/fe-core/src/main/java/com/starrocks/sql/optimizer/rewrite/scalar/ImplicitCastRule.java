@@ -21,6 +21,8 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -29,8 +31,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
@@ -122,6 +126,18 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type type1 = leftChild.getType();
         Type type2 = rightChild.getType();
 
+        // For a query like: select 'a' <=> NULL, we should cast Constant Null to the type of the other side
+        if (predicate.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ_FOR_NULL &&
+                (leftChild.isConstantNull() || rightChild.isConstantNull())) {
+            if (leftChild.isConstantNull()) {
+                predicate.setChild(0, ConstantOperator.createNull(type2));
+            }
+            if (rightChild.isConstantNull()) {
+                predicate.setChild(1, ConstantOperator.createNull(type1));
+            }
+            return predicate;
+        }
+
         if (type1.matchesType(type2)) {
             return predicate;
         }
@@ -178,6 +194,12 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         return castForBetweenAndIn(predicate);
+    }
+
+    @Override
+    public ScalarOperator visitMultiInPredicate(MultiInPredicateOperator predicate, ScalarOperatorRewriteContext c) {
+        throw new StarRocksPlannerException("Implicit casting of multi-column IN predicate is not supported.",
+                ErrorType.INTERNAL_ERROR);
     }
 
     @Override

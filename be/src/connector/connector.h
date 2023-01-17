@@ -95,6 +95,8 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
+
+    virtual bool stream_data_source() const { return false; }
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
@@ -105,6 +107,7 @@ enum ConnectorType {
     MYSQL = 3,
     FILE = 4,
     LAKE = 5,
+    BINLOG = 6,
 };
 
 class Connector {
@@ -116,6 +119,7 @@ public:
     static const std::string MYSQL;
     static const std::string FILE;
     static const std::string LAKE;
+    static const std::string BINLOG;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

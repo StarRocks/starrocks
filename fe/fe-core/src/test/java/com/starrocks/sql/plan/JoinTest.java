@@ -28,6 +28,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
@@ -532,7 +533,7 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  8:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 10> : 0\n" +
                 "  |  \n");
     }
@@ -572,7 +573,7 @@ public class JoinTest extends PlanTestBase {
             @Override
             public void addJoinTransformationRules() {
                 this.getTransformRules().clear();
-                this.getTransformRules().add(JoinAssociativityRule.getInstance());
+                this.getTransformRules().add(JoinAssociativityRule.INNER_JOIN_ASSOCIATIVITY_RULE);
             }
         };
 
@@ -593,7 +594,7 @@ public class JoinTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  5:Project\n" +
-                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 12> : 1\n" +
                 "  |  \n" +
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -1023,7 +1024,7 @@ public class JoinTest extends PlanTestBase {
         String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v10 = 2";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
-        assertContains(plan, "11:NESTLOOP JOIN\n" +
+        assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 + 10: v10 = 2");
@@ -1168,7 +1169,8 @@ public class JoinTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
@@ -2121,8 +2123,8 @@ public class JoinTest extends PlanTestBase {
                 "where 66 <= unix_timestamp() \n" +
                 "limit 155;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "6:Project\n" +
-                "  |  <slot 1> : 1: v1");
+        assertContains(plan, "7:Project\n" +
+                "  |  <slot 10> : 1");
     }
 
     @Test
@@ -2667,5 +2669,28 @@ public class JoinTest extends PlanTestBase {
                 "  |  \n" +
                 "  12:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)");
+    }
+
+    @Test
+    public void testSmallestColInJoin() throws Exception {
+        String sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2 where t.v1 = t1.v4 and t2.v7 = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode");
+        sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "|----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 21> : 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
     }
 }

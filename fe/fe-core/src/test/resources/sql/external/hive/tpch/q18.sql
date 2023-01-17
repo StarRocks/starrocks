@@ -38,6 +38,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 20:MERGING-EXCHANGE
+distribution type: GATHER
 limit: 100
 cardinality: 100
 column statistics:
@@ -159,14 +160,20 @@ OutPut Exchange Id: 20
 |    |    |  * sum-->[315.0, 4.5E14, 0.0, 8.0, 50.0] ESTIMATE
 |    |    |
 |    |    11:EXCHANGE
+|    |       distribution type: SHUFFLE
+|    |       partition exprs: [34: l_orderkey, INT, true]
 |    |       cardinality: 150000000
 |    |
 |    8:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [9: o_orderkey, INT, true]
 |       cardinality: 150000000
 |       probe runtime filters:
 |       - filter_id = 1, probe_expr = (9: o_orderkey)
 |
 1:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [18: l_orderkey, INT, true]
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (18: l_orderkey)
@@ -234,9 +241,13 @@ OutPut Exchange Id: 08
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |
 |----5:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [1: c_custkey, INT, true]
 |       cardinality: 15000000
 |
 3:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [10: o_custkey, INT, true]
 cardinality: 150000000
 
 PLAN FRAGMENT 4(F04)

@@ -39,6 +39,7 @@ using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
+    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
@@ -189,6 +190,33 @@ public:
 
     void set_prepare_time(int64_t cost_ns);
 
+    // INCREMENTAL MV Methods
+    //
+    // The operator will run periodically which is triggered by FE from PREPARED to EPOCH_FINISHED in one Epoch,
+    // and then reentered into PREPARED state by `reset_epoch` at the next new Epoch.
+    //
+    //                          `reset_epoch`
+    //    ┌───────────────────────────────────────────────────────┐
+    //    │                                                       │
+    //    │                                                       │
+    //    │                                                       │
+    //    ▼                                                       │
+    //  PREPARED ────► PROCESSING ───► EPOCH_FINISHING ──► EPOCH_FINISHED ───► FINISHING ──► FINISHED ────►[CANCELED] ────► CLOSED
+
+    // Mark whether the operator is finishing in one Epoch, `epoch_finishing` is the
+    // state that one operator starts finishing like `is_finishing`.
+    virtual bool is_epoch_finishing() const { return false; }
+    // Mark whether the operator is finished in one Epoch, `epoch_finished` is the
+    // state that one operator finished and not be scheduled again like `is_finished`.
+    virtual bool is_epoch_finished() const { return false; }
+    // Called when the operator's input has been finished, and the operator(self) starts
+    // epoch finishing.
+    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
+    // Called when the operator(self) has been finished.
+    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
+    // Called when the new Epoch starts at first to reset operator's internal state.
+    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -311,6 +339,9 @@ public:
     // Whether it has any runtime in-filter or bloom-filter.
     // MUST be invoked after init_runtime_filter.
     bool has_runtime_filters() const;
+
+    // Whether it has any runtime filter built by TopN node.
+    bool has_topn_filter() const;
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);

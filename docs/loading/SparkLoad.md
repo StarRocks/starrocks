@@ -301,7 +301,7 @@ WITH RESOURCE resource_name
 ~~~sql
 LOAD LABEL db1.label1
 (
-    DATA INFILE("hdfs://abc.com:8888/user/palo/test/ml/file1")
+    DATA INFILE("hdfs://abc.com:8888/user/starrocks/test/ml/file1")
     INTO TABLE tbl1
     COLUMNS TERMINATED BY ","
     (tmp_c1,tmp_c2)
@@ -310,7 +310,7 @@ LOAD LABEL db1.label1
         id=tmp_c2,
         name=tmp_c1
     ),
-    DATA INFILE("hdfs://abc.com:8888/user/palo/test/ml/file2")
+    DATA INFILE("hdfs://abc.com:8888/user/starrocks/test/ml/file2")
     INTO TABLE tbl2
     COLUMNS TERMINATED BY ","
     (col1, col2)

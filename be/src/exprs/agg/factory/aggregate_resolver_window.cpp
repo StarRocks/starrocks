@@ -16,8 +16,8 @@
 
 #include "exprs/agg/factory/aggregate_factory.hpp"  // for AggregateFactory
 #include "exprs/agg/factory/aggregate_resolver.hpp" // for AggregateFuncRes...
-#include "runtime/primitive_type.h"                 // for TYPE_BIGINT, Pri...
-#include "runtime/primitive_type_infra.h"           // for type_dispatch_all
+#include "types/logical_type.h"                     // for TYPE_BIGINT, Pri...
+#include "types/logical_type_infra.h"               // for type_dispatch_all
 
 namespace starrocks {
 
@@ -25,10 +25,16 @@ struct WindowDispatcher {
     template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || is_object_type(pt)) {
-            resolver->add_aggregate_mapping_notnull<pt, pt>("first_value", true,
-                                                            AggregateFactory::MakeFirstValueWindowFunction<pt>());
+            resolver->add_aggregate_mapping_notnull<pt, pt>(
+                    "first_value", true, AggregateFactory::MakeFirstValueWindowFunction<pt, false>());
+            // use first_value_in for first_value with ingnore nulls.
+            resolver->add_aggregate_mapping_notnull<pt, pt>("first_value_in", true,
+                                                            AggregateFactory::MakeFirstValueWindowFunction<pt, true>());
             resolver->add_aggregate_mapping_notnull<pt, pt>("last_value", true,
-                                                            AggregateFactory::MakeLastValueWindowFunction<pt>());
+                                                            AggregateFactory::MakeLastValueWindowFunction<pt, false>());
+            // use last_value_in for last_value with ingnore nulls.
+            resolver->add_aggregate_mapping_notnull<pt, pt>("last_value_in", true,
+                                                            AggregateFactory::MakeLastValueWindowFunction<pt, true>());
             resolver->add_aggregate_mapping_notnull<pt, pt>("lead", true,
                                                             AggregateFactory::MakeLeadLagWindowFunction<pt>());
             resolver->add_aggregate_mapping_notnull<pt, pt>("lag", true,

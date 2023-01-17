@@ -167,6 +167,7 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     if (result.value()->is_constant() && ptr != nullptr) {
         result.value()->resize(ptr->num_rows());
     }
+    RETURN_IF_ERROR(result.value()->unfold_const_children(_type));
     return result;
 }
 

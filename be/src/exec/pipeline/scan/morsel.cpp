@@ -448,17 +448,25 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
         return true;
     }
 
-    Slice lower_key = lower->short_key;
+    Slice lower_key;
     // Empty short key of start ShortKeyOption means it is the first splitted key range,
     // so use start original short key to compare.
-    if (lower_key.empty()) {
+    if (lower->tuple_key != nullptr) {
+        lower_key = lower->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+    } else if (!lower->short_key.empty()) {
+        lower_key = lower->short_key;
+    } else {
         lower_key = *_block_ranges_per_seek_range[_range_idx].first;
     }
 
-    Slice upper_key = upper->short_key;
+    Slice upper_key;
     // Empty short key of end ShortKeyOption means it is the last splitted key range,
     // so use end original short key to compare.
-    if (upper_key.empty()) {
+    if (upper->tuple_key != nullptr) {
+        upper_key = upper->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+    } else if (!upper->short_key.empty()) {
+        upper_key = upper->short_key;
+    } else {
         auto end_iter = _block_ranges_per_seek_range[_range_idx].second;
         --end_iter;
         upper_key = *end_iter;
@@ -581,7 +589,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
     _short_key_schema = std::make_shared<VectorizedSchema>(
-            ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
+            ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
     _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);

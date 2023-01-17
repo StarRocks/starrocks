@@ -161,9 +161,8 @@ public class ProjectNode extends PlanNode {
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
@@ -174,7 +173,7 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 
@@ -210,5 +209,14 @@ public class ProjectNode extends PlanNode {
     @Override
     public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
         return slotMap.keySet().stream().sorted(Comparator.comparing(SlotId::asInt)).collect(Collectors.toList());
+    }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        slotMap.forEach((k, v) -> {
+            if (v instanceof SlotRef) {
+                normalizer.getEquivRelation().union(k, ((SlotRef) v).getSlotId());
+            }
+        });
     }
 }

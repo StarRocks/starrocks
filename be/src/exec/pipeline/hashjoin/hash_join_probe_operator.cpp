@@ -67,7 +67,6 @@ StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
     _join_prober->enter_post_probe_phase();
     return Status::OK();
 }
@@ -82,6 +81,11 @@ bool HashJoinProbeOperator::is_ready() const {
     return _join_prober->is_build_done();
 }
 
+Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<ChunkPtr>& refill_chunks) {
+    _join_prober->reset_probe(state);
+    return Status::OK();
+}
+
 HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id,
                                                            HashJoinerFactoryPtr hash_joiner_factory)
         : OperatorFactory(id, "hash_join_probe", plan_node_id), _hash_joiner_factory(std::move(hash_joiner_factory)) {}
@@ -94,9 +98,10 @@ void HashJoinProbeOperatorFactory::close(RuntimeState* state) {
 }
 
 OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<HashJoinProbeOperator>(this, _id, _name, _plan_node_id, driver_sequence,
-                                                   _hash_joiner_factory->create_prober(driver_sequence),
-                                                   _hash_joiner_factory->create_builder(driver_sequence));
+    return std::make_shared<HashJoinProbeOperator>(
+            this, _id, _name, _plan_node_id, driver_sequence,
+            _hash_joiner_factory->create_prober(degree_of_parallelism, driver_sequence),
+            _hash_joiner_factory->create_builder(degree_of_parallelism, driver_sequence));
 }
 
 } // namespace starrocks::pipeline

@@ -83,7 +83,9 @@ public:
 
     // when error has happpens, so we cancel this token
     // and remove all tasks in the queue.
-    void cancel();
+    void cancel(const Status& st);
+
+    void shutdown();
 
     // wait all tasks in token to be completed.
     Status wait();

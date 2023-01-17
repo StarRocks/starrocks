@@ -59,6 +59,16 @@ public:
         return true;
     }
 
+    void epoch_finish(RuntimeState* state) {
+        if (incr_epoch_finished_sinker() == _sink_number) {
+            for (auto* source : _source->get_sources()) {
+                source->set_epoch_finishing(state);
+            }
+            // reset the number to be reused in the next epoch.
+            _epoch_finished_sinker = 0;
+        }
+    }
+
     const std::string& name() const { return _name; }
 
     bool need_input() const;
@@ -68,11 +78,16 @@ public:
 
     int32_t source_dop() const { return _source->get_sources().size(); }
 
+    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
+
 protected:
     const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
     std::atomic<int32_t> _sink_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
+
+    // Stream MV
+    std::atomic<int32_t> _epoch_finished_sinker = 0;
 };
 
 // Exchange the local data for shuffle
@@ -99,6 +114,15 @@ class PartitionExchanger final : public LocalExchanger {
             return _partition_row_indexes_start_points[partition_id + 1];
         }
 
+        size_t partition_memory_usage(size_t partition_id) {
+            if (partition_id >= _partition_memory_usage.size() || partition_id < 0) {
+                throw std::runtime_error(fmt::format("invalid index {} to get partition memory usage, whose size = {}.",
+                                                     partition_id, _partition_memory_usage.size()));
+            } else {
+                return _partition_memory_usage[partition_id];
+            }
+        }
+
     private:
         LocalExchangeSourceOperatorFactory* _source;
         const TPartitionType::type _part_type;
@@ -113,6 +137,7 @@ class PartitionExchanger final : public LocalExchanger {
         // It will easy to get number of rows belong to one channel by doing
         // _partition_row_indexes_start_points[i + 1] - _partition_row_indexes_start_points[i]
         std::vector<size_t> _partition_row_indexes_start_points;
+        std::vector<size_t> _partition_memory_usage;
         std::unique_ptr<Shuffler> _shuffler;
     };
 

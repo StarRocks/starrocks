@@ -236,8 +236,6 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
-    // When the storage types is different with TabletSchema
-    bool _needs_block_adapter = false;
 };
 
 } // namespace starrocks

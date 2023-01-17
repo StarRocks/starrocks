@@ -16,6 +16,7 @@
 
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -59,6 +60,14 @@ size_t FragmentContext::total_dop() const {
     size_t total = 0;
     for (const auto& pipeline : _pipelines) {
         total += pipeline->degree_of_parallelism();
+    }
+    return total;
+}
+
+size_t FragmentContext::num_drivers() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->drivers().size();
     }
     return total;
 }
@@ -247,6 +256,24 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     if (_runtime_state) {
         _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
+}
+
+Status FragmentContext::reset_epoch() {
+    _num_finished_epoch_pipelines = 0;
+    for (const auto& pipeline : _pipelines) {
+        RETURN_IF_ERROR(_runtime_state->reset_epoch());
+        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
+    }
+    return Status::OK();
+}
+
+void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
+    bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
+    if (!all_pipelines_finished) {
+        return;
+    }
+
+    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
 
 } // namespace starrocks::pipeline

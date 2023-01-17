@@ -51,10 +51,12 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaSca
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
@@ -188,7 +190,8 @@ public class Optimizer {
         }
     }
 
-    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree, ColumnRefFactory columnRefFactory) {
+    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree,
+                         ColumnRefFactory columnRefFactory) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -327,7 +330,7 @@ public class Optimizer {
     private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
         OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
-        validator.visit(tree, null);
+        validator.validate(result);
         return result;
     }
 
@@ -377,6 +380,11 @@ public class Optimizer {
             }
         }
 
+        if (sessionVariable.isEnableOuterJoinReorder() &&
+                Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
+            context.getRuleSet().addOuterJoinTransformationRules();
+        }
+
         if (!sessionVariable.isMVPlanner()) {
             //add join implementRule
             String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
@@ -423,7 +431,8 @@ public class Optimizer {
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
-
+        result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
     }

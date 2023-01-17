@@ -325,11 +325,6 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
         physicalPropertyInfo.tableId = node.getTable().getId();
         physicalPropertyInfo.partitionIds = node.getSelectedPartitionId();
-
-        if (node.canDoReplicatedJoin()) {
-            physicalPropertyInfo.isReplicate = true;
-        }
-
         return createPropertySetByDistribution(new HashDistributionSpec(
                 new HashDistributionDesc(olapDistributionSpec.getShuffleColumns(),
                         HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));

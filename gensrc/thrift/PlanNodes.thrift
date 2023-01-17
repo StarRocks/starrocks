@@ -708,6 +708,7 @@ struct TSortNode {
   23: optional list<Exprs.TExpr> partition_exprs
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
+  26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
 }
 
 enum TAnalyticWindowType {
@@ -972,6 +973,12 @@ struct TConnectorScanNode {
   // 2: optional THdfsScanNode hdfs_scan_node
 }
 
+// binlog meta column names
+const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
+const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
+const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
+const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
+
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
 }
@@ -1013,8 +1020,9 @@ struct TStreamAggregationNode {
   2: optional list<Exprs.TExpr> aggregate_functions
 
   // IMT info
-  // 10: optional Descriptors.TIMTDescriptor detail_imt
-  // 11: optional Descriptors.TIMTDescriptor agg_result_imt
+  10: optional Descriptors.TIMTDescriptor agg_result_imt
+  11: optional Descriptors.TIMTDescriptor agg_intermediate_imt
+  12: optional Descriptors.TIMTDescriptor agg_detail_imt
   
   // For profile attributes' printing: `Grouping Keys` `Aggregate Functions`
   22: optional string sql_grouping_keys

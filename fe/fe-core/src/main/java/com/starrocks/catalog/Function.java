@@ -141,20 +141,6 @@ public class Function implements Writable {
         this(0, name, args, retType, varArgs);
     }
 
-    public Function(long functionId, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs,
-                    boolean isVectorized) {
-        this.functionId = functionId;
-        this.name = name;
-        this.hasVarArgs = hasVarArgs;
-        if (argTypes == null) {
-            this.argTypes = new Type[0];
-        } else {
-            this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
-        }
-        this.retType = retType;
-        this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
-    }
-
     public Function(long id, FunctionName name, Type[] argTypes, Type retType, boolean hasVarArgs) {
         this.id = id;
         this.name = name;
@@ -169,12 +155,15 @@ public class Function implements Writable {
     }
 
     public Function(long id, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
-        this(id, name, (Type[]) null, retType, hasVarArgs);
-        if (argTypes.size() > 0) {
-            this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
-        } else {
+        this.functionId = id;
+        this.name = name;
+        this.hasVarArgs = hasVarArgs;
+        if (argTypes == null) {
             this.argTypes = new Type[0];
+        } else {
+            this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
         }
+        this.retType = retType;
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
 
@@ -241,10 +230,6 @@ public class Function implements Writable {
         }
         Preconditions.checkState(argTypes.length > 0);
         return argTypes[argTypes.length - 1];
-    }
-
-    public boolean isVectorized() {
-        return true;
     }
 
     public boolean isPolymorphic() {

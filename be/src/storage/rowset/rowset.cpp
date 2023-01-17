@@ -399,7 +399,7 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
+            auto f = ChunkHelper::convert_field(cid, col);
             segment_schema.append(std::make_shared<VectorizedField>(std::move(f)));
         }
     }
@@ -432,18 +432,17 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
         }
     }
 
-    auto this_rowset = shared_from_this();
-    if (tmp_seg_iters.empty()) {
-        // nothing to do
-    } else if (rowset_meta()->is_segments_overlapping()) {
-        for (auto& iter : tmp_seg_iters) {
-            auto wrapper = std::make_shared<SegmentIteratorWrapper>(this_rowset, std::move(iter));
+    if (!tmp_seg_iters.empty()) {
+        if (rowset_meta()->is_segments_overlapping()) {
+            for (auto& iter : tmp_seg_iters) {
+                auto wrapper = std::make_shared<SegmentIteratorWrapper>(shared_from_this(), std::move(iter));
+                segment_iterators->emplace_back(std::move(wrapper));
+            }
+        } else {
+            auto iter = new_union_iterator(std::move(tmp_seg_iters));
+            auto wrapper = std::make_shared<SegmentIteratorWrapper>(shared_from_this(), std::move(iter));
             segment_iterators->emplace_back(std::move(wrapper));
         }
-    } else {
-        auto iter = new_union_iterator(std::move(tmp_seg_iters));
-        auto wrapper = std::make_shared<SegmentIteratorWrapper>(this_rowset, std::move(iter));
-        segment_iterators->emplace_back(std::move(wrapper));
     }
     return Status::OK();
 }

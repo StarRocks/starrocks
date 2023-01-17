@@ -70,7 +70,7 @@ void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) c
 }
 
 template <typename T>
-std::string DecimalV3Column<T>::debug_item(uint32_t idx) const {
+std::string DecimalV3Column<T>::debug_item(size_t idx) const {
     auto& data = this->get_data();
     return DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
 }
@@ -109,8 +109,8 @@ int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
 
     for (size_t i = from; i < to; ++i) {
         if constexpr (std::is_same_v<T, int128_t>) {
-            xor_checksum ^= (src[i] >> 64);
-            xor_checksum ^= (src[i] & ULLONG_MAX);
+            xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
+            xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
         } else {
             xor_checksum ^= src[i];
         }

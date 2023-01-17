@@ -331,6 +331,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_DIALECT = "sql_dialect";
 
+    public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
+
+    public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+    public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -745,6 +752,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
+    private boolean enableRewriteSumByAssociativeRule = true;
+
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
     }
@@ -815,6 +825,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SQL_DIALECT)
     private String sqlDialect = "StarRocks";
+
+    @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
+    private boolean enableOuterJoinReorder = true;
+
+    // This value is different from cboMaxReorderNodeUseExhaustive which only counts innerOrCross join node, while it
+    // counts all types of join node including outer/semi/anti join.
+    @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
+    private int cboReorderThresholdUseExhaustive = 6;
+
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
+    private boolean enablePruneComplexTypes = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1528,6 +1549,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlDialect(String dialect) {
         this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableOuterJoinReorder() {
+        return enableOuterJoinReorder;
+    }
+
+    public void setEnableOuterJoinReorder(boolean enableOuterJoinReorder) {
+        this.enableOuterJoinReorder = enableOuterJoinReorder;
+    }
+
+    public int getCboReorderThresholdUseExhaustive() {
+        return cboReorderThresholdUseExhaustive;
+    }
+
+    public void setCboReorderThresholdUseExhaustive(int cboReorderThresholdUseExhaustive) {
+        this.cboReorderThresholdUseExhaustive = cboReorderThresholdUseExhaustive;
+    }
+
+    public void setEnableRewriteSumByAssociativeRule(boolean enableRewriteSumByAssociativeRule) {
+        this.enableRewriteSumByAssociativeRule = enableRewriteSumByAssociativeRule;
+    }
+
+    public boolean isEnableRewriteSumByAssociativeRule() {
+        return this.enableRewriteSumByAssociativeRule;
+    }
+
+    public boolean getEnablePruneComplexTypes() {
+        return this.enablePruneComplexTypes;
+    }
+
+    public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
+        this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
 
     // Serialize to thrift object

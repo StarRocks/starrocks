@@ -52,10 +52,10 @@ class StreamAggregator final : public Aggregator {
 public:
     StreamAggregator(AggregatorParamsPtr&& params);
 
-    static constexpr StreamRowOp INSERT_OP = StreamRowOp::INSERT;
-    static constexpr StreamRowOp DELETE_OP = StreamRowOp::DELETE;
-    static constexpr StreamRowOp UPDATE_BEFORE_OP = StreamRowOp::UPDATE_BEFORE;
-    static constexpr StreamRowOp UPDATE_AFTER_OP = StreamRowOp::UPDATE_AFTER;
+    static constexpr StreamRowOp INSERT_OP = StreamRowOp::OP_INSERT;
+    static constexpr StreamRowOp DELETE_OP = StreamRowOp::OP_DELETE;
+    static constexpr StreamRowOp UPDATE_BEFORE_OP = StreamRowOp::OP_UPDATE_BEFORE;
+    static constexpr StreamRowOp UPDATE_AFTER_OP = StreamRowOp::OP_UPDATE_AFTER;
 
     ~StreamAggregator() override {
         if (_state != nullptr) {

@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -42,6 +43,7 @@ public:
     using PredicatesPtrs = std::vector<std::unique_ptr<ColumnPredicate>>;
     using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
     using RuntimeFilterArrivedCallBack = std::function<Status(int, const PredicatesRawPtrs&)>;
+    static constexpr auto rf_update_threhold = 4096 * 10;
 
     OlapRuntimeScanRangePruner() = default;
     OlapRuntimeScanRangePruner(PredicateParser* parser, const UnarrivedRuntimeFilterList& params) {
@@ -51,23 +53,27 @@ public:
 
     void set_predicate_parser(PredicateParser* parser) { _parser = parser; }
 
-    Status update_range_if_arrived(RuntimeFilterArrivedCallBack&& updater) {
+    Status update_range_if_arrived(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                   RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
         if (_arrived_runtime_filters_masks.empty()) return Status::OK();
-        return _update(std::move(updater));
+        return _update(global_dictmaps, std::move(updater), raw_read_rows);
     }
 
 private:
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;
     std::vector<bool> _arrived_runtime_filters_masks;
+    std::vector<size_t> _rf_versions;
     PredicateParser* _parser = nullptr;
+    size_t _raw_read_rows = 0;
 
     // get predicate
-    StatusOr<PredicatesPtrs> _get_predicates(size_t idx);
+    StatusOr<PredicatesPtrs> _get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx);
 
     PredicatesRawPtrs _as_raw_predicates(const std::vector<std::unique_ptr<ColumnPredicate>>& predicates);
 
-    Status _update(RuntimeFilterArrivedCallBack&& updater);
+    Status _update(const ColumnIdToGlobalDictMap* global_dictmaps, RuntimeFilterArrivedCallBack&& updater,
+                   size_t raw_read_rows);
 
     void _init(const UnarrivedRuntimeFilterList& params);
 };

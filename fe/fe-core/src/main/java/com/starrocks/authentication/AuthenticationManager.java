@@ -17,7 +17,9 @@ package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -37,9 +39,11 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -51,8 +55,8 @@ public class AuthenticationManager {
 
     public static final String ROOT_USER = "root";
 
-    // core data struction
-    // user identity -> all the authentication infomation
+    // core data structure
+    // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new TreeMap<>((o1, o2) -> {
         // make sure that ip > domain > %
@@ -102,6 +106,8 @@ public class AuthenticationManager {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
+        AuthenticationProviderFactory.installPlugin(
+                LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
 
         // default user
         UserAuthenticationInfo info = new UserAuthenticationInfo();
@@ -134,10 +140,10 @@ public class AuthenticationManager {
     }
 
     /**
-     * If someone login from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
+     * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
      * 1. test_user@10.1.1.1
      * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-     * If multiple hostnames matche the login ip, just return one randomly.
+     * If multiple hostnames match the login ip, just return one randomly.
      * 3. test_user@%, as a fallback.
      */
     private Integer scoreUserIdentityHost(UserIdentity userIdentity) {
@@ -152,7 +158,7 @@ public class AuthenticationManager {
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
-        // quickly filter unmatched entries by user name
+        // quickly filter unmatched entries by username
         if (!info.matchUser(remoteUser)) {
             return false;
         }
@@ -192,6 +198,20 @@ public class AuthenticationManager {
         }
         LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
         return null; // cannot find user
+    }
+
+    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
+        return checkPassword(remoteUser, remoteHost,
+                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
+        if (Config.enable_password_reuse) {
+            return;
+        }
+        if (checkPlainPassword(user.getQualifiedUser(), user.getHost(), plainPassword) != null) {
+            throw new DdlException("password should not be the same as the previous one!");
+        }
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
@@ -240,6 +260,35 @@ public class AuthenticationManager {
         }
     }
 
+    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties) throws DdlException {
+        UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
+        if (userProperty == null) {
+            throw new DdlException("user '" + user + "' doesn't exist");
+        }
+        userProperty.update(properties);
+    }
+
+    public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
+        try {
+            writeLock();
+            updateUserPropertyNoLock(user, properties);
+            UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
+            LOG.info("finished to update user '{}' with properties: {}", user, properties);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+        try {
+            writeLock();
+            updateUserPropertyNoLock(info.getUser(), info.getProperties());
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info) throws AuthenticationException {
         writeLock();
         try {
@@ -275,7 +324,7 @@ public class AuthenticationManager {
 
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
-        if (! userToAuthenticationInfo.containsKey(userIdentity)) {
+        if (!userToAuthenticationInfo.containsKey(userIdentity)) {
             LOG.warn("cannot find user {}", userIdentity);
             return;
         }
@@ -283,7 +332,7 @@ public class AuthenticationManager {
         LOG.info("user {} is dropped", userIdentity);
         // 2. remove from userNameToProperty
         String userName = userIdentity.getQualifiedUser();
-        if (! hasUserNameNoLock(userName)) {
+        if (!hasUserNameNoLock(userName)) {
             LOG.info("user property for {} is dropped: {}", userName, userNameToProperty.get(userName));
             userNameToProperty.remove(userName);
         }
@@ -317,7 +366,7 @@ public class AuthenticationManager {
     private void updateUserNoLock(
             UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists) throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
-            if (! shouldExists) {
+            if (!shouldExists) {
                 throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
             }
         } else {
@@ -478,6 +527,10 @@ public class AuthenticationManager {
 
     public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
         return userToAuthenticationInfo.get(userIdentity);
+    }
+
+    public Map<UserIdentity, UserAuthenticationInfo> getUserToAuthenticationInfo() {
+        return userToAuthenticationInfo;
     }
 
     public void upgradeUserProperty(String userName, long maxConn) {

@@ -88,6 +88,19 @@ public class BinlogConsumeStateVO implements Writable {
         return Objects.hash(binlogMap);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("BinlogConsumeStateVO{");
+        for (Map.Entry<BinlogIdVO, BinlogLSNVO> entry : binlogMap.entrySet()) {
+            stringBuilder.append("(")
+                    .append(entry.getKey().toString()).append(", ")
+                    .append(entry.getValue().toString()).append(")");
+        }
+        stringBuilder.append('}');
+        return stringBuilder.toString();
+    }
+
     /**
      * Identifier of Binlog, which is tablet-granularity
      */
@@ -128,6 +141,11 @@ public class BinlogConsumeStateVO implements Writable {
         @Override
         public int hashCode() {
             return Objects.hash(tabletId);
+        }
+
+        @Override
+        public String toString() {
+            return "BinlogIdVO{" + "tabletId=" + tabletId + '}';
         }
     }
 
@@ -191,6 +209,14 @@ public class BinlogConsumeStateVO implements Writable {
         @Override
         public int hashCode() {
             return Objects.hash(version, lsn);
+        }
+
+        @Override
+        public String toString() {
+            return "BinlogLSNVO{" +
+                    "version=" + version +
+                    "lsn=" + lsn +
+                    '}';
         }
     }
 }

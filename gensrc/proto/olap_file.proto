@@ -228,6 +228,16 @@ message TabletUpdatesPB {
     optional uint64 next_log_id = 4;
 }
 
+message BinlogConfigPB {
+    // Version of the configuration, and FE should deliver it to
+    // the BE when executing 'ALTER TABLE'. The configuration with
+    // a higher version can override that with a lower version.
+    optional int64 version = 1;
+    optional bool binlog_enable = 2;
+    optional int64 binlog_ttl_second = 3;
+    optional int64 binlog_max_size = 4;
+}
+
 message TabletMetaPB {
     optional int64 table_id = 1;    // ?
     optional int64 partition_id = 2;    // ?
@@ -252,6 +262,7 @@ message TabletMetaPB {
     optional TabletTypePB tablet_type = 17;
     optional TabletUpdatesPB updates = 50; // used for new updatable tablet
     optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
+    optional BinlogConfigPB binlog_config = 52;
 }
 
 message OLAPIndexHeaderMessage {

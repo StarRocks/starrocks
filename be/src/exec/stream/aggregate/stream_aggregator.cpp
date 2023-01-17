@@ -148,7 +148,8 @@ Status StreamAggregator::_prepare_state_tables(RuntimeState* state) {
 
 Status StreamAggregator::process_chunk(StreamChunk* chunk) {
     size_t chunk_size = chunk->num_rows();
-    RETURN_IF_ERROR(_evaluate_exprs(chunk));
+    RETURN_IF_ERROR(_evaluate_group_by_exprs(chunk));
+    RETURN_IF_ERROR(evaluate_agg_fn_exprs(chunk));
 
     {
         SCOPED_TIMER(agg_compute_timer());

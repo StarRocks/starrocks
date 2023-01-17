@@ -61,7 +61,7 @@ ReplicateChannel::~ReplicateChannel() {
 }
 
 std::string ReplicateChannel::debug_string() {
-    return fmt::format("SyncChannnel [host={}, port={}, load_id={}, tablet_id={}, txn_id={}]", _host, _port,
+    return fmt::format("SyncChannnel [host: {}, port: {}, load_id: {}, tablet_id: {}, txn_id: {}]", _host, _port,
                        print_id(_opt->load_id), _opt->tablet_id, _opt->txn_id);
 }
 
@@ -219,10 +219,14 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
     return _replicate_token->submit(std::move(task));
 }
 
-void ReplicateToken::cancel() {
+void ReplicateToken::cancel(const Status& st) {
     for (auto& channel : _replicate_channels) {
         channel->cancel();
     }
+    set_status(st);
+}
+
+void ReplicateToken::shutdown() {
     _replicate_token->shutdown();
 }
 

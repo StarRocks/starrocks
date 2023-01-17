@@ -68,8 +68,10 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -87,6 +89,14 @@ public class AggregationNode extends PlanNode {
     
     private boolean withLocalShuffle = false;
 
+    // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
+    // 1. bucket shuffle join,
+    // 2. colocate join,
+    // 3. one-phase agg,
+    // 4. 1st phaes of three-phase-agg(2nd phase of four-phase agg eliminated).
+    // OlapScanNode and these PlanNodes have the same data partition policy.
+    private boolean identicallyDistributed = false;
+
     /**
      * Create an agg node that is not an intermediate node.
      * isIntermediate is true if it is a slave node in a 2-part agg plan.
@@ -98,7 +108,6 @@ public class AggregationNode extends PlanNode {
         this.needsFinalize = true;
         updateplanNodeName();
     }
-
 
     // Unsets this node as requiring finalize. Only valid to call this if it is
     // currently marked as needing finalize.
@@ -116,7 +125,9 @@ public class AggregationNode extends PlanNode {
         useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
     }
 
-    public AggregateInfo getAggInfo() { return aggInfo; }
+    public AggregateInfo getAggInfo() {
+        return aggInfo;
+    }
 
     /**
      * Have this node materialize the aggregation's intermediate tuple instead of
@@ -165,6 +176,14 @@ public class AggregationNode extends PlanNode {
         }
         sb.append(")");
         setPlanNodeName(sb.toString());
+    }
+
+    public void setIdenticallyDistributed(boolean identicallyDistributed) {
+        this.identicallyDistributed = identicallyDistributed;
+    }
+
+    public boolean isIdenticallyDistributed() {
+        return identicallyDistributed;
     }
 
     @Override
@@ -228,7 +247,8 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
-        msg.agg_node.setInterpolate_passthrough(useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
+        msg.agg_node.setInterpolate_passthrough(
+                useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
     }
 
     protected String getDisplayLabelDetail() {
@@ -265,7 +285,8 @@ public class AggregationNode extends PlanNode {
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
+            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+                    .append("\n");
         }
         if (useSortAgg) {
             output.append(detailPrefix).append("sorted streaming: true\n");
@@ -296,7 +317,7 @@ public class AggregationNode extends PlanNode {
             if (!(gexpr instanceof SlotRef)) {
                 continue;
             }
-            if (((SlotRef)gexpr).getSlotId().asInt() == ((SlotRef)expr).getSlotId().asInt()) {
+            if (((SlotRef) gexpr).getSlotId().asInt() == ((SlotRef) expr).getSlotId().asInt()) {
                 newSlotExprs.add(gexpr);
             }
         }
@@ -304,7 +325,8 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -313,7 +335,7 @@ public class AggregationNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 
@@ -349,6 +371,14 @@ public class AggregationNode extends PlanNode {
         if (!stringColumnStatistics.isEmpty()) {
             normalizer.setUncacheable(true);
         }
+    }
+
+    @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts,
+                FragmentNormalizer.getSlotIdSet(aggInfo.getGroupingExprs()));
+        return false;
     }
 
     @Override

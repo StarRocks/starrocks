@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/sort_exec_exprs.h"
 
@@ -41,13 +42,14 @@ public:
     PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::shared_ptr<ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              SortContext* sort_context)
+                              SortContext* sort_context, RuntimeFilterHub* hub)
             : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _sort_context(sort_context) {}
+              _sort_context(sort_context),
+              _hub(hub) {}
 
     ~PartitionSortSinkOperator() override = default;
 
@@ -81,6 +83,7 @@ private:
     TupleDescriptor* _materialized_tuple_desc;
 
     SortContext* _sort_context;
+    RuntimeFilterHub* _hub;
 };
 
 class PartitionSortSinkOperatorFactory final : public OperatorFactory {
@@ -91,7 +94,7 @@ public:
             std::string sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
             const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
             const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
-            std::vector<ExprContext*> analytic_partition_exprs)
+            std::vector<ExprContext*> analytic_partition_exprs, RuntimeFilterHub* hub)
             : OperatorFactory(id, "local_sort_sink", plan_node_id),
               _sort_context_factory(std::move(std::move(sort_context_factory))),
               _sort_exec_exprs(sort_exec_exprs),
@@ -105,7 +108,8 @@ public:
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
-              _analytic_partition_exprs(std::move(analytic_partition_exprs)) {}
+              _analytic_partition_exprs(std::move(analytic_partition_exprs)),
+              _hub(hub) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 
@@ -133,6 +137,7 @@ private:
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
+    RuntimeFilterHub* _hub;
 };
 
 } // namespace pipeline

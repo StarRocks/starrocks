@@ -26,10 +26,11 @@ public class AggregatePushDownTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
     }
 
     @Test
     public void testPushDown() {
-        runFileUnitTest("optimized-plan/agg-pushdown", false);
+        runFileUnitTest("optimized-plan/agg-pushdown");
     }
 }

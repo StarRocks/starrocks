@@ -29,7 +29,6 @@
 
 namespace starrocks::stream {
 using AggGroupStatePtr = uint8_t*;
-using AggStateTableKind = AggStateTableKind;
 
 struct AggStateDataParams {
     int32_t func_idx;

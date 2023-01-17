@@ -165,10 +165,10 @@ CURL_SOURCE=curl-7.79.0
 CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
 
 # RE2
-RE2_DOWNLOAD="https://github.com/google/re2/archive/2017-05-01.tar.gz"
-RE2_NAME=re2-2017-05-01.tar.gz
-RE2_SOURCE=re2-2017-05-01
-RE2_MD5SUM="4aa65a0b22edacb7ddcd7e4aec038dcf"
+RE2_DOWNLOAD="https://github.com/google/re2/archive/refs/tags/2022-12-01.tar.gz"
+RE2_NAME=re2-2022-12-01.tar.gz
+RE2_SOURCE=re2-2022-12-01
+RE2_MD5SUM="f25d7b06a3e7747ecbb2f12d48be61cd"
 
 # boost
 BOOST_DOWNLOAD="https://boostorg.jfrog.io/artifactory/main/release/1.80.0/source/boost_1_80_0.tar.gz"
@@ -183,10 +183,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=incubator-brpc-1.3.0.tar.gz
-BRPC_SOURCE=incubator-brpc-1.3.0
-BRPC_MD5SUM="ee5d00e203e9ef7b8dd25d0c882914c6"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
+BRPC_NAME=brpc-1.3.0.tar.gz
+BRPC_SOURCE=brpc-1.3.0
+BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -237,10 +237,10 @@ S2_SOURCE=s2geometry-0.9.0
 S2_MD5SUM="293552c7646193b8b4a01556808fe155"
 
 # BITSHUFFLE
-BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.3.5.tar.gz"
-BITSHUFFLE_NAME=bitshuffle-0.3.5.tar.gz
-BITSHUFFLE_SOURCE=bitshuffle-0.3.5
-BITSHUFFLE_MD5SUM="2648ec7ccd0b896595c6636d926fc867"
+BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.5.1.tar.gz"
+BITSHUFFLE_NAME=bitshuffle-0.5.1.tar.gz
+BITSHUFFLE_SOURCE=bitshuffle-0.5.1
+BITSHUFFLE_MD5SUM="b3bf6a9838927f7eb62214981c138e2f"
 
 # CROARINGBITMAP
 CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/v0.2.60.tar.gz"

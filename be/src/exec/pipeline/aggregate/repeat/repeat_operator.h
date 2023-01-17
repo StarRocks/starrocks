@@ -51,7 +51,10 @@ public:
     Status prepare(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
+    Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     static ColumnPtr generate_repeat_column(int64_t value, int64_t num_rows) {

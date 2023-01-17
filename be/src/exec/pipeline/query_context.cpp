@@ -15,9 +15,11 @@
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
+#include <vector>
 
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -40,6 +42,7 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -197,11 +200,12 @@ Status QueryContextManager::init() {
         return Status::InternalError("Fail to create clean_thread of QueryContextManager");
     }
 }
-void QueryContextManager::_clean_slot_unlocked(size_t i) {
+void QueryContextManager::_clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del) {
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
         if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
+            del.emplace_back(std::move(sc_it->second));
             sc_it = sc_map.erase(sc_it);
         } else {
             ++sc_it;
@@ -211,8 +215,9 @@ void QueryContextManager::_clean_slot_unlocked(size_t i) {
 void QueryContextManager::_clean_query_contexts() {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _mutexes[i];
+        std::vector<QueryContextPtr> del_list;
         std::unique_lock write_lock(mutex);
-        _clean_slot_unlocked(i);
+        _clean_slot_unlocked(i, del_list);
     }
 }
 
@@ -322,8 +327,13 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
+    // retain the query_ctx reference to avoid call destructors while holding a lock
+    // we should define them before hold the write lock
+    QueryContextPtr query_ctx;
+    std::vector<QueryContextPtr> del_list;
+
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-    _clean_slot_unlocked(i);
+    _clean_slot_unlocked(i, del_list);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
@@ -332,6 +342,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
+        query_ctx = std::move(it->second);
         context_map.erase(it);
         return true;
     } else if (it->second->has_no_active_instances()) {
@@ -373,6 +384,8 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -402,7 +415,7 @@ void QueryContextManager::report_fragments_with_same_host(
                     params.__set_backend_id(backend_id.value());
                 }
 
-                report_exec_status_params_vector.push_back(params);
+                report_exec_status_params_vector.emplace_back(std::move(params));
                 cur_batch_report_indexes.push_back(i);
                 reported[i] = true;
             }
@@ -469,6 +482,8 @@ void QueryContextManager::report_fragments(
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -484,6 +499,8 @@ void QueryContextManager::report_fragments(
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 exec_env->frontend_client_cache()->close_connections(fe_addr);
                 continue;
             }

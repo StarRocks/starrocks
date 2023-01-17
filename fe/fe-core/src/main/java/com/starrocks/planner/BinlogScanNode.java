@@ -41,7 +41,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStreamScanNode;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,7 +84,12 @@ public class BinlogScanNode extends ScanNode {
     }
 
     protected TBinlogOffset getBinlogOffset(long tabletId) {
-        throw new NotImplementedException("TODO");
+        TBinlogOffset offset = new TBinlogOffset();
+        offset.setTablet_id(tabletId);
+        // TODO -1 indicates that read from the oldest binlog
+        offset.setVersion(-1);
+        offset.setLsn(-1);
+        return offset;
     }
 
     @Override
@@ -120,7 +124,7 @@ public class BinlogScanNode extends ScanNode {
         StringBuilder sb = new StringBuilder();
 
         sb.append(prefix).append("table: ").append(olapTable.getName());
-        sb.append(prefix).append("tabletList: %s").append(Joiner.on(",").join(tabletIds));
+        sb.append(prefix).append(String.format("tabletList: %s", Joiner.on(",").join(tabletIds)));
         return sb.toString();
     }
 
@@ -148,7 +152,7 @@ public class BinlogScanNode extends ScanNode {
                 TBinlogOffset binlogOffset = getBinlogOffset(tabletId);
                 TBinlogScanRange binlogRange = new TBinlogScanRange();
                 binlogRange.setTablet_id(tabletId);
-                binlogRange.setOffset(getBinlogOffset(tabletId));
+                binlogRange.setOffset(binlogOffset);
                 binlogRange.setPartition_id(partitionId);
                 binlogRange.setTable_id(tableId);
                 binlogRange.setDb_name(dbName);

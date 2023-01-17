@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -211,7 +211,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 clonedElseClause = clonedOperators.get(clonedOperators.size() - 1);
             }
 
-            int whenThenEndIdx = operator.getElseClause() == null ? clonedOperators.size() : clonedOperators.size() - 1;
+            int whenThenEndIdx = operator.hasElse() ? clonedOperators.size() - 1 : clonedOperators.size();
             clonedWhenThenClauses = clonedOperators.subList(operator.getWhenStart(), whenThenEndIdx);
 
             return new CaseWhenOperator(operator.getType(), clonedCaseClause, clonedElseClause, clonedWhenThenClauses);

@@ -65,7 +65,8 @@ import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
-import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithoutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFunction;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
@@ -132,11 +133,13 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRu
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateAggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
@@ -327,7 +330,8 @@ public class RuleSet {
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule(),
-                new RewriteMinMaxAggToMetaScanRule()
+                new RewriteMinMaxAggToMetaScanRule(),
+                new RewriteSumByAssociativeRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
@@ -365,7 +369,8 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 OnlyScanRule.getInstance(),
-                AggregateScanRule.getInstance()
+                AggregateScanRule.getInstance(),
+                AggregateAggregateScanRule.getInstance()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
@@ -382,11 +387,16 @@ public class RuleSet {
 
     public void addJoinTransformationRules() {
         transformRules.add(JoinCommutativityRule.getInstance());
-        transformRules.add(JoinAssociativityRule.getInstance());
+        transformRules.add(JoinAssociativityRule.INNER_JOIN_ASSOCIATIVITY_RULE);
+    }
+
+    public void addOuterJoinTransformationRules() {
+        transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
+        transformRules.add(JoinLeftAsscomRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {
-        transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+        transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
     }
 
     public void addMultiTableMvRewriteRule() {

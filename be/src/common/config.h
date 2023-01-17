@@ -698,7 +698,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-CONF_Int64(pipeline_hdfs_scan_thread_pool_thread_num, "48");
+CONF_Int64(pipeline_connector_scan_thread_num_per_cpu, "8");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -721,15 +721,15 @@ CONF_mBool(pipeline_print_profile, "false");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
-CONF_Int64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
+CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
 // Default is 16384*64, where 16384 is the chunk size in pipeline.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 //
 // Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
-CONF_Int64(tablet_internal_parallel_min_scan_dop, "4");
+CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
@@ -812,14 +812,6 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
 
-// Whether to enable segment overflow read
-// If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
-// after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
-// If false, segment will scan (remaining rows of chunk) rows each time, the final chunk after filtering
-// must be less than of equal to the capacity
-// default: true
-CONF_Bool(enable_segment_overflow_read_chunk, "true");
-
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
@@ -900,6 +892,8 @@ CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(max_tmp_l1_num, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -918,5 +912,8 @@ CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+
+// limit local exchange buffer's memory size per driver
+CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
 
 } // namespace starrocks::config

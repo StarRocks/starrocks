@@ -119,6 +119,14 @@ void NLJoinProbeOperator::_check_post_probe() const {
     }
 }
 
+Status NLJoinProbeOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    _join_stage = JoinStage::Probe;
+    _input_finished = false;
+    _probe_chunk.reset();
+    _output_accumulator.reset();
+    return Status::OK();
+}
+
 bool NLJoinProbeOperator::has_output() const {
     _check_post_probe();
     return _join_stage != JoinStage::Finished;

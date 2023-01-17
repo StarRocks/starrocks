@@ -27,6 +27,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 12:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 5
 column statistics:
 * o_orderpriority-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
@@ -55,6 +56,8 @@ OutPut Exchange Id: 12
 |  * count-->[0.0, 5.0, 0.0, 8.0, 5.0] ESTIMATE
 |
 9:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [6: o_orderpriority, VARCHAR, true]
 cardinality: 5
 
 PLAN FRAGMENT 2(F04)
@@ -92,9 +95,13 @@ OutPut Exchange Id: 09
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5675675.675675674] ESTIMATE
 |
 |----5:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [1: o_orderkey, INT, true]
 |       cardinality: 5675676
 |
 2:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [10: l_orderkey, INT, true]
 cardinality: 300018951
 
 PLAN FRAGMENT 3(F02)

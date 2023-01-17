@@ -36,6 +36,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -275,6 +276,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowCatalogsStatement(ShowCatalogsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -928,6 +933,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitInPredicate(InPredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitMultiInPredicate(MultiInPredicate node, C context) {
         return visitExpression(node, context);
     }
 

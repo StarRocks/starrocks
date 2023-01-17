@@ -78,6 +78,13 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _order_by_types[i].is_nullable = expr_node.is_nullable || has_outer_join_child;
         }
     }
+    if (tnode.sort_node.__isset.build_runtime_filters) {
+        for (const auto& desc : tnode.sort_node.build_runtime_filters) {
+            auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
+            _build_runtime_filters.emplace_back(rf_desc);
+        }
+    }
 
     DCHECK_EQ(_conjuncts.size(), 0) << "TopNNode should never have predicates to evaluate.";
     _abort_on_default_limit_exceeded = tnode.sort_node.is_default_limit;
@@ -221,6 +228,9 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                                _analytic_partition_exprs);
     }
 
+    // define a runtime filter holder
+    context->fragment_context()->runtime_filter_hub()->add_holder(_id);
+
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
     auto could_local_shuffle = context->source_operator(ops_sink_with_sort)->could_local_shuffle();
     auto partition_type = context->source_operator(ops_sink_with_sort)->partition_type();
@@ -233,9 +243,10 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     } else {
         context_factory = std::make_shared<SortContextFactory>(
                 runtime_state(), _tnode.sort_node.topn_type, is_merging, _offset, _limit,
-                _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first);
+                _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first, _build_runtime_filters);
     }
 
+    auto rf_hub = context->fragment_context()->runtime_filter_hub();
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     OperatorFactoryPtr sink_operator;
@@ -249,7 +260,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
                 context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
                 _is_null_first, _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types,
-                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
+                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, rf_hub);
     }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);

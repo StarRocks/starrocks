@@ -42,11 +42,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -139,6 +141,8 @@ public class ColocateTableIndex implements Writable {
     private Map<GroupId, List<List<Long>>> group2BackendsPerBucketSeq = Maps.newHashMap();
     // the colocate group is unstable
     private Set<GroupId> unstableGroups = Sets.newHashSet();
+    // lake group, in memory
+    private Set<GroupId> lakeGroups = Sets.newHashSet();
 
     private transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -164,14 +168,17 @@ public class ColocateTableIndex implements Writable {
 
     // NOTICE: call 'addTableToGroup()' will not modify 'group2BackendsPerBucketSeq'
     // 'group2BackendsPerBucketSeq' need to be set manually before or after, if necessary.
-    public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId) {
+    public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId, boolean isReplay)
+            throws DdlException {
         writeLock();
         try {
+            boolean groupAlreadyExist = false;
             GroupId groupId = null;
             String fullGroupName = dbId + "_" + groupName;
 
             if (groupName2Id.containsKey(fullGroupName)) {
                 groupId = groupName2Id.get(fullGroupName);
+                groupAlreadyExist = true;
             } else {
                 if (assignedGroupId != null) {
                     // use the given group id, eg, in replay process
@@ -187,6 +194,26 @@ public class ColocateTableIndex implements Writable {
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
             }
+
+            if (groupAlreadyExist) {
+                if (tbl.isLakeTable() != lakeGroups.contains(groupId)) {
+                    throw new DdlException("Table type mismatch with colocate group type.");
+                }
+            }
+
+            if (tbl.isLakeTable()) {
+                if (!isReplay) { // leader create or update meta group
+                    LakeTable ltbl = (LakeTable) tbl;
+                    List<Long> shardGroupIds = ltbl.getShardGroupIds();
+                    if (!groupAlreadyExist) {
+                        GlobalStateMgr.getCurrentStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
+                    } else {
+                        GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+                    }
+                }
+                lakeGroups.add(groupId);
+            }
+
             group2Tables.put(groupId, tbl.getId());
             table2Group.put(tbl.getId(), groupId);
             return groupId;
@@ -240,7 +267,7 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public boolean removeTable(long tableId) {
+    public boolean removeTable(long tableId, OlapTable tbl, boolean isReplay) {
         writeLock();
         try {
             if (!table2Group.containsKey(tableId)) {
@@ -248,12 +275,25 @@ public class ColocateTableIndex implements Writable {
             }
 
             GroupId groupId = table2Group.remove(tableId);
+
+            if (tbl != null && tbl.isLakeTable() && !isReplay) {
+                LakeTable ltbl = (LakeTable) tbl;
+                List<Long> shardGroupIds = ltbl.getShardGroupIds();
+                try {
+                    GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
+                            false /* isJoin */);
+                } catch (DdlException e) {
+                    LOG.error(e.getMessage());
+                }
+            }
+
             group2Tables.remove(groupId, tableId);
             if (!group2Tables.containsKey(groupId)) {
                 // all tables of this group are removed, remove the group
                 group2BackendsPerBucketSeq.remove(groupId);
                 group2Schema.remove(groupId);
                 unstableGroups.remove(groupId);
+                lakeGroups.remove(groupId);
                 String fullGroupName = null;
                 for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
                     if (entry.getValue().equals(groupId)) {
@@ -275,7 +315,12 @@ public class ColocateTableIndex implements Writable {
     public boolean isGroupUnstable(GroupId groupId) {
         readLock();
         try {
-            return unstableGroups.contains(groupId);
+            if (lakeGroups.contains(groupId)) {
+                // TODO: for now just consider lake table always stable
+                return false;
+            } else {
+                return unstableGroups.contains(groupId);
+            }
         } finally {
             readUnlock();
         }
@@ -285,6 +330,19 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             return table2Group.containsKey(tableId);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public boolean isLakeColocateTable(long tableId) {
+        readLock();
+        try {
+            GroupId groupId = table2Group.get(tableId);
+            if (groupId == null) {
+                return false;
+            }
+            return lakeGroups.contains(groupId);
         } finally {
             readUnlock();
         }
@@ -471,14 +529,15 @@ public class ColocateTableIndex implements Writable {
         return -1;
     }
 
-    public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId) {
+    public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId,
+            boolean isReplay) throws DdlException {
         writeLock();
         try {
             if (!Strings.isNullOrEmpty(oldGroup)) {
                 // remove from old group
-                removeTable(tbl.getId());
+                removeTable(tbl.getId(), tbl, isReplay);
             }
-            return addTableToGroup(dbId, tbl, newGroup, assignedGroupId);
+            return addTableToGroup(dbId, tbl, newGroup, assignedGroupId, isReplay);
         } finally {
             writeUnlock();
         }
@@ -496,7 +555,10 @@ public class ColocateTableIndex implements Writable {
                 group2BackendsPerBucketSeq.put(info.getGroupId(), info.getBackendsPerBucketSeq());
             }
 
-            addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId());
+            addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId(), true /* isReplay */);
+        } catch (DdlException e) {
+            // should not happen, just log an error here
+            LOG.error(e.getMessage());
         } finally {
             writeUnlock();
         }
@@ -515,7 +577,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayRemoveTable(ColocatePersistInfo info) {
-        removeTable(info.getTableId());
+        removeTable(info.getTableId(), null, true /* isReplay */);
     }
 
     // only for test
@@ -775,6 +837,7 @@ public class ColocateTableIndex implements Writable {
         }
         // clean up if dbId or tableId not found, this is actually a bug
         cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+        constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
         return checksum;
     }
@@ -830,7 +893,7 @@ public class ColocateTableIndex implements Writable {
                 backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
             }
             // change group after getting backends sequence(if has), in case 'getArbitraryTabletBucketsSeq' failed
-            groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId);
+            groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId, isReplay);
             if (groupSchema == null) {
                 Preconditions.checkNotNull(backendsPerBucketSeq);
                 addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
@@ -853,7 +916,7 @@ public class ColocateTableIndex implements Writable {
                 // when replayModifyTableColocate, we need the groupId info
                 String fullGroupName = db.getId() + "_" + oldGroup;
                 groupId = getGroupSchema(fullGroupName).getGroupId();
-                removeTable(table.getId());
+                removeTable(table.getId(), table, isReplay);
                 table.setColocateGroup(null);
                 table.setInColocateMvGroup(false);
             } else {
@@ -863,7 +926,7 @@ public class ColocateTableIndex implements Writable {
                 Optional<String> anyMvName = table.getColocateMaterializedViewNames().stream().findAny();
                 Preconditions.checkState(anyMvName.isPresent());
                 String groupName = db.getFullName() + ":" + anyMvName.get();
-                groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId);
+                groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId, isReplay);
                 table.setColocateGroup(groupName);
                 table.setInColocateMvGroup(true);
             }
@@ -924,7 +987,24 @@ public class ColocateTableIndex implements Writable {
         }
         LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
         for (Long tableId : badTableIds) {
-            removeTable(tableId);
+            removeTable(tableId, null, false /* isReplay */);
+        }
+    }
+
+    private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
+        if (!Config.use_staros) {
+            return;
+        }
+
+        for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
+            long dbId = entry.getValue().dbId;
+            long tableId = entry.getKey();
+            // database and table should be valid if reach here
+            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+            if (table.isLakeTable()) {
+                lakeGroups.add(entry.getValue());
+            }
         }
     }
 }

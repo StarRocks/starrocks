@@ -1,4 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
+// Copyright 2023-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,11 +37,12 @@
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
-#include "runtime/primitive_type.h"
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -76,9 +77,6 @@ struct TypeDescriptor {
 
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
-
-    // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
-    std::vector<bool> selected_fields;
 
     TypeDescriptor() = default;
 
@@ -270,6 +268,8 @@ struct TypeDescriptor {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
     }
 
+    inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
+
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
 
     inline bool is_struct_type() const { return type == TYPE_STRUCT; }
@@ -310,6 +310,8 @@ struct TypeDescriptor {
     /// Recursive implementation of ToThrift() that populates 'thrift_type' with the
     /// TTypeNodes for this type and its children.
     void to_thrift(TTypeDesc* thrift_type) const;
+
+    size_t get_array_depth_limit() const;
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

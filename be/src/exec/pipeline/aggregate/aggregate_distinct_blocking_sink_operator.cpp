@@ -54,7 +54,7 @@ StatusOr<ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeStat
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());

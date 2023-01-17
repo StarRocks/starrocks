@@ -30,7 +30,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -72,6 +72,12 @@ public:
      * @param col must be a boolean column
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
+
+    // Find the first non-null value
+    static size_t find_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find the non-null value in reversed order
+    static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {

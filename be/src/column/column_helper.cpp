@@ -23,8 +23,8 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
+#include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
@@ -45,7 +45,7 @@ Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
         size_t num_rows = sel_vec.size();
         // we treat null(1) as false(0)
         for (size_t i = 0; i < num_rows; ++i) {
-            selected[i] &= !nulls[i];
+            selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
         }
         return sel_vec;
     } else {
@@ -63,7 +63,7 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Column::Filter* __
         auto num_rows = nullable_column->size();
         // we treat null(1) as false(0)
         for (size_t j = 0; j < num_rows; ++j) {
-            (*filter)[j] &= (!nulls[j]) & datas[j];
+            (*filter)[j] = static_cast<uint8_t>((*filter)[j] & (!nulls[j]) & datas[j]);
         }
     } else {
         size_t num_rows = column->size();
@@ -145,8 +145,8 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
         const Buffer<uint8_t>& null_data = tmp->null_column_data();
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
 
-        int null_count = SIMD::count_nonzero(null_data);
-        int true_count = SIMD::count_nonzero(bool_data);
+        size_t null_count = SIMD::count_nonzero(null_data);
+        size_t true_count = SIMD::count_nonzero(bool_data);
 
         if (null_count == col->size()) {
             return 0;
@@ -177,8 +177,8 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
         const Buffer<uint8_t>& null_data = tmp->null_column_data();
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
 
-        int null_count = SIMD::count_nonzero(null_data);
-        int false_count = SIMD::count_zero(bool_data);
+        size_t null_count = SIMD::count_nonzero(null_data);
+        size_t false_count = SIMD::count_zero(bool_data);
 
         if (null_count == col->size()) {
             return 0;
@@ -198,6 +198,36 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
     nullable_column->append_nulls(1);
     return ConstColumn::create(nullable_column, chunk_size);
+}
+
+size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+
+    if (!col->has_null()) {
+        return 0;
+    }
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    return SIMD::find_zero(null, start, end - start);
+}
+
+size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+    DCHECK_LE(end, col->size());
+
+    if (!col->has_null()) {
+        return end - 1;
+    }
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    for (size_t i = end - 1;;) {
+        if (null[i] == 0) {
+            return i;
+        }
+        if (i == start) {
+            break;
+        }
+        i--;
+    }
+    return end;
 }
 
 // expression trees' return column should align return type when some return columns maybe diff from the required
@@ -266,21 +296,24 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
-        auto keys = create_column(type_desc.children[0], true, is_const, size);
-        auto values = create_column(type_desc.children[1], true, is_const, size);
+        ColumnPtr keys = nullptr;
+        ColumnPtr values = nullptr;
+        if (type_desc.children[0].is_unknown_type()) {
+            keys = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            keys = create_column(type_desc.children[0], true, is_const, size);
+        }
+        if (type_desc.children[1].is_unknown_type()) {
+            values = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            values = create_column(type_desc.children[1], true, is_const, size);
+        }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
-        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        DCHECK_EQ(field_size, type_desc.field_names.size());
         Columns columns;
         for (size_t i = 0; i < field_size; i++) {
-            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
-            // We should optimize it in future.
-            // if (!type_desc.selected_fields.at(i)) {
-            //     continue;
-            // }
-
-            // Subfield column must be nullable column.
             ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
         }

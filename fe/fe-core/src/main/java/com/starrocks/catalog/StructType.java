@@ -12,26 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/StructType.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -58,7 +38,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -90,6 +70,18 @@ public class StructType extends Type {
         Arrays.fill(selectedFields, false);
     }
 
+    // Used to construct an unnamed struct type, for example, to create a struct type
+    // row(1, 'b') to create an unnamed struct type struct<int, string>
+    public StructType(List<Type> fieldTypes) {
+        ArrayList<StructField> newFields = new ArrayList<>();
+        for (Type fieldType : fieldTypes) {
+            newFields.add(new StructField(fieldType));
+        }
+        this.fields = newFields;
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
+    }
+
     @Override
     public String toString() {
         // TODO(SmithCruise): Lazy here, any difference from toSql()?
@@ -114,20 +106,15 @@ public class StructType extends Type {
             return false;
         }
 
-        if (((StructType) t).getFields().size() != fields.size()) {
+        StructType rhsType = (StructType) t;
+        if (fields.size() != rhsType.fields.size()) {
             return false;
         }
-
-        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
-            StructField tField = ((StructType) t).getField(field.getValue().getName());
-            if (tField == null) {
-                return false;
-            }
-            if (!tField.getType().matchesType(field.getValue().getType())) {
+        for (int i = 0; i < fields.size(); ++i) {
+            if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -181,6 +168,23 @@ public class StructType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        for (int pos = selectedFields.length - 1; pos >= 0; pos--) {
+            StructField structField = fields.get(pos);
+            if (!selectedFields[pos]) {
+                fields.remove(pos);
+                fieldMap.remove(structField.getName());
+            }
+        }
+
+        for (StructField structField : fields) {
+            Type type = structField.getType();
+            if (type.isComplexType()) {
+                type.pruneUnusedSubfields();
+            }
+        }
+    }
+
     @Override
     public void selectAllFields() {
         Arrays.fill(selectedFields, true);
@@ -221,11 +225,8 @@ public class StructType extends Type {
         container.types.add(node);
         Preconditions.checkNotNull(fields);
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
-        Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
-        Preconditions.checkArgument(selectedFields.length == fields.size());
-        node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);
         }
@@ -240,7 +241,7 @@ public class StructType extends Type {
         return new StructType(structFields);
     }
 
-    public static class StructTypeDeSerializer implements JsonDeserializer<StructType> {
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
         @Override
         public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
                                    JsonDeserializationContext jsonDeserializationContext)

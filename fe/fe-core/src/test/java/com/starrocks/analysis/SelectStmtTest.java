@@ -34,7 +34,9 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -42,6 +44,9 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class SelectStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -153,5 +158,26 @@ public class SelectStmtTest {
         starRocksAssert.query(sql).explainQuery();
         sql = "select localtimestamp";
         starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testSelectFromTabletIds() throws Exception {
+        FeConstants.runningUnitTest = true;
+        ShowResultSet tablets = starRocksAssert.showTablet("db1", "partition_table");
+        List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
+        Assert.assertEquals(tabletIds.size(), 4);
+        String tabletCsv = String.join(",", tabletIds);
+        String sql = String.format("select count(1) from db1.partition_table tablet (%s)", tabletCsv);
+        String explain = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(explain.contains(tabletCsv));
+
+        String invalidTabletCsv = tabletIds.stream().map(id -> id + "0").collect(Collectors.joining(","));
+        String invalidSql = String.format("select count(1) from db1.partition_table tablet (%s)", invalidTabletCsv);
+        try {
+            starRocksAssert.query(invalidSql).explainQuery();
+        } catch (Throwable ex) {
+            Assert.assertTrue(ex.getMessage().contains("Invalid tablet"));
+        }
+        FeConstants.runningUnitTest = false;
     }
 }

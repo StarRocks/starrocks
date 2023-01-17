@@ -37,6 +37,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 18:MERGING-EXCHANGE
+distribution type: GATHER
 limit: 20
 cardinality: 20
 column statistics:
@@ -124,9 +125,13 @@ OutPut Exchange Id: 18
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 |----13:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [10: o_custkey, INT, true]
 |       cardinality: 7651211
 |
 5:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [1: c_custkey, INT, true]
 cardinality: 15000000
 
 PLAN FRAGMENT 2(F04)
@@ -161,6 +166,7 @@ OutPut Exchange Id: 13
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----10:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5738046
 |
 7:Project
@@ -262,6 +268,7 @@ OutPut Exchange Id: 05
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 |----2:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 25
 |
 0:HdfsScanNode

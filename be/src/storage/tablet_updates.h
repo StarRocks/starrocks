@@ -257,6 +257,8 @@ public:
     void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
 
+    Status check_and_remove_rowset();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -318,14 +320,6 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    // Find all but the latest already-applied versions whose creation time is less than or
-    // equal to |expire_time|, then append them into |expire_list| and erase them from the
-    // in-memory version list.
-    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
-                                 int64_t* min_readable_version);
-
-    std::set<uint32_t> _active_rowsets();
-
     void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
@@ -353,7 +347,7 @@ private:
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
     // thread-safe
-    void _remove_unused_rowsets();
+    void _remove_unused_rowsets(bool drop_tablet = false);
 
     // REQUIRE: |_lock| is held.
     void _to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const;

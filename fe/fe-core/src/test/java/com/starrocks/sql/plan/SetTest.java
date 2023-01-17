@@ -30,15 +30,20 @@ public class SetTest extends PlanTestBase {
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  3:AGGREGATE (update finalize)\n" +
-                "  |  output: min(2: expr)\n" +
+        Assert.assertTrue(explainString.contains("  3:Project\n" +
+                "  |  <slot 3> : 3: min\n" +
+                "  |  <slot 4> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(1)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  2:Project\n" +
-                "  |  <slot 2> : 1\n" +
-                "  |  \n" +
                 "  1:SELECT\n" +
-                "  |  predicates: abs(1) = 2"));
+                "  |  predicates: abs(1) = 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL"));
     }
 
     @Test

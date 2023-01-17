@@ -88,12 +88,12 @@ Status AggStateData::process_chunk(size_t chunk_size, const StreamRowOp* ops,
     for (int i = 0; i < chunk_size; i++) {
         auto op = ops[i];
         switch (op) {
-        case StreamRowOp::INSERT:
-        case StreamRowOp::UPDATE_BEFORE:
+        case StreamRowOp::OP_INSERT:
+        case StreamRowOp::OP_UPDATE_BEFORE:
             _agg_function->update(_agg_fn_ctx, columns, agg_group_state[i] + _agg_state_offset, i);
             break;
-        case StreamRowOp::DELETE:
-        case StreamRowOp::UPDATE_AFTER:
+        case StreamRowOp::OP_DELETE:
+        case StreamRowOp::OP_UPDATE_AFTER:
             _agg_function->retract(_agg_fn_ctx, columns, agg_group_state[i] + _agg_state_offset, i);
             break;
         }

@@ -145,43 +145,12 @@ public class SlotDescriptor {
         this.type = type;
     }
 
-    public void setUsedSubfieldPosGroup(List<ImmutableList<Integer>> usedSubfieldPosGroup) {
-        Preconditions.checkArgument(type.isComplexType());
-        // type should be cloned from originType!
-        if (usedSubfieldPosGroup.isEmpty()) {
-            type.selectAllFields();
-            return;
-        }
-
-        for (List<Integer> usedSubfieldPos : usedSubfieldPosGroup) {
-            if (usedSubfieldPos.isEmpty()) {
-                type.selectAllFields();
-                return;
-            }
-            Type tmpType = type;
-            for (int i = 0; i < usedSubfieldPos.size(); i++) {
-                // we will always select the ItemType of ArrayType, so we don't mark it and skip it.
-                while (tmpType.isArrayType()) {
-                    tmpType = ((ArrayType)tmpType).getItemType();
-                }
-                int pos = usedSubfieldPos.get(i);
-                if (i == usedSubfieldPos.size() -1) {
-                    // last one, select children's all subfields
-                    tmpType.setSelectedField(pos, true);
-                } else {
-                    tmpType.setSelectedField(pos, false);
-                    if (tmpType.isStructType()) {
-                        tmpType = ((StructType)tmpType).getField(pos).getType();
-                    } else if (tmpType.isMapType()) {
-                        tmpType = pos == 0 ? ((MapType)tmpType).getKeyType() : ((MapType)tmpType).getValueType();
-                    }
-                }
-            }
-        }
-    }
-
     public Type getOriginType() {
         return originType;
+    }
+
+    public void setOriginType(Type type) {
+        this.originType = type;
     }
 
     public Column getColumn() {
@@ -293,7 +262,7 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
-        if (originType != null && !originType.isComplexType()) {
+        if (originType != null) {
             return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),

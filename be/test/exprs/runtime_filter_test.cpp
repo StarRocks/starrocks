@@ -131,8 +131,8 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     EXPECT_EQ(bf.min_value(), 0);
     EXPECT_EQ(bf.max_value(), 187);
     for (int i = 0; i <= 200; i += 17) {
-        EXPECT_TRUE(bf.test_data(i));
-        EXPECT_FALSE(bf.test_data(i + 1));
+        EXPECT_TRUE(bf._test_data(i));
+        EXPECT_FALSE(bf._test_data(i + 1));
     }
     EXPECT_FALSE(rf->has_null());
     bf.insert(nullptr);
@@ -175,11 +175,11 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSlice) {
     EXPECT_EQ(bf.min_value(), values[0]);
     EXPECT_EQ(bf.max_value(), values[values.size() - 1]);
     for (auto& s : values) {
-        EXPECT_TRUE(bf.test_data(s));
+        EXPECT_TRUE(bf._test_data(s));
     }
     std::vector<std::string> ex_data = {"ee", "ff", "gg"};
     for (const auto& s : ex_data) {
-        EXPECT_FALSE(bf.test_data(Slice(s)));
+        EXPECT_FALSE(bf._test_data(Slice(s)));
     }
 }
 
@@ -269,9 +269,9 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge) {
     bf2.merge(rf0);
     bf2.merge(rf1);
     for (int i = 0; i <= 200; i += 17) {
-        EXPECT_TRUE(bf2.test_data(i));
-        EXPECT_TRUE(bf2.test_data(i + 1));
-        EXPECT_FALSE(bf2.test_data(i + 2));
+        EXPECT_TRUE(bf2._test_data(i));
+        EXPECT_TRUE(bf2._test_data(i + 1));
+        EXPECT_FALSE(bf2._test_data(i + 2));
     }
     EXPECT_EQ(bf2.min_value(), 0);
     EXPECT_EQ(bf2.max_value(), 188);

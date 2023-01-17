@@ -23,7 +23,11 @@ class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
 public:
+    using ValueType = void;
     using Container = Buffer<std::string>;
+
+    // Used to construct an unnamed struct
+    StructColumn(Columns fields) : _fields(std::move(fields)) {}
 
     StructColumn(Columns fields, std::vector<std::string> field_names)
             : _fields(std::move(fields)), _field_names(std::move(field_names)) {
@@ -124,6 +128,8 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
+    bool equals(size_t left, const Column& rhs, size_t right) const override;
+
     void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
@@ -132,7 +138,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 
@@ -157,11 +163,15 @@ public:
     // Struct Column own functions
     const Columns& fields() const;
 
+    bool is_unnamed_struct() const { return _field_names.empty(); }
+
     Columns& fields_column();
 
     ColumnPtr field_column(const std::string& field_name);
 
     const std::vector<std::string>& field_names() const { return _field_names; }
+
+    Status unfold_const_children(const TypeDescriptor& type) override;
 
 private:
     // A collection that contains StructType's subfield column.
@@ -172,4 +182,5 @@ private:
     // _field_names will not participate in serialization because it is created based on meta information
     std::vector<std::string> _field_names;
 };
+
 } // namespace starrocks

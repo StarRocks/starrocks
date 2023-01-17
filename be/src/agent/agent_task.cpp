@@ -697,6 +697,19 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 break;
             case TTabletMetaType::REPLICATED_STORAGE:
                 break;
+            case TTabletMetaType::DISABLE_BINLOG:
+                break;
+            case TTabletMetaType::BINLOG_CONFIG:
+                LOG(INFO) << "update tablet:" << tablet->tablet_id() << "binlog config";
+                {
+                    auto curr_binlog_config = tablet->tablet_meta()->get_binlog_config();
+                    if (curr_binlog_config != nullptr) {
+                        LOG(INFO) << "current binlog config:" << curr_binlog_config->to_string();
+                    }
+                }
+
+                tablet->set_binlog_config(tablet_meta_info.binlog_config);
+                break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;

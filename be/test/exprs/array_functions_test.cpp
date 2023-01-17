@@ -3547,8 +3547,7 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint) {
     src_column3->append_datum(DatumArray{(int8_t)100});
     src_column3->append_datum(DatumArray{(int8_t)4, Datum(), (int8_t)2, (int8_t)1});
 
-    ArrayConcat<LogicalType::TYPE_TINYINT> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int8_t>({(int8_t)5, (int8_t)3, (int8_t)6, (int8_t)5, (int8_t)6, (int8_t)5},
@@ -3588,8 +3587,7 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint_not_nullable) {
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)1});
     src_column3->append_datum(DatumArray{(int8_t)4, Datum(), (int8_t)2, (int8_t)1});
 
-    ArrayConcat<LogicalType::TYPE_TINYINT> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<int8_t>({(int8_t)5, (int8_t)3, (int8_t)6, (int8_t)5, (int8_t)6, (int8_t)5},
@@ -3630,8 +3628,7 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint) {
     src_column3->append_datum(DatumArray{(int64_t)100});
     src_column3->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    ArrayConcat<LogicalType::TYPE_BIGINT> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6, (int64_t)5, (int64_t)6, (int64_t)5},
@@ -3671,8 +3668,7 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint_not_nullable) {
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)1});
     src_column3->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    ArrayConcat<LogicalType::TYPE_BIGINT> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6, (int64_t)5, (int64_t)6, (int64_t)5},
@@ -3713,8 +3709,7 @@ TEST_F(ArrayFunctionsTest, array_concat_double) {
     src_column3->append_datum(DatumArray{(double)100});
     src_column3->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    ArrayConcat<LogicalType::TYPE_DOUBLE> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<double>({(double)5, (double)3, (double)6, (double)5, (double)6, (double)5},
@@ -3754,8 +3749,7 @@ TEST_F(ArrayFunctionsTest, array_concat_double_not_nullable) {
     src_column3->append_datum(DatumArray{(double)2, (double)1});
     src_column3->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    ArrayConcat<LogicalType::TYPE_DOUBLE> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<double>({(double)5, (double)3, (double)6, (double)5, (double)6, (double)5},
@@ -3796,8 +3790,7 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar) {
     src_column3->append_datum(DatumArray{Slice("100")});
     src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    ArrayConcat<LogicalType::TYPE_VARCHAR> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<Slice>({Slice("5"), Slice("3"), Slice("6"), Slice("5"), Slice("6"), Slice("5")},
@@ -3837,8 +3830,7 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
     src_column3->append_datum(DatumArray{Slice("2"), Slice("1")});
     src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    ArrayConcat<LogicalType::TYPE_VARCHAR> concat;
-    auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
+    auto dest_column = ArrayFunctions::concat(nullptr, {src_column, src_column2, src_column3}).value();
 
     ASSERT_EQ(dest_column->size(), 4);
     _check_array<Slice>({Slice("5"), Slice("3"), Slice("6"), Slice("5"), Slice("6"), Slice("5")},
@@ -4667,6 +4659,7 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
     ASSERT_TRUE(dest_column->get(0).get_array().empty());
+
     // array is null
     dest_column = filter.process(nullptr, {src_column2, src_column});
     ASSERT_TRUE(dest_column->only_null());
@@ -4674,6 +4667,16 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     // all null
     dest_column = filter.process(nullptr, {src_column2, src_column2});
     ASSERT_TRUE(dest_column->only_null());
+
+    // src is nullable & bool_array is null
+    auto src_column_nullable = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column_nullable->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column_nullable->append_datum(Datum());
+    dest_column = filter.process(nullptr, {src_column_nullable, src_column2});
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data();
+    ASSERT_TRUE(null_data.size() == 2);
+    ASSERT_TRUE(!null_data.data()[0]);
+    ASSERT_TRUE(null_data.data()[1]);
 }
 
 TEST_F(ArrayFunctionsTest, array_distinct_only_null) {

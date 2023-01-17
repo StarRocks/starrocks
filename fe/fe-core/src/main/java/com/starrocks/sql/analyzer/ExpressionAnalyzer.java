@@ -42,6 +42,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PlaceHolderExpr;
@@ -242,14 +243,19 @@ public class ExpressionAnalyzer {
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             Preconditions.checkArgument(child.getType().isStructType(),
                     String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
-            StructType structType = (StructType) child.getType();
-            StructField structField = structType.getField(node.getFieldName());
 
-            if (structField == null) {
-                throw new SemanticException("Struct subfield '%s' cannot be resolved", node.getFieldName());
+            List<String> fieldNames = node.getFieldNames();
+            Type tmpType = child.getType();
+            for (String fieldName : fieldNames) {
+                StructType structType = (StructType) tmpType;
+                StructField structField = structType.getField(fieldName);
+                if (structField == null) {
+                    throw new SemanticException("Struct subfield '%s' cannot be resolved", fieldName);
+                }
+                tmpType = structField.getType();
             }
 
-            node.setType(structField.getType());
+            node.setType(tmpType);
             return null;
         }
 
@@ -642,6 +648,35 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
+            predicateBaseAndCheck(node);
+            List<Type> leftTypes =
+                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType).collect(Collectors.toList());
+
+            Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
+            List<Type> rightTypes =
+                    inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
+                            collect(Collectors.toList());
+            if (leftTypes.size() != rightTypes.size()) {
+                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+            }
+
+            for (int i = 0; i < rightTypes.size(); ++i) {
+                if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
+                        rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
+                        rightTypes.get(i).isStructType()) {
+                    throw new SemanticException("InPredicate of JSON, Map, Struct types is not supported");
+                }
+                if (!Type.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
+                    throw new SemanticException(
+                            "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
+                                    + " is invalid.");
+                }
+            }
+            return null;
+        }
+
+        @Override
         public Void visitLiteral(LiteralExpr node, Scope scope) {
             if (node instanceof LargeIntLiteral) {
                 BigInteger value = ((LargeIntLiteral) node).getValue();
@@ -799,6 +834,10 @@ public class ExpressionAnalyzer {
                             " should be an array or a lambda function.");
                 }
                 // force the second array be of Type.ARRAY_BOOLEAN
+                if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                    throw new SemanticException("The second input of array_filter " +
+                            node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                }
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

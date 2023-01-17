@@ -44,6 +44,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
@@ -60,6 +61,7 @@ import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -498,7 +500,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return result;
     }
 
-    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer){
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
     }
 
     // Append a flattened version of this plan node, including all children, to 'container'.
@@ -685,7 +687,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
     }
 
-
     public int getNumInstances() {
         return numInstances;
     }
@@ -781,12 +782,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     /**
      * When push down runtime filter cross exchange, need take care partitionByExprs of exchange.
      */
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
-        Optional<List<List<Expr>>> optCandidatePartitionByExprs = canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        Optional<List<List<Expr>>> optCandidatePartitionByExprs =
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
         if (!optCandidatePartitionByExprs.isPresent()) {
             return false;
         }
@@ -796,20 +799,37 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = false;
         for (PlanNode node : children) {
             if (candidatePartitionByExprs.isEmpty()) {
-                if (node.pushDownRuntimeFilters(description, probeExpr, Lists.newArrayList())) {
+                if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, Lists.newArrayList())) {
                     accept = true;
                     break;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : candidatePartitionByExprs) {
-                    if (node.pushDownRuntimeFilters(description, probeExpr, candidateOfPartitionByExprs)) {
+                    if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, candidateOfPartitionByExprs)) {
                         accept = true;
                         break;
                     }
                 }
             }
         }
-        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+
+        boolean isBound = false;
+        if (probeExpr instanceof SlotRef && description.runtimeFilterType().equals(
+                RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
+            SlotRef slotRef = (SlotRef) probeExpr;
+            found:
+            for (TupleId tupleId : getTupleIds()) {
+                for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
+                    // TopN Filter only works in no-nullable column
+                    if (slot.getId().equals(slotRef.getSlotId()) && !slotRef.isNullable()) {
+                        isBound = true;
+                        break found;
+                    }
+                }
+            }
+        } else {
+            isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        }
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }
@@ -825,7 +845,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
-    private boolean tryPushdownRuntimeFilterToChild(RuntimeFilterDescription description,
+    private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,
                                                     Optional<List<Expr>> optProbeExprCandidates,
                                                     Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                     int childIdx) {
@@ -837,14 +857,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         for (Expr candidateOfProbeExpr : probeExprCandidates) {
             if (partitionByExprsCandidates.isEmpty()) {
-                if (children.get(childIdx).pushDownRuntimeFilters(description, candidateOfProbeExpr,
+                if (children.get(childIdx).pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
                         Lists.newArrayList())) {
                     return true;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : partitionByExprsCandidates) {
                     if (children.get(childIdx)
-                            .pushDownRuntimeFilters(description, candidateOfProbeExpr, candidateOfPartitionByExprs)) {
+                            .pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
+                                    candidateOfPartitionByExprs)) {
                         return true;
                     }
                 }
@@ -857,14 +878,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Push down a runtime filter for the specific child with childIdx. `addProbeInfo` indicates whether
      * add runtime filter info into this PlanNode.
      */
-    protected boolean pushdownRuntimeFilterForChildOrAccept(RuntimeFilterDescription description,
+    protected boolean pushdownRuntimeFilterForChildOrAccept(DescriptorTable descTbl,
+                                                            RuntimeFilterDescription description,
                                                             Expr probeExpr,
                                                             Optional<List<Expr>> optProbeExprCandidates,
                                                             List<Expr> partitionByExprs,
                                                             Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                             int childIdx,
                                                             boolean addProbeInfo) {
-        boolean accept = tryPushdownRuntimeFilterToChild(description, optProbeExprCandidates,
+        boolean accept = tryPushdownRuntimeFilterToChild(descTbl, description, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
         if (isBound) {
@@ -892,13 +914,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return canDoReplicatedJoin;
     }
 
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts, Collections.emptySet());
+        return true;
+    }
+
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         final DescriptorTable descriptorTable = normalizer.getExecPlan().getDescTbl();
         List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
                 .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
                 .collect(Collectors.toList());
-        Preconditions.checkState(normalizer.containsAllSlotIds(slotIds), "All slotIds should be remapped");
-        planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
+        normalizer.remapSlotIds(slotIds);
+        planNode.setConjuncts(normalizer.normalizeExprs(normalizer.getConjunctsByPlanNodeId(this)));
     }
 
     public TNormalPlanNode normalize(FragmentNormalizer normalizer) {
@@ -920,5 +948,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
         return descriptorTable.getTupleDesc(getTupleIds().get(0)).getSlots()
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+    }
+
+    // Used to collect equivalence relations produced by PlanNodes. there are
+    // three cases:
+    // 1. ProjectNode: slotId to slotId mapping in slotMap;
+    // 2. SetOperation: input slotId and its corresponding input slotIds of the child PlanNode;
+    // 3. HashJoinNode: slotIds of both sides of Join equal conditions in semi join and inner join.
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
     }
 }

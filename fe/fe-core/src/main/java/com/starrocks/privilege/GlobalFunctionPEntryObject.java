@@ -88,8 +88,19 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
     }
 
     @Override
-    public int compareTo(PEntryObject o) {
-        return 0;
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof GlobalFunctionPEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+
+        GlobalFunctionPEntryObject o = (GlobalFunctionPEntryObject) obj;
+        if (functionSig.equals(ALL_GLOBAL_FUNCTION_SIGS)) {
+            return -1;
+        } else if (o.functionSig.equals(ALL_GLOBAL_FUNCTION_SIGS)) {
+            return 1;
+        } else {
+            return functionSig.compareTo(o.functionSig);
+        }
     }
 
     @Override

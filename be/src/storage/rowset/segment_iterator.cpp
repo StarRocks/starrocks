@@ -176,10 +176,6 @@ private:
 
         // not all dict encode
         bool _has_force_dict_encode{false};
-
-        // save overflow rows in read_chunk
-        std::shared_ptr<Chunk> _overflow_read_chunk;
-        std::vector<uint32_t> _overflow_read_chunk_rowids;
     };
 
     Status _init();
@@ -297,8 +293,6 @@ private:
 
     bool _inited = false;
     bool _has_bitmap_index = false;
-
-    bool _context_switch_next_time = false;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema schema, SegmentReadOptions options)
@@ -356,13 +350,8 @@ Status SegmentIterator::_init() {
         }
     }
 
-    if (config::enable_segment_overflow_read_chunk) {
-        _selection.resize(_reserve_chunk_size + _reserve_chunk_size / 4 + 1);
-        _selected_idx.resize(_reserve_chunk_size + _reserve_chunk_size / 4 + 1);
-    } else {
-        _selection.resize(_reserve_chunk_size);
-        _selected_idx.resize(_reserve_chunk_size);
-    }
+    _selection.resize(_reserve_chunk_size);
+    _selected_idx.resize(_reserve_chunk_size);
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
@@ -395,20 +384,23 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
-    return _opts.runtime_range_pruner.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
-        const ColumnPredicate* del_pred;
-        auto iter = _del_predicates.find(cid);
-        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange r;
-        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
-        size_t prev_size = _scan_range.span_size();
-        SparseRange res;
-        _range_iter = _range_iter.intersection(r, &res);
-        std::swap(res, _scan_range);
-        _range_iter.set_range(&_scan_range);
-        _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
-        return Status::OK();
-    });
+    return _opts.runtime_range_pruner.update_range_if_arrived(
+            _opts.global_dictmaps,
+            [this](auto cid, const PredicateList& predicates) {
+                const ColumnPredicate* del_pred;
+                auto iter = _del_predicates.find(cid);
+                del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
+                SparseRange r;
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
+                size_t prev_size = _scan_range.span_size();
+                SparseRange res;
+                _range_iter = _range_iter.intersection(r, &res);
+                std::swap(res, _scan_range);
+                _range_iter.set_range(&_scan_range);
+                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                return Status::OK();
+            },
+            _opts.stats->raw_rows_read);
 }
 
 template <bool check_global_dict>
@@ -518,7 +510,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators<false>(range.lower().schema());
+            _init_column_iterators<false>(range.upper().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
@@ -847,6 +839,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     sw.start();
 
     const uint32_t chunk_capacity = _reserve_chunk_size;
+    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_predicate = !_opts.predicates.empty();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
@@ -855,62 +848,20 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_final_chunk->reset();
     _context->_adapt_global_dict_chunk->reset();
 
-    // If _overflow_read_chunk contains some rows, it means that in previous round of `_do_get_next`,
-    // _read_chunk reads more rows than its capacity, the overflow rows in saved in _overflow_read_chunk.
-    // Here we reload those overflow rows to current context's _read_chunk.
-    if (_context->_overflow_read_chunk != nullptr && !_context->_overflow_read_chunk->is_empty()) {
-        DCHECK_EQ(_context->_read_chunk->num_columns(), _context->_overflow_read_chunk->num_columns());
-        _context->_read_chunk->swap_chunk(*_context->_overflow_read_chunk);
-        if (rowid != nullptr) {
-            DCHECK_EQ(_context->_read_chunk->num_rows(), _context->_overflow_read_chunk_rowids.size());
-            rowid->insert(rowid->end(), _context->_overflow_read_chunk_rowids.begin(),
-                          _context->_overflow_read_chunk_rowids.end());
-            _context->_overflow_read_chunk_rowids.clear();
-        }
-        DCHECK(_context->_read_chunk->num_rows() > 0);
-        DCHECK(_context->_overflow_read_chunk->is_empty());
-    }
-
     Chunk* chunk = _context->_read_chunk.get();
     uint16_t chunk_start = chunk->num_rows();
 
-    if (LIKELY(!_context_switch_next_time)) {
-        while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
-            if (config::enable_segment_overflow_read_chunk) {
-                RETURN_IF_ERROR(_read(chunk, rowid, std::max(chunk_capacity - chunk_start, chunk_capacity / 4)));
-            } else {
-                RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
-            }
+    while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+        RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
+        chunk->check_or_die();
+        size_t next_start = chunk->num_rows();
+
+        if (has_predicate) {
+            ASSIGN_OR_RETURN(next_start, _filter(chunk, rowid, chunk_start, next_start));
             chunk->check_or_die();
-            size_t next_start = chunk->num_rows();
-
-            if (has_predicate) {
-                ASSIGN_OR_RETURN(next_start, _filter(chunk, rowid, chunk_start, next_start));
-                chunk->check_or_die();
-            }
-            chunk_start = next_start;
-            DCHECK_EQ(chunk_start, chunk->num_rows());
         }
-    }
-
-    // If _read_chunk contains more rows than its capacity, we save the overflow rows in _overflow_read_chunk.
-    if (chunk_start > chunk_capacity) {
-        if (_context->_overflow_read_chunk == nullptr) {
-            _context->_overflow_read_chunk = chunk->clone_empty(_reserve_chunk_size / 4 + 1);
-            if (rowid != nullptr) {
-                _context->_overflow_read_chunk_rowids.reserve(_reserve_chunk_size / 4 + 1);
-            }
-        }
-        DCHECK(_context->_overflow_read_chunk->is_empty());
-        _context->_overflow_read_chunk->append(*chunk, chunk_capacity, chunk_start - chunk_capacity);
-        _context->_overflow_read_chunk->set_delete_state(chunk->delete_state());
-        if (rowid != nullptr) {
-            DCHECK(_context->_overflow_read_chunk_rowids.empty());
-            _context->_overflow_read_chunk_rowids.insert(_context->_overflow_read_chunk_rowids.end(),
-                                                         rowid->begin() + chunk_capacity, rowid->end());
-            rowid->resize(chunk_capacity);
-        }
-        chunk->set_num_rows(chunk_capacity);
+        chunk_start = next_start;
+        DCHECK_EQ(chunk_start, chunk->num_rows());
     }
 
     size_t raw_chunk_size = chunk->num_rows();
@@ -948,14 +899,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
                chunk_size * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
-        if (LIKELY(!_context_switch_next_time)) {
-            _context_switch_count++;
-        }
-    }
-
-    if (UNLIKELY(_context_switch_next_time)) {
-        need_switch_context = true;
-        _context_switch_next_time = false;
+        _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
@@ -992,15 +936,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
-        // If config::enable_segment_overflow_read_chunk is enabled, when we performn context switch,
-        // we need to first check whether current context's _overflow_read_chunk is empty, if it is not
-        // we will handle _overflow_read_chunk in the next batch and also delay the context switch to next batch.
-        if (config::enable_segment_overflow_read_chunk && _context->_overflow_read_chunk != nullptr &&
-            !_context->_overflow_read_chunk->is_empty()) {
-            _context_switch_next_time = true;
-        } else {
-            _switch_context(_context->_next);
-        }
+        _switch_context(_context->_next);
     }
 
     return Status::OK();
@@ -1016,12 +952,7 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        if (config::enable_segment_overflow_read_chunk) {
-            to->_read_chunk =
-                    ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size + _reserve_chunk_size / 4 + 1);
-        } else {
-            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
-        }
+        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
     }
 
     if (to->_has_dict_column) {

@@ -59,6 +59,13 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
             request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
             request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
+
+    if (request.__isset.binlog_config) {
+        BinlogConfig binlog_config;
+        binlog_config.update(request.binlog_config);
+        (*tablet_meta)->set_binlog_config(binlog_config);
+    }
+
     return Status::OK();
 }
 
@@ -262,6 +269,12 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     if (tablet_meta_pb.has_updates()) {
         _updatesPB.reset(tablet_meta_pb.release_updates());
     }
+
+    if (tablet_meta_pb.has_binlog_config()) {
+        BinlogConfig binlog_config;
+        binlog_config.update(tablet_meta_pb.binlog_config());
+        set_binlog_config(binlog_config);
+    }
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -310,6 +323,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
         _updates->to_updates_pb(tablet_meta_pb->mutable_updates());
     } else if (_updatesPB) {
         tablet_meta_pb->mutable_updates()->CopyFrom(*_updatesPB);
+    }
+
+    if (_binlog_config != nullptr) {
+        _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
     }
 }
 

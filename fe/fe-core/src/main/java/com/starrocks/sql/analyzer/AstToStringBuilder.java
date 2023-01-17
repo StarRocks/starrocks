@@ -56,11 +56,13 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -163,6 +165,16 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(")");
+            return sb.toString();
+        }
+
         @Override
         public String visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
@@ -234,6 +246,45 @@ public class AstToStringBuilder {
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
                 sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitExportStatement(ExportStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("EXPORT TABLE ");
+            if (stmt.getTblName() == null) {
+                sb.append("non-exist");
+            } else {
+                sb.append(stmt.getTblName().toSql());
+            }
+            
+            if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
+                sb.append(" PARTITION (");
+                Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
+            }
+            
+            if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
+                sb.append("(");
+                Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
+            }
+            sb.append(" TO ");
+            sb.append("\"" + stmt.getPath() +  "\" ");
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            sb.append("WITH BROKER ");
+            if (stmt.getBrokerDesc() != null) {
+                if (!stmt.getBrokerDesc().getName().isEmpty()) {
+                    sb.append(stmt.getBrokerDesc().getName());
+                }
+                sb.append("' (");
+                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
                 sb.append(")");
             }
             return sb.toString();
@@ -380,9 +431,19 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")"
-                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias().getTbl());
+        public String visitSubquery(SubqueryRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+            return sqlBuilder.toString();
         }
 
         @Override
@@ -495,7 +556,16 @@ public class AstToStringBuilder {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias().getTbl());
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
 
             return sqlBuilder.toString();
         }
@@ -514,9 +584,9 @@ public class AstToStringBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
-                if (node.getColumnNames() != null) {
+                if (node.getColumnOutputNames() != null) {
                     sqlBuilder.append("(");
-                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnOutputNames()));
                     sqlBuilder.append(")");
                 }
             }
@@ -716,7 +786,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), node.getFieldName());
+            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {

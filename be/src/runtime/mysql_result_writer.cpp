@@ -41,7 +41,7 @@
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {

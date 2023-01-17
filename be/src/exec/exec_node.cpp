@@ -61,12 +61,14 @@
 #include "exec/lake_meta_scan_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/project_node.h"
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
+#include "exec/stream/stream_aggregate_node.h"
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
@@ -543,6 +545,28 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
+    case TPlanNodeType::STREAM_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        std::string connector_name;
+        StreamSourceType::type source_type = new_node.stream_scan_node.source_type;
+        switch (source_type) {
+        case StreamSourceType::BINLOG: {
+            connector_name = connector::Connector::BINLOG;
+            break;
+        }
+        default:
+            return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
+        };
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector_name;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::STREAM_AGG_NODE: {
+        *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
+        return Status::OK();
+    }
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
@@ -795,6 +819,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {
@@ -822,6 +847,15 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
+}
+
+void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
+    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
+    // for now just disable it in stream pipelines:
+    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
+    if (!context->is_stream_pipeline()) {
+        ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
+    }
 }
 
 } // namespace starrocks

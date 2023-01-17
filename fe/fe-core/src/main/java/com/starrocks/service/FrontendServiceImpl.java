@@ -159,6 +159,7 @@ import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
@@ -264,8 +265,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         for (String fullName : dbNames) {
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                continue;
+            if (globalStateMgr.isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                    continue;
+                }
+            } else {
+                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
 
             final String db = ClusterNamespace.getNameFromFullName(fullName);
@@ -277,6 +284,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         result.setDbs(dbs);
         return result;
+    }
+
+    private boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
+        Table.TableType type = tbl.getType();
+        switch (type) {
+            case OLAP:
+                return PrivilegeManager.checkAnyActionOnTable(currentUser, dbName, tbl.getName());
+            case MATERIALIZED_VIEW:
+                return PrivilegeManager.checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
+            case VIEW:
+                return PrivilegeManager.checkAnyActionOnView(currentUser, dbName, tbl.getName());
+            default:
+                return false;
+        }
     }
 
     @Override
@@ -296,7 +317,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // database privs should be checked in analysis phrase
-
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
@@ -307,9 +327,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                        tableName, PrivPredicate.SHOW)) {
-                    continue;
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    Table tbl = db.getTable(tableName);
+                    if (!checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
+                        continue;
+                    }
+                } else {
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
+                            tableName, PrivPredicate.SHOW)) {
+                        continue;
+                    }
                 }
 
                 if (matcher != null && !matcher.match(tableName)) {
@@ -357,7 +384,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                             table.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
@@ -376,10 +407,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         String ddlSql = view.getInlineViewDef();
                         Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
                         for (TableName tableName : allTables.keySet()) {
-                            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                                    currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
-                                ddlSql = "";
-                                break;
+                            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                                Table tbl = db.getTable(tableName.getTbl());
+                                if (!checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
+                                    break;
+                                }
+                            } else {
+                                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                                        currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
+                                    ddlSql = "";
+                                    break;
+                                }
                             }
                         }
                         status.setDdl_sql(ddlSql);
@@ -408,7 +446,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         db.readLock();
         try {
             for (MaterializedView mvTable : db.getMaterializedViews()) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+                        continue;
+                    }
+                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
                         mvTable.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
@@ -505,8 +547,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<Task> taskList = taskManager.showTasks(null);
 
         for (Task task : taskList) {
-
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
+            if (globalStateMgr.isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, task.getDbName())) {
+                    continue;
+                }
+            } else if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -546,9 +591,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
 
         for (TaskRunStatus status : taskRunList) {
-
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
-                continue;
+            if (globalStateMgr.isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, status.getDbName())) {
+                    continue;
+                }
+            } else {
+                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
 
             TTaskRunInfo info = new TTaskRunInfo();
@@ -574,6 +624,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetDBPrivsResult result = new TGetDBPrivsResult();
         List<TDBPrivDesc> tDBPrivs = Lists.newArrayList();
         result.setDb_privs(tDBPrivs);
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // TODO(yiming): support showing user privilege info in information_schema later
+            return result;
+        }
+
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
         List<DbPrivEntry> dbPrivEntries = GlobalStateMgr.getCurrentState().getAuth().getDBPrivEntries(currentUser);
         // flatten privileges
@@ -615,6 +670,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTablePrivsResult result = new TGetTablePrivsResult();
         List<TTablePrivDesc> tTablePrivs = Lists.newArrayList();
         result.setTable_privs(tTablePrivs);
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // TODO(yiming): support showing user privilege info in information_schema later
+            return result;
+        }
+
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
         List<TablePrivEntry> tablePrivEntries =
                 GlobalStateMgr.getCurrentState().getAuth().getTablePrivEntries(currentUser);
@@ -659,11 +719,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetUserPrivsResult result = new TGetUserPrivsResult();
         List<TUserPrivDesc> tUserPrivs = Lists.newArrayList();
         result.setUser_privs(tUserPrivs);
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // TODO(yiming): support showing user privilege info in information_schema later
+            return result;
+        }
+
         UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
         Auth currAuth = GlobalStateMgr.getCurrentState().getAuth();
         UserPrivTable userPrivTable = currAuth.getUserPrivTable();
         List<UserIdentity> userIdents = Lists.newArrayList();
-        // users can only see the privileges of themself at this moment
+        // users can only see the privileges of themselves at this moment
         userIdents.add(currentUser);
 
         // TODO: users with super privilege can view all the privileges like below
@@ -703,9 +768,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeResult updateExportTaskStatus(TUpdateExportTaskStatusRequest request) throws TException {
         TStatus status = new TStatus(TStatusCode.OK);
-        TFeResult result = new TFeResult(FrontendServiceVersion.V1, status);
-
-        return result;
+        return new TFeResult(FrontendServiceVersion.V1, status);
     }
 
     @Override
@@ -732,14 +795,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             describeWithoutDbAndTable(currentUser, columns, limit);
             return result;
         }
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                params.getTable_name(), PrivPredicate.SHOW)) {
-            return result;
-        }
+
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
-            db.readLock();
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!checkAnyActionOnTableLikeObject(currentUser, params.db, db.getTable(params.getTable_name()))) {
+                    return result;
+                }
+            } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
+                    params.getTable_name(), PrivPredicate.SHOW)) {
+                return result;
+            }
+
             try {
+                db.readLock();
                 Table table = db.getTable(params.getTable_name());
                 setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
             } finally {
@@ -756,19 +825,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbNames = globalStateMgr.getDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                continue;
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(currentUser, fullName)) {
+                    continue;
+                }
+            } else {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, fullName,
+                        PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
-                            tableName, PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
+                            continue;
+                        }
+                    } else {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
+                                tableName, PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
-                    db.readLock();
+
                     try {
+                        db.readLock();
                         Table table = db.getTable(tableName);
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
@@ -920,19 +1003,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
-                                       String clientIp, PrivPredicate predicate) throws AuthenticationException {
+    private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
+                                          String clientIp) throws AuthenticationException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isUsingNewPrivilege()) {
+            UserIdentity currentUser =
+                    globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
+            if (currentUser == null) {
+                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
+            }
+            // check INSERT action on table
+            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.TableAction.INSERT)) {
+                throw new AuthenticationException(
+                        "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
+            }
+        } else {
+            List<UserIdentity> currentUser = Lists.newArrayList();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkPlainPassword(user, clientIp, passwd, currentUser)) {
+                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
+            }
 
-        List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkPlainPassword(user, clientIp, passwd, currentUser)) {
-            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-        }
-
-        Preconditions.checkState(currentUser.size() == 1);
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl, predicate)) {
-            throw new AuthenticationException(
-                    "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
+            Preconditions.checkState(currentUser.size() == 1);
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl,
+                    PrivPredicate.LOAD)) {
+                throw new AuthenticationException(
+                        "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
+            }
         }
     }
 
@@ -979,13 +1076,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
-        checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+        checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                request.getTbl(), request.getUser_ip());
 
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
@@ -1047,16 +1139,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // return true if commit success and publish success, return false if publish timeout
     private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
 
         // get database
@@ -1069,8 +1156,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make publish timeout is less than thrift_rpc_timeout_ms
-        // Otherwise, the publish will be successful but commit timeout in BE
-        // It will results as error like "call frontend service failed"
+        // Otherwise, the publish process will be successful but commit timeout in BE
+        // It will result in error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
@@ -1161,16 +1248,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
 
         // get database
@@ -1227,16 +1309,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
         String dbName = request.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -1308,6 +1385,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
+            plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
@@ -1410,7 +1488,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeManager.checkTableAction(ConnectContext.get(), dbName,
+                    if (!PrivilegeManager.checkTableAction(userIdentity, dbName,
                             tableName, PrivilegeType.TableAction.INSERT)) {
                         throw new UnauthorizedException(String.format(
                                 "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
@@ -1643,7 +1721,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
-
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
     }
 
@@ -1668,6 +1745,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        LOG.info("Recieve mvReport: {}", request);
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }

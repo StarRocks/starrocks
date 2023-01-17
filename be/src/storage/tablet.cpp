@@ -434,9 +434,8 @@ void Tablet::delete_expired_inc_rowsets() {
 }
 
 void Tablet::delete_expired_stale_rowset() {
-    int64_t now = UnixSeconds();
     // Compute the end time to delete rowsets, when an expired rowset createtime older then this time, it will be deleted.
-    int64_t expired_stale_sweep_endtime = now - config::tablet_rowset_stale_sweep_time_sec;
+    int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
 
     if (_updates) {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
@@ -1070,6 +1069,9 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_path_hash(_data_dir->path_hash());
     tablet_info->__set_is_in_memory(_tablet_meta->tablet_schema().is_in_memory());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+    if (_tablet_meta->get_binlog_config() != nullptr) {
+        tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+    }
     if (_updates) {
         _updates->get_tablet_info_extra(tablet_info);
     } else {

@@ -26,6 +26,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -87,7 +88,8 @@ public class AuthenticationManagerTest {
         masterManager.createUser(stmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
-        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
+        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(),
+                "10.1.1.1", new byte[0], new byte[0]);
         Assert.assertEquals(user, testUser);
 
         // create twice fail
@@ -252,6 +254,12 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(testUser, masterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
 
+        // 3.1 update user property
+        sql = "set property for 'test' 'max_user_connections' = '555'";
+        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+        Assert.assertEquals(555, masterManager.getMaxConn("test"));
+
         // 4. save image after alter
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
         masterManager.save(alterImage.getDataOutputStream());
@@ -284,6 +292,11 @@ public class AuthenticationManagerTest {
         followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
         Assert.assertEquals(testUser, followerManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+        // 7.2.1 replay update user property
+        UserPropertyInfo userPropertyInfo = (UserPropertyInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V2);
+        followerManager.replayUpdateUserProperty(userPropertyInfo);
+        Assert.assertEquals(555, followerManager.getMaxConn("test"));
         // 7.3 replay drop user
         UserIdentity dropInfo = (UserIdentity)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V2);
@@ -389,6 +402,6 @@ public class AuthenticationManagerTest {
             }
         }
         Assert.assertEquals(Arrays.asList(
-                    "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
+                "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
     }
 }

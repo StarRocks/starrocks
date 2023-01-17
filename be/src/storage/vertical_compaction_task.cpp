@@ -113,7 +113,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      const std::vector<uint32_t>& column_group,
                                                      RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
+    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());

@@ -38,26 +38,16 @@ public:
 
     static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool,
                            bool exception_if_failed = false);
-};
-
-// cast Array to Array.
-// only support cast the array to another array with the same nested level
-// For example.
-//   cast Array<int> to Array<String> is OK
-//   cast Array<int> to Array<Array<int>> is not OK
-class VectorizedCastArrayExpr final : public Expr {
-public:
-    VectorizedCastArrayExpr(Expr* cast_element_expr, const TExprNode& node)
-            : Expr(node), _cast_element_expr(cast_element_expr) {}
-
-    ~VectorizedCastArrayExpr() override = default;
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
-
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastArrayExpr(*this)); }
 
 private:
-    Expr* _cast_element_expr;
+    static StatusOr<std::unique_ptr<Expr>> create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
+                                                            const TypeDescriptor& cast_type,
+                                                            bool allow_throw_exception);
+    static StatusOr<std::unique_ptr<Expr>> create_cast_expr(ObjectPool* pool, const TExprNode& node,
+                                                            const TypeDescriptor& from_type,
+                                                            const TypeDescriptor& to_type, bool allow_throw_exception);
+    static Expr* create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+                                       LogicalType to_type, bool allow_throw_exception);
 };
 
 // Cast string to array<ANY>
@@ -94,6 +84,69 @@ public:
 private:
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
+};
+
+// cast one ARRAY to another ARRAY.
+// For example.
+//   cast ARRAY<tinyint> to ARRAY<int>
+class CastArrayExpr final : public Expr {
+public:
+    CastArrayExpr(const TExprNode& node, std::unique_ptr<Expr> element_cast)
+            : Expr(node), _element_cast(std::move(element_cast)) {}
+
+    CastArrayExpr(const CastArrayExpr& rhs) : Expr(rhs) {}
+
+    ~CastArrayExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayExpr(*this)); }
+
+private:
+    std::unique_ptr<Expr> _element_cast;
+};
+
+// cast one MAP to another MAP.
+// For example.
+//   cast MAP<tinyint, tinyint> to MAP<int, int>
+// TODO(alvin): function is enough, but now all cast operations are implemented in Expr.
+//  Need to refactor these Expressions as Functions
+class CastMapExpr final : public Expr {
+public:
+    CastMapExpr(const TExprNode& node, std::unique_ptr<Expr> key_cast, std::unique_ptr<Expr> value_cast)
+            : Expr(node), _key_cast(std::move(key_cast)), _value_cast(std::move(value_cast)) {}
+
+    CastMapExpr(const CastMapExpr& rhs) : Expr(rhs) {}
+
+    ~CastMapExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastMapExpr(*this)); }
+
+private:
+    std::unique_ptr<Expr> _key_cast;
+    std::unique_ptr<Expr> _value_cast;
+};
+
+// cast one STRUCT to another STRUCT.
+// For example.
+//   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
+class CastStructExpr final : public Expr {
+public:
+    CastStructExpr(const TExprNode& node, std::vector<std::unique_ptr<Expr>> field_casts)
+            : Expr(node), _field_casts(std::move(field_casts)) {}
+
+    CastStructExpr(const CastStructExpr& rhs) : Expr(rhs) {}
+
+    ~CastStructExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStructExpr(*this)); }
+
+private:
+    std::vector<std::unique_ptr<Expr>> _field_casts;
 };
 
 } // namespace starrocks

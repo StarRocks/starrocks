@@ -294,6 +294,31 @@ int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int n
     return 0;
 }
 
+bool StructColumn::equals(size_t left, const Column& rhs, size_t right) const {
+    const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
+    if (_fields.size() != rhs_struct._fields.size()) {
+        return false;
+    }
+    for (int i = 0; i < _fields.size(); ++i) {
+        if (_fields[i]->is_null(left)) {
+            if (!rhs_struct._fields[i]->is_null(right)) {
+                return false;
+            }
+        } else {
+            if (rhs_struct._fields[i]->is_null(right)) {
+                return false;
+            }
+
+            auto lhs_field = ColumnHelper::get_data_column(_fields[i].get());
+            auto rhs_field = ColumnHelper::get_data_column(rhs_struct._fields[i].get());
+            if (!lhs_field->equals(left, *rhs_field, right)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {
@@ -320,31 +345,53 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
 void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
-    for (size_t i = 0; i < _fields.size(); ++i) {
-        const auto& field = _fields[i];
-        buf->push_string(_field_names[i]);
-        buf->separator(':');
-        field->put_mysql_row_buffer(buf, idx);
-        if (i < _fields.size() - 1) {
-            // Add struct field separator, last field don't need ','.
-            buf->separator(',');
+    if (is_unnamed_struct()) {
+        for (size_t i = 0; i < _fields.size(); ++i) {
+            const auto& field = _fields[i];
+            field->put_mysql_row_buffer(buf, idx);
+            if (i < _fields.size() - 1) {
+                // Add struct field separator, last field don't need ','.
+                buf->separator(',');
+            }
+        }
+    } else {
+        for (size_t i = 0; i < _fields.size(); ++i) {
+            const auto& field = _fields[i];
+            buf->push_string(_field_names[i]);
+            buf->separator(':');
+            field->put_mysql_row_buffer(buf, idx);
+            if (i < _fields.size() - 1) {
+                // Add struct field separator, last field don't need ','.
+                buf->separator(',');
+            }
         }
     }
     buf->finish_push_bracket();
 }
 
-std::string StructColumn::debug_item(uint32_t idx) const {
+std::string StructColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';
-    for (size_t i = 0; i < _fields.size(); i++) {
-        const auto& field = _fields[i];
-        ss << _field_names[i];
-        ss << ":";
-        ss << field->debug_item(idx);
-        if (i < _fields.size() - 1) {
-            // Add struct field separator, last field don't need ','.
-            ss << ",";
+    if (is_unnamed_struct()) {
+        for (size_t i = 0; i < _fields.size(); i++) {
+            const auto& field = _fields[i];
+            ss << field->debug_item(idx);
+            if (i < _fields.size() - 1) {
+                // Add struct field separator, last field don't need ','.
+                ss << ",";
+            }
+        }
+    } else {
+        for (size_t i = 0; i < _fields.size(); i++) {
+            const auto& field = _fields[i];
+            ss << _field_names[i];
+            ss << ":";
+            ss << field->debug_item(idx);
+            if (i < _fields.size() - 1) {
+                // Add struct field separator, last field don't need ','.
+                ss << ",";
+            }
         }
     }
     ss << '}';
@@ -455,6 +502,16 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) {
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
     return nullptr;
+}
+
+Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == _fields.size()) << "Struct schema does not match data's";
+    auto num_fields = type.children.size();
+    auto num_rows = _fields[0]->size();
+    for (int i = 0; i < num_fields; ++i) {
+        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, _fields[i]);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

@@ -53,6 +53,10 @@
 
 namespace starrocks {
 
+inline unsigned long long operator"" _ms(unsigned long long x) {
+    return x * 1000 * 1000;
+}
+
 // Define macros for updating counters.  The macros make it very easy to disable
 // all counters at compile time.  Set this to 0 to remove counters.  This is useful
 // to do to make sure the counters aren't affecting the system.
@@ -68,6 +72,8 @@ namespace starrocks {
 #define ADD_TIMER(profile, name) (profile)->add_counter(name, TUnit::TIME_NS)
 #define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_child_counter(name, type, parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, parent) (profile)->add_child_counter(name, type, parent, true)
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
+    (profile)->add_child_counter(name, TUnit::TIME_NS, parent, threshold)
 #define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_child_counter(name, TUnit::TIME_NS, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
@@ -104,8 +110,8 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        explicit Counter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
-                : _value(value), _type(type), _skip_merge(skip_merge){};
+        explicit Counter(TUnit::type type, int64_t value = 0, bool skip_merge = false, int64_t display_threshold = 0)
+                : _value(value), _type(type), _skip_merge(skip_merge), _display_threshold(display_threshold){};
 
         virtual ~Counter() = default;
 
@@ -132,6 +138,8 @@ public:
 
         bool skip_merge() const { return _skip_merge; }
 
+        int64_t display_threshold() const { return _display_threshold; }
+
     private:
         friend class RuntimeProfile;
 
@@ -143,6 +151,8 @@ public:
         // its original value after merge. We can set the flag _skip_merge to true to skip the merge process
         // of the counter.
         const bool _skip_merge;
+
+        const int64_t _display_threshold;
     };
 
     class ConcurrentTimerCounter;
@@ -334,9 +344,9 @@ public:
     // parent_name.
     // If the counter already exists, the existing counter object is returned.
     Counter* add_child_counter(const std::string& name, TUnit::type type, const std::string& parent_name,
-                               bool skip_merge = false);
-    Counter* add_counter(const std::string& name, TUnit::type type, bool skip_merge = false) {
-        return add_child_counter(name, type, ROOT_COUNTER, skip_merge);
+                               bool skip_merge = false, int64_t threshold = 0);
+    Counter* add_counter(const std::string& name, TUnit::type type, bool skip_merge = false, int64_t threshold = 0) {
+        return add_child_counter(name, type, ROOT_COUNTER, skip_merge, threshold);
     }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
@@ -460,7 +470,7 @@ private:
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
     Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name,
-                                bool skip_merge);
+                                bool skip_merge, int64_t theshold = 0);
 
     RuntimeProfile* _parent;
 

@@ -81,12 +81,23 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         split_morsel_queue->set_ticket_checker(ticket_checker);
     }
 
+    const auto use_cache = _fragment_ctx->enable_cache();
     source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
     LocalRFWaitingSet all_local_rf_set;
-    for (auto& op : _operators) {
+    for (auto& op_ref : _operators) {
+        auto op = op_ref;
+        if (use_cache) {
+            // For MultilaneOperator<HashJoinProbeOperator> and MultilaneOperator<NLJoinProbeOperator>, we must use the
+            // internal operators wrapped in MultiOperators to construct _dependencies.
+            if (auto multilane_op = std::dynamic_pointer_cast<query_cache::MultilaneOperator>(op_ref);
+                multilane_op != nullptr) {
+                op = multilane_op->get_internal_op(0);
+            }
+        }
+
         if (auto* op_with_dep = dynamic_cast<DriverDependencyPtr>(op.get())) {
             _dependencies.push_back(op_with_dep);
         }
@@ -97,7 +108,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         const auto* global_rf_collector = op->runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
-                _global_rf_descriptors.emplace_back(desc);
+                if (!desc->skip_wait()) {
+                    _global_rf_descriptors.emplace_back(desc);
+                }
             }
 
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
@@ -109,29 +122,33 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
-    ssize_t cache_op_idx = -1;
-    query_cache::CacheOperatorPtr cache_op = nullptr;
-    for (auto i = 0; i < _operators.size(); ++i) {
-        if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
-            cache_op_idx = i;
-            break;
-        }
-    }
-
-    if (cache_op != nullptr) {
-        query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
-        query_cache::MultilaneOperators multilane_operators;
-        for (auto i = 0; i < cache_op_idx; ++i) {
-            auto& op = _operators[i];
-            if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get()); multilane_op != nullptr) {
-                multilane_op->set_lane_arbiter(lane_arbiter);
-                multilane_operators.push_back(multilane_op);
-            } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
-                olap_scan_op->set_lane_arbiter(lane_arbiter);
-                olap_scan_op->set_cache_operator(cache_op);
+    if (use_cache) {
+        ssize_t cache_op_idx = -1;
+        query_cache::CacheOperatorPtr cache_op = nullptr;
+        for (auto i = 0; i < _operators.size(); ++i) {
+            if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
+                cache_op_idx = i;
+                break;
             }
         }
-        cache_op->set_multilane_operators(std::move(multilane_operators));
+
+        if (cache_op != nullptr) {
+            query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
+            query_cache::MultilaneOperators multilane_operators;
+            for (auto i = 0; i < cache_op_idx; ++i) {
+                auto& op = _operators[i];
+                if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get());
+                    multilane_op != nullptr) {
+                    multilane_op->set_lane_arbiter(lane_arbiter);
+                    multilane_operators.push_back(multilane_op);
+                } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
+                    olap_scan_op->set_lane_arbiter(lane_arbiter);
+                    olap_scan_op->set_cache_operator(cache_op);
+                    cache_op->set_scan_operator(olap_scan_op);
+                }
+            }
+            cache_op->set_multilane_operators(std::move(multilane_operators));
+        }
     }
 
     for (auto& op : _operators) {
@@ -190,11 +207,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
-    DeferOp defer([&]() {
-        if (return_status.ok()) {
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
-        }
-    });
+    DeferOp defer([&]() { _update_statistics(total_chunks_moved, total_rows_moved, time_spent); });
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
@@ -396,6 +409,19 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    int64_t time_spent = 0;
+    // The driver may be destructed after finalizing, so use a temporal driver to record
+    // the information about the driver queue and workgroup.
+    PipelineDriver copied_driver;
+    copied_driver.set_workgroup(_workgroup);
+    copied_driver.set_in_queue(_in_queue);
+    copied_driver.set_driver_queue_level(_driver_queue_level);
+    DeferOp defer([&copied_driver, &time_spent]() {
+        copied_driver._update_driver_acct(0, 0, time_spent);
+        copied_driver._in_queue->update_statistics(&copied_driver);
+    });
+    SCOPED_RAW_TIMER(&time_spent);
+
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
     QUERY_TRACE_BEGIN("finalize", _driver_name);
@@ -559,11 +585,14 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     return Status::OK();
 }
 
-void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
-    driver_acct().increment_schedule_times();
+void PipelineDriver::_update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
     driver_acct().update_last_chunks_moved(total_chunks_moved);
     driver_acct().update_accumulated_rows_moved(total_rows_moved);
     driver_acct().update_last_time_spent(time_spent);
+}
+
+void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    _update_driver_acct(total_chunks_moved, total_rows_moved, time_spent);
 
     // Update statistics of scan operator
     if (ScanOperator* scan = source_scan_operator()) {
@@ -577,6 +606,10 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+}
+
+void PipelineDriver::increment_schedule_times() {
+    driver_acct().increment_schedule_times();
 }
 
 } // namespace starrocks::pipeline

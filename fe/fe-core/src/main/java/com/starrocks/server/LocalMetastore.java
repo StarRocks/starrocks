@@ -54,6 +54,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -1856,6 +1857,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
+                            table.getCurBinlogConfig(),
                             table.getPartitionInfo().getTabletType(partition.getId()),
                             table.getCompressionType(), indexMeta.getSortKeyIdxes());
                     tasks.add(task);
@@ -1960,6 +1962,28 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public ColocateTableIndex getColocateTableIndex() {
         return colocateTableIndex;
+    }
+
+    private void processColocationProperties(String colocateGroup, Database db, OlapTable olapTable, boolean expectLakeTable)
+            throws DdlException {
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            return;
+        }
+
+        if (olapTable.isLakeTable() != expectLakeTable) {
+            return;
+        }
+
+        String fullGroupName = db.getId() + "_" + colocateGroup;
+        ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+        if (groupSchema != null) {
+            // group already exist, check if this table can be added to this group
+            groupSchema.checkColocateSchema(olapTable);
+        }
+        // add table to this group, if group does not exist, create a new one
+        colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
+                null /* generate group id inside */, false /* isReplay */);
+        olapTable.setColocateGroup(colocateGroup);
     }
 
     // Create olap|lake table and related base index synchronously.
@@ -2155,6 +2179,26 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
+        if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
+            try {
+                boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
+                long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
+                long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
+                BinlogConfig binlogConfig = new BinlogConfig(0, enableBinlog,
+                        binlogTtl, binlogMaxSize);
+                olapTable.setCurBinlogConfig(binlogConfig);
+                LOG.info("create table {} set binlog config, enable_binlog = {}, binlogTtl = {}, binlog_max_size = {}",
+                        tableName, enableBinlog, binlogTtl, binlogMaxSize);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
         // write quorum
         try {
             olapTable.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -2164,7 +2208,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // replicated storage
         olapTable.setEnableReplicatedStorage(
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
+                PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine));
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -2204,23 +2250,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // check colocation properties
+        String colocateGroup = null;
         try {
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (!Strings.isNullOrEmpty(colocateGroup)) {
-                if (olapTable.isLakeTable()) {
-                    throw new DdlException("Does not support collocate group in lake table");
-                }
-                String fullGroupName = db.getId() + "_" + colocateGroup;
-                ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-                if (groupSchema != null) {
-                    // group already exist, check if this table can be added to this group
-                    groupSchema.checkColocateSchema(olapTable);
-                }
-                // add table to this group, if group does not exist, create a new one
-                colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
-                        null /* generate group id inside */);
-                olapTable.setColocateGroup(colocateGroup);
-            }
+            colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            processColocationProperties(colocateGroup, db, olapTable, false /* expectLakeTable */);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -2365,7 +2398,18 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
+                // if binlog_enable is true when creating table,
+                // then set binlogAvailableVersion without statistics through reportHandler
+                if (olapTable.isBinlogEnabled()) {
+                    Map<String, String> binlogAvailableVersion = olapTable.buildBinlogAvailableVersion();
+                    olapTable.setBinlogAvailableVersion(binlogAvailableVersion);
+                    LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
+                            tableName, binlogAvailableVersion.toString());
+                }
             }
+
+            // process lake table colocation properties, after partition and tablet creation
+            processColocationProperties(colocateGroup, db, olapTable, true /* expectLakeTable */);
 
             // check database exists again, because database can be dropped when creating table
             if (!tryLock(false)) {
@@ -2413,7 +2457,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             // only remove from memory, because we have not persist it
             if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
-                colocateTableIndex.removeTable(tableId);
+                colocateTableIndex.removeTable(tableId, olapTable, false /* isReplay */);
             }
         }
     }
@@ -3236,15 +3280,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> baseSchema = stmt.getMvColumnItems();
         validateColumns(baseSchema);
         // create partition info
-        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
-        PartitionInfo partitionInfo;
-        if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(
-                    Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
-        } else {
-            partitionInfo = new SinglePartitionInfo();
-        }
+        PartitionInfo partitionInfo = buildPartitionInfo(stmt);
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -3457,11 +3493,24 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             unlock();
         }
-        LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
+        LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        PartitionInfo partitionInfo;
+        if (partitionDesc != null) {
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Collections.singletonList(stmt.getPartitionColumn()),
+                    Maps.newHashMap(), false);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
+        return partitionInfo;
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
@@ -3971,6 +4020,21 @@ public class LocalMetastore implements ConnectorMetadata {
 
     }
 
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
+                db.getId(),
+                table.getId(),
+                binlogConfig.toProperties());
+        editLog.logModifyBinlogConfig(log);
+
+        if (!binlogConfig.getBinlogEnable()) {
+            table.clearBinlogAvailableVersion();
+            table.setBinlogTxnId(BinlogConfig.INVALID);
+        }
+        table.setCurBinlogConfig(binlogConfig);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
@@ -4140,6 +4204,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
+                } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
+                    if (!olapTable.isBinlogEnabled()) {
+                        olapTable.clearBinlogAvailableVersion();
+                    }
                 }
             }
         } finally {
@@ -4799,7 +4867,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public void onEraseTable(@NotNull OlapTable olapTable) {
+    public void onEraseTable(@NotNull OlapTable olapTable, boolean isReplay) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
         for (Partition partition : allPartitions) {
@@ -4810,7 +4878,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        colocateTableIndex.removeTable(olapTable.getId());
+        colocateTableIndex.removeTable(olapTable.getId(), olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {

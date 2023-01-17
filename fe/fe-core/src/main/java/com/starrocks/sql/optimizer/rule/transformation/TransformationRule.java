@@ -23,7 +23,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Transformation rules: logical -> logical
  */
 public abstract class TransformationRule extends Rule {
+
+
     protected TransformationRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
+
+
 }

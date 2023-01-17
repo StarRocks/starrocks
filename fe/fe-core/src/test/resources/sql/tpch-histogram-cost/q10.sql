@@ -37,6 +37,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 17:MERGING-EXCHANGE
+distribution type: GATHER
 limit: 20
 cardinality: 20
 column statistics:
@@ -127,6 +128,7 @@ OutPut Exchange Id: 17
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----12:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 25
 |
 10:Project
@@ -172,6 +174,8 @@ OutPut Exchange Id: 17
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----8:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [11: O_CUSTKEY, INT, false]
 |       cardinality: 5644405
 |
 0:OlapScanNode
@@ -240,6 +244,8 @@ OutPut Exchange Id: 08
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----5:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [10: O_ORDERKEY, INT, false]
 |       cardinality: 5644405
 |
 2:Project

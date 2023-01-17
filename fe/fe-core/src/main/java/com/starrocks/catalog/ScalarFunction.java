@@ -88,16 +88,14 @@ public class ScalarFunction extends Function {
         setCloseFnSymbol(closeFnSymbol);
     }
 
-    public ScalarFunction(long fid, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs,
-                          boolean isVectorized) {
-        super(fid, name, argTypes, retType, hasVarArgs, isVectorized);
+    public ScalarFunction(long fid, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
+        super(fid, name, argTypes, retType, hasVarArgs);
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
                                                          String name, List<Type> argTypes,
                                                          boolean hasVarArgs, Type retType) {
-        ScalarFunction fn = new ScalarFunction(fid,
-                new FunctionName(name), argTypes, retType, hasVarArgs, true);
+        ScalarFunction fn = new ScalarFunction(fid, new FunctionName(name), argTypes, retType, hasVarArgs);
         fn.setBinaryType(TFunctionBinaryType.BUILTIN);
         fn.setUserVisible(true);
         return fn;

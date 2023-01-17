@@ -95,14 +95,25 @@ public final class Platform {
         _UNSAFE.putDouble(object, offset, value);
     }
 
+    public static boolean isTesting() {
+        return System.getProperties().containsKey("starrocks.fe.test") &&
+                System.getProperty("starrocks.fe.test").equals("1");
+    }
+
     public static void freeMemory(long address) {
-        //_UNSAFE.freeMemory(address);
-        com.starrocks.utils.NativeMethodHelper.memoryTrackerFree(address);
+        if (isTesting()) {
+            _UNSAFE.freeMemory(address);
+        } else {
+            com.starrocks.utils.NativeMethodHelper.memoryTrackerFree(address);
+        }
     }
 
     public static long allocateMemory(long size) {
-        //return _UNSAFE.allocateMemory(size);
-        return com.starrocks.utils.NativeMethodHelper.memoryTrackerMalloc(size);
+        if (isTesting()) {
+            return _UNSAFE.allocateMemory(size);
+        } else {
+            return com.starrocks.utils.NativeMethodHelper.memoryTrackerMalloc(size);
+        }
     }
 
     public static long reallocateMemory(long address, long oldSize, long newSize) {

@@ -18,10 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -335,6 +332,35 @@ public class Utils {
         return true;
     }
 
+    public static boolean capableOuterReorder(OptExpression root, int threshold) {
+        boolean[] hasOuterOrSemi = {false};
+        int totalJoinNodes = countJoinNode(root, hasOuterOrSemi);
+        return totalJoinNodes < threshold && hasOuterOrSemi[0];
+    }
+
+    private static int countJoinNode(OptExpression root, boolean[] hasOuterOrSemi) {
+        int count = 0;
+        Operator operator = root.getOp();
+        for (OptExpression child : root.getInputs()) {
+            if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+                count += countJoinNode(child, hasOuterOrSemi);
+            } else {
+                count = Math.max(count, countJoinNode(child, hasOuterOrSemi));
+            }
+        }
+
+        if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+            count += 1;
+            if (!hasOuterOrSemi[0]) {
+                LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+                if (joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isSemiAntiJoin()) {
+                    hasOuterOrSemi[0] = true;
+                }
+            }
+        }
+        return count;
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -425,36 +451,6 @@ public class Utils {
             }
         }
         return smallestColumnRef;
-    }
-
-    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
-                                              Collection<Long> selectedPartitionId,
-                                              Collection<Long> selectedTabletId) {
-        ConnectContext ctx = ConnectContext.get();
-        int backendSize = ctx.getTotalBackendNumber();
-        int aliveBackendSize = ctx.getAliveBackendNumber();
-        int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
-        for (Long partitionId : selectedPartitionId) {
-            Partition partition = table.getPartition(partitionId);
-            if (table.isLakeTable()) {
-                // TODO(wyb): necessary to support?
-                return false;
-            }
-            if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
-                return false;
-            }
-            long visibleVersion = partition.getVisibleVersion();
-            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
-            // TODO(kks): improve this for loop
-            for (Long id : selectedTabletId) {
-                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
-                if (tablet != null && tablet.getQueryableReplicasSize(visibleVersion, schemaHash)
-                        != aliveBackendSize) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {
