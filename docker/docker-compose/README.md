@@ -85,7 +85,7 @@ When you connect to the cluster, StarRocks may return the following error:
  ERROR 2003 (HY000): Can't connect to MySQL server on 'starrocks-fe:9030' (111)
 ```
 
-The reason may be that the BE node was started earlier than that the FE node was started. To solve this problem, you can re-run the `docker compose up` command, or manually add the BE node to the cluster using the following command:
+The reason may be that the BE node was started before the FE node is ready. To solve this problem, re-run the docker compose up command, or manually add the BE node to the cluster using the following command:
 
 ```sql
 ADD BACKEDN "<be_ip>:9050";
