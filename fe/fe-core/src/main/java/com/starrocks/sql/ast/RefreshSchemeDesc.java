@@ -22,7 +22,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class RefreshSchemeDesc implements ParseNode {
 
     protected MaterializedView.RefreshType type;
-
+    protected MaterializedView.RefreshMoment moment;
     protected final NodePosition pos;
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type) {
@@ -30,8 +30,13 @@ public class RefreshSchemeDesc implements ParseNode {
     }
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos) {
-        this.pos = pos;
+        this(type, pos, MaterializedView.RefreshMoment.IMMEDIATE);
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
         this.type = type;
+        this.moment = moment;
+        this.pos = pos;
     }
 
     public MaterializedView.RefreshType getType() {
@@ -42,4 +47,9 @@ public class RefreshSchemeDesc implements ParseNode {
     public NodePosition getPos() {
         return pos;
     }
+
+    public MaterializedView.RefreshMoment getMoment() {
+        return moment;
+    }
+
 }

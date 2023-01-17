@@ -321,9 +321,36 @@ public class ShowCreateMaterializedViewStmtTest {
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
+    @Test
+    public void testShowCreateDeferredMv() throws Exception {
+        String createMvSql = "create materialized view deferred_mv4 " +
+                "partition by (date_trunc('month',k3))" +
+                "distributed by hash(k3) buckets 10 " +
+                "refresh deferred manual " +
+                "as select k1 as k3, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("deferred_mv4");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (date_trunc('month', `k3`))\n" +
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll("deferred_mv4", "deferred_mv4_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+    }
 
     @Test(expected = SemanticException.class)
-    public void testNoTbl(){
+    public void testNoTbl() {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");

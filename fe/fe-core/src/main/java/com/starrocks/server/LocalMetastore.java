@@ -2648,6 +2648,7 @@ public class LocalMetastore implements ConnectorMetadata {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
         }
+        mvRefreshScheme.setMoment(refreshSchemeDesc.getMoment());
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;

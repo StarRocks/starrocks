@@ -2509,7 +2509,8 @@ public class CreateMaterializedViewTest {
                     "distributed by hash(k1) " +
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
             CreateMaterializedViewStatement stmt =
-                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            newStarRocksAssert.getCtx());
             Assert.assertEquals(stmt.getTableName().getDb(), "test");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
@@ -2520,6 +2521,16 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCreateImmediateDeferred() throws Exception {
+        UtFrameUtils.parseStmtWithNewParser(
+                "create materialized view immediate_mv refresh deferred async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1", connectContext);
+        UtFrameUtils.parseStmtWithNewParser(
+                "create materialized view immediate_mv refresh immediate async distributed by hash(c_1_9) as" +
+                        " select c_1_9, c_1_4 from t1", connectContext);
     }
 }
 
