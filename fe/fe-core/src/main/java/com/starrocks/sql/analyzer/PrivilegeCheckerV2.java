@@ -1522,21 +1522,39 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
-            // Step 1 check system.Repository
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            // check repository on system
             checkSystemRepository(context);
-            // Step 2 check any action on db
-            if (!PrivilegeManager.checkAnyActionOnDb(context, statement.getDbName())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getDbName());
-            }
-            // Step 3 check table.insert
+
             List<TableRef> tableRefs = statement.getTableRefs();
-            for (TableRef tableRef : tableRefs) {
-                checkTableAction(context,
-                        statement.getDbName(),
-                        tableRef.getName().getTbl(),
-                        PrivilegeType.TableAction.INSERT);
+            // check create_database on current catalog if we're going to restore the whole database
+            if (tableRefs == null || tableRefs.isEmpty()) {
+                checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CatalogAction.CREATE_DATABASE);
+            } else {
+                // going to restore some tables in database or some partitions in table
+                Database db = globalStateMgr.getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        // check create_table on specified database
+                        checkDbAction(context, context.getCurrentCatalog(), db.getFullName(),
+                                PrivilegeType.DbAction.CREATE_TABLE);
+                        // check insert on specified table
+                        for (TableRef tableRef : tableRefs) {
+                            Table table = db.getTable(tableRef.getName().getTbl());
+                            if (table != null) {
+                                checkTableAction(context,
+                                        statement.getDbName(),
+                                        tableRef.getName().getTbl(),
+                                        PrivilegeType.TableAction.INSERT);
+                            }
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
             }
+
             return null;
         }
 

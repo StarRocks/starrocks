@@ -1343,13 +1343,11 @@ public class PrivilegeCheckerV2Test {
         verifyMultiGrantRevoke(
                 "recover database " + testDbName + ";",
                 Arrays.asList(
-                        "grant DROP on database " + testDbName + " to test",
                         "grant CREATE_DATABASE on catalog default_catalog to test"),
                 Arrays.asList(
-                        "revoke DROP on database " + testDbName + " from test",
                         "revoke CREATE_DATABASE on catalog default_catalog from test;"
                 ),
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied for user 'test' to catalog 'default_catalog'");
         grantRevokeSqlAsRoot("grant DROP on database " + testDbName + " to test");
         try {
             verifyMultiGrantRevoke(
@@ -2010,7 +2008,7 @@ public class PrivilegeCheckerV2Test {
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
-        grantOrRevoke("grant create_view on database db1 to test");
+        grantOrRevoke("grant create_table on database db1 to test");
 
         verifyGrantRevoke(restoreSql,
                 "grant SELECT,INSERT on db1.tbl1 to test",
