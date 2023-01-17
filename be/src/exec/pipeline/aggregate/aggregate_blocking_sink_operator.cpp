@@ -69,9 +69,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {
         }
-        TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->build_hash_map(*hash_map_with_key, chunk_size, agg_group_by_with_limit);
-        }));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, agg_group_by_with_limit));
         _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
