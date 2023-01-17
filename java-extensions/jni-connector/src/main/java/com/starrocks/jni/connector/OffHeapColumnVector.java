@@ -24,6 +24,7 @@ public class OffHeapColumnVector {
         DATETIME,
         DECIMAL
     }
+
     private long nulls;
     private long data;
 
@@ -73,15 +74,12 @@ public class OffHeapColumnVector {
         reset();
     }
 
-<<<<<<< HEAD
-=======
     public static boolean isArray(OffHeapColumnType type) {
         return type == OffHeapColumnType.BINARY || type == OffHeapColumnType.STRING
                 || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DATETIME
                 || type == OffHeapColumnType.DECIMAL;
     }
 
->>>>>>> fbf3c31c4 ([Feature] Support binary/timestamp column type for hudi MOR (#16594))
     public long nullsNativeAddress() {
         return nulls;
     }
@@ -147,7 +145,8 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
         } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL) {
+        } else if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE ||
+                type == OffHeapColumnType.DECIMAL) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
