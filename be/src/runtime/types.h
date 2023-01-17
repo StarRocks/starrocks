@@ -259,7 +259,7 @@ struct TypeDescriptor {
                type == TYPE_PERCENTILE;
     }
 
-    inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
+    inline bool is_unknown_type() const { return type == INVALID_TYPE; }
 
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
 

@@ -188,7 +188,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     type_map_varchar_int.children.resize(2);
     type_map_varchar_int.children[0].type = PrimitiveType::TYPE_VARCHAR;
     type_map_varchar_int.children[0].len = 10;
-    type_map_varchar_int.children[1].type = LogicalType::TYPE_INT;
+    type_map_varchar_int.children[1].type = PrimitiveType::TYPE_INT;
 
     TypeDescriptor type_varchar(PrimitiveType::TYPE_VARCHAR);
     type_varchar.len = 10;

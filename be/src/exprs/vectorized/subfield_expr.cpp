@@ -31,7 +31,9 @@ public:
             auto* struct_column = down_cast<StructColumn*>(tmp_col);
             col = struct_column->field_column(fieldname);
             if (col == nullptr) {
-                return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
+                LOG(WARNING) << "Struct subfield name: " + fieldname + " not found!";
+                // Return an empty column to avoid nullptr
+                return ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_NULL), true);
             }
         }
 
@@ -55,7 +57,9 @@ public:
         std::string fieldname = _used_subfield_names.back();
         ColumnPtr subfield_column = struct_column->field_column(fieldname);
         if (subfield_column == nullptr) {
-            return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
+            LOG(WARNING) << "Struct subfield name: " + fieldname + " not found!";
+            // Return an empty column to avoid nullptr
+            return ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_NULL), true);
         }
         if (subfield_column->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(subfield_column.get());
