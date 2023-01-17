@@ -1423,6 +1423,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
         // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.

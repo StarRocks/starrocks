@@ -34,6 +34,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -56,7 +57,7 @@ import java.util.Map;
  * <p>
  * TODO: support table api like Iceberg
  */
-public class LakeTable extends OlapTable {
+public class LakeTable extends OlapTable implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(LakeTable.class);
 

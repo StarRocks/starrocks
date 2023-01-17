@@ -1557,13 +1557,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName);
             }
             try {
-                if (olapTable.getRelatedMaterializedViews() != null) {
-                    for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                        MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
-                        if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
-                            GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                    db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
-                        }
+                for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
+                    if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                                db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             } catch (MetaNotFoundException e) {
