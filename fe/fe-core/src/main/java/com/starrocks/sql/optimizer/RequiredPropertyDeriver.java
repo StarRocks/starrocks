@@ -138,7 +138,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
                 && context.getRootProperty().isExecuteInOneTablet()
-                && node.getType().isGlobal() && !node.isSplit()) {
+                && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;
         }
