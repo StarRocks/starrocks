@@ -1152,18 +1152,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return this instanceof CastExpr && ((CastExpr) this).isImplicit();
     }
 
-    /**
-     * Looks up in the globalStateMgr the builtin for 'name' and 'argTypes'.
-     * Returns null if the function is not found.
-     */
-    protected Function getBuiltinFunction(
-            Analyzer analyzer, String name, Type[] argTypes, Function.CompareMode mode)
-            throws AnalysisException {
-        FunctionName fnName = new FunctionName(name);
-        Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
-        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
-    }
-
     public static Function getBuiltinFunction(String name, Type[] argTypes, Function.CompareMode mode) {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
