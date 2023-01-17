@@ -96,7 +96,8 @@ public final class Platform {
     }
 
     public static boolean isTesting() {
-        return System.getProperties().containsKey("starrocks.fe.test") && System.getProperty("starrocks.fe.test").equals("1");
+        return System.getProperties().containsKey("starrocks.fe.test") &&
+                System.getProperty("starrocks.fe.test").equals("1");
     }
 
     public static void freeMemory(long address) {
