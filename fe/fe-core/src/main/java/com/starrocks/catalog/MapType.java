@@ -73,6 +73,17 @@ public class MapType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        // We set pruned subfield to NULL in map
+        if (!selectedFields[0]) {
+            keyType = ScalarType.UNKNOWN_TYPE;
+        }
+        if (!selectedFields[1]) {
+            valueType = ScalarType.UNKNOWN_TYPE;
+        }
+        Preconditions.checkArgument(!keyType.isNull() || !valueType.isNull());
+    }
+
     @Override
     public void selectAllFields() {
         Arrays.fill(selectedFields, true);
@@ -142,10 +153,7 @@ public class MapType extends Type {
     public void toThrift(TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
-        Preconditions.checkNotNull(keyType);
-        Preconditions.checkNotNull(valueType);
         node.setType(TTypeNodeType.MAP);
-        node.setSelected_fields(Arrays.asList(selectedFields));
         keyType.toThrift(container);
         valueType.toThrift(container);
     }
