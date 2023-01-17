@@ -1795,7 +1795,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = true;
+    public static boolean enable_new_publish_mechanism = false;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.

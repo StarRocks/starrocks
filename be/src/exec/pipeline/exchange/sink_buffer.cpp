@@ -59,10 +59,10 @@ SinkBuffer::~SinkBuffer() {
     _buffers.clear();
 }
 
-void SinkBuffer::add_request(TransmitChunkInfo& request) {
+Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
-        return;
+        return Status::OK();
     }
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
@@ -70,8 +70,10 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        _try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); });
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
+
+    return Status::OK();
 }
 
 bool SinkBuffer::is_full() const {
@@ -215,7 +217,7 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
+Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 
@@ -224,7 +226,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::funct
 
     for (;;) {
         if (_is_finishing) {
-            return;
+            return Status::OK();
         }
 
         auto& buffer = _buffers[instance_id.lo];
@@ -241,7 +243,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::funct
             too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
         }
         if (buffer.empty() || too_much_brpc_process) {
-            return;
+            return Status::OK();
         }
 
         TransmitChunkInfo& request = buffer.front();
@@ -263,7 +265,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::funct
         // But we must guarantee that first packet must be received first
         if (_num_finished_rpcs[instance_id.lo] == 0 && _num_in_flight_rpcs[instance_id.lo] > 0) {
             need_wait = true;
-            return;
+            return Status::OK();
         }
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
@@ -290,7 +292,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::funct
                 // But we must guarantee that eos packent must be the last packet
                 if (_num_in_flight_rpcs[instance_id.lo] > 0) {
                     need_wait = true;
-                    return;
+                    return Status::OK();
                 }
             }
         }
@@ -363,7 +365,9 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::funct
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         }
 
-        return;
+        return Status::OK();
     }
+
+    return Status::OK();
 }
 } // namespace starrocks::pipeline

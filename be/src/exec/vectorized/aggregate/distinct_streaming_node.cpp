@@ -68,9 +68,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
                 TRY_CATCH_ALLOC_SCOPE_START()
 
-                _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                    _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
-                });
+                _aggregator->build_hash_set(input_chunk_size);
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
@@ -94,9 +92,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
                     TRY_CATCH_ALLOC_SCOPE_START()
-                    _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                        _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
-                    });
+                    _aggregator->build_hash_set(input_chunk_size);
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
                     _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -108,11 +104,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_ALLOC_SCOPE_START()
-                        _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                            _aggregator->build_hash_set_with_selection(*hash_set_with_key, input_chunk_size);
-                        });
-                        TRY_CATCH_ALLOC_SCOPE_END()
+                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection(input_chunk_size));
                     }
 
                     {
@@ -166,9 +158,7 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
-        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, runtime_state()->chunk_size(), chunk);
-    });
+    _aggregator->convert_hash_set_to_chunk(runtime_state()->chunk_size(), chunk);
 }
 
 pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
