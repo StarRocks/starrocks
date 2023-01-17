@@ -786,7 +786,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), node.getFieldName());
+            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
