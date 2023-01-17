@@ -1402,7 +1402,9 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     c2.field_names.emplace_back("not_existed");
 
     SlotDesc slot_descs[] = {
-            {"c1", c1}, {"c2", c2}, {""},
+            {"c1", c1},
+            {"c2", c2},
+            {""},
     };
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
