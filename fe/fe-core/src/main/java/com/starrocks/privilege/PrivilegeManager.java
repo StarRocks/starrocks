@@ -485,7 +485,7 @@ public class PrivilegeManager {
             invalidateUserInCache(user);
             LOG.info("grant role {} to user {}", roleName, user);
         } finally {
-            userWriteLock();
+            userWriteUnlock();
         }
     }
 
@@ -573,7 +573,7 @@ public class PrivilegeManager {
             invalidateUserInCache(user);
             LOG.info("revoke role {} from user {}", roleName, user);
         } finally {
-            userWriteLock();
+            userWriteUnlock();
         }
     }
 
