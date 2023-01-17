@@ -40,7 +40,7 @@ public class SubmitResult {
         this.status = status;
     }
 
-    enum SubmitStatus {
+    public enum SubmitStatus {
         SUBMITTED,
         REJECTED,
         FAILED
