@@ -14,15 +14,16 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.jni.connector.ColumnType;
+import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.jni.connector.TypeMapping;
+import com.starrocks.jni.connector.StructSelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.ArrayWritable;
@@ -43,6 +44,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.stream.Collectors.toList;
@@ -53,10 +55,13 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
     private final String[] requiredFields;
+    private int[] requiredColumnIds;
+    private ColumnType[] requiredTypes;
+    private final String[] nestedFields;
     private final String instantTime;
     private final String[] deltaFilePaths;
     private final String dataFilePath;
-    private final long dataFileLenth;
+    private final long dataFileLength;
     private final String serde;
     private final String inputFormat;
     private RecordReader<NullWritable, ArrayWritable> reader;
@@ -73,6 +78,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.hiveColumnNames = params.get("hive_column_names");
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
+        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
             this.deltaFilePaths = new String[0];
@@ -80,7 +86,7 @@ public class HudiSliceScanner extends ConnectorScanner {
             this.deltaFilePaths = params.get("delta_file_paths").split(",");
         }
         this.dataFilePath = params.get("data_file_path");
-        this.dataFileLenth = Long.parseLong(params.get("data_file_length"));
+        this.dataFileLength = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
         this.inputFormat = params.get("input_format");
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
@@ -88,68 +94,92 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.classLoader = this.getClass().getClassLoader();
     }
 
+    private JobConf makeJobConf(Properties properties) {
+        Configuration conf = new Configuration();
+        conf.setBoolean("dfs.client.use.legacy.blockreader", false);
+        JobConf jobConf = new JobConf(conf);
+        jobConf.setBoolean("hive.io.file.read.all.columns", false);
+        properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
+        return jobConf;
+    }
+
+    private void parseRequiredTypes() {
+        String[] hiveColumnNames = this.hiveColumnNames.split(",");
+        HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
+        HashMap<String, String> hiveColumnNameToType = new HashMap<>();
+        for (int i = 0; i < hiveColumnNames.length; i++) {
+            hiveColumnNameToIndex.put(hiveColumnNames[i], i);
+            hiveColumnNameToType.put(hiveColumnNames[i], hiveColumnTypes[i]);
+        }
+
+        requiredTypes = new ColumnType[requiredFields.length];
+        requiredColumnIds = new int[requiredFields.length];
+        for (int i = 0; i < requiredFields.length; i++) {
+            requiredColumnIds[i] = hiveColumnNameToIndex.get(requiredFields[i]);
+            String type = hiveColumnNameToType.get(requiredFields[i]);
+            requiredTypes[i] = new ColumnType(requiredFields[i], type);
+        }
+
+        StructSelectedFields ssf = new StructSelectedFields();
+        for (String nestField : nestedFields) {
+            ssf.addNestedPath(nestField);
+        }
+        for (int i = 0; i < requiredFields.length; i++) {
+            ColumnType type = requiredTypes[i];
+            String name = requiredFields[i];
+            if (type.isStruct()) {
+                StructSelectedFields ssf2 = ssf.findChildren(name);
+                type.pruneOnStructSelectedFields(ssf2);
+            }
+        }
+    }
+
+    private Properties makeProperties() {
+        Properties properties = new Properties();
+        properties.setProperty("hive.io.file.readcolumn.ids",
+                Arrays.stream(this.requiredColumnIds).mapToObj(x -> String.valueOf(x))
+                        .collect(Collectors.joining(",")));
+        properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
+        if (this.nestedFields.length > 0) {
+            properties.setProperty("hive.io.file.readNestedColumn.paths", String.join(",", this.nestedFields));
+        }
+        properties.setProperty("columns", this.hiveColumnNames);
+        properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
+        properties.setProperty("serialization.lib", this.serde);
+        return properties;
+    }
+
+    private void initReader(JobConf jobConf, Properties properties) throws Exception {
+        // dataFileLenth==-1 or dataFilePath == "" means logs only scan
+        String realtimePath = dataFileLength != -1 ? dataFilePath : deltaFilePaths[0];
+        long realtimeLength = dataFileLength != -1 ? dataFileLength : 0;
+        Path path = new Path(realtimePath);
+        FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
+        List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
+        FileSplit hudiSplit =
+                new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
+
+        InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
+        reader = (RecordReader<NullWritable, ArrayWritable>) inputFormatClass
+                .getRecordReader(hudiSplit, jobConf, Reporter.NULL);
+
+        deserializer = getDeserializer(jobConf, properties, serde);
+        rowInspector = getTableObjectInspector(deserializer);
+        for (int i = 0; i < requiredFields.length; i++) {
+            StructField field = rowInspector.getStructFieldRef(requiredFields[i]);
+            structFields[i] = field;
+            fieldInspectors[i] = field.getFieldObjectInspector();
+        }
+    }
+
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Properties properties = new Properties();
-            Configuration conf = new Configuration();
-            conf.setBoolean("dfs.client.use.legacy.blockreader", false);
-            JobConf jobConf = new JobConf(conf);
-            jobConf.setBoolean("hive.io.file.read.all.columns", false);
-            String[] hiveColumnNames = this.hiveColumnNames.split(",");
-            HashMap<String, Integer> hiveColumnNameToIndex = new HashMap<>();
-            HashMap<String, String> hiveColumnNameToType = new HashMap<>();
-            for (int i = 0; i < hiveColumnNames.length; i++) {
-                hiveColumnNameToIndex.put(hiveColumnNames[i], i);
-                hiveColumnNameToType.put(hiveColumnNames[i], hiveColumnTypes[i]);
-            }
-
-            String[] requiredTypes = new String[requiredFields.length];
-            StringBuilder columnIdBuilder = new StringBuilder();
-            boolean isFirst = true;
-            for (int i = 0; i < requiredFields.length; i++) {
-                if (!isFirst) {
-                    columnIdBuilder.append(",");
-                }
-                columnIdBuilder.append(hiveColumnNameToIndex.get(requiredFields[i]));
-                String typeStr = hiveColumnNameToType.get(requiredFields[i]);
-                // convert decimal(x,y) to decimal
-                if (typeStr.startsWith("decimal")) {
-                    typeStr = "decimal";
-                }
-                requiredTypes[i] = typeStr;
-                isFirst = false;
-            }
-            initOffHeapTableWriter(requiredTypes, fetchSize, TypeMapping.hiveTypeMappings);
-
-            properties.setProperty("hive.io.file.readcolumn.ids", columnIdBuilder.toString());
-            properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
-            properties.setProperty("columns", this.hiveColumnNames);
-            properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
-            properties.setProperty("serialization.lib", this.serde);
-            properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
-
-            // dataFileLenth==-1 or dataFilePath == "" means logs only scan
-            String realtimePath = dataFileLenth != -1 ? dataFilePath : deltaFilePaths[0];
-            long realtimeLength = dataFileLenth != -1 ? dataFileLenth : 0;
-            Path path = new Path(realtimePath);
-            FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
-            List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
-            FileSplit hudiSplit =
-                    new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
-
-            InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
-            reader = (RecordReader<NullWritable, ArrayWritable>) inputFormatClass
-                    .getRecordReader(hudiSplit, jobConf, Reporter.NULL);
-
-            deserializer = getDeserializer(jobConf, properties, serde);
-            rowInspector = getTableObjectInspector(deserializer);
-            for (int i = 0; i < requiredFields.length; i++) {
-                StructField field = rowInspector.getStructFieldRef(requiredFields[i]);
-                structFields[i] = field;
-                fieldInspectors[i] = field.getFieldObjectInspector();
-            }
-
+            parseRequiredTypes();
+            initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
+            Properties properties = makeProperties();
+            JobConf jobConf = makeJobConf(properties);
+            initReader(jobConf, properties);
         } catch (Exception e) {
             close();
             e.printStackTrace();
@@ -183,11 +213,10 @@ public class HudiSliceScanner extends ConnectorScanner {
                 for (int i = 0; i < requiredFields.length; i++) {
                     Object fieldData = rowInspector.getStructFieldData(rowData, structFields[i]);
                     if (fieldData == null) {
-                        scanData(i, null);
+                        appendData(i, null);
                     } else {
-                        Object fieldValue =
-                                ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
-                        scanData(i, fieldValue);
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData);
+                        appendData(i, fieldValue);
                     }
                 }
             }
@@ -246,7 +275,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         sb.append(dataFilePath);
         sb.append("\n");
         sb.append("dataFileLenth: ");
-        sb.append(dataFileLenth);
+        sb.append(dataFileLength);
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);
