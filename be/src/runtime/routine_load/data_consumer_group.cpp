@@ -137,7 +137,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     //improve performance
     Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter);
     char row_delimiter = '\n';
-    if (ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO_CONFLUENT) {
+    if (ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO) {
         append_data = &KafkaConsumerPipe::append_json;
     } else {
         append_data = &KafkaConsumerPipe::append_with_row_delimiter;
@@ -227,7 +227,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 }
             } else {
                 Status st = Status::OK();
-                if (ctx->format == TFileFormatType::FORMAT_AVRO_CONFLUENT) {
+                if (ctx->format == TFileFormatType::FORMAT_AVRO) {
                     avro_value_t avro;
                     DeferOp op([&] { avro_value_decref(&avro); });
                     serdes_schema_t* schema;

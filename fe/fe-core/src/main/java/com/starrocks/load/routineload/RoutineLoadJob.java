@@ -327,8 +327,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             } else {
                 jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
             }
-        } else if (stmt.getFormat().equals("avro_confluent")) {
-            jobProperties.put(PROPS_FORMAT, "avro_confluent");
+        } else if (stmt.getFormat().equals("avro")) {
+            jobProperties.put(PROPS_FORMAT, "avro");
         } else {
             throw new UserException("Invalid format type.");
         }

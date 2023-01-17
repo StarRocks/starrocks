@@ -491,8 +491,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 jsonPaths = jobProperties.get(JSONPATHS);
                 jsonRoot = jobProperties.get(JSONROOT);
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
-            } else if (format.equalsIgnoreCase("avro_confluent")) {
-                format = "avro_confluent";
+            } else if (format.equalsIgnoreCase("avro")) {
+                format = "avro";
             } else {
                 throw new UserException("Format type is invalid. format=`" + format + "`");
             }
@@ -567,12 +567,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             if (format == null) {
                 format = jobProperties.get(FORMAT);
                 if (format != null) {
-                    if (format.equalsIgnoreCase("avro_confluent")) {
-                        format = "avro_confluent";
+                    if (format.equalsIgnoreCase("avro")) {
+                        format = "avro";
                     }
                 }
             }
-            if (format.equals("avro_confluent")) {
+            if (format.equals("avro")) {
                 throw new AnalysisException(CONFLUENT_SCHEMA_REGISTRY_URL + " is a required property");
             }
         } else {
