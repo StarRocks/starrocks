@@ -50,13 +50,7 @@ public:
                                                                  _aggregator_factory->get_or_create(driver_sequence));
     }
 
-    bool could_local_shuffle() const override { return _could_local_shuffle; }
-    void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
-
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
-    // This flag will be inherited from the source operator of AggregateBlockingSinkOperator,
-    // by calling `set_could_local_shuffle` when decomposing to pipeline.
-    bool _could_local_shuffle = true;
 };
 } // namespace starrocks::pipeline

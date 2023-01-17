@@ -145,11 +145,11 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
                         if (false) {
                         }
-#define HASH_MAP_METHOD(NAME)                                                             \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {     \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype( \
-                                    _aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, input_chunk_size));                \
+#define HASH_MAP_METHOD(NAME)                                                                       \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {               \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<                             \
+                            typename decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, input_chunk_size));                          \
     }
                         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
@@ -277,6 +277,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    source_operator->set_could_local_shuffle(context->could_local_shuffle(operators_with_sink));
     operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {
         operators_with_source.emplace_back(
