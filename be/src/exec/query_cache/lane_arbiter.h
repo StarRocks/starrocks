@@ -49,9 +49,7 @@ public:
         // reduce the retention time of the data inside multilane operators in order to reduce summit memory usage
         int64_t assign_seqno;
         bool operator==(const LaneAssignment& rhs) const {
-            typedef __int128 int128_t;
-            static_assert(sizeof(LaneAssignment) == sizeof(int128_t));
-            return *(int128_t*)this == *(int128_t*)&rhs;
+            return lane_owner == rhs.lane_owner && assign_seqno == rhs.assign_seqno;
         }
         bool operator!=(const LaneAssignment& rhs) const { return !(*this == rhs); }
     };
