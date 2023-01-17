@@ -71,7 +71,7 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSum() throws Exception {
         // TODO Can't pushdown, also consider by group
         String sql = "select sum(c2.a) as t from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
     }
 
     @Test
