@@ -992,9 +992,9 @@ build_jasson() {
     cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
     mkdir -p build
     cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
-    make -j$PARALLEL
-    make install
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 # avro-cpp
@@ -1003,9 +1003,9 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
-    cmake -G "Unix Makefiles" ..
-    make -j$PARALLEL
-    make install
+    $CMAKE_CMD -G "Unix Makefiles" ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 # avro-c
@@ -1014,9 +1014,9 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
-    make -j$PARALLEL
-    make install
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL    
+    ${BUILD_SYSTEM} install
 }
 
 # serders
@@ -1033,8 +1033,8 @@ build_serdes() {
                 --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
                 --enable-static \
                 --disable-shared
-    make -j$PARALLEL
-    make install
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
 }

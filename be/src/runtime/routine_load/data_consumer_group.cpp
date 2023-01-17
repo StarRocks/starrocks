@@ -229,6 +229,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 Status st = Status::OK();
                 if (ctx->format == TFileFormatType::FORMAT_AVRO_CONFLUENT) {
                     avro_value_t avro;
+                    DeferOp op([&] { avro_value_decref(&avro); });
                     serdes_schema_t* schema;
                     serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
                                                                errstr, sizeof(errstr));
@@ -241,7 +242,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
                         return Status::InternalError("avro to json failed");
                     }
-                    avro_value_decref(&avro);
                     st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
                     free(as_json);
                 } else {
