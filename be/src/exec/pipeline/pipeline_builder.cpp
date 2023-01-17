@@ -170,8 +170,8 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
     return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
 }
 
-bool PipelineBuilderContext::need_local_shuffle(OpFactories ops) const {
-    return down_cast<SourceOperatorFactory*>(ops[0].get())->need_local_shuffle();
+bool PipelineBuilderContext::could_local_shuffle(OpFactories ops) const {
+    return down_cast<SourceOperatorFactory*>(ops[0].get())->could_local_shuffle();
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {

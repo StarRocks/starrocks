@@ -154,7 +154,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    if (context->need_local_shuffle(ops_with_sink)) {
+    if (context->could_local_shuffle(ops_with_sink)) {
         ops_with_sink =
                 context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, partition_expr_ctxs);
     }
@@ -165,8 +165,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
-    source_operator->set_need_local_shuffle(
-            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+    source_operator->set_could_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
     ops_with_source.push_back(std::move(source_operator));
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {

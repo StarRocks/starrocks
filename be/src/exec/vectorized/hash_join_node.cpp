@@ -438,7 +438,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                     down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->partition_type();
 
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
-            if (context->need_local_shuffle(rhs_operators)) {
+            if (context->could_local_shuffle(rhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
                     rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
@@ -448,7 +448,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                                       _build_expr_ctxs, part_type);
                 }
             }
-            if (context->need_local_shuffle(lhs_operators)) {
+            if (context->could_local_shuffle(lhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
                     lhs_operators = context->maybe_interpolate_local_shuffle_exchange(

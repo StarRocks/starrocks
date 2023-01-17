@@ -42,7 +42,7 @@ public:
     // There are two source operators returning false.
     // - The scan operator, which has been assigned tablets with the specific bucket sequences.
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
-    virtual bool need_local_shuffle() const { return true; }
+    virtual bool could_local_shuffle() const { return true; }
     virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
 
 protected:
