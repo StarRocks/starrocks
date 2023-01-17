@@ -51,6 +51,9 @@
 
 namespace starrocks {
 
+constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
+constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
+
 template <class UT>
 UT to_bigendian(UT v);
 
@@ -238,9 +241,6 @@ inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
 }
 
 bool PrimaryKeyEncoder::is_supported(const VectorizedField& f) {
-    if (f.is_nullable()) {
-        return false;
-    }
     switch (f.type()->type()) {
     case TYPE_BOOLEAN:
     case TYPE_TINYINT:
@@ -272,6 +272,9 @@ LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const VectorizedSchema& 
         return TYPE_NONE;
     }
     if (key_idxes.size() == 1) {
+        if (!schema.sort_key_idxes().empty() && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
+            return TYPE_VARCHAR;
+        }
         return schema.field(key_idxes[0])->type()->type();
     }
     return TYPE_VARCHAR;
@@ -455,13 +458,39 @@ void PrimaryKeyEncoder::encode_sort_key(const VectorizedSchema& schema, const Ch
     prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
     auto& bdest = down_cast<BinaryColumn&>(*dest);
     bdest.reserve(bdest.size() + len);
-    std::string buff;
-    for (size_t i = 0; i < len; i++) {
-        buff.clear();
-        for (int j = 0; j < ncol; j++) {
-            ops[j](datas[j], offset + i, &buff);
+    std::vector<std::shared_ptr<Column>> cols(ncol);
+    for (int i = 0; i < ncol; i++) {
+        cols[i] = chunk.get_column_by_index(schema.sort_key_idxes()[i]);
+    }
+    bool has_nullable_sort_key = false;
+    for (int i = 0; i < ncol; i++) {
+        if (schema.field(schema.sort_key_idxes()[i])->is_nullable()) {
+            has_nullable_sort_key = true;
+            break;
         }
-        bdest.append(buff);
+    }
+    std::string buff;
+    if (!has_nullable_sort_key) {
+        for (size_t i = 0; i < len; i++) {
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                ops[j](datas[j], offset + i, &buff);
+            }
+            bdest.append(buff);
+        }
+    } else {
+        for (size_t i = 0; i < len; i++) {
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                if (cols[j]->is_null(i)) {
+                    buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
+                } else {
+                    buff.push_back(SORT_KEY_NORMAL_MARKER);
+                    ops[j](datas[j], offset + i, &buff);
+                }
+            }
+            bdest.append(buff);
+        }
     }
 }
 

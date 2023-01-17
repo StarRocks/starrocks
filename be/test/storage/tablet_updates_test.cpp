@@ -236,6 +236,43 @@ public:
         return *writer->build();
     }
 
+    RowsetSharedPtr create_nullable_sort_key_rowset(const TabletSharedPtr& tablet,
+                                                    const vector<vector<int64_t>>& all_cols) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        const auto keys_size = all_cols[0].size();
+        auto chunk = ChunkHelper::new_chunk(schema, keys_size);
+        auto& cols = chunk->columns();
+        for (auto i = 0; i < keys_size; ++i) {
+            auto append_datum_func = []<typename T>(std::shared_ptr<Column> col, T val) {
+                if (val == -1) {
+                    col->append_nulls(1);
+                } else {
+                    col->append_datum(Datum(val));
+                }
+            };
+            append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
+            append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
+            append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
+        }
+
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -313,6 +350,41 @@ public:
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
+    TabletSharedPtr create_tablet_with_nullable_sort_key(int64_t tablet_id, int32_t schema_hash,
+                                                         std::vector<int32_t> sort_key_idxes) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.sort_key_idxes = sort_key_idxes;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.__set_is_allow_null(true);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.__set_is_allow_null(true);
         k3.column_type.type = TPrimitiveType::INT;
         request.tablet_schema.columns.push_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
@@ -807,6 +879,48 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
         cols[0]->append_datum(Datum((int64_t)keys[i]));
         cols[1]->append_datum(Datum((int16_t)1));
         cols[2]->append_datum(Datum((int32_t)i));
+    }
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            return -1;
+        }
+    }
+    return count;
+}
+
+static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& tablet, int64_t version,
+                                                         const vector<vector<int64_t>>& all_cols) {
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    if (iter == nullptr) {
+        return -1;
+    }
+    const auto keys_size = all_cols[0].size();
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys_size);
+    auto& cols = full_chunk->columns();
+    for (auto i = 0; i < keys_size; ++i) {
+        auto append_datum_func = []<typename T>(std::shared_ptr<Column> col, T val) {
+            if (val == -1) {
+                col->append_nulls(1);
+            } else {
+                col->append_datum(Datum(val));
+            }
+        };
+        append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
+        append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
+        append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -1499,6 +1613,93 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key_error_encode_case)
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 4);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_nullable_sort_key) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    {
+        int N = 10;
+        srand(GetCurrentTimeMicros());
+        _tablet = create_tablet_with_nullable_sort_key(rand(), rand(), {2});
+        std::vector<int64_t> keys;
+        for (int i = 0; i < N; i++) {
+            keys.push_back(i);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2, create_nullable_sort_key_rowset(_tablet, {{1, 2, 3, 4, 5, 6, 7, 8},
+                                                                                        {8, 7, 6, 5, 4, 3, 2, 1},
+                                                                                        {-1, -1, -1, -1, 5, 6, 7, 8}}))
+                            .ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(
+                _tablet->rowset_commit(3, create_nullable_sort_key_rowset(_tablet, {{5, 6, 7, 8, 9, 10, 11, 12},
+                                                                                    {12, 11, 10, 9, 8, 7, 6, 5},
+                                                                                    {-1, -1, -1, -1, 9, 10, 11, 12}}))
+                        .ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_EQ(_tablet->updates()->version_history_count(), 3);
+        ASSERT_EQ(12, read_tablet(_tablet, 3));
+        const auto& best_tablet = StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(
+                _tablet->data_dir());
+        EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+        EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+        ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        EXPECT_EQ(12, read_tablet_and_compare_nullable_sort_key(best_tablet, 3,
+                                                                {{1, 5, 2, 6, 3, 7, 4, 8, 9, 10, 11, 12},
+                                                                 {8, 12, 7, 11, 6, 10, 5, 9, 8, 7, 6, 5},
+                                                                 {-1, -1, -1, -1, -1, -1, -1, -1, 9, 10, 11, 12}}));
+        ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+        ASSERT_EQ(best_tablet->updates()->version_history_count(), 4);
+        // the time interval is not enough after last compaction
+        EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    }
+
+    {
+        int N = 10;
+        srand(GetCurrentTimeMicros());
+        _tablet = create_tablet_with_nullable_sort_key(rand(), rand(), {1, 2});
+        std::vector<int64_t> keys;
+        for (int i = 0; i < N; i++) {
+            keys.push_back(i);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2, create_nullable_sort_key_rowset(_tablet,
+                                                                              {
+                                                                                      {1, 2, 3, 4, 5, 6, 7, 8},
+                                                                                      {-1, -1, -1, -1, 5, 6, 7, 8},
+                                                                                      {8, 7, 6, 5, 4, 3, 2, 1},
+                                                                              }))
+                            .ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_nullable_sort_key_rowset(_tablet,
+                                                                              {
+                                                                                      {5, 6, 7, 8, 9, 10, 11, 12},
+                                                                                      {-1, -1, -1, -1, 9, 10, 11, 12},
+                                                                                      {12, 11, 10, 9, 8, 7, 6, 5},
+                                                                              }))
+                            .ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_EQ(_tablet->updates()->version_history_count(), 3);
+        ASSERT_EQ(12, read_tablet(_tablet, 3));
+        const auto& best_tablet = StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(
+                _tablet->data_dir());
+        EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+        EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+        ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        EXPECT_EQ(12, read_tablet_and_compare_nullable_sort_key(best_tablet, 3,
+                                                                {
+                                                                        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+                                                                        {-1, -1, -1, -1, -1, -1, -1, -1, 9, 10, 11, 12},
+                                                                        {8, 7, 6, 5, 12, 11, 10, 9, 8, 7, 6, 5},
+                                                                }));
+        ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+        ASSERT_EQ(best_tablet->updates()->version_history_count(), 4);
+        // the time interval is not enough after last compaction
+        EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    }
 }
 
 void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
