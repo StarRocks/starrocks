@@ -145,8 +145,7 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
         } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE ||
-                type == OffHeapColumnType.DECIMAL) {
+        } else if (isArray(type)) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
