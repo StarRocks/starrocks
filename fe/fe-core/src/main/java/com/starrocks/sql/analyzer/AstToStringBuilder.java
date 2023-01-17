@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -245,6 +246,45 @@ public class AstToStringBuilder {
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
                 sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitExportStatement(ExportStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("EXPORT TABLE ");
+            if (stmt.getTblName() == null) {
+                sb.append("non-exist");
+            } else {
+                sb.append(stmt.getTblName().toSql());
+            }
+            
+            if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
+                sb.append(" PARTITION (");
+                Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
+            }
+            
+            if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
+                sb.append("(");
+                Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
+            }
+            sb.append(" TO ");
+            sb.append("\"" + stmt.getPath() +  "\" ");
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            sb.append("WITH BROKER ");
+            if (stmt.getBrokerDesc() != null) {
+                if (!stmt.getBrokerDesc().getName().isEmpty()) {
+                    sb.append(stmt.getBrokerDesc().getName());
+                }
+                sb.append("' (");
+                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
                 sb.append(")");
             }
             return sb.toString();

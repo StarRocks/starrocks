@@ -419,8 +419,8 @@ public class ExportJob implements Writable {
                     TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
             coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
-            LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",
-                    id, i, DebugUtil.printId(queryId));
+            LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
+                    id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
         }
         LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
     }
