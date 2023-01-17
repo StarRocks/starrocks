@@ -1,5 +1,5 @@
 # docker-compose
-This is a docker compose instance for starrocks. The repo used for you learn have to use and test starrocks. Deploys starrocks and start one fe instance, three be instances.
+This is a docker compose instance for starrocks which is a good start to learn how to test and use starrocks. The compose deploys starrocks with one fe instance and one be instances by default.
 To run starrocks on your linux machine:
 ```shell
 docker compose up
