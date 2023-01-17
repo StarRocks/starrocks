@@ -309,7 +309,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
-
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -770,6 +771,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
+    private boolean enablePruneComplexTypes = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1445,6 +1449,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
+    public boolean getEnablePruneComplexTypes() {
+        return this.enablePruneComplexTypes;
+    }
+
+    public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
+        this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+    
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

@@ -553,6 +553,10 @@ public abstract class Type implements Cloneable {
         throw new IllegalStateException("selectAllFields() is not implemented for type " + toSql());
     }
 
+    public void pruneUnusedSubfields() {
+        throw new IllegalStateException("pruneUnusedFields() is not implemented for type " + toSql());
+    }
+
     /**
      * used for test
      */
