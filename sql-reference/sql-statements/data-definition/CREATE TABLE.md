@@ -34,11 +34,11 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 说明：
 
-**col_name**：列名称。
+**col_name**：列名称
 
-**col_type**：列类型。
+**col_type**：列数据类型
 
-具体的列类型以及范围等信息如下：
+支持的列类型以及取值范围等信息如下：
 
 * TINYINT（1字节）
   范围：-2^7 + 1 ~ 2^7 - 1
@@ -56,17 +56,17 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
   范围：-2^127 + 1 ~ 2^127 - 1
 
 * FLOAT（4字节）
-  支持科学计数法
+  支持科学计数法。
 
 * DOUBLE（8字节）
-  支持科学计数法
+  支持科学计数法。
 
 * DECIMAL[(precision, scale)] (16字节)
   保证精度的小数类型。默认是 DECIMAL(10, 0)
     precision: 1 ~ 38
     scale: 0 ~ precision
   其中整数部分为：precision - scale
-  不支持科学计数法
+  不支持科学计数法。
 
 * DATE（3字节）
   范围：0000-01-01 ~ 9999-12-31
@@ -81,38 +81,38 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 * VARCHAR[(length)]
 
   变长字符串。单位：字节，默认取值为 `1`。
-  * 对于 StarRocks 2.1 之前的版本，`length` 的取值范围为 1~65533。
-  * 【公测中】自 StarRocks 2.1 版本开始，`length` 的取值范围为 1~1048576。
+  * StarRocks 2.1.0 之前的版本，`length` 的取值范围为 1~65533。
+  * 【公测中】自 StarRocks 2.1.0 版本开始，`length` 的取值范围为 1~1048576。
 
 * HLL (1~16385个字节)
 
-  hll 列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且 HLL 列只能通过配套的 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/aggregate-functions/hll_hash.md)进行查询或使用。
+  HLL 列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且 HLL 列只能通过配套的 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/aggregate-functions/hll_hash.md)进行查询或使用。
 
 * BITMAP
-  bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1。
+  BITMAP 列类型，不需要指定长度和默认值。表示整型的集合，元素个数最大支持到 2^64 - 1。
 
 * ARRAY
-  支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
+  支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 的元素类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
 
 **agg_type**：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列。
 
-```plain text
+```plain
 支持的聚合类型如下：
 
 * SUM、MAX、MIN、REPLACE
 
-* HLL_UNION（仅用 HLL列，为 HLL 独有的聚合方式)。
+* HLL_UNION（仅用于 HLL列，为 HLL 独有的聚合方式)。
 
 * BITMAP_UNION（仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
 
-* REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非 NULL 值时会发生替换行为，如果新导入的数据是NULL，那么 StarRocks 仍然会保留原值。
+* REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非 NULL 值时会发生替换行为。如果新导入的数据是 NULL，那么 StarRocks 仍然会保留原值。
 ```
 
 注意：
 
-1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT,SMALLINT, INT, BIGINT`。
-2. 如果用在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-该类型只对聚合模型有用(`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
+1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
+2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
+  该类型只对聚合模型有用(`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
 **NULL | NOT NULL**：是否允许为 NULL。默认为 NULL，PRIMARY KEY 的 key 列默认为 NOT NULL。NULL 值在导入数据中用 \N 来表示。
 
@@ -128,7 +128,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### **ENGINE 类型**
 
-默认为 olap。可选 mysql，elasticsearch，hive。
+默认为 `olap`。可选 `mysql`，`elasticsearch`，`hive`，`jdbc`(2.3 及以后)，`iceberg`，`hudi`（2.2 及以后）。
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -144,11 +144,11 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     ```
 
     注意：
-    "table" 条目中的 "table_name" 是 mysql 中的真实表名。
-    而 CREATE TABLE 语句中的 table_name 是该 mysql 表在 StarRocks 中的名字，可以不同。
+    "table" 条目中的 "table_name" 是 MySQL 中的真实表名。
+    而 CREATE TABLE 语句中的 table_name 是该 MySQL 表在 StarRocks 中的名字，可以不同。
 
-    在 StarRocks 创建 mysql 表的目的是可以通过 StarRocks 访问 mysql 数据库。
-    而 StarRocks 本身并不维护、存储任何 mysql 数据。
+    在 StarRocks 创建 MySQL 表的目的是可以通过 StarRocks 访问 MySQL 数据库。
+    而 StarRocks 本身并不维护、存储任何 MySQL 数据。
 
 2. 如果是 elasticsearch，则需要在 properties 提供以下信息：
 
@@ -162,7 +162,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     )
     ```
 
-    其中 host 为 ES 集群连接地址，可指定一个或者多个，user/password 为开启 basic 认证的 ES 集群的用户名/密码，index 是 StarRocks 中的表对应的 ES 的 index 名字，可以是 alias，type 指定 index 的 type，默认是 doc。
+    其中 `hosts` 为 Elasticsearch 集群连接地址，可指定一个或者多个，`user 和 password` 为开启 basic 认证的 Elasticsearch 集群的用户名/密码，`index` 是 StarRocks 中的表对应的 Elasticsearch 的 index 名字，可以是 alias，`type` 指定 index 的类型，默认是 `doc`。
 
 3. 如果是 hive，则需要在 properties 提供以下信息：
 
@@ -174,7 +174,41 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     )
     ```
 
-    其中 database 是 hive 表对应的库名字，table 是 hive 表的名字，hive.metastore.uris 是 hive metastore 服务地址。
+    其中 `database` 是 Hive 表对应的库名字，`table` 是 hive 表的名字，`hive.metastore.uris` 是 Hive metastore 服务地址。
+
+4. 如果是 jdbc，则需要在 properties 提供以下信息：
+
+    ```sql
+    PROPERTIES (
+        "resource"="jdbc0",
+        "table"="dest_tbl"
+    )
+    ```
+
+    其中 `resource` 是所使用 JDBC 资源的名称。`table` 是目标数据库表名。
+
+5. 如果是 iceberg，则需要在 properties 提供以下信息：
+
+    ```sql
+    PROPERTIES (
+        "resource" = "iceberg0", 
+        "database" = "iceberg", 
+        "table" = "iceberg_table"
+    )
+    ```
+
+    其中 `resource` 是引用的 Iceberg 资源的名称。`database` 是 Iceberg 表所属的数据库名称。`table` Iceberg 表名称。
+6. 如果是 hudi，则需要在 properties 提供以下信息：
+
+    ```sql
+    PROPERTIES (
+        "resource" = "hudi0", 
+        "database" = "hudi", 
+        "table" = "hudi_table" 
+    )
+    ```
+
+    其中 `resource` 是 Hudi 资源的名称。`database` 是 Hudi 表所属的数据库名称。`table` Hudi 表名称。
 
 ### **key_desc**
 
@@ -184,26 +218,22 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 `key_type(k1[,k2 ...])`
 ```
 
-说明：
+> 说明
+>
+数据按照指定的 key 列进行排序，且根据不同的 `key_type` 具有不同特性。
+`key_type` 支持以下类型：
 
-```plain text
-数据按照指定的key列进行排序，且根据不同的key_type具有不同特性。
-key_type支持以下类型：
-AGGREGATE KEY:key列相同的记录，value列按照指定的聚合类型进行聚合，
-适合报表、多维分析等业务场景。
-UNIQUE KEY/PRIMARY KEY:key列相同的记录，value列按导入顺序进行覆盖，
-适合按key列进行增删改查的点查询业务。
-DUPLICATE KEY:key列相同的记录，同时存在于StarRocks中，
-适合存储明细数据或者数据无聚合特性的业务场景。
-默认为DUPLICATE KEY，数据按key列做排序。
+* AGGREGATE KEY: key 列相同的记录，value 列按照指定的聚合类型进行聚合，适合报表、多维分析等业务场景。
+* UNIQUE KEY/PRIMARY KEY: key 列相同的记录，value 列按导入顺序进行覆盖，适合按 key 列进行增删改查的点查询 (point query) 业务。
+* DUPLICATE KEY: key列相同的记录，同时存在于 StarRocks 中，适合存储明细数据或者数据无聚合特性的业务场景。
 
-注意：
-除AGGREGATE KEY外，其他key_type在建表时，value列不需要指定聚合类型。
-```
+默认为 DUPLICATE KEY，数据按 key 列做排序。
+
+除 AGGREGATE KEY 外，其他 `key_type` 在建表时，`value` 列不需要指定聚合类型 (agg_type)。
 
 ### **partition_desc**
 
-partition 描述有三种使用方式，分别为：`LESS THAN，Fixed Range，批量创建分区`。以下为不同方式的详细使用方法：
+`partition_desc` 有三种使用方式，分别为：`LESS THAN，Fixed Range，批量创建分区`。以下为不同方式的详细使用方法：
 
 **LESS THAN**
 
@@ -221,7 +251,7 @@ PARTITION BY RANGE (k1, k2, ...)
 说明：
 使用指定的 key 列和指定的数值范围进行分区。
 
-1. 分区名称仅支持字母开头，字母、数字和下划线组成。
+1. 分区名称仅支持字母开头，由字母、数字和下划线组成。
 2. 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
 3. 分区为左闭右开区间，首个分区的左边界为最小值。
 4. NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
@@ -375,12 +405,13 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 
 #### 设置数据的初始存储介质、存储降冷时间和副本数
 
-如果 ENGINE 类型为 olap, 可以在 properties 设置该表数据的初始存储介质、存储降冷时间和副本数。
+如果 ENGINE 类型为 olap, 可以在 `properties` 设置该表数据的初始存储介质 (storage_medium)、存储降冷时间 (storage_cooldown_time) 和副本数 (replication_num)。
 
-注意：
-只有 "storage_medium" = "SSD" 时才可设置降冷时间，创建 SSD 属性的表需要您的集群中配置了 SSD 类型的存储路径（storage_root_path）。
+> 注意
+>
+只有 "storage_medium" = "SSD" 时才可设置降冷时间，创建 SSD 属性的表需要您的集群中配置了 SSD 类型的存储路径（`storage_root_path`）。
 
-``` sql
+```sql
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
@@ -392,30 +423,24 @@ PROPERTIES (
 
 > 注意：当 FE 配置项 `enable_strict_storage_medium_check` 为 `true` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough hosts with storage medium [SSD|HDD] at all backends...`。设置 `enable_strict_storage_medium_check` 为 `false` 可以忽略该报错强行建表，但是后续可能会导致集群磁盘空间分布出现不均衡，所以强烈建议在建表时指定和集群存储介质相匹配的 `storage_medium` 属性。
 
-**storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间应该大于当前时间。
+**storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。
 
 * 不显式设置该属性时，默认不进行自动降冷。
-* 格式为："yyyy-MM-dd HH:mm:ss"
+* 取值格式为："yyyy-MM-dd HH:mm:ss"
 
-**replication_num**：指定分区的副本数。
-
-* 默认为 3。
-
-<br/>
+**replication_num**：指定分区的副本数。默认为 3。
 
 说明：
 
-* 当表为单分区表时，这些属性为表的属性。
-* 当表为两级分区时，这些属性附属于每一个分区。
-* 如果希望不同分区有不同属性。可以通过 ADD PARTITION 或 MODIFY PARTITION 进行操作。
+* 当表为单分区表时，以上属性为表的属性。
+* 当表为两级分区时，以上属性属于每一个分区。
+* 如果希望不同分区有不同属性，可以通过 ADD PARTITION 或 MODIFY PARTITION 命令进行操作，具体参见[ALTER TABLE](../data-definition/ALTER%20TABLE.md)。
 
-<br/>
-
-#### 创建表时为列添加 bloom filter
+#### 创建表时为列添加 bloom filter 索引
 
 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引仅适用于查询条件为 `in` 和 `equal` 的情况，该列的值越分散效果越好。
 
-目前只支持以下情况的列: 除了 `TINYINT，FLOAT，DOUBLE` 类型以外的 **key 列** 及聚合方法为 `REPLACE` 的 **value 列**。
+目前只支持符合以下条件的列: 除了 `TINYINT，FLOAT，DOUBLE` 类型以外的 **key 列** 及聚合方法为 `REPLACE` 的 **value 列**。
 
 ``` sql
 PROPERTIES (
@@ -462,7 +487,7 @@ dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名
 
 dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
-#### 建表时可以批量创建多个 Rollup
+#### 建表时批量创建多个 Rollup
 
 语法：
 
@@ -476,7 +501,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
 
-创建一个 olap 表，使用 HASH 分桶，使用列存，相同 key 的记录进行聚合。
+创建一个 olap 表，使用 Hash 分桶，使用列存，相同 key 的记录进行聚合。
 
 ``` sql
 CREATE TABLE example_db.table_hash
@@ -560,7 +585,8 @@ PARTITION BY RANGE (k1)
 )
 DISTRIBUTED BY HASH(k2) BUCKETS 10
 PROPERTIES(
-    "storage_medium" = "SSD", "storage_cooldown_time" = "2025-06-04 00:00:00"
+    "storage_medium" = "SSD",
+    "storage_cooldown_time" = "2025-06-04 00:00:00"
 );
 ```
 
@@ -573,7 +599,7 @@ PROPERTIES(
 [ {"2014-06-01"},   {"2014-12-01"} )
 ```
 
-不在这些分区范围内的数据将视为非法数据被过滤
+不在这些分区范围内的数据将视为非法数据被过滤。
 
 使用 Fixed Range 方式创建分区：
 
@@ -599,7 +625,7 @@ PROPERTIES(
 );
 ```
 
-### 创建一个 mysql 外表
+### 创建一个 MySQL 外表
 
 ``` sql
 CREATE TABLE example_db.table_mysql
@@ -658,7 +684,7 @@ PROPERTIES ("storage_type" = "column");
 
 ### 创建两张支持 Colocate Join 的表
 
-创建 t1 和 t2 两个表，两表可进行 Colocate Join。两表的属性中的 `colocate_with` 属性的值需保持一致。
+创建 t1 和 t2 两个表，两表可进行 Colocate Join。两表属性中的 `colocate_with` 属性的值需保持一致。
 
 ``` sql
 CREATE TABLE `t1` (
@@ -702,18 +728,18 @@ PROPERTIES ("storage_type" = "column");
 
 ### 创建动态分区表
 
- 创建动态分区表需要在 FE 配置中开启 **动态分区** 功能。
+ 创建动态分区表需要在 FE 配置中开启 **动态分区** 功能（`"dynamic_partition.enable" = "true"`），参数可参见本文[设置动态分区](#设置动态分区)。
 
  该表每天提前创建 3 天的分区，并删除 3 天前的分区。例如今天为 `2020-01-08`，则会创建分区名为 `p20200108`，`p20200109`，`p20200110`，`p20200111` 的分区. 分区范围分别为:
 
-``` plain text
+```plain text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )
 [types: [DATE]; keys: [2020-01-11]; ‥types: [DATE]; keys: [2020-01-12]; )
 ```
 
-``` sql
+```sql
 CREATE TABLE example_db.dynamic_partition
 (
     k1 DATE,
@@ -741,7 +767,7 @@ PROPERTIES(
 );
 ```
 
-### 创建一个 hive 外部表
+### 创建一个 Hive 外部表
 
 ``` SQL
 CREATE TABLE example_db.table_hive
