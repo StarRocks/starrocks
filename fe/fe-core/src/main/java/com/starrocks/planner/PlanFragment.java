@@ -251,7 +251,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void setAssignScanRangesPerDriverSeq(boolean assignScanRangesPerDriverSeq) {
-        this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
+        this.assignScanRangesPerDriverSeq |= assignScanRangesPerDriverSeq;
     }
 
     public boolean isForceAssignScanRangesPerDriverSeq() {

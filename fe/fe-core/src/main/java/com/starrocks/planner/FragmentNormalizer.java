@@ -302,20 +302,11 @@ public class FragmentNormalizer {
                 return false;
             }
             TSerializer serializer = new TSerializer(new TCompactProtocol.Factory());
-            //TSerializer serializer1 = new TSerializer(new TJSONProtocol.Factory());
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            //MessageDigest digest2 = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
                 byte[] data = serializer.serialize(node);
                 digest.update(data);
-                /*
-                String s = new String(serializer1.serialize(node));
-                digest2.update(data);
-                System.out.println(String.format("%d.%s:%s,%s", node.getNode_id(), node.getNode_type().toString(),
-                        toHexString(digest2.digest()), s));
-                digest2.reset();
-                 */
             }
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
