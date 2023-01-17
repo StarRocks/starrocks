@@ -776,7 +776,7 @@ vectorized_functions = [
     [150201, 'array_concat', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', "..."],   'ArrayFunctions::concat'],
     [150202, 'array_concat', 'ARRAY_JSON',      ['ARRAY_JSON', "..."],      'ArrayFunctions::concat'],
 
-    # [150203, 'array_concat', 'ANY_ARRAY',      ['ANY_ARRAY', "..."],      'ArrayFunctions::concat'],
+    [150203, 'array_concat', 'ANY_ARRAY',      ['ANY_ARRAY', "..."],      'ArrayFunctions::concat'],
 
     [150210, 'arrays_overlap', 'BOOLEAN',      ['ARRAY_DATE', 'ARRAY_DATE'],        'ArrayFunctions::array_overlap_date'],
     [150211, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_DATETIME', 'ARRAY_DATETIME'],    'ArrayFunctions::array_overlap_datetime'],
