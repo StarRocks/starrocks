@@ -17,30 +17,30 @@
   limitations under the License.
 """
 
+import argparse
 import os
 import sys
+
 from string import Template
 
-import vectorized_functions
+import functions
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 license_string = """
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//  http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 // This is a generated file, DO NOT EDIT.
 // To add new functions, see the generator at
@@ -114,7 +114,7 @@ def add_function(fn_data):
     entry["args"] = fn_data[3]
 
     if "..." in fn_data[3]:
-        assert 2 <= len(fn_data[3]), "Invalid arguments in vectorized_functions.py:\n\t" + repr(fn_data)
+        assert 2 <= len(fn_data[3]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
         assert "..." == fn_data[3][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
 
         entry["args_nums"] = len(fn_data[3]) - 1
@@ -181,18 +181,26 @@ def generate_cpp(path):
 
 
 if __name__ == '__main__':
+    FE_PATH = "../../fe/fe-core/target/generated-sources/build"
+    BE_PATH = "../build/gen_cpp"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cpp", dest='cpp_path', default=BE_PATH, help="Path of generated cpp file", type=str)
+    parser.add_argument("--java", dest='java_path', default=FE_PATH, help="Path of generated java file", type=str)
+    args = parser.parse_args()
+
     # Read the function metadata inputs
-    for function in vectorized_functions.vectorized_functions:
+    for function in functions.vectorized_functions:
         add_function(function)
 
-    FE_PATH = "../../../../fe/fe-core/target/generated-sources/build/com/starrocks/builtins/"
-    BE_PATH = "../../gen_cpp/opcode/"
+    be_functions_dir = args.cpp_path + "/opcode"
+    if not os.path.exists(be_functions_dir):
+        os.makedirs(be_functions_dir)
 
-    if not os.path.exists(FE_PATH):
-        os.makedirs(FE_PATH)
+    fe_functions_dir = args.java_path + "/com/starrocks/builtins"
+    if not os.path.exists(fe_functions_dir):
+        os.makedirs(fe_functions_dir)
 
-    if not os.path.exists(BE_PATH):
-        os.makedirs(BE_PATH)
+    generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
+    generate_cpp(be_functions_dir + "/builtin_functions.cpp")
 
-    generate_fe(FE_PATH + "VectorizedBuiltinFunctions.java")
-    generate_cpp(BE_PATH + "builtin_functions.cpp")
