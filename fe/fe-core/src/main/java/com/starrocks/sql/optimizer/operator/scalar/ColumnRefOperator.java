@@ -14,12 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -34,25 +32,11 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
-    // TODO(SmithCruise) Ugly code, remove it in future.
-    // Empty list for default
-    // If it's empty, means select all
-    // Only used for map and struct type
-    private final List<ImmutableList<Integer>> usedSubfieldPosGroup = new ArrayList<>();
-
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-    }
-
-    public void addUsedSubfieldPos(ImmutableList<Integer> usedNestFieldPos) {
-        this.usedSubfieldPosGroup.add(usedNestFieldPos);
-    }
-
-    public List<ImmutableList<Integer>> getUsedSubfieldPosGroup() {
-        return this.usedSubfieldPosGroup;
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {

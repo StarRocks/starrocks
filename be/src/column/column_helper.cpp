@@ -296,21 +296,24 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
-        auto keys = create_column(type_desc.children[0], true, is_const, size);
-        auto values = create_column(type_desc.children[1], true, is_const, size);
+        ColumnPtr keys = nullptr;
+        ColumnPtr values = nullptr;
+        if (type_desc.children[0].is_unknown_type()) {
+            keys = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            keys = create_column(type_desc.children[0], true, is_const, size);
+        }
+        if (type_desc.children[1].is_unknown_type()) {
+            values = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            values = create_column(type_desc.children[1], true, is_const, size);
+        }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
-        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        DCHECK_EQ(field_size, type_desc.field_names.size());
         Columns columns;
         for (size_t i = 0; i < field_size; i++) {
-            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
-            // We should optimize it in future.
-            // if (!type_desc.selected_fields.at(i)) {
-            //     continue;
-            // }
-
-            // Subfield column must be nullable column.
             ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
         }

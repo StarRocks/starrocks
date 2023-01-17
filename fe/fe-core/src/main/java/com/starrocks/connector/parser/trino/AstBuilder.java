@@ -15,6 +15,7 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -609,15 +610,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String fieldName = "";
         if (node.getField().isPresent()) {
             fieldName = node.getField().get().getValue();
-
         }
         if (base instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) base;
             List<String> parts = new ArrayList<>(slotRef.getQualifiedName().getParts());
             parts.add(fieldName);
             return new SlotRef(QualifiedName.of(parts));
-        } else {
-            return new SubfieldExpr(base, fieldName);
+        } else if (base instanceof SubfieldExpr) {
+            // Merge multi-level subfield access
+            SubfieldExpr subfieldExpr = (SubfieldExpr) base;
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+            for (String tmpFieldName : subfieldExpr.getFieldNames()) {
+                builder.add(tmpFieldName);
+            }
+            builder.add(fieldName);
+            return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
+        }  else {
+            return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
 

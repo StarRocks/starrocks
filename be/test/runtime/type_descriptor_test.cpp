@@ -157,13 +157,11 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.__isset.types = true;
         ttype_desc.types.resize(5);
         ttype_desc.types[0].__set_type(TTypeNodeType::MAP);
-        ttype_desc.types[0].__set_selected_fields({true, true});
         ttype_desc.types[1].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[1].__set_scalar_type(TScalarType());
         ttype_desc.types[1].scalar_type.__set_type(TPrimitiveType::VARCHAR);
         ttype_desc.types[1].scalar_type.__set_len(10);
         ttype_desc.types[2].__set_type(TTypeNodeType::MAP);
-        ttype_desc.types[2].__set_selected_fields({true, true});
         ttype_desc.types[3].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[3].__set_scalar_type(TScalarType());
         ttype_desc.types[3].scalar_type.__set_type(TPrimitiveType::INT);
@@ -193,7 +191,6 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types[0].struct_fields.resize(2);
         ttype_desc.types[0].struct_fields[0].__set_name("a");
         ttype_desc.types[0].struct_fields[1].__set_name("b");
-        ttype_desc.types[0].__set_selected_fields({true, true});
         ttype_desc.types[1].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[1].__set_scalar_type(TScalarType());
         ttype_desc.types[1].scalar_type.__set_type(TPrimitiveType::INT);
@@ -294,8 +291,6 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     {
         TypeDescriptor t;
         t.type = LogicalType::TYPE_MAP;
-        t.selected_fields.emplace_back(true);
-        t.selected_fields.emplace_back(true);
         t.children.resize(2);
         t.children[0].type = LogicalType::TYPE_INT;
         t.children[1].type = LogicalType::TYPE_STRUCT;
@@ -303,8 +298,6 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
         t.children[1].children.resize(2);
         t.children[1].children[0].type = LogicalType::TYPE_TINYINT;
         t.children[1].children[1].type = LogicalType::TYPE_BIGINT;
-        t.children[1].selected_fields.emplace_back(true);
-        t.children[1].selected_fields.emplace_back(true);
 
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_TRUE(ttype_desc.__isset.types);
@@ -471,13 +464,9 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         t_pb.mutable_types(0)->set_type(TTypeNodeType::STRUCT);
         t_pb.mutable_types(0)->add_struct_fields()->set_name("a");
         t_pb.mutable_types(0)->add_struct_fields()->set_name("b");
-        t_pb.mutable_types(0)->add_selected_fields(true);
-        t_pb.mutable_types(0)->add_selected_fields(true);
         t_pb.mutable_types(1)->set_type(TTypeNodeType::SCALAR);
         t_pb.mutable_types(1)->mutable_scalar_type()->set_type(TPrimitiveType::INT);
         t_pb.mutable_types(2)->set_type(TTypeNodeType::MAP);
-        t_pb.mutable_types(2)->add_selected_fields(true);
-        t_pb.mutable_types(2)->add_selected_fields(true);
         t_pb.mutable_types(3)->set_type(TTypeNodeType::SCALAR);
         t_pb.mutable_types(3)->mutable_scalar_type()->set_type(TPrimitiveType::INT);
         t_pb.mutable_types(4)->set_type(TTypeNodeType::SCALAR);
@@ -487,8 +476,6 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_FALSE(t.is_collection_type());
         ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
-        ASSERT_TRUE(t.selected_fields[0]);
-        ASSERT_TRUE(t.selected_fields[1]);
         ASSERT_EQ(2, t.field_names.size());
         ASSERT_EQ("a", t.field_names[0]);
         ASSERT_EQ("b", t.field_names[1]);
@@ -496,8 +483,6 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         ASSERT_EQ(LogicalType::TYPE_INT, t.children[0].type);
         ASSERT_EQ(LogicalType::TYPE_MAP, t.children[1].type);
         ASSERT_EQ(2, t.children[1].children.size());
-        ASSERT_TRUE(t.children[1].selected_fields[0]);
-        ASSERT_TRUE(t.children[1].selected_fields[1]);
         ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
         ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.children[1].children[1].type);
     }
@@ -596,8 +581,6 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
         TypeDescriptor t;
         t.children.resize(2);
         t.type = LogicalType::TYPE_MAP;
-        t.selected_fields.emplace_back(true);
-        t.selected_fields.emplace_back(true);
         t.children[0].type = LogicalType::TYPE_INT;
         t.children[1].type = LogicalType::TYPE_STRUCT;
         t.children[1].field_names = {"a", "b", "c"};
@@ -608,9 +591,6 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
         t.children[1].children[1].scale = 2;
         t.children[1].children[2].type = LogicalType::TYPE_VARCHAR;
         t.children[1].children[2].len = 10;
-        t.children[1].selected_fields.emplace_back(true);
-        t.children[1].selected_fields.emplace_back(true);
-        t.children[1].selected_fields.emplace_back(true);
 
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(6, t_pb.types().size());
@@ -694,8 +674,6 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     {
         TypeDescriptor t;
         t.type = LogicalType::TYPE_MAP;
-        t.selected_fields.emplace_back(true);
-        t.selected_fields.emplace_back(true);
         t.children.resize(2);
         t.children[0].type = LogicalType::TYPE_INT;
         t.children[1].type = LogicalType::TYPE_VARCHAR;
@@ -711,9 +689,7 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
         t.children[0].type = LogicalType::TYPE_VARCHAR;
         t.children[0].len = 20;
         t.children[1].type = LogicalType::TYPE_INT;
-        t.selected_fields.push_back(true);
-        t.selected_fields.push_back(false);
-        EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}, Selected fields: [1, 0]", t.debug_string());
+        EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}", t.debug_string());
     }
 }
 

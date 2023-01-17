@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -92,10 +91,8 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -229,13 +226,6 @@ public final class SqlToScalarOperatorTranslator {
         private final CTETransformerContext cteContext;
         public final OptExprBuilder builder;
         public final Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders;
-        // TODO(SmithCruise) The code here is ugly, we should move these rules into optimizer
-        // ArrayDeque will push into and pop out the head
-        // Example: the Deque is [1,2,3,4]
-        // when push(5) -> [5,1,2,3,4]
-        // then pop() -> [1,2,3,4]
-        // Empty usedSubFieldPos means select all fields
-        private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
 
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
@@ -277,45 +267,27 @@ public final class SqlToScalarOperatorTranslator {
                 correlation.add(columnRefOperator);
             }
 
-            ScalarOperator returnValue = columnRefOperator;
-
             // If origin type is struct type, means that node contains subfield access
             if (node.getTrueOriginType().isStructType()) {
                 Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
-                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
-
-                for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
-                    usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
-                }
-
-                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
-
-                for (int i = 0; i < node.getUsedStructFieldPos().size(); i++) {
-                    usedSubFieldPos.pop();
-                }
+                return SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
             } else {
-                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+                return columnRefOperator;
             }
-            return returnValue;
         }
 
         @Override
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
-
-            usedSubFieldPos.push(node.getFieldPos(node.getFieldName()));
             ScalarOperator child = visit(node.getChild(0), context);
-            usedSubFieldPos.pop();
             return SubfieldOperator.build(child, node);
         }
 
         @Override
         public ScalarOperator visitFieldReference(FieldReference node, Context context) {
             ColumnRefOperator scalarOperator = expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
-            // Consider a Table [a:int, b:int], for SELECT * FROM tbl, a and b will be FieldReference, not SlotRef.
-            scalarOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
             return scalarOperator;
         }
 
@@ -332,15 +304,8 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCollectionElementExpr(CollectionElementExpr node, Context context) {
             Preconditions.checkState(node.getChildren().size() == 2);
-            // key value all selected used in map
-            if (node.getChild(0).getType().isMapType()) {
-                usedSubFieldPos.push(-1);
-            }
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            if (node.getChild(0).getType().isMapType()) {
-                usedSubFieldPos.pop();
-            }
             return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
         }
 
@@ -666,22 +631,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitFunctionCall(FunctionCallExpr node, Context context) {
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_size")) {
-                usedSubFieldPos.push(0);
-            }
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
-                usedSubFieldPos.push(1);
-            }
             List<ScalarOperator> arguments = node.getChildren()
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_size") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
-                usedSubFieldPos.pop();
-            }
 
             return new CallOperator(
                     node.getFnName().getFunction(),

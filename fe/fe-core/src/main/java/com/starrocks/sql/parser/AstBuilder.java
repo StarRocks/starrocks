@@ -5020,10 +5020,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
             parts.add(fieldName);
             return new SlotRef(QualifiedName.of(parts));
+        } else if (base instanceof SubfieldExpr) {
+            // Merge multi-level subfield access
+            SubfieldExpr subfieldExpr = (SubfieldExpr) base;
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+            for (String tmpFieldName : subfieldExpr.getFieldNames()) {
+                builder.add(tmpFieldName);
+            }
+            builder.add(fieldName);
+            return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
         } else {
-            // If left is not a SlotRef, we can left must be an StructType,
+            // If left is not a SlotRef, we can assume left node must be an StructType,
             // and fieldName must be StructType's subfield name.
-            return new SubfieldExpr(base, fieldName);
+            return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
 
