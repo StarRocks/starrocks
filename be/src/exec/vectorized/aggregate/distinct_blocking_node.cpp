@@ -145,7 +145,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
             context->next_operator_id(), id(), aggregator_factory, partition_expr_ctxs);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories ops_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
