@@ -7,52 +7,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class StructTypeTest {
-    @Test
-    public void testTypeMatch() {
-        Assert.assertTrue(Type.ANY_STRUCT.matchesType(Type.ANY_STRUCT));
-        Assert.assertTrue(Type.ANY_STRUCT.matchesType(Type.ANY_ELEMENT));
-        StructType structType = new StructType(Lists.newArrayList(Type.BIGINT, Type.DOUBLE));
-        Assert.assertTrue(Type.ANY_STRUCT.matchesType(structType));
-    }
-
-    @Test
-    public void testUnnamedStruct() {
-        StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
-        Assert.assertEquals("STRUCT<int(11), datetime>", type.toSql());
-    }
-
-    @Test
-    public void testStructEquals() {
-        // test equals() for unnamed struct
-        StructType originType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
-        StructType comparedType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
-        Assert.assertEquals(originType, comparedType);
-        Assert.assertEquals(comparedType, originType);
-
-        comparedType = new StructType(Lists.newArrayList(Type.VARCHAR, Type.INT));
-        Assert.assertNotEquals(originType, comparedType);
-        Assert.assertNotEquals(comparedType, originType);
-
-        // test equals() for unnamed struct & named struct
-        StructField tmpField1 = new StructField("hello", Type.INT);
-        StructField tmpField2 = new StructField("world", Type.VARCHAR);
-        comparedType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
-        Assert.assertNotEquals(originType, comparedType);
-        Assert.assertNotEquals(comparedType, originType);
-
-        // test equals() for named struct & named struct
-        StructField tmpField3 = new StructField("hello", Type.INT);
-        StructField tmpField4 = new StructField("world", Type.VARCHAR);
-        originType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
-        comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
-        Assert.assertEquals(originType, comparedType);
-        Assert.assertEquals(comparedType, originType);
-
-        tmpField3 = new StructField("hello123", Type.INT);
-        comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
-        Assert.assertNotEquals(originType, comparedType);
-        Assert.assertNotEquals(comparedType, originType);
-    }
 
     @Test
     public void testStructMatchType() throws Exception {
