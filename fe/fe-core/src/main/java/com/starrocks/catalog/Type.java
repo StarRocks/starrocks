@@ -115,6 +115,8 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DATETIME = new ArrayType(Type.DATETIME);
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
 
+    public static final Type ARRAY_NULL = new ArrayType(Type.NULL);
+
     private static final ImmutableList<ScalarType> integerTypes =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
     private static final ImmutableList<ScalarType> floatPointTypes =

@@ -911,6 +911,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
             l.treeToThriftHelper(container);
             return;
+        } else if (Type.ARRAY_NULL.equals(type)) {
+            NullLiteral l = NullLiteral.create(Type.ARRAY_BOOLEAN);
+            l.treeToThriftHelper(container);
+            return;
         }
 
         msg.type = type.toThrift();
@@ -929,6 +933,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         // Echoes the above hack process
         if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
             msg.child_type = PrimitiveType.BOOLEAN.toThrift();
+        } else if (Type.ARRAY_NULL.toThrift().equals(msg.child_type_desc)) {
+            msg.child_type_desc = Type.ARRAY_BOOLEAN.toThrift();
         }
         container.addToNodes(msg);
         for (Expr child : children) {
