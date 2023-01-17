@@ -501,10 +501,11 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+        String role = getUnqualifiedRole(ctx);
+
         readLock();
         try {
             String user = getUnqualifiedUser(ctx);
-            String role = getUnqualifiedRole(ctx);
             String remoteIp = ctx.getRemoteIP();
             List<ResourceGroupClassifier> classifierList =
                     classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
