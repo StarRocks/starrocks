@@ -836,24 +836,34 @@ public class OlapTable extends Table implements GsonPostProcessable {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
 
-            Preconditions.checkState(partitionInfo.getType() == PartitionType.RANGE);
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    // recycle range partition
+                    GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
+                            rangePartitionInfo.getRange(partition.getId()),
+                            rangePartitionInfo.getDataProperty(partition.getId()),
+                            rangePartitionInfo.getReplicationNum(partition.getId()),
+                            rangePartitionInfo.getIsInMemory(partition.getId()),
+                            rangePartitionInfo.getStorageCacheInfo(partition.getId()),
+                            isLakeTable());
+                } else if (!reserveTablets) {
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
 
-            if (!isForceDrop) {
-                // recycle partition
-                GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
-                        rangePartitionInfo.getRange(partition.getId()),
-                        rangePartitionInfo.getDataProperty(partition.getId()),
-                        rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()),
-                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                        isLakeTable());
-            } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                // drop partition info
+                rangePartitionInfo.dropPartition(partition.getId());
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    // TODO: recycle list partition
+                } else if (!reserveTablets) {
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
+
+                // drop partition info
+                listPartitionInfo.dropPartition(partition.getId());
             }
-
-            // drop partition info
-            rangePartitionInfo.dropPartition(partition.getId());
         }
     }
 
