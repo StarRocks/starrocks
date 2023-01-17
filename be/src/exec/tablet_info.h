@@ -149,6 +149,7 @@ struct OlapTablePartition {
     int64_t id = 0;
     ChunkRow start_key;
     ChunkRow end_key;
+    std::vector<ChunkRow> in_keys;
     int64_t num_buckets = 0;
     std::vector<OlapTableIndexTablets> indexes;
 };

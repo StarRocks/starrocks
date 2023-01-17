@@ -70,6 +70,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -758,13 +759,22 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return partitionColumnNames;
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
         }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName());
-        }
-        return partitionColumnNames;
+        throw new SemanticException("unknown partition info:" + partitionInfo.getClass().getName());
     }
 
     public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
