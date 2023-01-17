@@ -60,4 +60,4 @@ if [[ $# -eq 1 ]];then
 fi
 
 cp dockerignore ${ROOT}/.dockerignore
-docker build ${ROOT} -f Dockerfile --build-arg BRANCH=$BRANCH -t $IMAGENAME
+docker build ${ROOT} -f ../dockerfiles/Dockerfile_all_in_one --build-arg BRANCH=$BRANCH -t $IMAGENAME
