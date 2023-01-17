@@ -7,8 +7,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // SIZE: 256 * uint8_t
 static const uint8_t UTF8_BYTE_LENGTH_TABLE[256] = {
@@ -142,9 +141,6 @@ static int utf8_len(const char* begin, const char* end) {
     return len;
 }
 
-<<<<<<< HEAD
-} // namespace vectorized
-=======
 // Check if the string contains a utf-8 character
 static inline bool utf8_contains(const std::string& str, const std::vector<size_t>& utf8_index, Slice utf8_char) {
     for (int i = 0; i < utf8_index.size(); i++) {
@@ -168,5 +164,4 @@ static inline Slice utf8_char_start(const char* end) {
     return {p, count};
 }
 
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529))
-} // namespace starrocks
+} // namespace starrocks::vectorized

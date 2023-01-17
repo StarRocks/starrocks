@@ -1861,91 +1861,10 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     (*offsets)[i + 1] = bytes->size();
 }
 
-<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
-template <size_t simd_threshold>
-struct AdaptiveLTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
-
-        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-        auto& dst_offsets = dst->get_offset();
-        auto& dst_bytes = dst->get_bytes();
-
-        const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
-        dst_bytes.reserve(dst_bytes.size());
-
-        size_t i = 0;
-        const auto sample_num = std::min(num_rows, 100ul);
-        size_t spaces_num = 0;
-
-        for (; i < sample_num; ++i) {
-            trim_per_slice<TRIM_LEFT, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, &spaces_num, nullptr);
-        }
-        // when the average number of leading spaces in the sample is greater than simd_threshold,
-        // SIMD optimization is enabled.
-        if (spaces_num < simd_threshold * spaces_num) {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_LEFT, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        } else {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_LEFT, TRIM_SIMD_LEFT, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        }
-        return dst;
-    }
-};
-
-template <size_t simd_threshold>
-struct AdaptiveRTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
-
-        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-        auto& dst_offsets = dst->get_offset();
-        auto& dst_bytes = dst->get_bytes();
-
-        const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
-        dst_bytes.reserve(dst_bytes.size());
-
-        size_t i = 0;
-        const auto sample_num = std::min(num_rows, 100ul);
-        size_t spaces_num = 0;
-
-        for (; i < sample_num; ++i) {
-            trim_per_slice<TRIM_RIGHT, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, nullptr, &spaces_num);
-        }
-        // when the average number of trailing spaces in the sample is greater than simd_threshold,
-        // SIMD optimization is enabled.
-        if (spaces_num < simd_threshold * sample_num) {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_RIGHT, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        } else {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_RIGHT, TRIM_SIMD_RIGHT, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        }
-        return dst;
-    }
-};
-
-template <size_t simd_threshold>
-struct AdaptiveTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-=======
 template <TrimType trim_type, size_t simd_threshold, bool trim_single, bool trim_utf8>
 struct AdaptiveTrimFunction {
-    template <LogicalType Type, LogicalType ResultType, class RemoveArg, class Utf8Index>
+    template <PrimitiveType Type, PrimitiveType ResultType, class RemoveArg, class Utf8Index>
     static ColumnPtr evaluate(const ColumnPtr& column, RemoveArg&& remove, Utf8Index&& utf8_index) {
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/src/exprs/string_functions.cpp
         auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
@@ -2006,7 +1925,7 @@ struct TrimState {
 };
 
 template <TrimType trim_type>
-static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::Columns& columns) {
+static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const Columns& columns) {
     auto* state = reinterpret_cast<TrimState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     DCHECK(!!state);
     auto& remove_chars = state->remove_chars;
@@ -2066,51 +1985,16 @@ Status StringFunctions::trim_close(FunctionContext* context, FunctionContext::Fu
     return Status::OK();
 }
 
-<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
-ColumnPtr StringFunctions::trim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
+ColumnPtr StringFunctions::trim(FunctionContext* context, const Columns& columns) {
+    return trim_impl<TRIM_BOTH>(context, columns).value();
 }
 
-// ltrim
-DEFINE_STRING_UNARY_FN_WITH_IMPL(ltrimImpl, str) {
-    int begin = 0;
-    while (begin < str.size && str.data[begin] == ' ') {
-        ++begin;
-    }
-    return std::string(str.data + begin, str.size - begin);
+ColumnPtr StringFunctions::ltrim(FunctionContext* context, const Columns& columns) {
+    return trim_impl<TRIM_LEFT>(context, columns).value();
 }
 
-ColumnPtr StringFunctions::ltrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveLTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
-}
-
-// rtrim
-DEFINE_STRING_UNARY_FN_WITH_IMPL(rtrimImpl, str) {
-    if (str.size == 0) {
-        return std::string("");
-    }
-
-    int end = str.size - 1;
-    while (end > 0 && str.data[end] == ' ') {
-        --end;
-    }
-    return std::string(str.data, (str.data[end] == ' ') ? end : end + 1);
-}
-
-ColumnPtr StringFunctions::rtrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveRTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
-=======
-StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::Columns& columns) {
-    return trim_impl<TRIM_BOTH>(context, columns);
-}
-
-StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starrocks::Columns& columns) {
-    return trim_impl<TRIM_LEFT>(context, columns);
-}
-
-StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::Columns& columns) {
-    return trim_impl<TRIM_RIGHT>(context, columns);
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/src/exprs/string_functions.cpp
+ColumnPtr StringFunctions::rtrim(FunctionContext* context, const Columns& columns) {
+    return trim_impl<TRIM_RIGHT>(context, columns).value();
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {

@@ -5,15 +5,10 @@
 #include <random>
 
 #include "butil/time.h"
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
-=======
-#include "exprs/mock_vectorized_expr.h"
-#include "exprs/string_functions.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
@@ -43,13 +38,9 @@ TEST_F(StringFunctionTrimTest, trimTest) {
 
     columns.emplace_back(str);
 
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
-=======
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -76,7 +67,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     std::vector<ColumnPtr> columns{str_col, remove_col};
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
     ASSERT_EQ(4096, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -100,8 +91,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
             ctx->set_constant_columns(columns);
             ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
             auto maybe_result = StringFunctions::trim(ctx.get(), columns);
-            ASSERT_OK(maybe_result.status());
-            Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result.value());
+            Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result);
             ASSERT_EQ("abc🐱🐷", std::string(result));
             ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
         }
@@ -143,13 +133,9 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
 
     columns.emplace_back(str);
 
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
-=======
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
     ASSERT_EQ(1, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
@@ -177,13 +163,9 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
 
     columns.emplace_back(str);
 
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
-    ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns);
-=======
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns).value();
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
+    ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns);
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -206,13 +188,9 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
 
     columns.emplace_back(str);
 
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
-    ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns);
-=======
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns).value();
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
+    ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns);
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -241,17 +219,11 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
 
     columns.emplace_back(NullableColumn::create(str, nulls));
 
-<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_trim_test.cpp
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr rtrim_result = StringFunctions::rtrim(ctx.get(), columns);
     ColumnPtr ltrim_result = StringFunctions::ltrim(ctx.get(), columns);
     ColumnPtr trim_result = StringFunctions::trim(ctx.get(), columns);
-=======
-    ctx->set_constant_columns(columns);
-    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr rtrim_result = StringFunctions::rtrim(ctx.get(), columns).value();
-    ColumnPtr ltrim_result = StringFunctions::ltrim(ctx.get(), columns).value();
-    ColumnPtr trim_result = StringFunctions::trim(ctx.get(), columns).value();
->>>>>>> 5bf95e735 ([Feature] implement trim function with remove characters (#15529)):be/test/exprs/string_fn_trim_test.cpp
     ASSERT_EQ(4096, rtrim_result->size());
     ASSERT_EQ(4096, ltrim_result->size());
     ASSERT_EQ(4096, trim_result->size());
