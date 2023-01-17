@@ -106,7 +106,7 @@ This topic uses CSV as an example to describe how to load data. For information 
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `/input/` folder of your Amazon S3 bucket `bucket_s3`, and to the `/input/` folder of your Google CGS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google CGS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
@@ -138,17 +138,19 @@ PROPERTIES
 
 #### Load data from Amazon S3
 
-Execute the following statement to load `file1.csv` and `file2.csv` from the `/input/` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
+Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label2
 (
     DATA INFILE("s3a://bucket_s3/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, city)
     
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, name, score)
 )
 WITH BROKER "mybroker"
@@ -156,7 +158,7 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)
+);
 ```
 
 > **NOTE**
@@ -166,17 +168,19 @@ WITH BROKER "mybroker"
 
 #### Load data from Google GCS
 
-Execute the following statement to load `file1.csv` and `file2.csv` from the `/input/` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
+Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label3
 (
     DATA INFILE("s3a://bucket_gcs/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, city)
     
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, name, score)
 )
 WITH BROKER "mybroker"
@@ -184,14 +188,14 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "storage.googleapis.com"
-)
+);
 ```
 
 > **NOTE**
 >
 > Broker Load supports accessing Google CGS only according to the S3A protocol. Therefore, when you load data from Google CGS, you must replace the prefix in the CGS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
-### Query data
+#### Query data
 
 After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
 
@@ -210,7 +214,7 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    4 rows in set (0.00 sec)
    ```
 
-1. Execute the following statement to query the data of `table2`:
+2. Execute the following statement to query the data of `table2`:
 
    ```SQL
    MySQL [test_db]> SELECT * FROM table2;
@@ -221,6 +225,46 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    +------+--------+
    4 rows in set (0.01 sec)
    ```
+
+#### Usage notes
+
+The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your Amazon S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+
+To load `file1.csv` into `table1`, execute the following statement:
+
+```SQL
+LOAD LABEL test_db.label_7
+(
+    DATA INFILE("s3a://bucket_s3/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
+
+To load all data files from the `input` folder into `table1`, execute the following statement:
+
+```SQL
+LOAD LABEL test_db.label_8
+(
+    DATA INFILE("s3a://bucket_s3/input/*")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
 
 ### View a load job
 
