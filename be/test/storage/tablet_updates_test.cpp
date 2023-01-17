@@ -57,6 +57,15 @@ enum PartialUpdateCloneCase {
     CASE4  // rowset status is applied in meta, rowset file is full rowset
 };
 
+template <class T>
+static void append_datum_func(std::shared_ptr<Column> col, T val) {
+    if (val == -1) {
+        col->append_nulls(1);
+    } else {
+        col->append_datum(Datum(val));
+    }
+}
+
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
@@ -252,18 +261,11 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         const auto keys_size = all_cols[0].size();
         auto chunk = ChunkHelper::new_chunk(schema, keys_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < keys_size; ++i) {
-            auto append_datum_func = []<typename T>(std::shared_ptr<Column> col, T val) {
-                if (val == -1) {
-                    col->append_nulls(1);
-                } else {
-                    col->append_datum(Datum(val));
-                }
-            };
             append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
             append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
             append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
@@ -901,7 +903,7 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
 
 static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& tablet, int64_t version,
                                                          const vector<vector<int64_t>>& all_cols) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -911,13 +913,6 @@ static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& 
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys_size);
     auto& cols = full_chunk->columns();
     for (auto i = 0; i < keys_size; ++i) {
-        auto append_datum_func = []<typename T>(std::shared_ptr<Column> col, T val) {
-            if (val == -1) {
-                col->append_nulls(1);
-            } else {
-                col->append_datum(Datum(val));
-            }
-        };
         append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
         append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
         append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
