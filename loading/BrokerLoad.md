@@ -151,10 +151,12 @@ LOAD LABEL test_db.label2
 (
     DATA INFILE("s3a://bucket_s3/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, name, score)
     
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER "mybroker"
@@ -179,10 +181,12 @@ LOAD LABEL test_db.label3
 (
     DATA INFILE("s3a://bucket_gcs/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, name, score)
     
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER "mybroker"
@@ -206,10 +210,12 @@ LOAD LABEL test_db.label4
 (
     DATA INFILE("oss://bucket_oss/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, name, score)
     
     DATA INFILE("oss://bucket_oss/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER "mybroker"
@@ -229,10 +235,12 @@ LOAD LABEL test_db.label5
 (
     DATA INFILE("cosn://bucket_cos/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, name, score)
     
     DATA INFILE("cosn://bucket_cos/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER "mybroker"
@@ -252,10 +260,12 @@ LOAD LABEL test_db.label6
 (
     DATA INFILE("obs://bucket_obs/input/file1.csv")
     INTO TABLE table1
+    COLUMNS TERMINATED BY ","
     (id, name, score)
     
     DATA INFILE("obs://bucket_obs/input/file2.csv")
     INTO TABLE table2
+    COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER "mybroker"
