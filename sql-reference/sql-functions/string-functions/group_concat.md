@@ -15,7 +15,7 @@ group_concat(VARCHAR str[, VARCHAR sep])
 ## 参数说明
 
 - `str`: 待拼接的一列值。支持的数据类型为 VARCHAR。
-- `sep`: 字符串之间的连接符，可选。如果未指定，默认使用逗号（,）作为连接符。
+- `sep`: 字符串之间的连接符，可选。如果未指定，默认使用逗号 `,` 作为连接符。
 
 ## 返回值说明
 
@@ -63,7 +63,7 @@ select group_concat(value) from group_concat;
 | meat, fruit, seafood, fruit, drinks |
 +-------------------------------------+
 
--- 指定了空格作为连接符。
+-- 指定空格作为连接符。
 MySQL > select group_concat(value, " ") from group_concat;
 +---------------------------------+
 | group_concat(value, ' ')        |
