@@ -151,7 +151,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
                                                                                             id(), aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
 
     if (context->could_local_shuffle(ops_with_sink)) {
         ops_with_sink =

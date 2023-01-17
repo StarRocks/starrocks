@@ -204,10 +204,6 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         }
     }
 
-    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
-    // and we may set other parallelism for source operator in many special cases
-    size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
-
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
@@ -224,7 +220,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(),
                                                                                     aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     auto* upstream_source_op = context->source_operator(ops_with_sink);

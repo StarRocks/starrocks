@@ -228,7 +228,7 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
             context->next_operator_id(), id(), aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     auto* upstream_source_op = context->source_operator(operators_with_sink);
