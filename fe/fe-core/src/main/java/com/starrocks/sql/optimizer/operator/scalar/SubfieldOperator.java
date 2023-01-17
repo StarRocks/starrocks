@@ -15,7 +15,9 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
@@ -31,42 +33,36 @@ public class SubfieldOperator extends ScalarOperator {
 
     // Only one child
     private final List<ScalarOperator> children = new ArrayList<>();
-    private final String fieldName;
+    private final ImmutableList<String> fieldNames;
 
     // Build based on SubfieldExpr
     public static SubfieldOperator build(ScalarOperator child, SubfieldExpr expr) {
-        return new SubfieldOperator(child, expr.getType(), expr.getFieldName());
+        return new SubfieldOperator(child, expr.getType(), expr.getFieldNames());
     }
 
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
         Type tmpType = type;
-        SubfieldOperator res = null;
         // Like SELECT a.b.c FROM tbl; Will be converted to:
-        // Subfield(Subfield(ColumnRefOperator(a), "b"), "c")
+        // Subfield(ColumnRefOperator(a), ["b", "c"])
+        List<String> usedSubfieldNames = new ArrayList<>();
         for (int pos : usedSubfieldPos) {
-            StructType tmp = (StructType) tmpType;
-            StructField field = tmp.getField(pos);
+            StructType structType = (StructType) tmpType;
+            StructField field = structType.getField(pos);
+            usedSubfieldNames.add(field.getName());
             tmpType = field.getType();
-            if (res == null) {
-                res = new SubfieldOperator(child, field.getType(), field.getName());
-            } else {
-                res = new SubfieldOperator(res, field.getType(), field.getName());
-            }
         }
-
-        Preconditions.checkArgument(res != null);
-        return res;
+        return new SubfieldOperator(child, tmpType, ImmutableList.copyOf(usedSubfieldNames));
     }
 
-    private SubfieldOperator(ScalarOperator child, Type type, String fieldName) {
+    private SubfieldOperator(ScalarOperator child, Type type, ImmutableList<String> fieldNames) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
-        this.fieldName = fieldName.toLowerCase();
+        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
     }
 
-    public String getFieldName() {
-        return fieldName;
+    public ImmutableList<String> getFieldNames() {
+        return fieldNames;
     }
 
     @Override
@@ -93,12 +89,12 @@ public class SubfieldOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return "struct" + getChild(0).toString();
+        return String.format("Subfield([%s], \"%s\")", getChild(0).toString(), Joiner.on('.').join(fieldNames));
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(getChild(0), fieldName);
+        return Objects.hash(getChild(0), fieldNames);
     }
 
     @Override
@@ -111,7 +107,7 @@ public class SubfieldOperator extends ScalarOperator {
             return false;
         }
         SubfieldOperator otherOp = (SubfieldOperator) other;
-        return fieldName.equals(otherOp.fieldName) && getChild(0).equals(otherOp.getChild(0));
+        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0));
     }
 
     @Override
