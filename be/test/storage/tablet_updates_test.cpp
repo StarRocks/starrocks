@@ -252,7 +252,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         const auto keys_size = all_cols[0].size();
         auto chunk = ChunkHelper::new_chunk(schema, keys_size);
         auto& cols = chunk->columns();
@@ -901,7 +901,7 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
 
 static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& tablet, int64_t version,
                                                          const vector<vector<int64_t>>& all_cols) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
