@@ -52,6 +52,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -604,11 +605,7 @@ public class FunctionSet {
                 || alwaysReturnNonNullableFunctions.contains(funcName);
     }
 
-    public Function getFunction(Function desc, Function.CompareMode mode) {
-        List<Function> fns = vectorizedFunctions.get(desc.functionName());
-        if (fns == null) {
-            return null;
-        }
+    private Function pickupFromFuncCandidates(Function desc, Function.CompareMode mode, List<Function> fns) {
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
@@ -644,6 +641,27 @@ public class FunctionSet {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
                 return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
             }
+        }
+        return null;
+    }
+
+    public Function getFunction(Function desc, Function.CompareMode mode) {
+        List<Function> fns = vectorizedFunctions.get(desc.functionName());
+        if (fns == null || fns.isEmpty()) {
+            return null;
+        }
+        // To be back-compatible, we first choose the functions from the non-polymorphic functions, if we can't find
+        // a suitable in non-polymorphic functions. We will try to search in the polymorphic functions.
+        List<Function> nonPolyFuncs = fns.stream().filter(func -> !func.isPolymorphic()).collect(Collectors.toList());
+        if (!nonPolyFuncs.isEmpty()) {
+            Function func = pickupFromFuncCandidates(desc, mode, nonPolyFuncs);
+            if (func != null) {
+                return func;
+            }
+        }
+        List<Function> polyFuncs = fns.stream().filter(Function::isPolymorphic).collect(Collectors.toList());
+        if (!polyFuncs.isEmpty()) {
+            return pickupFromFuncCandidates(desc, mode, polyFuncs);
         }
         return null;
     }
