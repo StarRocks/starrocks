@@ -41,7 +41,7 @@ public class JoinReorderGreedy extends JoinOrder {
     @Override
     protected void enumerate() {
         for (int curJoinLevel = 2; curJoinLevel <= atomSize; curJoinLevel++) {
-            searchJoinOrders(curJoinLevel - 1, 1);
+            searchJoinOrders(curJoinLevel - 1, 1, false);
             searchBushyJoinOrders(curJoinLevel);
         }
     }
@@ -52,7 +52,7 @@ public class JoinReorderGreedy extends JoinOrder {
         // Note that join trees of level 3 and below are never bushy,
         // so this loop only executes at curJoinLevel >= 4
         for (int rightLevel = 2; rightLevel <= curJoinLevel / 2; rightLevel++) {
-            searchJoinOrders(curJoinLevel - rightLevel, rightLevel);
+            searchJoinOrders(curJoinLevel - rightLevel, rightLevel, true);
         }
     }
 
@@ -65,10 +65,13 @@ public class JoinReorderGreedy extends JoinOrder {
         return result;
     }
 
-    private void searchJoinOrders(int leftLevel, int rightLevel) {
+    private void searchJoinOrders(int leftLevel, int rightLevel, boolean isSearchBushyJoin) {
         List<GroupInfo> leftGroupInfos = getGroupForLevel(leftLevel);
         List<GroupInfo> rightGroupInfos = getGroupForLevel(rightLevel);
         JoinLevel curLevel = joinLevels.get(leftLevel + rightLevel);
+        if (isSearchBushyJoin) {
+            rightGroupInfos = getBestGroupList(rightGroupInfos, curLevel);
+        }
         List<GroupInfo> bestLeftGroups = getBestGroupList(leftGroupInfos, curLevel);
         for (GroupInfo leftGroup : bestLeftGroups) {
             BitSet leftBitset = leftGroup.atoms;
@@ -89,7 +92,7 @@ public class JoinReorderGreedy extends JoinOrder {
                 joinBitSet.or(rightBitset);
 
                 computeCost(joinExpr, true);
-                GroupInfo groupInfo = getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr);
+                getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr);
                 double joinCost = joinExpr.cost;
                 if (joinCost < bestCost) {
                     bestCost = joinCost;
