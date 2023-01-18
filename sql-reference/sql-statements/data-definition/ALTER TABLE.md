@@ -414,13 +414,6 @@ SWAP WITH table_name;
     SET ("replication_num" = "3");
     ```
 
-3. 修改数据在多副本间的写入和同步方式。
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    SET ("single_leader_replication" = "false");
-    ```
-
 ### partition
 
 1. 增加分区，现有分区 [MIN, 2013-01-01)，增加分区 [2013-01-01, 2014-01-01)，使用默认分桶方式。
