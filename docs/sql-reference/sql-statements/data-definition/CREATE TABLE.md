@@ -365,7 +365,9 @@ It is recommended to use Hash bucketing method.
 
 ### PROPERTIES
 
-- If ENGINE type is olap. Users can specify storage medium, cooldown time and replica number.
+#### Specify storage medium, storage cooldown time, replica number
+
+- If ENGINE type is olap. Users can specify storage medium, cooldown time, and replica number.
 
 ```Plain%20Text
 PROPERTIES (
@@ -387,7 +389,9 @@ replication_num: number of replicas in the specified partition. Default number: 
 
 When the table has only one partition, the properties belongs to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions through ADD ADDITION and MODIFY PARTITION statements.
 
-- If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
+#### Add bloomfilter index for a column
+
+If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
 
 ```SQL
 PROPERTIES (
@@ -395,7 +399,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use Colocate Join attributes, please specify it in properties.
+#### Use Colocate Join
+
+If you want to use Colocate Join attributes, specify it in `properties`.
 
 ```SQL
 PROPERTIES (
@@ -403,7 +409,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use dynamic partition attributes, please specify it in properties.
+#### Configure dynamic partitions
+
+If you want to use dynamic partition attributes, please specify it in properties.
 
 ```SQL
 PROPERTIES (
@@ -416,19 +424,69 @@ PROPERTIES (
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
+<<<<<<< HEAD
 dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default value: true.
+=======
+**`PROPERTIES`**
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 
 dynamic_partition.time_unit: It is used to specify the time unit for adding partitions dynamically. Time unit could be DAY, WEEK, MONTH.
 
+<<<<<<< HEAD
 dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default value: integer.Min_VAULE.
+=======
+#### Set data compression algorithm
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 
 dynamic_partition.end: It is used to specify the how many partitions will be created in advance. The value must be more than 0.
 
 dynamic_partition.prefix: It is used to specify the prefix of the created partition. For instance, if the prefix is p, the partition will be named p20200108 automatically.
 
+<<<<<<< HEAD
 dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
+=======
+- `LZ4`: the LZ4 algorithm.
+- `ZSTD`: the Zstandard algorithm.
+- `ZLIB`: the zlib algorithm.
+- `SNAPPY`: the Snappy algorithm.
 
-- When building tables, Rollup can be created in bulk.
+For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
+
+#### Set write quorum for data loading
+
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
+
+The valid values of `write_quorum` are:
+
+- `MAJORITY`：Default value. When the **majority** of data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ONE`：When **one** of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ALL`：When **all** of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+
+> **CAUTION**
+>
+> - Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
+> - StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
+
+#### Specify data writing and replication mode among replicas
+
+If your StarRocks cluster has multiple data replicas, you can specify the `single_leader_replication` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
+
+- `true` indicates that data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode reduces CPU cost caused by data writing to multiple replicas.
+- `false` indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
+
+2.4.0 and earlier versions only support "leaderless replication". 2.5.0 supports both "leaderless replication" and "single leader replication".
+
+You can modify this parameter using ALTER TABLE. Example:
+
+```sql
+    ALTER TABLE <tbl_name>
+    SET ("single_leader_replication" = "false");
+```
+
+#### Create rollup in bulk
+
+You can create rollup in bulk when you create a table.
 
 Syntax:
 

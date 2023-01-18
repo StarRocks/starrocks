@@ -113,9 +113,62 @@ The parameter description is as follows:
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
     | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
+<<<<<<< HEAD
 > **Note**
 >
 > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+=======
+    > **Note**
+    >
+    > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+
+- If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+
+    | **Property**                           | **Required** | **Description**                                              |
+    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+    | type                                   | Yes          | The type of the data source. Set the value to `hive`.        |
+    | hive.metastore.type                    | Yes          | The metadata service used by your Hive cluster. Set the value to `glue`. |
+    | aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+    | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+    | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+
+#### Properties for update policies for cached metadata
+
+StarRocks supports two policies to update cached metadata: asynchronous update and automatic incremental update. For more information, see [Update policies for cached metadata](#update-policies-for-cached-metadata).
+
+- Asynchronous update is the default policy that StarRocks uses to update the cached metadata of Hive. In most cases, you do not need to tune the following parameters because the default settings already maximize query performance. However, if the frequency of updating Hive data is relatively high, you can adjust the time interval of updating and discarding cached metadata to match the data update frequency.
+
+    | **Property**                           | **Required** | **Description**                                              |
+    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
+    | enable_hive_metastore_cache            | No           | Whether the metadata of Hive tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of Hive tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of Hive tables or partitions.</li></ul> |
+    | enable_remote_file_cache               | No           | Whether the metadata of the data files of Hive tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of data files of Hive tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of data files of Hive tables or partitions.</li></ul> |
+    | metastore_cache_refresh_interval_sec   | No           | The time interval to asynchronously update the metadata of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `7200`, which is 2 hours. |
+    | remote_file_cache_refresh_interval_sec | No           | The time interval to asynchronously update the metadata of the data files of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `60`. |
+    | metastore_cache_ttl_sec                | No           | The time interval to automatically discard the metadata of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `86400`, which is 24 hours. |
+    | remote_file_cache_ttl_sec              | No           | The time interval to automatically discard the metadata of the data files of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `129600`, which is 36 hours. |
+
+  If you want to query the latest Hive data but the time interval for updating cached metadata has not arrived, you can manually update the cached metadata. For example, there is a Hive table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. If StarRocks only cached the two kinds of metadata of `p1`, `p2`, and `p3`, you can update the cached metadata in one of the following ways:
+
+  - Updates the two kinds of cached metadata of all partitions (`p1`, `p2`, and `p3`) at the same time.
+
+      ```SQL
+      REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
+      ```
+
+  - Updates the two kinds of cached metadata of given partitions.
+
+      ```SQL
+      REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
+      [PARTITION ('partition_name', ...)];
+      ```
+
+    For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
+- To enable the automatic incremental update policy for the Hive catalog, add the following property.
+
+    | **Property**                       | **Required** | **Description**                                              |
+    | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+    | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 
 After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 

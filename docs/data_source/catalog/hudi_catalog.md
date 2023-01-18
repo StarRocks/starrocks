@@ -51,7 +51,11 @@ StarRocks develops a query execution plan based on the metadata of Hudi tables. 
 
 If a query hits a partition of a Hudi table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRocks asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
 
+<<<<<<< HEAD
 You can set the default time interval by the `hive_meta_cache_refresh_interval_s` parameter. The parameter value defaults to `7200`. Unit: seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
+=======
+- If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 
 If a query hits a partition and the time interval from the last update exceeds the default time interval, but the metadata cached in StarRocks is not updated, that means the cached metadata is invalid and will be cached again at the next query. You can set the time period during which the cached metadata is valid by the `hive_meta_cache_ttl_s` parameter. The parameter value defaults to `86400`. Unit: Seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
 

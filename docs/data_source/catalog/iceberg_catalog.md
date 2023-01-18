@@ -63,6 +63,21 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 | iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
+<<<<<<< HEAD
+=======
+#### AWS Glue
+
+If you use AWS Glue for your Iceberg cluster, configure the following properties for the Iceberg catalog.
+
+| **Property**                           | **Required** | **Description**                                              |
+| -------------------------------------- | ------------ | ------------------------------------------------------------ |
+| type                                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
+| iceberg.catalog.type                   | Yes          | The metadata service used by your Iceberg cluster. Set the value to `glue`. |
+| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+
+>>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 ## Caching strategy of Iceberg metadata
 
 StarRocks does not cache Iceberg metadata. When you query Iceberg data, Iceberg directly returns the latest data by default.
