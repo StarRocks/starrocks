@@ -217,6 +217,7 @@ Status ExceptNode::close(RuntimeState* state) {
 
 pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     const auto num_operators_generated = _children.size() + 1;
     auto&& rc_rf_probe_collector =
             std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
@@ -224,43 +225,41 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             std::make_shared<ExceptPartitionContextFactory>(_tuple_id);
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
-    OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
-    operators_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
-            runtime_state(), operators_with_except_build_sink, _child_expr_lists[0]);
-    operators_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
+    OpFactories ops_with_except_build_sink = child(0)->decompose_to_pipeline(context);
+    ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+            runtime_state(), ops_with_except_build_sink, _child_expr_lists[0]);
+    ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators_with_except_build_sink.back().get(), context,
-                                           rc_rf_probe_collector);
-    context->add_pipeline(operators_with_except_build_sink);
+    this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
+    context->add_pipeline(ops_with_except_build_sink);
 
     // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        OpFactories operators_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), operators_with_except_probe_sink, _child_expr_lists[i]);
-        operators_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
+        OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
+        ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), ops_with_except_probe_sink, _child_expr_lists[i]);
+        ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_with_except_probe_sink.back().get(), context,
-                                               rc_rf_probe_collector);
-        context->add_pipeline(operators_with_except_probe_sink);
+        this->init_runtime_filter_for_operator(ops_with_except_probe_sink.back().get(), context, rc_rf_probe_collector);
+        context->add_pipeline(ops_with_except_probe_sink);
     }
 
     // ExceptOutputSourceOperator is used to assemble the undeleted keys to output chunks.
-    OpFactories operators_with_except_output_source;
+    OpFactories ops_with_except_output_source;
     auto except_output_source = std::make_shared<ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
     except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
-    operators_with_except_output_source.emplace_back(std::move(except_output_source));
+    ops_with_except_output_source.emplace_back(std::move(except_output_source));
     if (limit() != -1) {
-        operators_with_except_output_source.emplace_back(
+        ops_with_except_output_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
-    return operators_with_except_output_source;
+    return ops_with_except_output_source;
 }
 
 } // namespace starrocks::vectorized

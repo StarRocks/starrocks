@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -55,6 +56,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -125,6 +127,9 @@ public class OlapScanNode extends ScanNode {
     // record the selected partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
 
+    private List<Expr> bucketExprs = Lists.newArrayList();
+    private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -164,6 +169,18 @@ public class OlapScanNode extends ScanNode {
 
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
+    public List<ColumnRefOperator> getBucketColumns() {
+        return bucketColumns;
+    }
+
+    public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
+        this.bucketColumns = bucketColumns;
+    }
+
+    public void setBucketExprs(List<Expr> bucketExprs) {
+        this.bucketExprs = bucketExprs;
     }
 
     // The column names applied dict optimization
@@ -599,6 +616,7 @@ public class OlapScanNode extends ScanNode {
                 keyColumnTypes.add(col.getPrimitiveType().toThrift());
             }
         }
+
         if (olapTable.isLakeTable()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
@@ -638,6 +656,10 @@ public class OlapScanNode extends ScanNode {
 
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+            }
+
+            if (!bucketExprs.isEmpty()) {
+                msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
         }
     }
