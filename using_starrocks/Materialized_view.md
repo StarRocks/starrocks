@@ -257,7 +257,7 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 
 ### 查看物化视图构建状态
 
-创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) 命令查看当前数据库中物化视图的构建状态。
+创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) 命令查看当前数据库中物化视图的构建状态。
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
