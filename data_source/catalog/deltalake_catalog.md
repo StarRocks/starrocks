@@ -1,4 +1,4 @@
-# Delta Lake catalog【公测中】
+# Delta Lake catalog
 
 本文介绍如何创建 Delta Lake catalog，以及需要做哪些相应的配置。
 
