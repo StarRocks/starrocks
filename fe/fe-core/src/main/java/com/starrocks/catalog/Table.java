@@ -45,6 +45,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TTableDescriptor;
@@ -67,7 +68,7 @@ import javax.annotation.Nullable;
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
  */
-public class Table extends MetaObject implements Writable {
+public class Table extends MetaObject implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Table.class);
 
     // 1. Native table:
@@ -372,6 +373,11 @@ public class Table extends MetaObject implements Writable {
         } else {
             this.createTime = -1L;
         }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     @Override
