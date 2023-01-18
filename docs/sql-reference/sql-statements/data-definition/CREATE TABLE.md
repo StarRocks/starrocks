@@ -365,7 +365,9 @@ It is recommended to use Hash bucketing method.
 
 ### PROPERTIES
 
-- If ENGINE type is olap. Users can specify storage medium, cooldown time and replica number.
+#### Specify storage medium, storage cooldown time, replica number
+
+- If ENGINE type is olap. Users can specify storage medium, cooldown time, and replica number.
 
 ```Plain%20Text
 PROPERTIES (
@@ -387,7 +389,9 @@ replication_num: number of replicas in the specified partition. Default number: 
 
 When the table has only one partition, the properties belongs to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions through ADD ADDITION and MODIFY PARTITION statements.
 
-- If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
+#### Add bloomfilter index for a column
+
+If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
 
 ```SQL
 PROPERTIES (
@@ -395,7 +399,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use Colocate Join attributes, please specify it in properties.
+#### Use Colocate Join
+
+If you want to use Colocate Join attributes, specify it in `properties`.
 
 ```SQL
 PROPERTIES (
@@ -403,7 +409,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use dynamic partition attributes, please specify it in properties.
+#### Configure dynamic partitions
+
+If you want to use dynamic partition attributes, please specify it in properties.
 
 ```SQL
 PROPERTIES (
@@ -428,7 +436,9 @@ dynamic_partition.prefix: It is used to specify the prefix of the created partit
 
 dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
 
-- When building tables, Rollup can be created in bulk.
+#### Create rollup in bulk
+
+You can create rollup in bulk when you create a table.
 
 Syntax:
 
