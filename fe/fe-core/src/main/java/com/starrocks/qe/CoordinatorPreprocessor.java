@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
@@ -1335,6 +1336,8 @@ public class CoordinatorPreprocessor {
         if (resourceGroup != null) {
             connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
             connect.setResourceGroup(resourceGroup);
+        } else {
+            connect.getAuditEventBuilder().setResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         return resourceGroup;
