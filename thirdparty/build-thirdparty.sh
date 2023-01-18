@@ -1006,6 +1006,7 @@ build_avro_cpp() {
     $CMAKE_CMD -G "Unix Makefiles" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib/libavrocpp.so*
 }
 
 # avro-c
@@ -1017,6 +1018,7 @@ build_avro_c() {
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL    
     ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
 }
 
 # serders
@@ -1026,7 +1028,7 @@ build_serdes() {
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
-    export LIBS="-lrt -lpthread -lcurl -lssl -lcrypto -ldl -ljansson -lavrocpp -lavro -lz" 
+    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavrocpp_s -lavro -lssl -lcrypto -ldl" 
     ./configure --prefix=${TP_INSTALL_DIR} \
                 --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
                 --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
@@ -1035,6 +1037,8 @@ build_serdes() {
                 --disable-shared
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    rm ${TP_INSTALL_DIR}/lib/libserdes++.so*
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
 }

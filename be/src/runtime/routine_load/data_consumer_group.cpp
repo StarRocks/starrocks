@@ -38,6 +38,7 @@
 #include "runtime/routine_load/data_consumer.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "util/defer_op.h"
 
 #ifdef __cplusplus
 extern "C" {
