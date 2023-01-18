@@ -100,7 +100,11 @@ This topic uses CSV as an example to describe how to load data. For information 
    200,'Beijing'
    ```
 
+<<<<<<< HEAD
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `/input/` folder of your Amazon S3 bucket `bucket_s3`, and to the `/input/` folder of your Google CGS bucket `bucket_gcs`.
+=======
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+>>>>>>> 547f4ed11 (fix typo in broker load docs (#16758))
 
 #### Load data from HDFS
 
@@ -178,7 +182,13 @@ WITH BROKER "mybroker"
 )
 ```
 
+<<<<<<< HEAD
 > Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+=======
+> **NOTE**
+>
+> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+>>>>>>> 547f4ed11 (fix typo in broker load docs (#16758))
 
 ### Query data
 

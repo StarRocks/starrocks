@@ -129,6 +129,7 @@ WITH BROKER broker_name
 
         kerberos_principal: principal of specified kerberos
 
+<<<<<<< HEAD
         kerberos_keytab: keytab file path of specified kerberos. This file must be on the server where broker process resides.
 
         kerberos_keytab_content: the contents of the KeyTab file in specified Kerberos after base64 encoding, which is optional from the kerberos_keytab configuration.  
@@ -138,6 +139,23 @@ WITH BROKER broker_name
         By configuring namenode HA, new namenode can be automatically identified when the namenode is switched.
 
         dfs.nameservices: specify hdfs service name, custom, eg: "dfs.nameservices" = "my_ha"  
+=======
+#### Google GCS
+
+If the source data is stored in a Google GCS bucket, provide the following configurations.
+
+| Parameter         | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| fs.s3a.access.key | The Access Key that you can use to access the Google GCS bucket. |
+| fs.s3a.secret.key | The Secret Key that you can use to access the Google GCS bucket. |
+| fs.s3a.endpoint   | The endpoint that you can use to access the Google GCS bucket. |
+
+> **NOTE**
+>
+> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+
+To create an Access/Secret key pair to access your Google GCS bucket, follow these steps:
+>>>>>>> 547f4ed11 (fix typo in broker load docs (#16758))
 
         dfs.ha.namenodes.xxx: customize the name of a namenode, separated by commas. XXX is a custom name in dfs. name services, such as "dfs. ha. namenodes. my_ha" = "my_nn"
 
