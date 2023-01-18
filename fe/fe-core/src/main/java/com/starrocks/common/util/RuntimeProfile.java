@@ -44,6 +44,7 @@ import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.thrift.TCounter;
+import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
@@ -93,7 +94,7 @@ public class RuntimeProfile {
     }
 
     public RuntimeProfile() {
-        this.counterTotalTime = new Counter(TUnit.TIME_NS, 0);
+        this.counterTotalTime = new Counter(TUnit.TIME_NS, null, 0);
         this.localTimePercent = 0;
         this.counterMap.put("TotalTime", Pair.create(counterTotalTime, ROOT_COUNTER));
     }
@@ -124,18 +125,21 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
-    public Counter addCounter(String name, TUnit type) {
-        return addCounter(name, type, ROOT_COUNTER);
+    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
+        return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
-    public Counter addCounter(String name, TUnit type, String parentName) {
+    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
+        if (strategy == null) {
+            strategy = Counter.createStrategy(type);
+        }
         Pair<Counter, String> pair = this.counterMap.get(name);
         if (pair != null) {
             return pair.first;
         } else {
             Preconditions.checkState(parentName.equals(ROOT_COUNTER)
                     || this.counterMap.containsKey(parentName));
-            Counter newCounter = new Counter(type, 0);
+            Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
             if (!childCounterMap.containsKey(parentName)) {
@@ -209,7 +213,7 @@ public class RuntimeProfile {
 
             if (!Objects.equals(ROOT_COUNTER, name)) {
                 Counter srcCounter = srcProfile.counterMap.get(name).first;
-                Counter newCounter = addCounter(name, srcCounter.getType(), parentName);
+                Counter newCounter = addCounter(name, srcCounter.getType(), srcCounter.getStrategy(), parentName);
                 newCounter.setValue(srcCounter.getValue());
             }
 
@@ -259,9 +263,9 @@ public class RuntimeProfile {
                     String parentName = child2ParentMap.get(topName);
                     if (pair == null && tcounter != null && parentName != null) {
                         Counter counter =
-                                addCounter(topName, tcounter.type, parentName);
+                                addCounter(topName, tcounter.type, tcounter.strategy, parentName);
                         counter.setValue(tcounter.value);
-                        counter.setSkipMerge(tcounter.skip_merge);
+                        counter.setStrategy(tcounter.strategy);
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -287,9 +291,9 @@ public class RuntimeProfile {
             for (TCounter tcounter : tCounterMap.values()) {
                 Pair<Counter, String> pair = counterMap.get(tcounter.name);
                 if (pair == null) {
-                    Counter counter = addCounter(tcounter.name, tcounter.type);
+                    Counter counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
                     counter.setValue(tcounter.value);
-                    counter.setSkipMerge(tcounter.skip_merge);
+                    counter.setStrategy(tcounter.strategy);
                 } else {
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
@@ -592,7 +596,7 @@ public class RuntimeProfile {
             long minValue = Long.MAX_VALUE;
             long maxValue = Long.MIN_VALUE;
             boolean alreadyMerged = false;
-            boolean skipMerge = false;
+            TCounterStrategy strategy = null;
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
 
@@ -608,9 +612,7 @@ public class RuntimeProfile {
                             profile0.name, name, type.name(), counter.getType().name());
                     return;
                 }
-                if (counter.isSkipMerge()) {
-                    skipMerge = true;
-                }
+                strategy = counter.getStrategy();
 
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
                 if (minCounter != null) {
@@ -628,7 +630,7 @@ public class RuntimeProfile {
                 }
                 counters.add(counter);
             }
-            Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(type, counters);
+            Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(counters);
             final long mergedValue = mergedInfo.mergedValue;
             if (!alreadyMerged) {
                 minValue = mergedInfo.minValue;
@@ -640,22 +642,19 @@ public class RuntimeProfile {
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == null) {
                 if (!Objects.equals(ROOT_COUNTER, parentName) && profile0.getCounter(parentName) != null) {
-                    counter0 = profile0.addCounter(name, type, parentName);
+                    counter0 = profile0.addCounter(name, type, strategy, parentName);
                 } else {
                     if (!Objects.equals(ROOT_COUNTER, parentName)) {
                         LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
                                 profile0.name, name, parentName);
                     }
-                    counter0 = profile0.addCounter(name, type);
-                }
-                if (skipMerge) {
-                    counter0.setSkipMerge(true);
+                    counter0 = profile0.addCounter(name, type, strategy);
                 }
             }
             counter0.setValue(mergedValue);
 
-            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
-            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
+            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, counter0.getStrategy(), name);
+            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, counter0.getStrategy(), name);
             minCounter.setValue(minValue);
             maxCounter.setValue(maxValue);
         }
@@ -717,6 +716,7 @@ public class RuntimeProfile {
     static class DefaultProfileFormater implements ProfileFormater {
 
         private final StringBuilder builder;
+
         DefaultProfileFormater(StringBuilder builder) {
             this.builder = builder;
         }
@@ -809,6 +809,7 @@ public class RuntimeProfile {
         JsonProfileFormater() {
             this.builder = new JsonObject();
         }
+
         @Override
         public String format(RuntimeProfile profile, String prefix) {
             //may parse prefix to json
@@ -821,7 +822,6 @@ public class RuntimeProfile {
             Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
             return gson.toJson(builder);
         }
-
 
         public void addRuntimeProfile(RuntimeProfile profile, JsonObject jsonObject) {
             Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
@@ -860,7 +860,6 @@ public class RuntimeProfile {
             }
         }
 
-
         private void addChildCounters(RuntimeProfile profile, String counterName, JsonObject childJsonObject) {
             Map<String, Set<String>> childCounterMap = profile.getChildCounterMap();
 
@@ -888,7 +887,8 @@ public class RuntimeProfile {
             for (String childName : reorderedChildNames) {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
-                childJsonObject.addProperty(childName, profile.printCounter(childCounter.getValue(), childCounter.getType()));
+                childJsonObject.addProperty(childName,
+                        profile.printCounter(childCounter.getValue(), childCounter.getType()));
                 this.addChildCounters(profile, childName, childJsonObject);
             }
         }

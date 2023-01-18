@@ -170,7 +170,8 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter =
+            ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {

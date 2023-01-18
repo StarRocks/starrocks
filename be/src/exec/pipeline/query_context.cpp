@@ -123,7 +123,8 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
-        auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        auto* mem_tracker_counter =
+                ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         mem_tracker_counter->set(bytes_limit);
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
     });

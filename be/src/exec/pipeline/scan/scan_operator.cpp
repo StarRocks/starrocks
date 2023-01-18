@@ -64,8 +64,10 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(_buffer_unplug_threshold()));
-    _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT,
-                                                                         RuntimeProfile::ROOT_COUNTER, true);
+    _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakChunkBufferSize", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
+            RuntimeProfile::ROOT_COUNTER);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
@@ -85,13 +87,15 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
-    _default_buffer_capacity_counter =
-            ADD_COUNTER_SKIP_MERGE(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
+    _default_buffer_capacity_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "DefaultChunkBufferCapacity",
+                                                              TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
-    _buffer_capacity_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
+    _buffer_capacity_counter =
+            ADD_COUNTER_SKIP_MERGE(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
 
-    _tablets_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT);
+    _tablets_counter =
+            ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
     COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
     _merge_chunk_source_profiles(state);

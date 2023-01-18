@@ -112,7 +112,8 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
     runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    auto* dop_counter =
+            ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
