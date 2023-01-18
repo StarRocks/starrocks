@@ -702,6 +702,8 @@ public class Coordinator {
         if (resourceGroup != null) {
             connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
             connect.setResourceGroup(resourceGroup);
+        } else {
+            connect.getAuditEventBuilder().setResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         return resourceGroup;
