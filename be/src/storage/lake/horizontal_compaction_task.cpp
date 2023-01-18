@@ -33,9 +33,6 @@ HorizontalCompactionTask::~HorizontalCompactionTask() = default;
 Status HorizontalCompactionTask::execute(Stats* stats) {
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     const KeysType keys_type = tablet_schema->keys_type();
-    if (keys_type == PRIMARY_KEYS) {
-        return Status::NotSupported("primary key compaction not supported");
-    }
     int64_t num_rows = 0;
     int64_t num_size = 0;
     for (auto& rowset : _input_rowsets) {

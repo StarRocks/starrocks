@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/pretty_printer.h"
@@ -29,6 +30,10 @@
 #include "util/time.h"
 
 namespace starrocks {
+
+Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
+    return StorageEngine::instance()->update_manager()->get_del_vec(_meta, tsid, version, pdelvec);
+}
 
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()), _update_state_cache(std::numeric_limits<size_t>::max()) {
