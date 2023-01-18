@@ -32,6 +32,9 @@ namespace starrocks::lake {
 Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index)
         : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
 
+Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
+        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
+
 Rowset::~Rowset() = default;
 
 // TODO: support
@@ -52,8 +55,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-        seg_options.is_lake_table = true;
-        seg_options.update_mgr = _tablet->update_mgr();
+        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), nullptr);
         seg_options.version = options.version;
         seg_options.tablet_id = _tablet->id();
         seg_options.rowset_id = _rowset_metadata->id();
@@ -146,6 +148,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const VectorizedSchema& schema,
                                                                                       int64_t version,
+                                                                                      const MetaFileBuilder* builder,
                                                                                       OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
@@ -155,8 +158,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = stats;
     seg_options.is_primary_keys = true;
-    seg_options.is_lake_table = true;
-    seg_options.update_mgr = _tablet->update_mgr();
+    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), builder);
     seg_options.version = version;
     seg_options.tablet_id = _tablet->id();
     seg_options.rowset_id = _rowset_metadata->id();

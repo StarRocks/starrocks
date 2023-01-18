@@ -76,13 +76,17 @@ TEST_F(GCTest, test_metadata_gc) {
 
     // LocationProvider and TabletManager of worker A
     auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), nullptr, 16384);
+    auto update_manager_1 = std::make_unique<lake::UpdateManager>(location_provider_1.get());
+    auto tablet_manager_1 =
+            std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A
     location_provider_1->_owned_shards.insert(tablet_id_1);
 
     // LocationProvider and TabletManager of worker B
     auto location_provider_2 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto tablet_manager_2 = std::make_unique<lake::TabletManager>(location_provider_2.get(), nullptr, 16384);
+    auto update_manager_2 = std::make_unique<lake::UpdateManager>(location_provider_2.get());
+    auto tablet_manager_2 =
+            std::make_unique<lake::TabletManager>(location_provider_2.get(), update_manager_2.get(), 16384);
     // tablet_id_2 owned by worker B
     location_provider_2->_owned_shards.insert(tablet_id_2);
 
@@ -169,13 +173,17 @@ TEST_F(GCTest, test_datafile_gc) {
     auto tablet_id_2 = next_id();
     // LocationProvider and TabletManager of worker A
     auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), nullptr, 16384);
+    auto update_manager_1 = std::make_unique<lake::UpdateManager>(location_provider_1.get());
+    auto tablet_manager_1 =
+            std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A
     location_provider_1->_owned_shards.insert(tablet_id_1);
 
     // LocationProvider and TabletManager of worker B
     auto location_provider_2 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto tablet_manager_2 = std::make_unique<lake::TabletManager>(location_provider_2.get(), nullptr, 16384);
+    auto update_manager_2 = std::make_unique<lake::UpdateManager>(location_provider_2.get());
+    auto tablet_manager_2 =
+            std::make_unique<lake::TabletManager>(location_provider_2.get(), update_manager_2.get(), 16384);
     // tablet_id_2 owned by worker B
     location_provider_2->_owned_shards.insert(tablet_id_2);
 
@@ -279,7 +287,9 @@ TEST_F(GCTest, test_dels_gc) {
     auto tablet_id_1 = next_id();
     // LocationProvider and TabletManager of worker A
     auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), nullptr, 16384);
+    auto update_manager_1 = std::make_unique<lake::UpdateManager>(location_provider_1.get());
+    auto tablet_manager_1 =
+            std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A
     location_provider_1->_owned_shards.insert(tablet_id_1);
     {
