@@ -120,7 +120,7 @@ This section describes the window functions supported in StarRocks.
 Syntax:
 
 ~~~SQL
-AVG([DISTINCT | ALL] *expression*) [OVER (*analytic_clause*)]
+AVG(expression) [OVER (*analytic_clause*)]
 ~~~
 
 Example 3:
@@ -161,7 +161,7 @@ where property in ('odd','even');
 Syntax:
 
 ~~~SQL
-COUNT([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+COUNT(expression) [OVER (analytic_clause)]
 ~~~
 
 Example 4:
@@ -472,7 +472,7 @@ order by closing_date;
 Syntax：
 
 ~~~SQL
-MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MAX(expression) [OVER (analytic_clause)]
 ~~~
 
 Example 8:
@@ -509,7 +509,7 @@ where property in ('prime','square');
 Syntax：
 
 ~~~SQL
-MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MIN(expression) [OVER (analytic_clause)]
 ~~~
 
 Example 9:
@@ -614,7 +614,7 @@ from int_t;
 Syntax：
 
 ~~~SQL
-SUM([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+SUM(expression) [OVER (analytic_clause)]
 ~~~
 
 Example 12:
