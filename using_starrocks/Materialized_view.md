@@ -157,7 +157,7 @@ GROUP BY store_id;
 
 可以看到，此时查询时间为 0.02 秒，其 Query Profile 中的 `rollup` 项显示为 `sales_records`（即基表），说明该查询未使用物化视图。
 
-### 创建物化视图
+### 创建单表同步刷新物化视图
 
 您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) 语句为特定查询语句创建物化视图。
 
@@ -170,7 +170,7 @@ FROM sales_records
 GROUP BY store_id;
 ```
 
-### 使用物化视图查询
+### 使用单表同步物化视图查询
 
 新建的物化视图将预计算并保存上述查询的结果，后续查询将直接调用该结果以加速查询。创建成功后，您可以再次运行同样的查询以测试查询时间。
 
@@ -250,7 +250,7 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 
 可以看到，此时 Query Profile 中的 `rollup` 项显示为 `store_amt`（即物化视图），说明该查询已命中物化视图。
 
-### 查看物化视图构建状态
+### 查看单表同步物化视图构建状态
 
 创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) 命令查看当前数据库中物化视图的构建状态。
 
@@ -307,7 +307,7 @@ MySQL > DESC sales_records ALL;
 
 #### 删除正在创建的物化视图
 
-可以通过取消正在进行的物化视图创建任务删除正在创建的物化视图。首先需要通过 [查看物化视图构建状态](#查看物化视图构建状态) 获取该物化视图的任务 ID `JobID`。得到任务 ID 后，需要通过 CANCEL ALTER 命令取消该创建任务。
+可以通过取消正在进行的物化视图创建任务删除正在创建的物化视图。首先需要通过 [查看物化视图构建状态](#查看单表同步物化视图构建状态) 获取该物化视图的任务 ID `JobID`。得到任务 ID 后，需要通过 CANCEL ALTER 命令取消该创建任务。
 
 ```Plain
 CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
@@ -477,7 +477,7 @@ FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
 
-### 创建物化视图
+### 创建多表异步刷新物化视图
 
 您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) 语句为特定查询语句创建物化视图。
 
