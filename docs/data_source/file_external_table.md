@@ -1,4 +1,4 @@
-# [Preview] File external table
+# File external table
 
 This topic describes how to use file external tables to directly query Parquet and ORC data files in external storage systems (such as HDFS). Only StarRocks 2.5 and later versions support this feature.
 
