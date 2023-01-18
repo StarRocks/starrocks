@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -90,7 +91,8 @@ public class ExtractAggregateColumn implements TreeRewriteRule {
                         if (scalarOperator == null) {
                             return;
                         }
-                        if (!scalarOperator.isColumnRef() && !hasDictMappingOperator(scalarOperator)) {
+                        if (!scalarOperator.isColumnRef() && !hasDictMappingOperator(scalarOperator) &&
+                                !(scalarOperator.getOpType() == OperatorType.SUBFIELD)) {
                             rewriteMap.put(childRef, scalarOperator);
                             extractedColumns.add(childRef);
                         }

@@ -79,10 +79,25 @@ public class StructTypePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testSum() throws Exception {
-        // TODO Can't pushdown, also consider by group
+    public void testAggregate() throws Exception {
         String sql = "select sum(c2.a) as t from test";
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+
+        sql = "select sum(c2.b) as t from test group by c2.a";
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+
+        sql = "select count(c1.b[10].a) from test";
+        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<b ARRAY<STRUCT<a int(11)>>>]");
+
+        sql = "select count(c3.c.b) from test group by c1.a, c2.b";
+        assertVerbosePlanContains(sql, " Pruned type: 2 <-> [STRUCT<a int(11)>]\n" +
+                "     Pruned type: 3 <-> [STRUCT<b int(11)>]\n" +
+                "     Pruned type: 4 <-> [STRUCT<c STRUCT<b int(11)>>]");
+
+        sql = "select sum(c3.c.b + c2.a) as t from test group by c1.a, c2.b";
+        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11)>]\n" +
+                "     Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]\n" +
+                "     Pruned type: 4 <-> [STRUCT<c STRUCT<b int(11)>>]");
     }
 
     @Test
