@@ -20,6 +20,7 @@
 #include "column/datum.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
+#include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
@@ -29,10 +30,6 @@ class Condition;
 struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
-class KVStore;
-namespace lake {
-class UpdateManager;
-} // namespace lake
 } // namespace starrocks
 
 namespace starrocks {
@@ -57,15 +54,11 @@ public:
     DisjunctivePredicates delete_predicates;
 
     // used for updatable tablet to get delvec
+    std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
     uint32_t rowset_id = 0;
     int64_t version = 0;
-    KVStore* meta = nullptr;
-
-    // used for lake table
-    bool is_lake_table = false;
-    lake::UpdateManager* update_mgr = nullptr;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;

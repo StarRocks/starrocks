@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
@@ -32,6 +33,18 @@ class TxnLogPB_OpWrite;
 class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
+class UpdateManager;
+
+class LakeDelvecLoader : public DelvecLoader {
+public:
+    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder)
+            : _update_mgr(update_mgr), _pk_builder(pk_builder) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    UpdateManager* _update_mgr = nullptr;
+    const MetaFileBuilder* _pk_builder = nullptr;
+};
 
 class UpdateManager {
 public:
@@ -45,24 +58,25 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
-    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata, Tablet* tablet,
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(Tablet* tablet, TabletMetadata* metadata,
+    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                    const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
-                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
 
     // get column data by rssid and rowids
-    Status get_column_values(Tablet* tablet, TabletMetadata* metadata, TabletSchema* tablet_schema,
+    Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TabletSchema& tablet_schema,
                              std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns);
     // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+                       DelVectorPtr* pdelvec);
 
     // get latest delvec
-    Status get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, MetaFileBuilder* builder,
+    Status get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, const MetaFileBuilder* builder,
                               DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file
@@ -72,8 +86,21 @@ public:
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
 
+    // get del nums from rowset, for compaction policy
+    size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
+
+    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
+                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
+
+    // remove primary index entry from cache, called when publish version error happens.
+    // Because update primary index isn't idempotent, so if primary index update success, but
+    // publish failed later, need to clear primary index.
+    void remove_primary_index_cache(uint32_t tablet_id);
+
     void expire_cache();
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
+    void clear_cached_del_vec(const std::vector<TabletSegmentIdRange>& tsid_ranges);
+    size_t cached_del_vec_size();
 
 private:
     Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
@@ -90,7 +117,7 @@ private:
 
     // DelVector related states
     std::mutex _del_vec_cache_lock;
-    std::unordered_map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
+    std::map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
     // use _del_vec_cache_ver to indice the valid position
     int64_t _del_vec_cache_ver{0};
 

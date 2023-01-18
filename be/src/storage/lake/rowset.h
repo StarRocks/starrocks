@@ -20,9 +20,15 @@
 #include "storage/olap_common.h"
 
 namespace starrocks::lake {
+class MetaFileBuilder;
+
+static const int kInvalidRowsetIndex = -1;
+
 class Rowset {
 public:
     explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index);
+
+    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata);
 
     ~Rowset();
 
@@ -45,7 +51,8 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const VectorizedSchema& schema, int64_t version, OlapReaderStatistics* stats);
+            const VectorizedSchema& schema, int64_t version, const MetaFileBuilder* builder,
+            OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 
@@ -67,7 +74,7 @@ private:
     // _tablet is owned by TabletReader
     Tablet* _tablet;
     RowsetMetadataPtr _rowset_metadata;
-    int _index;
+    int _index{kInvalidRowsetIndex};
 };
 
 } // namespace starrocks::lake
