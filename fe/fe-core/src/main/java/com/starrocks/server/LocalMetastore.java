@@ -4519,7 +4519,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // check partitions
             for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
-                Partition partition = copiedTbl.getPartition(entry.getValue().getId());
+                Partition partition = olapTable.getPartition(entry.getValue().getId());
                 if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
