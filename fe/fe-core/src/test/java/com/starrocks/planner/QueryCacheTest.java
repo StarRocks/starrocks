@@ -22,6 +22,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -364,6 +365,26 @@ public class QueryCacheTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
+
+        String createTbl9StmtStr = "" +
+                "CREATE TABLE if not exists VBAP_LEFT_JOIN_MS(\n" +
+                "ts DATETIME NOT NULL,\n" +
+                "REGION_CODE VARCHAR NOT NULL,\n" +
+                "REGION_NAME VARCHAR NOT NULL,\n" +
+                "v1 INT NOT NULL,\n" +
+                "v2 DECIMAL(7,2) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`ts`, `REGION_CODE`, `REGION_NAME`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(ts) (\n" +
+                "  START (\"2022-01-01\") END (\"2022-03-01\") EVERY (INTERVAL 1 day))\n" +
+                "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"default\"\n" +
+                ");";
+
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
@@ -382,6 +403,7 @@ public class QueryCacheTest {
         starRocksAssert.withTable(createTbl6StmtStr);
         starRocksAssert.withTable(createTbl7StmtStr);
         starRocksAssert.withTable(createTbl8StmtStr);
+        starRocksAssert.withTable(createTbl9StmtStr);
         starRocksAssert.withTable(hits);
     }
 
@@ -1179,5 +1201,12 @@ public class QueryCacheTest {
             Assert.assertTrue(optFrag.isPresent());
             Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
+    }
+
+    @Test
+    public void testGroupByDifferentColumns() {
+        String sql0 = "SELECT REGION_CODE, count(*) from VBAP_LEFT_JOIN_MS group by 1;";
+        String sql1 = "SELECT REGION_NAME, count(*) from VBAP_LEFT_JOIN_MS group by 1;";
+        testHelper(Arrays.asList(sql0, sql1));
     }
 }
