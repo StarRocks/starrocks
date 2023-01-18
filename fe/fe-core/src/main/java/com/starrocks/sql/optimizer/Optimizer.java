@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
@@ -405,7 +406,7 @@ public class Optimizer {
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
-
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
     }

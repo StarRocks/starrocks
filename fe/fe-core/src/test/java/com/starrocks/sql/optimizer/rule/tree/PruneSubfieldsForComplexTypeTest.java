@@ -1,6 +1,10 @@
-package com.starrocks.analysis;
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
@@ -15,15 +19,11 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 
-public class SlotDescriptorTest {
-
+public class PruneSubfieldsForComplexTypeTest {
     private Type mapType;
     private Type typeMapArrayMap;
-    private SlotDescriptor slot;
-    private ColumnRefOperator colRef;
 
     @Before
     public void setup() {
@@ -33,14 +33,11 @@ public class SlotDescriptorTest {
         Type arrayType = new ArrayType(mapType);
         Type keyTypeOuter = ScalarType.createType(PrimitiveType.INT);
         typeMapArrayMap = new MapType(keyTypeOuter, arrayType);
-        slot = new SlotDescriptor(SlotId.createGenerator().getNextId(), "type_map_array_map", typeMapArrayMap, true);
-        colRef = new ColumnRefOperator(0, typeMapArrayMap, "type_map_array_map", true);
     }
 
     @Test
     public void testSetUsedSubfieldPosGroupEmpty() {
-        // if the usedSubfieldPosGroup is null, all subfields are selected
-        slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, new ArrayList<>());
         Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -54,8 +51,9 @@ public class SlotDescriptorTest {
         // if the last one is complextype, select all child
         List<Integer> usedSubfieldPos = new ArrayList<>();
         usedSubfieldPos.add(1);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos));
-        slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+        List<ImmutableList<Integer>> group = new ArrayList<>();
+        group.add(ImmutableList.copyOf(usedSubfieldPos));
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, group);
         Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
         Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -68,8 +66,9 @@ public class SlotDescriptorTest {
     public void testSetUsedSubfieldPosGroupLeaf() {
         // if the last one is a leaf
         List<Integer> usedSubfieldPos = Arrays.asList(1, 1);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos));
-        slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+        List<ImmutableList<Integer>> group = new ArrayList<>();
+        group.add(ImmutableList.copyOf(usedSubfieldPos));
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, group);
         Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
         Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -80,11 +79,12 @@ public class SlotDescriptorTest {
 
     @Test
     public void testSetUsedSubfieldPosGroupTwoPos() {
+        List<ImmutableList<Integer>> group = new ArrayList<>();
         List<Integer> usedSubfieldPos1 = Arrays.asList(1, 1);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos1));
+        group.add(ImmutableList.copyOf(usedSubfieldPos1));
         List<Integer> usedSubfieldPos2 = Arrays.asList(1, 0);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos2));
-        slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+        group.add(ImmutableList.copyOf(usedSubfieldPos2));
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, group);
         Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
         Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -96,9 +96,10 @@ public class SlotDescriptorTest {
     @Test
     public void testSetUsedSubfieldPosGroupMapAllField() {
         // if the last one is a leaf
+        List<ImmutableList<Integer>> group = new ArrayList<>();
         List<Integer> usedSubfieldPos = Arrays.asList(1, -1);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos));
-        slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+        group.add(ImmutableList.copyOf(usedSubfieldPos));
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, group);
         Assert.assertEquals(2, typeMapArrayMap.getSelectedFields().length);
         Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -106,16 +107,16 @@ public class SlotDescriptorTest {
         Assert.assertEquals(true, mapType.getSelectedFields()[0]);
         Assert.assertEquals(true, mapType.getSelectedFields()[1]);
 
-        Type map_new = typeMapArrayMap.clone();
-        SlotDescriptor slot_new = new SlotDescriptor(SlotId.createGenerator().getNextId(), "clone_map", map_new, true);
-        ColumnRefOperator colRef_new = new ColumnRefOperator(0, map_new, "clone_map", true);
+        Type newMap = typeMapArrayMap.clone();
+        group = new ArrayList<>();
+
         List<Integer> usedSubfield = Arrays.asList(-1);
-        colRef_new.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfield));
-        slot_new.setUsedSubfieldPosGroup(colRef_new.getUsedSubfieldPosGroup());
-        Assert.assertEquals(2, map_new.getSelectedFields().length);
+        group.add(ImmutableList.copyOf(usedSubfield));
+        PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(newMap, group);
+        Assert.assertEquals(2, newMap.getSelectedFields().length);
         // the cloned map selected 1, 1
-        Assert.assertEquals(true, map_new.getSelectedFields()[0]);
-        Assert.assertEquals(true, map_new.getSelectedFields()[1]);
+        Assert.assertEquals(true, newMap.getSelectedFields()[0]);
+        Assert.assertEquals(true, newMap.getSelectedFields()[1]);
         // the origin map selected 0, 1
         Assert.assertEquals(false, typeMapArrayMap.getSelectedFields()[0]);
         Assert.assertEquals(true, typeMapArrayMap.getSelectedFields()[1]);
@@ -124,15 +125,18 @@ public class SlotDescriptorTest {
     @Test
     public void testSetUsedSubfieldPosGroupMapWrongField() {
         // if the last one is a leaf
+        List<ImmutableList<Integer>> group = new ArrayList<>();
         List<Integer> usedSubfieldPos = Arrays.asList(0, 0, 0);
-        colRef.addUsedSubfieldPos(ImmutableList.copyOf(usedSubfieldPos));
-        Assert.assertThrows(IllegalStateException.class, ()->slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup()));
+        group.add(ImmutableList.copyOf(usedSubfieldPos));
+        Assert.assertThrows(IllegalStateException.class,
+                () -> PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(typeMapArrayMap, group));
     }
 
     @Test
     public void testStructSubfield() {
         Type field1 = ScalarType.createType(PrimitiveType.INT);
-        Type field2Map = new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARCHAR));
+        Type field2Map =
+                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARCHAR));
         Type field2Str = ScalarType.createType(PrimitiveType.VARCHAR);
         StructField structField1 = new StructField("subfield1", field2Map);
         StructField structField2 = new StructField("subfield2", field2Str);
@@ -140,7 +144,6 @@ public class SlotDescriptorTest {
         list1.add(structField1);
         list1.add(structField2);
         Type field2 = new StructType(list1);
-
 
         StructField topLevel1 = new StructField("field1", field1);
         StructField topLevel2 = new StructField("field2", field2);
@@ -160,11 +163,7 @@ public class SlotDescriptorTest {
 
         {
             StructType cloneType = topType.clone();
-            SlotDescriptor slot = new SlotDescriptor(SlotId.createGenerator().getNextId(),
-                    "struct_type", cloneType, true);
-            ColumnRefOperator colRef = new ColumnRefOperator(0, cloneType, "struct_type", true);
-            colRef.addUsedSubfieldPos(ImmutableList.copyOf(new LinkedList<>()));
-            slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+            PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(cloneType, new ArrayList<>());
 
             Assert.assertTrue(cloneType.getSelectedFields()[0]);
             Assert.assertTrue(cloneType.getSelectedFields()[1]);
@@ -180,11 +179,9 @@ public class SlotDescriptorTest {
 
         {
             StructType cloneType = topType.clone();
-            SlotDescriptor slot = new SlotDescriptor(SlotId.createGenerator().getNextId(),
-                    "struct_type", cloneType, true);
-            ColumnRefOperator colRef = new ColumnRefOperator(0, cloneType, "struct_type", true);
-            colRef.addUsedSubfieldPos(ImmutableList.copyOf(Arrays.asList(1)));
-            slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+            List<ImmutableList<Integer>> group = new ArrayList<>();
+            group.add(ImmutableList.of(1));
+            PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(cloneType, group);
 
             Assert.assertFalse(cloneType.getSelectedFields()[0]);
             Assert.assertTrue(cloneType.getSelectedFields()[1]);
@@ -203,8 +200,9 @@ public class SlotDescriptorTest {
             SlotDescriptor slot = new SlotDescriptor(SlotId.createGenerator().getNextId(),
                     "struct_type", cloneType, true);
             ColumnRefOperator colRef = new ColumnRefOperator(0, cloneType, "struct_type", true);
-            colRef.addUsedSubfieldPos(ImmutableList.copyOf(Arrays.asList(1, 1)));
-            slot.setUsedSubfieldPosGroup(colRef.getUsedSubfieldPosGroup());
+            List<ImmutableList<Integer>> group = new ArrayList<>();
+            group.add(ImmutableList.of(1, 1));
+            PruneSubfieldsForComplexType.Util.setUsedSubfieldPosGroup(cloneType, group);
 
             Assert.assertFalse(cloneType.getSelectedFields()[0]);
             Assert.assertTrue(cloneType.getSelectedFields()[1]);

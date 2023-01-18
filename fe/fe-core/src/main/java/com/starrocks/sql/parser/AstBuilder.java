@@ -4470,8 +4470,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
-            return new FunctionCallExpr(context.name.getText().toLowerCase(),
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
+            functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+            return functionCallExpr;
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
     }
@@ -4820,13 +4822,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
             parts.add(fieldName);
             return new SlotRef(QualifiedName.of(parts));
+        } else if (base instanceof SubfieldExpr) {
+            // Merge multi-level subfield access
+            SubfieldExpr subfieldExpr = (SubfieldExpr) base;
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+            for (String tmpFieldName : subfieldExpr.getFieldNames()) {
+                builder.add(tmpFieldName);
+            }
+            builder.add(fieldName);
+            return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
         } else {
-            // If left is not a SlotRef, we can left must be an StructType,
+            // If left is not a SlotRef, we can assume left node must be an StructType,
             // and fieldName must be StructType's subfield name.
-            return new SubfieldExpr(
-                    (Expr) visit(ctx.base),
-                    ((Identifier) visit(ctx.fieldName)).getValue()
-            );
+            return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
 

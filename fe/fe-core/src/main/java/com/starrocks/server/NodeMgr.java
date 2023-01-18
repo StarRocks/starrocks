@@ -723,7 +723,13 @@ public class NodeMgr {
                 throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
             }
 
-            Frontend existFe = getFeByHost(fqdn);
+            Frontend existFe = null;
+            for (Frontend fe : frontends.values()) {
+                if (fe.getHost().equals(fqdn)) {
+                    existFe = fe;
+                }
+            }
+
             if (null != existFe) {
                 throw new DdlException("frontend with host [" + fqdn + "] already exists ");
             }

@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 
 class SubfieldExpr final : public Expr {
 public:
-    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_name(node.used_subfield_name) {}
+    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {}
 
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
@@ -22,6 +22,20 @@ public:
         DCHECK_EQ(1, _children.size());
 
         ColumnPtr col = _children.at(0)->evaluate(context, chunk);
+
+        // Enter multiple subfield for struct type, remain last subfield
+        for (size_t i = 0; i < _used_subfield_names.size() - 1; i++) {
+            std::string fieldname = _used_subfield_names[i];
+            Column* tmp_col = ColumnHelper::get_data_column(col.get());
+            DCHECK(tmp_col->is_struct());
+            auto* struct_column = down_cast<StructColumn*>(tmp_col);
+            col = struct_column->field_column(fieldname);
+            if (col == nullptr) {
+                LOG(WARNING) << "Struct subfield name: " + fieldname + " not found!";
+                // Return an empty column to avoid nullptr
+                return ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_NULL), true);
+            }
+        }
 
         // handle nullable column
         std::vector<uint8_t> null_flags;
@@ -40,7 +54,13 @@ public:
         DCHECK(tmp_col->is_struct());
         StructColumn* struct_column = down_cast<StructColumn*>(tmp_col);
 
-        ColumnPtr subfield_column = struct_column->field_column(_used_subfield_name);
+        std::string fieldname = _used_subfield_names.back();
+        ColumnPtr subfield_column = struct_column->field_column(fieldname);
+        if (subfield_column == nullptr) {
+            LOG(WARNING) << "Struct subfield name: " + fieldname + " not found!";
+            // Return an empty column to avoid nullptr
+            return ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_NULL), true);
+        }
         if (subfield_column->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(subfield_column.get());
             const uint8_t* nulls = nullable->null_column()->raw_data();
@@ -54,19 +74,19 @@ public:
         result_null->get_data().swap(null_flags);
         DCHECK_EQ(subfield_column->size(), result_null->size());
 
-        // If you want to edit subfield column, you need clone it first.
-        return NullableColumn::create(subfield_column, result_null);
+        // We need clone a new subfield column
+        return NullableColumn::create(subfield_column->clone_shared(), result_null);
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
 private:
-    std::string _used_subfield_name;
+    std::vector<std::string> _used_subfield_names;
 };
 
 Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
     DCHECK_EQ(TExprNodeType::SUBFIELD_EXPR, node.node_type);
-    DCHECK(node.__isset.used_subfield_name);
+    DCHECK(node.__isset.used_subfield_names);
     return new SubfieldExpr(node);
 }
 
