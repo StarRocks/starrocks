@@ -1876,4 +1876,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+<<<<<<< HEAD
+=======
+
+    @ConfField
+    public static long binlog_ttl_second = 60 * 30; // 30min
+
+    @ConfField
+    public static long binlog_max_size = Long.MAX_VALUE; // no limit
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
+>>>>>>> 278e2b14d ([Refactor] Add a configure to enable and disable auto tablet distribution(#16702))
 }

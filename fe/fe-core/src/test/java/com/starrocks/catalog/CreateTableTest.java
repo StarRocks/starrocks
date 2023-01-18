@@ -49,6 +49,7 @@ public class CreateTableTest {
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
+        Config.enable_auto_tablet_distribution = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
@@ -489,4 +490,200 @@ public class CreateTableTest {
                         ");"));
     }
 
+<<<<<<< HEAD
 }
+=======
+    @Test
+    public void testCreateBinaryTable() {
+        // duplicate table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl\n" +
+                        "(k1 int, j varbinary(10))\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl1\n" +
+                        "(k1 int, j varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl2\n" +
+                        "(k1 int, j varbinary(1), j1 varbinary(10), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        // default table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl3\n"
+                        + "(k1 int, k2 varbinary)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+
+        // unique key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+                "(k1 int(40), j varbinary, j1 varbinary(1), j2 varbinary(10))\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // primary key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+                "(k1 int(40), j varbinary, j1 varbinary, j2 varbinary(10))\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'VARBINARY'",
+                () -> createTable("create table test.binary_tbl0\n"
+                        + "(k1 int, k2 varbinary)\n"
+                        + "duplicate key(k1, k2)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "VARBINARY(10) column can not be distribution column",
+                () -> createTable("create table test.binary_tbl0 \n"
+                        + "(k1 int, k2 varbinary(10) )\n"
+                        + "duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Column[j] type[VARBINARY] cannot be a range partition key",
+                () -> createTable("create table test.binary_tbl0 \n" +
+                        "(k1 int(40), j varbinary, j1 varbinary(20), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1, j)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    /**
+     * Disable varbinary on unique/primary/aggregate key
+     */
+    @Test
+    public void testAlterBinaryTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_bf(\n" +
+                        "k1 INT,\n" +
+                        "k2 INT,\n" +
+                        "k3 VARBINARY\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type VARBINARY",
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_bf set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_primary_key ADD COLUMN k3 VARBINARY(21)"));
+    }
+
+    @Test
+    public void testCreateTableWithBinlogProperties() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.binlog_table(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n," +
+                        "\"binlog_max_size\" = \"100\"\n," +
+                        "\"binlog_enable\" = \"true\"\n," +
+                        "\"binlog_ttl_second\" = \"100\"\n" +
+                        ");"
+        ));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("binlog_table");
+        Assert.assertNotNull(table.getCurBinlogConfig());
+        Assert.assertTrue(table.isBinlogEnabled());
+
+        long version = table.getBinlogVersion();
+        Assert.assertEquals(0, version);
+        long binlogMaxSize = table.getCurBinlogConfig().getBinlogMaxSize();
+        Assert.assertEquals(100, binlogMaxSize);
+        long binlogTtlSecond = table.getCurBinlogConfig().getBinlogTtlSecond();
+        Assert.assertEquals(100, binlogTtlSecond);
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.binlog_table SET " +
+                        "(\"binlog_enable\" = \"false\",\"binlog_max_size\" = \"200\")"));
+        Assert.assertFalse(table.isBinlogEnabled());
+        Assert.assertEquals(1, table.getBinlogVersion());
+        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+
+    }
+
+    @Test
+    public void testCreateTableWithoutBinlogProperties() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.not_binlog_table(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("not_binlog_table");
+
+        Assert.assertFalse(table.containsBinlogConfig());
+        Assert.assertFalse(table.isBinlogEnabled());
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.not_binlog_table SET " +
+                        "(\"binlog_enable\" = \"true\",\"binlog_max_size\" = \"200\")"));
+        Assert.assertTrue(table.isBinlogEnabled());
+        Assert.assertEquals(0, table.getBinlogVersion());
+        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+    }
+}
+>>>>>>> 278e2b14d ([Refactor] Add a configure to enable and disable auto tablet distribution(#16702))
