@@ -28,7 +28,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ### 配置 FE 动态参数
 
-您可以通过以下命令在线修改 FE 动态参数。
+您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令在线修改 FE 动态参数。
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
