@@ -62,6 +62,7 @@ public class CreateTableTest {
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
+        Config.enable_auto_tablet_distribution = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database

@@ -1993,4 +1993,10 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long binlog_max_size = Long.MAX_VALUE; // no limit
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
 }
