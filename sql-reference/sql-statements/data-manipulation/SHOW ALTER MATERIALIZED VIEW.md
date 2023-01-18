@@ -2,12 +2,12 @@
 
 ## 功能
 
-查看单表同步物化视图刷新任务。
+查看物化视图构建状态。
 
 ## 语法
 
 ```SQL
-SHOW ALTER MATERIALIZED VIEW [FROM db_name]
+SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
 ```
 
 ## 参数
