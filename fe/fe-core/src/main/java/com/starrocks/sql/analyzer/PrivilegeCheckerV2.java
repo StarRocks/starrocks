@@ -715,7 +715,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            if (statement.isSetIfExists() && globalStateMgr.getDb(statement.getDbName()) == null) {
+            if (globalStateMgr.getDb(statement.getDbName()) == null) {
                 return null;
             }
 
