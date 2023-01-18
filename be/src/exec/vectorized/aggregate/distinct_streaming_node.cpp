@@ -122,11 +122,11 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
                         if (false) {
                         }
-#define HASH_MAP_METHOD(NAME)                                                                       \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {               \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<                             \
-                            typename decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                          \
+#define HASH_MAP_METHOD(NAME)                                                             \
+    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {     \
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype( \
+                                    _aggregator->hash_set_variant().NAME)::element_type>( \
+                *_aggregator->hash_set_variant().NAME, input_chunk_size));                \
     }
                         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
