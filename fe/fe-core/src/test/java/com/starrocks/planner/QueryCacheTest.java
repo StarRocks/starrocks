@@ -25,22 +25,18 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.IOUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
-import mockit.internal.util.ClassLoad;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,7 +46,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -386,6 +381,22 @@ public class QueryCacheTest {
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
 
+        String createTbl9StmtStr = "" +
+                "CREATE TABLE if not exists t9(\n" +
+                "REGION_CODE VARCHAR NOT NULL,\n" +
+                "REGION_NAME VARCHAR NOT NULL,\n" +
+                "v1 INT NOT NULL,\n" +
+                "v2 DECIMAL(7,2) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`REGION_CODE`, `REGION_NAME`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"default\"\n" +
+                ");";
+
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
@@ -404,6 +415,7 @@ public class QueryCacheTest {
         starRocksAssert.withTable(createTbl6StmtStr);
         starRocksAssert.withTable(createTbl7StmtStr);
         starRocksAssert.withTable(createTbl8StmtStr);
+        starRocksAssert.withTable(createTbl9StmtStr);
         starRocksAssert.withTable(hits);
         getSsbCreateTableSqlList().forEach(createTblSql -> {
             try {
@@ -442,6 +454,7 @@ public class QueryCacheTest {
         return plan.getFragments().stream()
                 .filter(f -> f.getCacheParam() != null).collect(Collectors.toList());
     }
+
     Optional<PlanFragment> getCachedFragment(String sql) {
         Optional<PlanFragment> optFragment = getCachedFragments(sql).stream().findFirst();
         if (!optFragment.isPresent()) {
@@ -1452,6 +1465,7 @@ public class QueryCacheTest {
                         .collect(Collectors.toList());
         testHelper(sqlList);
     }
+
     @Test
     public void testAllSupportPlanNodes() {
         List<String> sqlFormatList = Lists.newArrayList(
@@ -1514,5 +1528,15 @@ public class QueryCacheTest {
                 "where lo_discount between 1 and 3 and lo_quantity < 25 " +
                 "and lo_supplycost = (select min(lo_supplycost + 1) from lineorder);";
         Assert.assertEquals(2, getCachedFragments(sql).size());
+    }
+
+    @Test
+    public void testGroupByDifferentColumnsOnUnpartitionedTable() {
+        String sql0 = "SELECT REGION_CODE, count(*) from t9 group by 1;";
+        String sql1 = "SELECT REGION_NAME, count(*) from t9 group by 1;";
+        Optional<PlanFragment> frag0 = getCachedFragment(sql0);
+        Optional<PlanFragment> frag1 = getCachedFragment(sql1);
+        Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
+        Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
     }
 }

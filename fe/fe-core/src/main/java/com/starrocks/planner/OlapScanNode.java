@@ -829,34 +829,35 @@ public class OlapScanNode extends ScanNode {
                 .filter(s -> partColNames.contains(s.second)).map(s -> s.first).collect(Collectors.toSet());
     }
 
-    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode, RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
-        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
 
-        Column column = partitionColumns.get(0);
+    private Optional<SlotId> associateSlotIdsWithColumns(FragmentNormalizer normalizer, TNormalPlanNode planNode,
+                                                         Optional<Column> optPartitionColumn) {
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
         List<Pair<SlotId, String>> slotIdToColNames =
                 slots.stream().map(s -> new Pair<>(s.getId(), s.getColumn().getName()))
                         .collect(Collectors.toList());
 
-        SlotId slotId = slotIdToColNames.stream()
-                .filter(s -> s.second.equalsIgnoreCase(column.getName()))
-                .findFirst().map(s -> s.first).orElse(new SlotId(-1));
-
-        // slotId.isValid means that whereClause contains no predicates involving partition columns. so the query
-        // is equivalent to the query with a superset of all the partitions, so we needs add a fake slotId that
-        // represents the partition column to the slot remapping. for an example:
-        // table t0 is partition by dt and has there partitions:
-        //  p0=[2022-01-01, 2022-01-02),
-        //  p1=[2022-01-02, 2022-01-03),
-        //  p2=[2022-01-03, 2022-01-04).
-        // Q1: select count(*) from t0 will be performed p0,p1,p2. but dt is absent from OlapScanNode.
-        // Q2: select count(*) from t0 where dt between and '2022-01-01' and '2022-01-01' should use the partial result
-        // of Q1 on p0. but Q1 and Q2 has different SlotId re-mappings, so Q2's cache key cannot match the Q1's. so
-        // we should add a fake slotId represents the partition column when we re-map slotIds.
-        if (!slotId.isValid()) {
-            slotIdToColNames.add(new Pair<>(slotId, column.getName()));
+        Optional<SlotId> optPartitionSlotId = Optional.empty();
+        if (optPartitionColumn.isPresent()) {
+            Column column = optPartitionColumn.get();
+            SlotId slotId = slotIdToColNames.stream()
+                    .filter(s -> s.second.equalsIgnoreCase(column.getName()))
+                    .findFirst().map(s -> s.first).orElse(new SlotId(-1));
+            optPartitionSlotId = Optional.of(slotId);
+            // slotId.isValid means that whereClause contains no predicates involving partition columns. so the query
+            // is equivalent to the query with a superset of all the partitions, so we needs add a fake slotId that
+            // represents the partition column to the slot remapping. for an example:
+            // table t0 is partition by dt and has there partitions:
+            //  p0=[2022-01-01, 2022-01-02),
+            //  p1=[2022-01-02, 2022-01-03),
+            //  p2=[2022-01-03, 2022-01-04).
+            // Q1: select count(*) from t0 will be performed p0,p1,p2. but dt is absent from OlapScanNode.
+            // Q2: select count(*) from t0 where dt between and '2022-01-01' and '2022-01-01' should use the partial result
+            // of Q1 on p0. but Q1 and Q2 has different SlotId re-mappings, so Q2's cache key cannot match the Q1's. so
+            // we should add a fake slotId represents the partition column when we re-map slotIds.
+            if (!slotId.isValid()) {
+                slotIdToColNames.add(new Pair<>(slotId, column.getName()));
+            }
         }
         slotIdToColNames.sort(Pair.comparingBySecond());
         List<SlotId> slotIds = slotIdToColNames.stream().map(s -> s.first).collect(Collectors.toList());
@@ -865,13 +866,24 @@ public class OlapScanNode extends ScanNode {
         planNode.olap_scan_node.setRemapped_slot_ids(remappedSlotIds);
         planNode.olap_scan_node.setSelected_column(
                 slotIdToColNames.stream().map(c -> c.second).collect(Collectors.toList()));
+        return optPartitionSlotId;
+    }
 
+    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode,
+                                                RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
+        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
+
+        Column column = partitionColumns.get(0);
+        Optional<SlotId> optSlotId = associateSlotIdsWithColumns(normalizer, planNode, Optional.of(column));
         List<Map.Entry<Long, Range<PartitionKey>>> rangeMap = Lists.newArrayList();
         try {
             rangeMap = rangePartitionInfo.getSortedRangeMap(selectedPartIdSet);
         } catch (AnalysisException ignored) {
         }
-        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
+        Preconditions.checkState(optSlotId.isPresent());
+        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, optSlotId.get());
     }
 
     private void normalizeConjunctsNonLeft(FragmentNormalizer normalizer, TNormalPlanNode planNode) {
@@ -899,6 +911,7 @@ public class OlapScanNode extends ScanNode {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
+            associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizer.createSimpleRangeMap(getSelectedPartitionIds());
         }
         planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
