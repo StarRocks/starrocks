@@ -28,7 +28,7 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 
 ### 配置 FE 动态参数
 
-您可以通过一下命令在线修改 FE 节点动态参数。
+您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令在线修改 FE 动态参数。
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
