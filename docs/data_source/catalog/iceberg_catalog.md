@@ -61,7 +61,7 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 | iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. If you use a custom metadata service, you need to configure a custom catalog for your Iceberg cluster. Therefore, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
-#### [Preview] AWS Glue
+#### AWS Glue
 
 If you use AWS Glue for your Iceberg cluster, configure the following properties for the Iceberg catalog.
 
