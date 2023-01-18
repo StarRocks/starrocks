@@ -33,6 +33,7 @@ bool StreamAggregateSinkOperator::is_finished() const {
 
 Status StreamAggregateSinkOperator::set_finishing(RuntimeState* state) {
     _is_input_finished = true;
+    _stream_aggregator->set_ht_eos();
     _stream_aggregator->sink_complete();
     return Status::OK();
 }

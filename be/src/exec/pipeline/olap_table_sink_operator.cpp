@@ -149,8 +149,12 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     }
 
     // send_chunk() use internal queue, we check is_full() before call send_chunk(), so it will not block
-    auto new_chunk = StreamChunkConverter::to_chunk(chunk);
-    return _sink->send_chunk(state, new_chunk.get());
+    if (StreamChunkConverter::has_ops_column(chunk)) {
+        auto new_chunk = StreamChunkConverter::to_chunk(chunk);
+        return _sink->send_chunk(state, new_chunk.get());
+    } else {
+        return _sink->send_chunk(state, chunk.get());
+    }
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

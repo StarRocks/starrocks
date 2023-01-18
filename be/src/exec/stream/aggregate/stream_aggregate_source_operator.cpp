@@ -30,17 +30,11 @@ Status StreamAggregateSourceOperator::set_finished(RuntimeState* state) {
 }
 
 bool StreamAggregateSourceOperator::has_output() const {
-    auto ret = _stream_aggregator->is_epoch_finished() && !_stream_aggregator->is_ht_eos();
-    VLOG_ROW << "has_output:" << ret << ", is_epoch_finished=" << _stream_aggregator->is_epoch_finished()
-             << ", is_ht_eos=" << !_stream_aggregator->is_ht_eos();
-    return ret;
+    return _stream_aggregator->is_epoch_finished() && !_stream_aggregator->is_ht_eos();
 }
 
 bool StreamAggregateSourceOperator::is_epoch_finished() const {
-    auto ret = _stream_aggregator->is_epoch_finished() && _stream_aggregator->is_ht_eos();
-    VLOG_ROW << "is_epoch_finished:" << ret << ", is_epoch_finished=" << _stream_aggregator->is_epoch_finished()
-             << ", is_ht_eos=" << !_stream_aggregator->is_ht_eos();
-    return ret;
+    return _stream_aggregator->is_epoch_finished() && _stream_aggregator->is_ht_eos();
 }
 
 Status StreamAggregateSourceOperator::set_epoch_finishing(RuntimeState* state) {

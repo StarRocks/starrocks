@@ -127,7 +127,8 @@ Status AggGroupState::_prepare_imt_state_tables(RuntimeState* state,
     RETURN_IF_ERROR(_result_state_table->prepare(state));
 
     // intermediate state table
-    if (_params->agg_intermediate_imt) {
+    if (!intermediate_agg_states.empty()) {
+        DCHECK(_params->agg_intermediate_imt);
         _intermediate_state_table = std::make_unique<IMTStateTable>(*_params->agg_intermediate_imt);
         RETURN_IF_ERROR(_intermediate_state_table->prepare(state));
     }
@@ -350,7 +351,6 @@ Status AggGroupState::write(RuntimeState* state, StreamChunkPtr* result_chunk, C
     RETURN_IF_ERROR(_result_state_table->write(state, *result_chunk));
 
     // Update intermediate table
-    DCHECK_EQ(!_intermediate_state_table, !intermediate_chunk);
     if (_intermediate_state_table) {
         RETURN_IF_ERROR(_intermediate_state_table->write(state, (*intermediate_chunk)));
     }
