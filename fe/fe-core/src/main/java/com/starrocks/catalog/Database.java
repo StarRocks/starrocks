@@ -119,6 +119,7 @@ public class Database extends MetaObject implements Writable {
         this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
+<<<<<<< HEAD
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
         this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
     }
@@ -132,11 +133,54 @@ public class Database extends MetaObject implements Writable {
             LOG.warn("slow read lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
                     new Exception());
         }
+=======
+        this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
+        this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
+    }
+
+    private String getOwnerInfo(Thread owner) {
+        if (owner == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
+                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
+        return sb.toString();
+    }
+
+    private void logSlowLockEventIfNeeded(long startMs, String type, String threadDump) {
+        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        if (endMs - startMs > Config.slow_lock_threshold_ms &&
+                endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
+            lastSlowLockLogTime = endMs;
+            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
+                            "former {}, current stack trace: ", type, id, fullQualifiedName, endMs - startMs,
+                    threadDump, new Exception());
+        }
+    }
+
+    private void logTryLockFailureEvent(String type, String threadDump) {
+        LOG.warn("try db lock failed. type: {}, current {}", type, threadDump);
+    }
+
+    public void readLock() {
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        String threadDump = getOwnerInfo(rwLock.getOwner());
+        this.rwLock.readLock().lock();
+        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean readLockAndCheckExist() {
+<<<<<<< HEAD
         this.rwLock.readLock().lock();
+=======
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        String threadDump = getOwnerInfo(rwLock.getOwner());
+        this.rwLock.readLock().lock();
+        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
         if (exist) {
             return true;
         } else {
@@ -147,6 +191,7 @@ public class Database extends MetaObject implements Writable {
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
+<<<<<<< HEAD
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
                 Thread owner = rwLock.getOwner();
                 if (owner != null) {
@@ -154,6 +199,15 @@ public class Database extends MetaObject implements Writable {
                 }
                 return false;
             }
+=======
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            String threadDump = getOwnerInfo(rwLock.getOwner());
+            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("readLock", threadDump);
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
@@ -164,9 +218,19 @@ public class Database extends MetaObject implements Writable {
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
+<<<<<<< HEAD
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
                 return false;
             }
+=======
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            String threadDump = getOwnerInfo(rwLock.getOwner());
+            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("readLock", threadDump);
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
             if (exist) {
                 return true;
             } else {
@@ -185,6 +249,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void writeLock() {
+<<<<<<< HEAD
         long startMs = System.nanoTime() / 1000000;
         this.rwLock.writeLock().lock();
         long endMs = System.nanoTime() / 1000000;
@@ -193,11 +258,24 @@ public class Database extends MetaObject implements Writable {
             LOG.warn("slow write lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
                     new Exception());
         }
+=======
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        String threadDump = getOwnerInfo(rwLock.getOwner());
+        this.rwLock.writeLock().lock();
+        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean writeLockAndCheckExist() {
+<<<<<<< HEAD
         this.rwLock.writeLock().lock();
+=======
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        String threadDump = getOwnerInfo(rwLock.getOwner());
+        this.rwLock.writeLock().lock();
+        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
         if (exist) {
             return true;
         } else {
@@ -208,6 +286,7 @@ public class Database extends MetaObject implements Writable {
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
+<<<<<<< HEAD
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
                 Thread owner = rwLock.getOwner();
                 if (owner != null) {
@@ -215,6 +294,15 @@ public class Database extends MetaObject implements Writable {
                 }
                 return false;
             }
+=======
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            String threadDump = getOwnerInfo(rwLock.getOwner());
+            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("writeLock", threadDump);
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
@@ -225,9 +313,19 @@ public class Database extends MetaObject implements Writable {
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
+<<<<<<< HEAD
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
                 return false;
             }
+=======
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            String threadDump = getOwnerInfo(rwLock.getOwner());
+            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("tryWriteLock", threadDump);
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
+>>>>>>> 22bdacf6f ([Enhancement] Get thread dump before acquire database lock)
             if (exist) {
                 return true;
             } else {
