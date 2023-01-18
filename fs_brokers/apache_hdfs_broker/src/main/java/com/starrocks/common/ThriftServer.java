@@ -66,8 +66,12 @@ public class ThriftServer {
     }
 
     private void createThreadPoolServer() throws TTransportException {
+        TServerSocket.ServerSocketTransportArgs socketTransportArgs = new TServerSocket.ServerSocketTransportArgs()
+                .bindAddr(new InetSocketAddress(port))
+                .backlog(1024);
+
         TThreadPoolServer.Args args =
-            new TThreadPoolServer.Args(new TServerSocket(port)).protocolFactory(
+            new TThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                 new TBinaryProtocol.Factory()).processor(processor);
         server = new TThreadPoolServer(args);
     }
