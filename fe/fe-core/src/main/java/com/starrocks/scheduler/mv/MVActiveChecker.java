@@ -47,7 +47,6 @@ public class MVActiveChecker extends LeaderDaemon {
         List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                 listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
-        long startMillis = System.currentTimeMillis();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     dbName);
@@ -71,8 +70,5 @@ public class MVActiveChecker extends LeaderDaemon {
                 }
             }
         }
-
-        long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("[MVActiveChecker] finish check all materialized view in {}ms", duration);
     }
 }
