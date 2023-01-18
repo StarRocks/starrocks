@@ -25,11 +25,8 @@
 
 namespace starrocks::lake {
 
-PkTabletWriter::PkTabletWriter(Tablet tablet, RowsetTxnMetaPB* rowset_txn_meta,
-                               std::shared_ptr<const TabletSchema>& tschema)
-        : _tablet(tablet), _rowset_txn_meta(rowset_txn_meta) {
-    _schema = tschema;
-}
+PkTabletWriter::PkTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet)
+        : TabletWriter(std::move(tschema)), _tablet(tablet), _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 PkTabletWriter::~PkTabletWriter() = default;
 
@@ -91,9 +88,7 @@ void PkTabletWriter::close() {
 }
 
 Status PkTabletWriter::reset_segment_writer() {
-    if (_schema == nullptr) {
-        ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
-    }
+    DCHECK(_schema != nullptr);
     auto name = random_segment_filename();
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
@@ -111,11 +106,9 @@ Status PkTabletWriter::flush_segment_writer() {
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         // partial update
-        if (_rowset_txn_meta != nullptr) {
-            auto* partial_rowset_footer = _rowset_txn_meta->add_partial_rowset_footers();
-            partial_rowset_footer->set_position(footer_position);
-            partial_rowset_footer->set_size(segment_size - footer_position);
-        }
+        auto* partial_rowset_footer = _rowset_txn_meta->add_partial_rowset_footers();
+        partial_rowset_footer->set_position(footer_position);
+        partial_rowset_footer->set_size(segment_size - footer_position);
         _data_size += segment_size;
         _seg_writer.reset();
     }

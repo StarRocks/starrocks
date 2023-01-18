@@ -17,34 +17,32 @@
 #include <string>
 #include <unordered_map>
 
-#include "storage/lake/tablet_metadata.h"
+#include "common/status.h"
 #include "storage/lake/types_fwd.h"
-#include "storage/primary_index.h"
+#include "storage/olap_common.h"
 
 namespace starrocks {
 
 namespace lake {
+class Rowset;
 
-class Tablet;
-class MetaFileBuilder;
-
-class LakePrimaryIndex : public PrimaryIndex {
+class CompactionState {
 public:
-    LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const VectorizedSchema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() {}
+    CompactionState(Rowset* rowset);
+    ~CompactionState();
 
-    // Fetch all primary keys from the tablet associated with this index into memory
-    // to build a hash index.
-    //
-    // [thread-safe]
-    Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder);
+    CompactionState(const CompactionState&) = delete;
+    CompactionState& operator=(const CompactionState&) = delete;
+
+    Status load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
+    void release_segments(uint32_t segment_id);
+
+    std::vector<ColumnUniquePtr> pk_cols;
 
 private:
-    Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
-                         const MetaFileBuilder* builder);
+    Status _load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id);
 };
 
 } // namespace lake
+
 } // namespace starrocks

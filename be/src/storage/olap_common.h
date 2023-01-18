@@ -343,14 +343,49 @@ struct HashOfRowsetId {
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;
+    TabletSegmentId() {}
+    TabletSegmentId(int64_t tid, uint32_t sid) : tablet_id(tid), segment_id(sid) {}
+    ~TabletSegmentId() {}
     bool operator==(const TabletSegmentId& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id;
+    }
+    bool operator<(const TabletSegmentId& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
     }
     std::string to_string() const {
         std::stringstream ss;
         ss << tablet_id << "_" << segment_id;
         return ss.str();
     };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentId& tsid) {
+        out << tsid.to_string();
+        return out;
+    }
+};
+
+struct TabletSegmentIdRange {
+    TabletSegmentId left;
+    TabletSegmentId right;
+    TabletSegmentIdRange(int64_t left_tid, uint32_t left_sid, int64_t right_tid, uint32_t right_sid)
+            : left(left_tid, left_sid), right(right_tid, right_sid) {}
+    ~TabletSegmentIdRange() {}
+    // make sure left <= right
+    bool is_valid() const { return left < right || left == right; }
+    std::string to_string() const {
+        std::stringstream ss;
+        ss << "[" << left.to_string() << "," << right.to_string() << "]";
+        return ss.str();
+    };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentIdRange& tsid_range) {
+        out << tsid_range.to_string();
+        return out;
+    }
 };
 
 } // namespace starrocks

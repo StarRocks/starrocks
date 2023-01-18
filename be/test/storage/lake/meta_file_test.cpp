@@ -71,7 +71,7 @@ TEST_F(MetaFileTest, test_meta_rw) {
     metadata->set_version(10);
     metadata->set_next_rowset_id(110);
     // 2. write to pk meta file
-    MetaFileBuilder builder(metadata);
+    MetaFileBuilder builder(metadata, s_update_manager.get());
     Status st = builder.finalize(s_location_provider.get());
     EXPECT_TRUE(st.ok());
     // 3. read meta from meta file
@@ -94,7 +94,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     metadata->set_version(version);
     metadata->set_next_rowset_id(110);
     // 2. write pk meta & delvec
-    MetaFileBuilder builder(metadata);
+    MetaFileBuilder builder(metadata, s_update_manager.get());
     DelVector dv;
     dv.set_empty();
     EXPECT_TRUE(dv.empty());
@@ -104,7 +104,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_FALSE(ndv->empty());
     std::string before_delvec = ndv->save();
     builder.append_delvec(ndv, segment_id);
-    Status st = builder.finalize(s_location_provider.get(), s_update_manager.get());
+    Status st = builder.finalize(s_location_provider.get());
     EXPECT_TRUE(st.ok());
     // 3. read delvec
     MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
@@ -124,7 +124,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_EQ(delvecpb.page().version(), version);
     // 5. update delvec
     metadata->set_version(version2);
-    MetaFileBuilder builder2(metadata);
+    MetaFileBuilder builder2(metadata, s_update_manager.get());
     DelVector dv2;
     dv2.set_empty();
     EXPECT_TRUE(dv2.empty());
@@ -132,7 +132,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     std::vector<uint32_t> dels2 = {1, 3, 5, 9, 90000};
     dv2.add_dels_as_new_version(dels2, version2, &ndv2);
     builder2.append_delvec(ndv2, segment_id);
-    st = builder2.finalize(s_location_provider.get(), s_update_manager.get());
+    st = builder2.finalize(s_location_provider.get());
     EXPECT_TRUE(st.ok());
     // 6. read again
     MetaFileReader reader3(s_tablet_manager->tablet_metadata_location(tablet_id, version2), false);

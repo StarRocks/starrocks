@@ -55,6 +55,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/union_iterator.h"
+#include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/defer_op.h"
 #include "util/time.h"
@@ -384,7 +385,7 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
         seg_options.tablet_id = rowset_meta()->tablet_id();
         seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
-        seg_options.meta = options.meta;
+        seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
     }
     seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
@@ -458,7 +459,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Vec
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
-    seg_options.meta = meta;
+    seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;

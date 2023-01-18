@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -22,9 +24,11 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -38,20 +42,45 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
-
 using VSchema = starrocks::VectorizedSchema;
 using VChunk = starrocks::Chunk;
+
+class TestLocationProvider : public LocationProvider {
+public:
+    explicit TestLocationProvider(std::string dir) : _dir(dir) {}
+
+    std::set<int64_t> owned_tablets() const override { return _owned_shards; }
+
+    std::string root_location(int64_t tablet_id) const override { return _dir; }
+
+    Status list_root_locations(std::set<std::string>* roots) const override {
+        roots->insert(_dir);
+        return Status::OK();
+    }
+
+    void set_failed(bool f) { _set_failed = f; }
+
+    std::set<int64_t> _owned_shards;
+    std::string _dir;
+    bool _set_failed = false;
+};
 
 class PrimaryKeyTest : public testing::Test {
 public:
     PrimaryKeyTest() {
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
+        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
+
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        _location_provider->_owned_shards.insert(_tablet_metadata->id());
+
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
+
+        _parent_mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -77,6 +106,7 @@ public:
             c1->set_type("INT");
             c1->set_is_key(false);
             c1->set_is_nullable(false);
+            c1->set_aggregation("REPLACE");
         }
 
         _tablet_schema = TabletSchema::create(*schema);
@@ -91,18 +121,66 @@ public:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        tablet.delete_txn_log(_txn_id);
+        _txn_id++;
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
+        (void)fs::remove_all(kTestGroupPath);
+    }
+
+    VChunk generate_data(int64_t chunk_size, int shift) {
+        std::vector<int> v0(chunk_size);
+        std::vector<int> v1(chunk_size);
+        for (int i = 0; i < chunk_size; i++) {
+            v0[i] = i + shift * chunk_size;
+        }
+        auto rng = std::default_random_engine{};
+        std::shuffle(v0.begin(), v0.end(), rng);
+        for (int i = 0; i < chunk_size; i++) {
+            v1[i] = v0[i] * 3;
+        }
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return VChunk({c0, c1}, _schema);
+    }
+
+    int64_t read(int64_t version) {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        int64_t ret = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            ret += chunk->num_rows();
+            chunk->reset();
+        }
+        return ret;
+    }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_primary_key";
+    constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
+    constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<TestLocationProvider> _location_provider;
+    LocationProvider* _backup_location_provider;
+    TabletManager* _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
-    std::unique_ptr<UpdateManager> _update_manager;
     std::shared_ptr<TabletSchema> _tablet_schema;
+    std::unique_ptr<MemTracker> _parent_mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<VSchema> _schema;
-    int64_t _txnlog{1};
+    int64_t _txn_id = 1231;
+    int64_t _partition_id = 4561;
 };
 
 TEST_F(PrimaryKeyTest, test_write_success) {
@@ -119,7 +197,7 @@ TEST_F(PrimaryKeyTest, test_write_success) {
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(rowset_txn_meta.get(), const_schema));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
     ASSERT_OK(writer->open());
 
     // write segment #1
@@ -128,10 +206,10 @@ TEST_F(PrimaryKeyTest, test_write_success) {
 
     // write txnlog
     int64_t logs[1];
-    logs[0] = _txnlog;
+    logs[0] = _txn_id;
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_metadata->id());
-    txn_log->set_txn_id(_txnlog++);
+    txn_log->set_txn_id(_txn_id++);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
         op_write->mutable_rowset()->add_segments(std::move(f));
@@ -150,7 +228,7 @@ TEST_F(PrimaryKeyTest, test_write_success) {
     // read at version 2
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
     ASSERT_OK(reader->prepare());
-    vectorized::TabletReaderParams params;
+    TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
     auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
@@ -161,6 +239,98 @@ TEST_F(PrimaryKeyTest, test_write_success) {
         EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
+}
+
+TEST_F(PrimaryKeyTest, test_write_multitime) {
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        _txn_id++;
+        auto delta_writer =
+                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+}
+
+TEST_F(PrimaryKeyTest, test_write_fail_retry) {
+    std::vector<Chunk> chunks;
+    for (int i = 0; i < 5; i++) {
+        chunks.push_back(generate_data(kChunkSize, i));
+    }
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // write success
+    for (int i = 0; i < 3; i++) {
+        _txn_id++;
+        auto delta_writer =
+                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    // write failed
+    for (int i = 3; i < 5; i++) {
+        _txn_id++;
+        auto delta_writer =
+                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+        auto txn_log_st = tablet.get_txn_log(_txn_id);
+        EXPECT_TRUE(txn_log_st.ok());
+        auto& txn_log = txn_log_st.value();
+        ASSIGN_OR_ABORT(auto base_metadata, tablet.get_metadata(version));
+        auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
+        new_metadata->set_version(version + 1);
+        std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata, tablet.update_mgr());
+        // update primary table state, such as primary index
+        ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), *new_metadata, &tablet,
+                                                                  builder.get(), version));
+        // if builder.finalize fail, remove primary index cache and retry
+        builder->handle_failure();
+    }
+    // write success
+    for (int i = 3; i < 5; i++) {
+        _txn_id++;
+        auto delta_writer =
+                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 5, read(version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
 }
 
 } // namespace starrocks::lake

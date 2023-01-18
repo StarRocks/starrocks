@@ -73,4 +73,11 @@ private:
 
 typedef std::shared_ptr<DelVector> DelVectorPtr;
 
+class DelvecLoader {
+public:
+    DelvecLoader() = default;
+    virtual ~DelvecLoader() = default;
+    virtual Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) = 0;
+};
+
 } // namespace starrocks

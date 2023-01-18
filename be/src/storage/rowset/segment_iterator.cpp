@@ -315,13 +315,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSch
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
-        if (_opts.is_lake_table) {
-            // load delvec from meta file
-            _get_del_vec_st = _opts.update_mgr->get_del_vec(tsid, _opts.version, &_del_vec);
-        } else {
-            _get_del_vec_st = StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version,
-                                                                                       &_del_vec);
-        }
+        _get_del_vec_st = _opts.delvec_loader->load(tsid, _opts.version, &_del_vec);
         if (_get_del_vec_st.ok()) {
             if (_del_vec && _del_vec->empty()) {
                 _del_vec.reset();
