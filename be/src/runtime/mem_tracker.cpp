@@ -73,7 +73,8 @@ MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string 
         : _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
-          _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),
+          _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES,
+                                                        RuntimeProfile::Counter::create_strategy(TUnit::BYTES))),
           _local_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
