@@ -48,6 +48,10 @@ ON (sr_member);
 
 数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md) 语句取消备份作业。
 
+> **注意**
+>
+> 目前 StarRocks 不支持在备份数据时使用压缩算法。
+
 ## 恢复或迁移数据
 
 您可以将备份至远端仓库的数据快照恢复到当前或其他集群，完成数据恢复或迁移。
