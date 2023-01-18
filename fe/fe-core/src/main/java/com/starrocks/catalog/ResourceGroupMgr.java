@@ -133,7 +133,7 @@ public class ResourceGroupMgr implements Writable {
 
     public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
         if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, stmt.getName());
+            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
         }
 
         List<List<String>> rows;
@@ -159,7 +159,7 @@ public class ResourceGroupMgr implements Writable {
         String roleName = null;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                List<String> roleNameList = ctx.getGlobalStateMgr().getPrivilegeManager()
+                List<String> roleNameList = GlobalStateMgr.getCurrentState().getPrivilegeManager()
                         .getRoleNamesByUser(ctx.getCurrentUserIdentity());
                 roleNameList =
                         roleNameList.stream().filter(r -> !PrivilegeManager.BUILT_IN_ROLE_NAMES.contains(r))
@@ -195,7 +195,7 @@ public class ResourceGroupMgr implements Writable {
                 String user = getUnqualifiedUser(ctx);
                 String role = getUnqualifiedRole(ctx);
                 String remoteIp = ctx.getRemoteIP();
-                return resourceGroupList.stream().map(w -> w.showVisible(user, role, remoteIp))
+                return resourceGroupList.stream().map(rg -> rg.showVisible(user, role, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
             }
         } finally {

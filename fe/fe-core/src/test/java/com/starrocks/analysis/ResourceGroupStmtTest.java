@@ -27,7 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
+import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
 
 public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
@@ -179,7 +179,7 @@ public class ResourceGroupStmtTest {
     }
 
     private void assertResourceGroupNotExist(String wg) {
-        Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+        Assert.assertThrows(ERROR_NO_RG_ERROR.formatErrorMsg(wg), AnalysisException.class,
                 () -> starRocksAssert.executeResourceGroupShowSql("show resource group " + wg));
     }
 
