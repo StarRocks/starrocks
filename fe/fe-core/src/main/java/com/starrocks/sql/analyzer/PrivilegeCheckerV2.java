@@ -1233,7 +1233,29 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getDbTableName(), PrivilegeType.TableAction.ALTER);
+            if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        Table table = db.getTable(statement.getTableName());
+                        if (table == null || !table.isMaterializedView()) {
+                            // ignore privilege check for old mv
+                            return null;
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
+                if (!PrivilegeManager.checkMaterializedViewAction(context,
+                        statement.getDbName(),
+                        statement.getTableName(),
+                        PrivilegeType.MaterializedViewAction.ALTER)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+                }
+            } else {
+                checkTableAction(context, statement.getDbTableName(), PrivilegeType.TableAction.ALTER);
+            }
             return null;
         }
 
