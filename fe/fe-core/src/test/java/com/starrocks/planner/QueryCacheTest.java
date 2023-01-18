@@ -22,7 +22,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -367,17 +366,14 @@ public class QueryCacheTest {
                 ");";
 
         String createTbl9StmtStr = "" +
-                "CREATE TABLE if not exists VBAP_LEFT_JOIN_MS(\n" +
-                "ts DATETIME NOT NULL,\n" +
+                "CREATE TABLE if not exists t9(\n" +
                 "REGION_CODE VARCHAR NOT NULL,\n" +
                 "REGION_NAME VARCHAR NOT NULL,\n" +
                 "v1 INT NOT NULL,\n" +
                 "v2 DECIMAL(7,2) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
-                "PRIMARY KEY(`ts`, `REGION_CODE`, `REGION_NAME`)\n" +
+                "PRIMARY KEY(`REGION_CODE`, `REGION_NAME`)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE(ts) (\n" +
-                "  START (\"2022-01-01\") END (\"2022-03-01\") EVERY (INTERVAL 1 day))\n" +
                 "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -1204,9 +1200,12 @@ public class QueryCacheTest {
     }
 
     @Test
-    public void testGroupByDifferentColumns() {
-        String sql0 = "SELECT REGION_CODE, count(*) from VBAP_LEFT_JOIN_MS group by 1;";
-        String sql1 = "SELECT REGION_NAME, count(*) from VBAP_LEFT_JOIN_MS group by 1;";
-        testHelper(Arrays.asList(sql0, sql1));
+    public void testGroupByDifferentColumnsOnUnpartitionedTable() {
+        String sql0 = "SELECT REGION_CODE, count(*) from t9 group by 1;";
+        String sql1 = "SELECT REGION_NAME, count(*) from t9 group by 1;";
+        Optional<PlanFragment> frag0 = getCachedFragment(sql0);
+        Optional<PlanFragment> frag1 = getCachedFragment(sql1);
+        Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
+        Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
     }
 }
