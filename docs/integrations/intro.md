@@ -4,7 +4,7 @@ This topic introduces how to integrate with StarRocks.
 
 ## BI tools
 
-[SuperSet](https://github.com/StarRocks/starrocks/tree/main/contrib/sqlalchemy-connector)
+[SuperSet](./superset_support.md)
 
 ## Data Integration
 
@@ -34,4 +34,4 @@ This topic introduces how to integrate with StarRocks.
 
 ## Monitor
 
-[DataDog](https://github.com/StarRocks/starrocks/tree/main/contrib/datadog-connector)
+[DataDog](./datadog_support.md)
