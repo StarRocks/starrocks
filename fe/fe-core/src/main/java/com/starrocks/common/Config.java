@@ -1998,5 +1998,5 @@ public class Config extends ConfigBase {
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
-    public static boolean enable_auto_create_tablet = false;
+    public static boolean enable_auto_tablet_distribution = false;
 }
