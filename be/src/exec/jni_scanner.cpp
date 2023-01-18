@@ -333,18 +333,16 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     const TypeDescriptor& type = args.slot_type;
     int j = 0;
     for (int i = 0; i < type.children.size(); i++) {
-        if (type.selected_fields[i]) {
-            Column* column = struct_column->fields_column()[j].get();
-            j += 1;
-            std::string name = args.slot_name + "." + type.field_names[i];
-            FillColumnArgs sub_args = {.num_rows = args.num_rows,
-                                       .slot_name = name,
-                                       .slot_type = type.children[i],
-                                       .nulls = nullptr,
-                                       .column = column,
-                                       .must_nullable = true};
-            RETURN_IF_ERROR(_fill_column(&sub_args));
-        }
+        Column* column = struct_column->fields_column()[j].get();
+        j += 1;
+        std::string name = args.slot_name + "." + type.field_names[i];
+        FillColumnArgs sub_args = {.num_rows = args.num_rows,
+                                   .slot_name = name,
+                                   .slot_type = type.children[i],
+                                   .nulls = nullptr,
+                                   .column = column,
+                                   .must_nullable = true};
+        RETURN_IF_ERROR(_fill_column(&sub_args));
     }
     return Status::OK();
 }

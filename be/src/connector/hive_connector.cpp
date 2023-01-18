@@ -276,15 +276,13 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
     DCHECK(type.is_struct_type());
     for (int i = 0; i < type.children.size(); i++) {
-        if (type.selected_fields[i]) {
-            const auto& t = type.children[i];
-            std::string p = parent + "." + type.field_names[i];
-            if (t.is_struct_type()) {
-                build_nested_fields(t, p, sb);
-            } else {
-                sb->append(p);
-                sb->append(",");
-            }
+        const auto& t = type.children[i];
+        std::string p = parent + "." + type.field_names[i];
+        if (t.is_struct_type()) {
+            build_nested_fields(t, p, sb);
+        } else {
+            sb->append(p);
+            sb->append(",");
         }
     }
 }
