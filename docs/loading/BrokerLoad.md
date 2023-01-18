@@ -100,7 +100,7 @@ This topic uses CSV as an example to describe how to load data. For information 
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google CGS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
