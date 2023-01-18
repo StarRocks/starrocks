@@ -373,7 +373,7 @@ PROPERTIES (
 
 #### 设置动态分区
 
-如果希望使用动态分区特性，需要在 properties 中指定：
+如果希望使用动态分区特性，需要在 properties 中指定如下参数：
 
 ``` sql
 PROPERTIES (
