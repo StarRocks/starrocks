@@ -235,6 +235,9 @@ public:
 
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
+    void mark_epoch_finished() { _is_epoch_finished.store(true, std::memory_order_release); }
+    bool is_epoch_finished() { return _is_epoch_finished.load(std::memory_order_acquire); }
+
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
@@ -390,6 +393,9 @@ protected:
     bool _has_udaf = false;
 
     AggStatistics* _agg_stat;
+
+    // STREAM MV
+    std::atomic<bool> _is_epoch_finished = false;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);

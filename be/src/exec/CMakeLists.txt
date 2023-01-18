@@ -226,7 +226,8 @@ set(EXEC_FILES
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp
     stream/aggregate/stream_aggregator.cpp
-    stream/aggregate/stream_aggregate_operator.cpp
+    stream/aggregate/stream_aggregate_sink_operator.cpp
+    stream/aggregate/stream_aggregate_source_operator.cpp
     stream/stream_aggregate_node.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

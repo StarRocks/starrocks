@@ -167,7 +167,7 @@ public class MVManager {
             MVMaintenanceJob job = new MVMaintenanceJob(view);
             Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
 
-            IMTCreator.createIMT(stmt, view);
+            job.setImtInfos(IMTCreator.createIMT(stmt, view));
 
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
             GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);

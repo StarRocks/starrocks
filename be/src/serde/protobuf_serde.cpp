@@ -14,6 +14,8 @@
 
 #include "serde/protobuf_serde.h"
 
+#include <fmt/format.h>
+
 #include <utility>
 
 #include "column/chunk_extra_data.h"
@@ -333,7 +335,8 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_d
     }
 
     if (UNLIKELY(column_index != chunk_meta.is_nulls.size())) {
-        return Status::InternalError("build chunk _meta error");
+        return Status::InternalError(fmt::format("build chunk _meta error: column_index {} != expected_size {}",
+                                                 column_index, chunk_meta.is_nulls.size()));
     }
     return std::move(chunk_meta);
 }

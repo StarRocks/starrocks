@@ -45,6 +45,7 @@ struct TMVEpoch {
     2: optional i64 epoch_id
     3: optional Types.TTimestamp start_ts
     4: optional Types.TTimestamp commit_ts
+    5: optional Types.TUniqueId load_id
 }
 
 struct TMVStartEpochTask {
@@ -57,6 +58,9 @@ struct TMVStartEpochTask {
     // Max execution threshold of this epoch
     3: optional i64 max_exec_millis
     4: optional i64 max_scan_rows
+
+    // imt table id -> newest version id mapping
+    5: map<Types.TPlanNodeId, i64> imt_version_map
 }
 
 struct TMVCommitEpochTask {

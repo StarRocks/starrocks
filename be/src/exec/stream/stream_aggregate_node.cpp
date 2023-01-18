@@ -14,7 +14,13 @@
 
 #include "exec/stream/stream_aggregate_node.h"
 
+#include "exec/stream/aggregate/stream_aggregate_sink_operator.h"
+#include "exec/stream/aggregate/stream_aggregate_source_operator.h"
+
 namespace starrocks {
+
+using StreamAggregatorPtr = std::shared_ptr<stream::StreamAggregator>;
+using StreamAggregatorFactory = AggregatorFactoryBase<stream::StreamAggregator>;
 
 Status StreamAggregateNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -31,21 +37,38 @@ Status StreamAggregateNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > StreamAggregateNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
-    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
-    // and we may set other parallelism for source operator in many special cases
-    size_t degree_of_parallelism =
-            down_cast<pipeline::SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
+            std::vector<ExprContext*> group_by_expr_ctxs;
+            Expr::create_expr_trees(_pool, _tnode.stream_agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+            return group_by_expr_ctxs;
+        });
+    };
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    if (could_local_shuffle) {
+        ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+    }
+
+    auto aggregator_factory = std::make_shared<stream::StreamAggregatorFactory>(_tnode);
+    aggregator_factory->set_aggr_mode(AM_DEFAULT);
+
+    auto agg_sink_operator = std::make_shared<stream::StreamAggregateSinkOperatorFactory>(context->next_operator_id(),
+                                                                                          id(), aggregator_factory);
+    ops_with_sink.push_back(std::move(agg_sink_operator));
+    context->add_pipeline(ops_with_sink);
 
     // shared by sink operator and source operator
     OpFactories operators_with_source;
-    auto aggregator_factory = std::make_shared<stream::StreamAggregatorFactory>(_tnode);
-    auto source_operator = std::make_shared<stream::StreamAggregateOperatorFactory>(context->next_operator_id(), id(),
-                                                                                    aggregator_factory);
+    auto source_operator = std::make_shared<stream::StreamAggregateSourceOperatorFactory>(context->next_operator_id(),
+                                                                                          id(), aggregator_factory);
     // Aggregator must be used by a pair of sink and source operators,
-    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
-    source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    source_operator->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
     operators_with_source.push_back(std::move(source_operator));
+
     return operators_with_source;
 }
 

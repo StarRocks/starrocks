@@ -18,7 +18,8 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/stream/aggregate/stream_aggregate_operator.h"
+#include "exec/stream/aggregate/stream_aggregate_sink_operator.h"
+#include "exec/stream/aggregate/stream_aggregate_source_operator.h"
 #include "exec/stream/aggregate/stream_aggregator.h"
 #include "exec/stream/stream_pipeline_test.h"
 #include "exec/stream/stream_test.h"
@@ -175,15 +176,27 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_Dop1) {
             _tbl = GenerateDescTbl(_runtime_state, (*_obj_pool), _slot_infos);
             _runtime_state->set_desc_tbl(_tbl);
             _stream_aggregator = _create_stream_aggregator(_slot_infos, _group_by_infos, _agg_infos, false, 0);
+
+            // generator source
             OpFactories op_factories{
                     std::make_shared<GeneratorStreamSourceOperatorFactory>(
                             next_operator_id(), next_plan_node_id(),
                             GeneratorStreamSourceParam{
                                     .num_column = 2, .start = 0, .step = 1, .chunk_size = 4, .ndv_count = 4}),
-                    std::make_shared<StreamAggregateOperatorFactory>(next_operator_id(), next_plan_node_id(),
-                                                                     _stream_aggregator),
-                    std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()),
             };
+
+            // stream aggregator
+            auto stream_agg_node_id = next_plan_node_id();
+            auto aggregate_sink = std::make_shared<StreamAggregateSinkOperatorFactory>(
+                    next_operator_id(), stream_agg_node_id, _stream_aggregator);
+            auto aggregate_source = std::make_shared<StreamAggregateSourceOperatorFactory>(
+                    next_operator_id(), stream_agg_node_id, _stream_aggregator);
+            op_factories.emplace_back(aggregate_sink);
+            op_factories.emplace_back(aggregate_source);
+
+            // printer sink
+            op_factories.emplace_back(
+                    std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
             _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories));
         };
         return Status::OK();
@@ -236,8 +249,17 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_MultiDop) {
             op_factories.emplace_back(std::move(source_factory));
             // add exchange node to gather multi source operator to one sink operator
             op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
-            op_factories.emplace_back(std::make_shared<StreamAggregateOperatorFactory>(
-                    next_operator_id(), next_plan_node_id(), _stream_aggregator));
+
+            // stream aggregator
+            auto stream_agg_node_id = next_plan_node_id();
+            auto aggregate_sink = std::make_shared<StreamAggregateSinkOperatorFactory>(
+                    next_operator_id(), stream_agg_node_id, _stream_aggregator);
+            auto aggregate_source = std::make_shared<StreamAggregateSourceOperatorFactory>(
+                    next_operator_id(), stream_agg_node_id, _stream_aggregator);
+            op_factories.emplace_back(aggregate_sink);
+            op_factories.emplace_back(aggregate_source);
+
+            // printer sinker
             op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
             _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories));

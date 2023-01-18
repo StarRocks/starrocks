@@ -34,6 +34,7 @@ MVMaintenanceTaskInfo MVMaintenanceTaskInfo::from_maintenance_task(const TMVMain
 EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch) {
     EpochInfo res;
     res.epoch_id = start_epoch.epoch.epoch_id;
+    res.load_id = start_epoch.epoch.load_id;
     res.txn_id = start_epoch.epoch.txn_id;
     res.max_exec_millis = start_epoch.max_exec_millis;
     res.max_scan_rows = start_epoch.max_scan_rows;
@@ -42,7 +43,8 @@ EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch)
 
 std::string EpochInfo::debug_string() const {
     std::stringstream ss;
-    ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
+    ss << "epoch_id=" << epoch_id << ", load_id=" << print_id(load_id) << ", txn_id=" << txn_id
+       << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
        << ", trigger_mode=" << (int)(trigger_mode);
     return ss.str();
 }
@@ -71,7 +73,7 @@ bool StreamChunkConverter::has_ops_column(const StreamChunkPtr& chunk_ptr) {
     return has_ops_column(*chunk_ptr);
 }
 
-bool StreamChunkConverter::has_ops_column(StreamChunk* chunk_ptr) {
+bool StreamChunkConverter::has_ops_column(const StreamChunk* chunk_ptr) {
     if (!chunk_ptr) {
         return false;
     }
@@ -94,7 +96,7 @@ Int8Column* StreamChunkConverter::ops_col(const StreamChunkPtr& stream_chunk_ptr
     return ops_col(*stream_chunk_ptr);
 }
 
-Int8Column* StreamChunkConverter::ops_col(StreamChunk* stream_chunk_ptr) {
+Int8Column* StreamChunkConverter::ops_col(const StreamChunk* stream_chunk_ptr) {
     DCHECK(stream_chunk_ptr);
     return ops_col(*stream_chunk_ptr);
 }
@@ -104,7 +106,7 @@ const StreamRowOp* StreamChunkConverter::ops(const StreamChunk& stream_chunk) {
     return (StreamRowOp*)(op_col->get_data().data());
 }
 
-const StreamRowOp* StreamChunkConverter::ops(StreamChunk* stream_chunk) {
+const StreamRowOp* StreamChunkConverter::ops(const StreamChunk* stream_chunk) {
     auto* op_col = ops_col(stream_chunk);
     return (StreamRowOp*)(op_col->get_data().data());
 }
@@ -112,6 +114,19 @@ const StreamRowOp* StreamChunkConverter::ops(StreamChunk* stream_chunk) {
 const StreamRowOp* StreamChunkConverter::ops(const StreamChunkPtr& stream_chunk) {
     auto* op_col = ops_col(stream_chunk);
     return (StreamRowOp*)(op_col->get_data().data());
+}
+
+ChunkPtr StreamChunkConverter::to_chunk(const StreamChunkPtr& stream_chunk) {
+    if (has_ops_column(stream_chunk)) {
+        auto extra_column_data = down_cast<ChunkExtraColumnsData*>(stream_chunk->get_extra_data().get());
+        DCHECK(extra_column_data);
+        auto mock_slot_id = stream_chunk->num_columns();
+        for (auto& extra_column : extra_column_data->columns()) {
+            stream_chunk->append_column(extra_column, mock_slot_id++);
+        }
+        stream_chunk->set_extra_data(nullptr);
+    }
+    return stream_chunk;
 }
 
 } // namespace starrocks

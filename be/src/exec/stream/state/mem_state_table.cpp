@@ -175,7 +175,7 @@ VectorizedSchema MemStateTable::_make_schema_from_slots(const std::vector<SlotDe
     return VectorizedSchema(std::move(fields), KeysType::PRIMARY_KEYS, {});
 }
 
-DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumRow MemStateTable::_make_datum_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx) {
     DatumRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -185,7 +185,7 @@ DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, 
     return row;
 }
 
-DatumKeyRow MemStateTable::_make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumKeyRow MemStateTable::_make_datum_key_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx) {
     DatumKeyRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -204,7 +204,7 @@ DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t i
     return key_row;
 }
 
-Status MemStateTable::write(RuntimeState* state, StreamChunk* chunk) {
+Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
     if (StreamChunkConverter::has_ops_column(chunk)) {
@@ -228,6 +228,10 @@ Status MemStateTable::write(RuntimeState* state, StreamChunk* chunk) {
             _kv_mapping[k] = std::move(v);
         }
     }
+    return Status::OK();
+}
+
+Status MemStateTable::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 

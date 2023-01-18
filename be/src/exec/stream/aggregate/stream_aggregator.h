@@ -57,14 +57,10 @@ public:
         }
     }
 
-    Status open(RuntimeState* state) { return Aggregator::open(state); }
-
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                   MemTracker* mem_tracker) override {
-        RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
-        RETURN_IF_ERROR(_prepare_state_tables(state));
-        return Status::OK();
-    }
+                   MemTracker* mem_tracker) override;
+
+    Status open(RuntimeState* state);
 
     // Process input's chunks util `Epoch` chunk is received.
     Status process_chunk(StreamChunk* chunk);
@@ -72,14 +68,20 @@ public:
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
     Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk);
 
-    // Used to check result/intermediate/detail result for testing.
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
     Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
                           std::vector<ChunkPtr>& detail_chunks);
 
-    // Reset hashmap(like Cache's evict) when the transaction is over.
+    // Reset the aggregator's state to avoid hashmap too large.
     Status reset_state(RuntimeState* state);
 
+    // When the epoch is finished, commit the state table.
+    Status commit_epoch(RuntimeState* state);
+
+    // When the epoch starts, reset stream aggreator's state in the new epoch.
+    Status reset_epoch(RuntimeState* state);
+
+    // Close the stream aggregator when the mv is set finished.
     void close(RuntimeState* state) override;
 
 private:

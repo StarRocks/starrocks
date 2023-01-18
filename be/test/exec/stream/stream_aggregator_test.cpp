@@ -46,6 +46,7 @@ public:
     void RunBatch(size_t run_id, const StreamRowData<T>& input_rows, StreamChunkPtr* result_chunk,
                   ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>& detail_chunks) {
         VLOG_ROW << "[RunBatchAndCheck] >>>>>>>>>>>>>>> Run: " << run_id;
+        DCHECK_IF_ERROR(_stream_aggregator->reset_epoch(_runtime_state));
 
         auto input_chunk_ptr = MakeStreamChunk<T>(input_rows.rows, input_rows.ops);
         auto chunk_size = input_chunk_ptr->num_rows();
@@ -68,6 +69,7 @@ public:
                 }
             }
         }
+        DCHECK_IF_ERROR(_stream_aggregator->commit_epoch(_runtime_state));
         DCHECK_IF_ERROR(_stream_aggregator->reset_state(_runtime_state));
     }
 

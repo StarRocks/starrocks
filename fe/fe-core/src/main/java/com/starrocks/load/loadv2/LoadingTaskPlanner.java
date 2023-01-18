@@ -289,7 +289,7 @@ public class LoadingTaskPlanner {
         // 6. Sink plan fragment
         sinkFragment.setSink(olapTableSink);
         // For shuffle broker load, we only support tablet sink dop = 1
-        // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
+        // because for tablet sink dop > 1, local passthrough exchange will influence the order of sending,
         // which may lead to inconsistent replica for primary key.
         // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
         if (this.context != null) {

@@ -28,10 +28,13 @@
 
 namespace starrocks {
 
-class PipelineBlockingDriversAction : public HttpHandler {
+enum PipelineDriverPollerActionType { BLOCKING_QUEUE = 1, PARKED_QUEUE = 2 };
+
+class PipelineDriverPollerAction : public HttpHandler {
 public:
-    explicit PipelineBlockingDriversAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
-    ~PipelineBlockingDriversAction() override = default;
+    explicit PipelineDriverPollerAction(ExecEnv* exec_env, PipelineDriverPollerActionType type)
+            : _exec_env(exec_env), _type(type) {}
+    ~PipelineDriverPollerAction() override = default;
 
     void handle(HttpRequest* req) override;
 
@@ -52,11 +55,12 @@ private:
     //      }],
     //      "queries_in_workgroup": []
     // }
-    void _handle_stat(HttpRequest* req);
+    void _handle_stat(HttpRequest* req, PipelineDriverPollerActionType type);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
 
 private:
     ExecEnv* _exec_env;
+    PipelineDriverPollerActionType _type;
 };
 
 } // namespace starrocks

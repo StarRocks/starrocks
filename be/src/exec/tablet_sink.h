@@ -275,6 +275,7 @@ struct OlapTableSinkParams {
     bool is_lake_table;
     bool need_gen_rollup;
     bool enable_replicated_storage{false};
+    bool is_output_tuple_desc_same_with_input{false};
 };
 
 // Write data to Olap Table.
@@ -480,6 +481,7 @@ private:
     bool _colocate_mv_index = config::enable_load_colocate_mv;
 
     bool _enable_replicated_storage = false;
+    bool _is_output_tuple_desc_same_with_input = false;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 };

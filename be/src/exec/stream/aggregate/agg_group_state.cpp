@@ -51,6 +51,7 @@ Status AggGroupState::prepare(RuntimeState* state) {
             detail_agg_states.emplace_back(agg_state.get());
             break;
         default:
+            LOG(WARNING) << "unsupported state kind, agg function id=" << i;
             return Status::NotSupported("unsupported state kind");
         }
     }
@@ -120,13 +121,38 @@ Status AggGroupState::_prepare_imt_state_tables(RuntimeState* state,
     if (!detail_agg_states.empty() && !_params->agg_detail_imt) {
         return Status::InternalError("Create imt state table failed: detail imt should exist");
     }
+
+    // result state table
     _result_state_table = std::make_unique<IMTStateTable>(*_params->agg_result_imt);
+    RETURN_IF_ERROR(_result_state_table->prepare(state));
+
+    // intermediate state table
     if (_params->agg_intermediate_imt) {
         _intermediate_state_table = std::make_unique<IMTStateTable>(*_params->agg_intermediate_imt);
+        RETURN_IF_ERROR(_intermediate_state_table->prepare(state));
     }
+
     // TODO: Make one detail state table works.
     if (_params->agg_detail_imt) {
         return Status::InternalError("Detail state table is not supported yet.");
+    }
+    return Status::OK();
+}
+
+Status AggGroupState::open(RuntimeState* state) {
+    // Update result table
+    DCHECK(_result_state_table);
+    RETURN_IF_ERROR(_result_state_table->open(state));
+
+    // Update intermediate table
+    if (_intermediate_state_table) {
+        RETURN_IF_ERROR(_intermediate_state_table->open(state));
+    }
+
+    // Update detail tables
+    for (auto i = 0; i < _detail_state_tables.size(); i++) {
+        auto& detail_state_table = _detail_state_tables[i];
+        RETURN_IF_ERROR(detail_state_table->open(state));
     }
     return Status::OK();
 }
@@ -176,6 +202,7 @@ Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_c
             break;
         }
         default:
+            LOG(WARNING) << "unsupported state kind, agg function id=" << i;
             return Status::NotSupported("unsupported state kind");
         }
 
@@ -295,13 +322,12 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
 ChunkPtr AggGroupState::_build_intermediate_chunk(const Columns& group_by_columns,
                                                   const Columns& agg_intermediate_columns) const {
     ChunkPtr result_chunk = std::make_shared<Chunk>();
-
+    int64_t slot_id = 0;
     for (size_t i = 0; i < group_by_columns.size(); i++) {
-        result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
+        result_chunk->append_column(group_by_columns[i], slot_id++);
     }
     for (size_t i = 0; i < agg_intermediate_columns.size(); i++) {
-        size_t id = group_by_columns.size() + i;
-        result_chunk->append_column(agg_intermediate_columns[i], _intermediate_tuple_desc->slots()[id]->id());
+        result_chunk->append_column(agg_intermediate_columns[i], slot_id++);
     }
     return result_chunk;
 }
@@ -310,18 +336,66 @@ Status AggGroupState::write(RuntimeState* state, StreamChunkPtr* result_chunk, C
                             std::vector<ChunkPtr>& detail_chunks) {
     // Update result table
     DCHECK(_result_state_table);
-    RETURN_IF_ERROR(_result_state_table->write(state, (*result_chunk).get()));
+    DCHECK(result_chunk);
+    // Need mock slot id
+    auto new_result_chunk = std::make_shared<Chunk>();
+    int32_t slot_id = 0;
+    for (auto col : (*result_chunk)->columns()) {
+        new_result_chunk->append_column(col, slot_id++);
+    }
+    if (StreamChunkConverter::has_ops_column(*result_chunk)) {
+        new_result_chunk->set_extra_data((*result_chunk)->get_extra_data());
+    }
+
+    RETURN_IF_ERROR(_result_state_table->write(state, *result_chunk));
 
     // Update intermediate table
+    DCHECK_EQ(!_intermediate_state_table, !intermediate_chunk);
     if (_intermediate_state_table) {
-        RETURN_IF_ERROR(_intermediate_state_table->write(state, (*intermediate_chunk).get()));
+        RETURN_IF_ERROR(_intermediate_state_table->write(state, (*intermediate_chunk)));
     }
 
     // Update detail tables
     DCHECK_EQ(_detail_state_tables.size(), detail_chunks.size());
     for (auto i = 0; i < _detail_state_tables.size(); i++) {
         auto& detail_state_table = _detail_state_tables[i];
-        RETURN_IF_ERROR(detail_state_table->write(state, detail_chunks[i].get()));
+        RETURN_IF_ERROR(detail_state_table->write(state, detail_chunks[i]));
+    }
+    return Status::OK();
+}
+
+Status AggGroupState::commit_epoch(RuntimeState* state) {
+    // Update result table
+    DCHECK(_result_state_table);
+    RETURN_IF_ERROR(_result_state_table->commit(state));
+
+    // Update intermediate table
+    if (_intermediate_state_table) {
+        RETURN_IF_ERROR(_intermediate_state_table->commit(state));
+    }
+
+    // Update detail tables
+    for (auto i = 0; i < _detail_state_tables.size(); i++) {
+        auto& detail_state_table = _detail_state_tables[i];
+        RETURN_IF_ERROR(detail_state_table->commit(state));
+    }
+    return Status::OK();
+}
+
+Status AggGroupState::reset_epoch(RuntimeState* state) {
+    // Update result table
+    DCHECK(_result_state_table);
+    RETURN_IF_ERROR(_result_state_table->reset_epoch(state));
+
+    // Update intermediate table
+    if (_intermediate_state_table) {
+        RETURN_IF_ERROR(_intermediate_state_table->reset_epoch(state));
+    }
+
+    // Update detail tables
+    for (auto i = 0; i < _detail_state_tables.size(); i++) {
+        auto& detail_state_table = _detail_state_tables[i];
+        RETURN_IF_ERROR(detail_state_table->reset_epoch(state));
     }
     return Status::OK();
 }

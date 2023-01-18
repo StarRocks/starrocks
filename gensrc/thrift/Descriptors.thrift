@@ -469,6 +469,11 @@ struct TOlapTableRouteInfo {
   7: optional string table_name
   8: optional TNodesInfo nodes_info
   9: optional Types.TKeysType keys_type
+  10: optional i64 load_channel_timeout_s // the timeout of load channels in second
+  11: optional string txn_trace_parent
+  12: optional Types.TWriteQuorumType write_quorum_type
+  13: optional bool enable_replicated_storage
+  14: optional string merge_condition
 }
 
 enum TIMTType {

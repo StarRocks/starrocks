@@ -84,6 +84,8 @@ struct MVMaintenanceTaskInfo {
 struct EpochInfo {
     // transaction id
     int64_t txn_id;
+    // load_id
+    TUniqueId load_id;
     // epoch marker id
     int64_t epoch_id;
     // max binlog duration which this epoch will run
@@ -110,15 +112,17 @@ public:
 
     static bool has_ops_column(const StreamChunk& chunk);
     static bool has_ops_column(const StreamChunkPtr& chunk_ptr);
-    static bool has_ops_column(StreamChunk* chunk_ptr);
+    static bool has_ops_column(const StreamChunk* chunk_ptr);
 
     static Int8Column* ops_col(const StreamChunk& stream_chunk);
     static Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr);
-    static Int8Column* ops_col(StreamChunk* stream_chunk_ptr);
+    static Int8Column* ops_col(const StreamChunk* stream_chunk_ptr);
 
     static const StreamRowOp* ops(const StreamChunk& stream_chunk);
-    static const StreamRowOp* ops(StreamChunk* stream_chunk);
+    static const StreamRowOp* ops(const StreamChunk* stream_chunk);
     static const StreamRowOp* ops(const StreamChunkPtr& stream_chunk);
+
+    static ChunkPtr to_chunk(const StreamChunkPtr& stream_chunk);
 };
 
 } // namespace starrocks

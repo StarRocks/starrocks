@@ -402,6 +402,10 @@ public class FunctionSet {
     // Struct functions:
     public static final String ROW = "row";
 
+    // Stream MV
+    public static final String RETRACT_MIN = "retract_min";
+    public static final String RETRACT_MAX = "retract_max";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);

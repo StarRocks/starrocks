@@ -188,13 +188,14 @@ size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredica
 
     {
         std::unique_lock<std::mutex> lock(_global_parked_mutex);
-        for (auto driver_it = _parked_drivers.begin(); driver_it != _parked_drivers.end();) {
+        // Reverse iterate parked queue, FILO
+        for (auto driver_it = _parked_drivers.rbegin(); driver_it != _parked_drivers.rend();) {
             auto driver = *driver_it;
             if (predicate_func(driver)) {
                 VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
                 driver->set_driver_state(DriverState::READY);
                 ready_drivers.push_back(driver);
-                driver_it = _parked_drivers.erase(driver_it);
+                driver_it = decltype(driver_it)(_parked_drivers.erase(std::next(driver_it).base()));
             } else {
                 driver_it++;
             }
@@ -224,9 +225,16 @@ void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drive
     local_blocked_drivers.erase(driver_it++);
 }
 
-void PipelineDriverPoller::iterate_immutable_driver(const IterateImmutableDriverFunc& call) const {
+void PipelineDriverPoller::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
     std::shared_lock guard(_local_mutex);
     for (auto* driver : _local_blocked_drivers) {
+        call(driver);
+    }
+}
+
+void PipelineDriverPoller::iterate_immutable_parked_driver(const IterateImmutableDriverFunc& call) const {
+    std::unique_lock<std::mutex> lock(_global_parked_mutex);
+    for (auto* driver : _parked_drivers) {
         call(driver);
     }
 }

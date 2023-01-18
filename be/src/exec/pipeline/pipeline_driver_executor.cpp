@@ -296,7 +296,11 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
 }
 
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
-    _blocked_driver_poller->iterate_immutable_driver(call);
+    _blocked_driver_poller->iterate_immutable_blocking_driver(call);
+}
+
+void GlobalDriverExecutor::iterate_immutable_parked_driver(const IterateImmutableDriverFunc& call) const {
+    _blocked_driver_poller->iterate_immutable_parked_driver(call);
 }
 
 void GlobalDriverExecutor::_update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done) {

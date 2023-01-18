@@ -16,12 +16,8 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/stream/aggregate/stream_aggregate_operator.h"
 
 namespace starrocks {
-using StreamAggregatorPtr = std::shared_ptr<stream::StreamAggregator>;
-using StreamAggregatorFactory = AggregatorFactoryBase<stream::StreamAggregator>;
-using StreamAggregatorFactoryPtr = std::shared_ptr<StreamAggregatorFactory>;
 
 class StreamAggregateNode final : public starrocks::ExecNode {
 public:

@@ -50,11 +50,12 @@ public:
     ChunkIteratorPtrOr prefix_scan(const std::vector<std::string>& projection_columns, const Columns& keys,
                                    size_t row_idx) const override;
 
-    Status write(RuntimeState* state, StreamChunk* chunk) override;
+    Status write(RuntimeState* state, const StreamChunkPtr& chunk) override;
     Status commit(RuntimeState* state) override;
+    Status reset_epoch(RuntimeState* state) override;
 
 private:
-    TableReaderParams _convert_to_reader_params();
+    TableReaderParams _convert_to_reader_params(int64_t version);
     stream_load::OlapTableSinkParams _convert_to_sink_params();
     DatumTuple _convert_to_datum_tuple(const Columns& keys, size_t row_idx) const;
 
@@ -63,6 +64,7 @@ private:
 
     std::string _db_name;
     std::string _table_name;
+    int64_t _table_id;
 
     VectorizedSchema _schema;
     std::vector<std::string> _non_keys_field_names;

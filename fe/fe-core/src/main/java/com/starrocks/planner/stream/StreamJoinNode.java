@@ -22,7 +22,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
+import com.starrocks.sql.optimizer.operator.stream.IMTStateTable;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -36,7 +36,7 @@ import javax.ws.rs.NotSupportedException;
 
 public class StreamJoinNode extends JoinNode {
     // TODO: support bi-stream join
-    private IMTInfo rightIMT;
+    private IMTStateTable rightIMT;
 
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef, List<Expr> eqJoinConjuncts,
                           List<Expr> otherJoinConjuncts) {
@@ -77,9 +77,9 @@ public class StreamJoinNode extends JoinNode {
     }
 
     // TODO support bi-stream join
-    public void setLeftIMT(IMTInfo imt) { throw new NotSupportedException("TODO"); }
+    public void setLeftIMT(IMTStateTable imt) { throw new NotSupportedException("TODO"); }
 
-    public void setRightIMT(IMTInfo imt) { this.rightIMT = imt; }
+    public void setRightIMT(IMTStateTable imt) { this.rightIMT = imt; }
 
     @Override
     public boolean canPushDownRuntimeFilter() {

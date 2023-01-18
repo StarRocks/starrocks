@@ -18,7 +18,7 @@
 #pragma once
 
 #include "exec/aggregator.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec/pipeline/operator.h"
 #include "exec/stream/aggregate/stream_aggregator.h"
 
 namespace starrocks::stream {
@@ -26,19 +26,19 @@ using StreamAggregatorPtr = std::shared_ptr<StreamAggregator>;
 using StreamAggregatorFactory = AggregatorFactoryBase<StreamAggregator>;
 using StreamAggregatorFactoryPtr = std::shared_ptr<StreamAggregatorFactory>;
 
-class StreamAggregateOperator : public pipeline::SourceOperator {
+class StreamAggregateSinkOperator : public pipeline::Operator {
 public:
-    StreamAggregateOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                            StreamAggregatorPtr aggregator)
-            : pipeline::SourceOperator(factory, id, "stream_aggregate", plan_node_id, driver_sequence),
-              _aggregator(std::move(aggregator)) {
-        _aggregator->ref();
+    StreamAggregateSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                                StreamAggregatorPtr aggregator)
+            : pipeline::Operator(factory, id, "stream_aggregate_sink", plan_node_id, driver_sequence),
+              _stream_aggregator(std::move(aggregator)) {
+        _stream_aggregator->ref();
     }
 
-    ~StreamAggregateOperator() override = default;
+    ~StreamAggregateSinkOperator() override = default;
 
-    bool has_output() const override;
-    bool need_input() const override { return !is_finished(); }
+    bool has_output() const override { return false; }
+    bool need_input() const override { return !is_epoch_finished(); }
     bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
@@ -54,40 +54,38 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    StreamAggregatorPtr _aggregator = nullptr;
-    ChunkPtr _epoch_chunk = nullptr;
+    StreamAggregatorPtr _stream_aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_input_finished = false;
     // Mark whether aggregator is already epoch finished.
     bool _is_epoch_finished = false;
-    // Mark whether aggregator has output or not.
-    bool _has_output = true;
 };
 
-class StreamAggregateOperatorFactory final : public pipeline::SourceOperatorFactory {
+class StreamAggregateSinkOperatorFactory final : public pipeline::OperatorFactory {
 public:
-    StreamAggregateOperatorFactory(int32_t id, int32_t plan_node_id, StreamAggregatorFactoryPtr aggregator_factory)
-            : pipeline::SourceOperatorFactory(id, "stream_aggregate", plan_node_id),
+    StreamAggregateSinkOperatorFactory(int32_t id, int32_t plan_node_id, StreamAggregatorFactoryPtr aggregator_factory)
+            : pipeline::OperatorFactory(id, "stream_aggregate_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     // used for testing
-    StreamAggregateOperatorFactory(int32_t id, int32_t plan_node_id, StreamAggregatorPtr aggregator)
-            : pipeline::SourceOperatorFactory(id, "stream_aggregate", plan_node_id),
-              _aggregator(std::move(aggregator)) {}
+    StreamAggregateSinkOperatorFactory(int32_t id, int32_t plan_node_id, StreamAggregatorPtr aggregator)
+            : pipeline::OperatorFactory(id, "stream_aggregate_sink", plan_node_id),
+              _stream_aggregator(std::move(aggregator)) {}
 
-    ~StreamAggregateOperatorFactory() override = default;
+    ~StreamAggregateSinkOperatorFactory() override = default;
 
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        if (_aggregator) {
-            return std::make_shared<StreamAggregateOperator>(this, _id, _plan_node_id, driver_sequence, _aggregator);
+        if (_stream_aggregator) {
+            return std::make_shared<StreamAggregateSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                                 _stream_aggregator);
         } else {
-            return std::make_shared<StreamAggregateOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                             _aggregator_factory->get_or_create(driver_sequence));
+            return std::make_shared<StreamAggregateSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                                 _aggregator_factory->get_or_create(driver_sequence));
         }
     }
 
 private:
     StreamAggregatorFactoryPtr _aggregator_factory = nullptr;
-    StreamAggregatorPtr _aggregator = nullptr;
+    StreamAggregatorPtr _stream_aggregator = nullptr;
 };
 } // namespace starrocks::stream

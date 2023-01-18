@@ -17,9 +17,11 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -35,6 +37,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.operator.stream.IMTStateTable;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.MVTaskType;
@@ -91,6 +94,9 @@ public class MVMaintenanceJob implements Writable {
     // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
     private final transient ExecPlan plan;
 
+    // TODO: serialize imt info table ids, transactions need them.
+    List<IMTStateTable> imtStateTables;
+
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
     private transient AtomicReference<JobState> state = new AtomicReference<>();
@@ -130,6 +136,25 @@ public class MVMaintenanceJob implements Writable {
         this.serializedState = JobState.INIT;
         this.state.set(serializedState);
         this.inSchedule.set(false);
+    }
+
+    public List<IMTStateTable> getImtInfos() {
+        return imtStateTables;
+    }
+
+    public void setImtInfos(List<IMTStateTable> imtStateTables) {
+        this.imtStateTables = imtStateTables;
+    }
+
+    Map<Integer, Long> getIMTVersions() {
+        // imt table id -> newest version mapping
+        Map<Integer, Long> imtVersions = Maps.newHashMap();
+        for (IMTStateTable imtStateTable : imtStateTables) {
+            OlapTable imtTable = imtStateTable.getOlapTable();
+            long newestVersion = imtTable.getAllPartitions().stream().findFirst().get().getVisibleVersion();
+            imtVersions.put(Integer.valueOf((int) imtTable.getId()), newestVersion);
+        }
+        return imtVersions;
     }
 
     public void setEpoch(MVEpoch epoch) {
@@ -332,7 +357,6 @@ public class MVMaintenanceJob implements Writable {
 
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
-            long taskId = task.getTaskId();
             TNetworkAddress address = task.getBeRpcAddr();
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();

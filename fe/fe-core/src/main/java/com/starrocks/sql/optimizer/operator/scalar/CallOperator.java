@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Scalar operator support function call
  */
 public class CallOperator extends ScalarOperator {
-    private final String fnName;
+    private String fnName;
     /**
      * TODO:
      * We need a FunctionHandle to store the required information
@@ -78,6 +78,11 @@ public class CallOperator extends ScalarOperator {
 
     public String getFnName() {
         return fnName;
+    }
+
+    public void resetFnName(String fnName) {
+        this.fn.getFunctionName().setFunction(fnName);
+        this.fnName = fnName;
     }
 
     public Function getFunction() {

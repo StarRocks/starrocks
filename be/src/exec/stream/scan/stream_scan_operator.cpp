@@ -14,6 +14,7 @@
 
 #include "stream_scan_operator.h"
 
+#include "column/stream_chunk.h"
 #include "exec/connector_scan_node.h"
 
 namespace starrocks::pipeline {
@@ -77,19 +78,24 @@ StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
     if (status_or.ok()) {
         auto chunk = status_or.value();
         if (chunk && chunk->num_rows() > 0) {
+            Int8ColumnPtr ops = Int8Column::create();
+            auto op_insert = StreamRowOp::OP_INSERT;
+            ops->append_value_multiple_times(&op_insert, chunk->num_rows());
+            auto stream_chunk = StreamChunkConverter::make_stream_chunk(chunk, std::move(ops));
+
             int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
-            if (num >= 1) {
+            if (num >= 2) {
                 return _mark_mock_data_finished();
             } else {
-                return status_or;
+                return stream_chunk;
             }
         }
     }
-
     _run_time++;
-    if (_run_time > 100) {
+    if (_run_time > 10) {
         return _mark_mock_data_finished();
     }
+
     return status_or;
 }
 

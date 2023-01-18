@@ -40,6 +40,7 @@ using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
 
 struct ScanRangeInfo {
     std::unordered_map<TUniqueId, NodeId2ScanRanges> instance_scan_range_map;
+    std::unordered_map<int64_t, int64_t> imt_version_map;
 
     static ScanRangeInfo from_start_epoch_start(const TMVStartEpochTask& start_epoch);
 };
@@ -66,6 +67,7 @@ public:
     const EpochInfo& epoch_info() const;
     const std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges() const;
     const MVMaintenanceTaskInfo& maintenance_task_info() const;
+    const std::unordered_map<int64_t, int64_t> imt_version_map() const;
 
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
     void count_down_fragment_ctx(RuntimeState* state, FragmentContext* fragment_ctx, size_t val = 1);
@@ -81,6 +83,7 @@ private:
     EpochInfo _epoch_info;
     MVMaintenanceTaskInfo _maintenance_task_info;
     std::unordered_map<TUniqueId, NodeId2ScanRanges> _fragment_id_to_node_id_scan_ranges;
+    std::unordered_map<int64_t, int64_t> _imt_version_map;
     std::vector<FragmentContext*> _finished_fragment_ctxs;
     bool _enable_resource_group = true;
     int64_t _num_drivers = 0;

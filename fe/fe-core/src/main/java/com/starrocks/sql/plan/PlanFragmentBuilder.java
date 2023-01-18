@@ -2899,6 +2899,11 @@ public class PlanFragmentBuilder {
                             AggregateInfo.AggPhase.FIRST);
             StreamAggNode aggNode = new StreamAggNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
 
+            aggNode.setIntermediateTuple();
+
+            // To be used for setting IMTStateTables later.
+            node.setStreamAggNode(aggNode);
+
             aggNode.setHasNullableGenerateChild();
             aggNode.computeStatistics(optExpr.getStatistics());
             inputFragment.setPlanRoot(aggNode);

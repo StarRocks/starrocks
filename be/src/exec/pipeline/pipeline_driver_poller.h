@@ -54,6 +54,7 @@ public:
     // activate parked driver from poller
     size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
     size_t calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const;
+    void iterate_immutable_parked_driver(const IterateImmutableDriverFunc& call) const;
 
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {
@@ -61,7 +62,7 @@ public:
         return _local_blocked_drivers.size();
     }
 
-    void iterate_immutable_driver(const IterateImmutableDriverFunc& call) const;
+    void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const;
 
 private:
     void run_internal();

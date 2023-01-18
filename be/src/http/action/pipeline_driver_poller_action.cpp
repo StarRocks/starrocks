@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/pipeline_blocking_drivers_action.h"
+#include "http/action/pipeline_driver_poller_action.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -50,12 +50,12 @@ struct DriverInfo {
               fragment_status(std::move(status)) {}
 };
 
-void PipelineBlockingDriversAction::handle(HttpRequest* req) {
+void PipelineDriverPollerAction::handle(HttpRequest* req) {
     VLOG_ROW << req->debug_string();
     const auto& action = req->param(ACTION_KEY);
     if (req->method() == HttpMethod::GET) {
         if (action == ACTION_STAT) {
-            _handle_stat(req);
+            _handle_stat(req, _type);
         } else {
             _handle_error(req, strings::Substitute("Not support GET method: '$0'", req->uri()));
         }
@@ -65,7 +65,7 @@ void PipelineBlockingDriversAction::handle(HttpRequest* req) {
     }
 }
 
-void PipelineBlockingDriversAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
+void PipelineDriverPollerAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
     rapidjson::Document root;
     root.SetObject();
     func(root);
@@ -76,7 +76,7 @@ void PipelineBlockingDriversAction::_handle(HttpRequest* req, const std::functio
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
 }
 
-void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
+void PipelineDriverPollerAction::_handle_stat(HttpRequest* req, PipelineDriverPollerActionType type) {
     _handle(req, [=](rapidjson::Document& root) {
         auto& allocator = root.GetAllocator();
 
@@ -160,11 +160,17 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
         };
 
         QueryMap query_map_not_in_wg;
-        _exec_env->driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_not_in_wg));
-        rapidjson::Document queries_not_in_wg_obj = query_map_to_doc_func(query_map_not_in_wg);
-
         QueryMap query_map_in_wg;
-        _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+        if (type == PipelineDriverPollerActionType::BLOCKING_QUEUE) {
+            _exec_env->driver_executor()->iterate_immutable_blocking_driver(
+                    iterate_func_generator(query_map_not_in_wg));
+            _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+        } else {
+            DCHECK_EQ(type, PipelineDriverPollerActionType::PARKED_QUEUE);
+            _exec_env->driver_executor()->iterate_immutable_parked_driver(iterate_func_generator(query_map_not_in_wg));
+            _exec_env->wg_driver_executor()->iterate_immutable_parked_driver(iterate_func_generator(query_map_in_wg));
+        }
+        rapidjson::Document queries_not_in_wg_obj = query_map_to_doc_func(query_map_not_in_wg);
         rapidjson::Document queries_in_wg_obj = query_map_to_doc_func(query_map_in_wg);
 
         root.AddMember("queries_not_in_workgroup", queries_not_in_wg_obj, allocator);
@@ -172,7 +178,7 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
     });
 }
 
-void PipelineBlockingDriversAction::_handle_error(HttpRequest* req, const std::string& err_msg) {
+void PipelineDriverPollerAction::_handle_error(HttpRequest* req, const std::string& err_msg) {
     _handle(req, [err_msg](rapidjson::Document& root) {
         auto& allocator = root.GetAllocator();
         root.AddMember("error", rapidjson::Value(err_msg.c_str(), err_msg.size()), allocator);

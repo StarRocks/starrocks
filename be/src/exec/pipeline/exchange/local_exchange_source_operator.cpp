@@ -15,6 +15,7 @@
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 
 #include "column/chunk.h"
+#include "column/chunk_extra_data.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -65,7 +66,8 @@ bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
-           (_is_finished && _partition_rows_num > 0) || _local_buffer_almost_full();
+           (_is_finished && _partition_rows_num > 0) || _local_buffer_almost_full() ||
+           (_is_epoch_finished && _partition_rows_num > 0);
 }
 
 Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
@@ -79,6 +81,20 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     _memory_manager->update_memory_usage(-_local_memory_usage);
     _partition_rows_num = 0;
     _local_memory_usage = 0;
+    return Status::OK();
+}
+
+bool LocalExchangeSourceOperator::is_epoch_finished() const {
+    std::lock_guard<std::mutex> l(_chunk_lock);
+    return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
+}
+Status LocalExchangeSourceOperator::set_epoch_finishing(RuntimeState* state) {
+    std::lock_guard<std::mutex> l(_chunk_lock);
+    _is_epoch_finished = true;
+    return Status::OK();
+}
+Status LocalExchangeSourceOperator::reset_epoch(RuntimeState* state) {
+    _is_epoch_finished = false;
     return Status::OK();
 }
 
@@ -130,11 +146,24 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         throw std::runtime_error("local exchange gets empty shuffled chunk.");
     }
     // Unlock during merging partition chunks into a full chunk.
-    ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
+    auto first_partition_chunk = selected_partition_chunks[0].chunk;
+    ChunkPtr chunk = first_partition_chunk->clone_empty_with_slot();
     chunk->reserve(rows_num);
     for (const auto& partition_chunk : selected_partition_chunks) {
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
+    }
+
+    //  Need to append _ops column
+    if (auto* chunk_extra_data = ChunkExtraColumnsData::as_raw(first_partition_chunk->get_extra_data())) {
+        auto new_chunk_extra_data = chunk_extra_data->clone_empty(rows_num);
+        for (const auto& partition_chunk : selected_partition_chunks) {
+            auto src_extra_columns =
+                    dynamic_cast<ChunkExtraColumnsData*>(partition_chunk.chunk->get_extra_data().get());
+            new_chunk_extra_data->append_selective(*src_extra_columns, partition_chunk.indexes->data(),
+                                                   partition_chunk.from, partition_chunk.size);
+        }
+        chunk->set_extra_data(std::move(new_chunk_extra_data));
     }
     return chunk;
 }

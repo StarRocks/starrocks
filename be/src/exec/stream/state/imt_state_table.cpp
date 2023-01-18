@@ -14,6 +14,11 @@
 
 #include "exec/stream/state/imt_state_table.h"
 
+#include <fmt/format.h>
+
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/stream_epoch_manager.h"
+
 namespace starrocks::stream {
 
 IMTStateTable::IMTStateTable(const TIMTDescriptor& imt) : _imt(imt) {
@@ -22,16 +27,21 @@ IMTStateTable::IMTStateTable(const TIMTDescriptor& imt) : _imt(imt) {
 
     _db_name = _imt.olap_table.db_name;
     _table_name = _imt.olap_table.table_name;
+    _table_id = _imt.olap_table.schema.table_id;
 }
 
 Status IMTStateTable::prepare(RuntimeState* state) {
     // prepare read
-    _table_reader = std::make_unique<TableReader>(_convert_to_reader_params());
+    _table_reader = std::make_unique<TableReader>(_convert_to_reader_params(_imt.olap_table.schema.version));
     _schema = _table_reader->tablet_schema();
+
+    // Construct a default non_keys(values)'s field names array by default.
+    // TODO: construct non-key values from user's scope.
     auto field_names = _schema.field_names();
-    // TODO: Construct a default non_keys(values)'s field names array by default.
-    std::copy_backward(field_names.begin() + _schema.num_key_fields(), field_names.end(),
-                       _non_keys_field_names.begin());
+    DCHECK_LT(0, _schema.num_key_fields());
+    DCHECK_LT(_schema.num_key_fields(), _schema.num_fields());
+    _non_keys_field_names.resize(_schema.num_fields() - _schema.num_key_fields());
+    std::copy_backward(field_names.begin() + _schema.num_key_fields(), field_names.end(), _non_keys_field_names.end());
 
     // prepare write
     Status status;
@@ -45,10 +55,10 @@ Status IMTStateTable::open(RuntimeState* state) {
     return _olap_table_sink->open(state);
 }
 
-TableReaderParams IMTStateTable::_convert_to_reader_params() {
+TableReaderParams IMTStateTable::_convert_to_reader_params(int64_t version) {
     return TableReaderParams{
             .schema = _imt.olap_table.schema,
-            .version = _imt.olap_table.schema.version,
+            .version = version,
             .partition_param = _imt.olap_table.partition,
             .location_param = _imt.olap_table.location,
             .nodes_info = _imt.olap_table.nodes_info,
@@ -61,23 +71,24 @@ stream_load::OlapTableSinkParams IMTStateTable::_convert_to_sink_params() {
             .load_id = _imt.load_id,
 
             .txn_id = _imt.txn_id,
-            .load_channel_timeout_s = 0,
-            .num_replicas = 1,
+            .load_channel_timeout_s = _imt.olap_table.load_channel_timeout_s,
+            .num_replicas = _imt.olap_table.num_replicas,
             .tuple_id = _imt.olap_table.schema.tuple_desc.id,
 
-            .keys_type = TKeysType::PRIMARY_KEYS,
+            .keys_type = _imt.olap_table.keys_type,
             .schema = _imt.olap_table.schema,
             .partition = _imt.olap_table.partition,
             .location = _imt.olap_table.location,
             .nodes_info = _imt.olap_table.nodes_info,
 
-            .write_quorum_type = TWriteQuorumType::MAJORITY,
-            .merge_condition = "",
-            .txn_trace_parent = "",
+            .write_quorum_type = _imt.olap_table.write_quorum_type,
+            .merge_condition = _imt.olap_table.merge_condition,
+            .txn_trace_parent = _imt.olap_table.txn_trace_parent,
 
             .is_lake_table = false,
             .need_gen_rollup = false,
-            .enable_replicated_storage = false,
+            .enable_replicated_storage = _imt.olap_table.enable_replicated_storage,
+            .is_output_tuple_desc_same_with_input = true,
     };
 }
 
@@ -119,16 +130,36 @@ DatumTuple IMTStateTable::_convert_to_datum_tuple(const Columns& keys, size_t ro
     return res;
 }
 
-Status IMTStateTable::write(RuntimeState* state, StreamChunk* chunk) {
+Status IMTStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
     DCHECK(chunk);
     DCHECK(_olap_table_sink);
-    // TODO: `ops` column in the StreamChunk should be considered later.
-    return _olap_table_sink->send_chunk(state, chunk);
+    auto new_chunk = StreamChunkConverter::to_chunk(chunk);
+    return _olap_table_sink->send_chunk(state, new_chunk.get());
 }
 
 Status IMTStateTable::commit(RuntimeState* state) {
-    Status status;
-    return _olap_table_sink->close(state, status);
+    return _olap_table_sink->close(state, Status::OK());
+}
+
+Status IMTStateTable::reset_epoch(RuntimeState* state) {
+    // reset reader
+    pipeline::StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
+    auto& imt_version_map = stream_epoch_manager->imt_version_map();
+    auto iter = imt_version_map.find(_table_id);
+    if (iter == imt_version_map.end()) {
+        return Status::InternalError(fmt::format("Cannot find newest version in epoch: {}" + _table_id));
+    }
+    _table_reader = std::make_unique<TableReader>(_convert_to_reader_params(iter->second));
+
+    // reset writer
+    if (!_olap_table_sink->is_close_done()) {
+        // TODO: ignore error for now.
+        _olap_table_sink->close(state, Status::OK());
+    }
+    RETURN_IF_ERROR(_olap_table_sink->reset_epoch(state));
+    RETURN_IF_ERROR(_olap_table_sink->prepare(state));
+    RETURN_IF_ERROR(_olap_table_sink->open(state));
+    return Status::OK();
 }
 
 } // namespace starrocks::stream

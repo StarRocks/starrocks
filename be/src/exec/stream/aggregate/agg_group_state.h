@@ -34,6 +34,7 @@ public:
     const std::vector<AggStateDataUPtr>& agg_states() const { return _agg_states; }
 
     Status prepare(RuntimeState* state);
+    Status open(RuntimeState* state);
 
     Status process_chunk(size_t chunk_size, const Columns& group_by_columns, const Buffer<uint8_t>& keys_not_in_map,
                          const StreamRowOp* ops, const std::vector<std::vector<ColumnPtr>>& agg_columns,
@@ -50,6 +51,8 @@ public:
 
     Status write(RuntimeState* state, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
                  std::vector<ChunkPtr>& detail_chunk);
+    Status commit_epoch(RuntimeState* state);
+    Status reset_epoch(RuntimeState* state);
 
 private:
     Status _prepare_mem_state_tables(RuntimeState* state, const std::vector<AggStateData*>& intermediate_agg_states,

@@ -100,15 +100,10 @@ Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
     if (!_sink->is_close_done()) {
         RETURN_IF_ERROR(_sink->close(state, Status::OK()));
     }
-
     _is_epoch_finished = false;
-
     RETURN_IF_ERROR(_sink->reset_epoch(state));
-
     RETURN_IF_ERROR(_sink->prepare(state));
-
     RETURN_IF_ERROR(_sink->try_open(state));
-
     return Status::OK();
 }
 
@@ -154,7 +149,8 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     }
 
     // send_chunk() use internal queue, we check is_full() before call send_chunk(), so it will not block
-    return _sink->send_chunk(state, chunk.get());
+    auto new_chunk = StreamChunkConverter::to_chunk(chunk);
+    return _sink->send_chunk(state, new_chunk.get());
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

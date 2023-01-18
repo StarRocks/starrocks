@@ -39,6 +39,10 @@ ScanRangeInfo ScanRangeInfo::from_start_epoch_start(const TMVStartEpochTask& sta
             }
         }
     }
+
+    for (auto& [table_id, version] : start_epoch.imt_version_map) {
+        res.imt_version_map[table_id] = version;
+    }
     return res;
 }
 
@@ -76,6 +80,7 @@ Status StreamEpochManager::start_epoch(ExecEnv* exec_env, const QueryContext* qu
         } else {
             _fragment_id_to_node_id_scan_ranges = fragment_id_to_node_id_scan_ranges;
         }
+        _imt_version_map = scan_info.imt_version_map;
 
         _epoch_info = epoch_info;
         _finished_fragment_ctxs.clear();
@@ -162,6 +167,11 @@ const BinlogOffset* StreamEpochManager::get_binlog_offset(const TUniqueId& fragm
 const EpochInfo& StreamEpochManager::epoch_info() const {
     std::shared_lock<std::shared_mutex> l(_epoch_lock);
     return _epoch_info;
+}
+
+const std::unordered_map<int64_t, int64_t> StreamEpochManager::imt_version_map() const {
+    std::shared_lock<std::shared_mutex> l(_epoch_lock);
+    return _imt_version_map;
 }
 
 const std::unordered_map<TUniqueId, NodeId2ScanRanges>& StreamEpochManager::fragment_id_to_node_id_scan_ranges() const {

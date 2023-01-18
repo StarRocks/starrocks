@@ -65,10 +65,12 @@ public:
                                            size_t row_idx) const = 0;
 
     // Flush the input chunk into the state table: StreamChunk contains the ops columns.
-    virtual Status write(RuntimeState* state, StreamChunk* chunk) = 0;
+    virtual Status write(RuntimeState* state, const StreamChunkPtr& chunk) = 0;
 
     // Commit the flushed state data to be used in the later transaction.
     virtual Status commit(RuntimeState* state) = 0;
+
+    virtual Status reset_epoch(RuntimeState* state) = 0;
 };
 
 } // namespace starrocks::stream

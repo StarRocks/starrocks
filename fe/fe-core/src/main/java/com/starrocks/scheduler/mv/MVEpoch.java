@@ -22,6 +22,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TMVEpoch;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
@@ -62,6 +63,7 @@ public class MVEpoch implements Writable {
     private long commitTimeMilli;
 
     // Ephemeral states
+    private transient TUniqueId loadId;
     private transient long txnId;
 
     private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
@@ -159,6 +161,7 @@ public class MVEpoch implements Writable {
         TMVEpoch res = new TMVEpoch();
         // TODO(murphy) generate an epoch id instead of txn id
         res.setEpoch_id(txnId);
+        res.setLoad_id(loadId);
         res.setTxn_id(txnId);
         res.setStart_ts(startTimeMilli);
 
@@ -253,6 +256,14 @@ public class MVEpoch implements Writable {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    public TUniqueId getLoadId() {
+        return loadId;
+    }
+
+    public void setLoadId(TUniqueId loadId) {
+        this.loadId = loadId;
     }
 
     @Override

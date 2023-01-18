@@ -15,13 +15,14 @@
 
 package com.starrocks.planner.stream;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
+import com.starrocks.sql.optimizer.operator.stream.IMTStateTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -37,8 +38,10 @@ import java.util.stream.Collectors;
 
 public class StreamAggNode extends PlanNode {
     private final AggregateInfo aggInfo;
-    private IMTInfo detailImt;
-    private IMTInfo aggImt;
+
+    private IMTStateTable resultImt;
+    private IMTStateTable intermediateImt;
+    private IMTStateTable detailImt;
 
     public StreamAggNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
         super(id, aggInfo.getOutputTupleId().asList(), "StreamAgg");
@@ -46,10 +49,28 @@ public class StreamAggNode extends PlanNode {
         this.children.add(input);
     }
 
-    // TODO: set IMT for StreamAgg
-    public void setDetailImt(IMTInfo imt) { this.detailImt = imt; }
+    public void setIntermediateImt(IMTStateTable intermediateImt) {
+        this.intermediateImt = intermediateImt;
+    }
 
-    public void setAggImt(IMTInfo imt) { this.aggImt = imt; }
+    public void setResultImt(IMTStateTable resultImt) {
+        this.resultImt = resultImt;
+    }
+
+    public void setDetailImt(IMTStateTable detailImt) {
+        this.detailImt = detailImt;
+    }
+
+    /**
+     * Have this node materialize the aggregation's intermediate tuple instead of
+     * the output tuple.
+     */
+    public void setIntermediateTuple() {
+        Preconditions.checkState(!tupleIds.isEmpty());
+        Preconditions.checkState(tupleIds.get(0).equals(aggInfo.getOutputTupleId()));
+        tupleIds.clear();
+        tupleIds.add(aggInfo.getIntermediateTupleId());
+    }
 
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
@@ -70,11 +91,14 @@ public class StreamAggNode extends PlanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+            if (resultImt != null) {
+                output.append(detailPrefix).append("result_imt: ").append(resultImt.toString()).append("\n");
+            }
+            if (intermediateImt != null) {
+                output.append(detailPrefix).append("intermediate_imt: ").append(intermediateImt.toString()).append("\n");
+            }
             if (detailImt != null) {
                 output.append(detailPrefix).append("detail_imt: ").append(detailImt.toString()).append("\n");
-            }
-            if (aggImt != null) {
-                output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
             }
         }
         return output.toString();
@@ -101,6 +125,19 @@ public class StreamAggNode extends PlanNode {
         }
         String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
+
+        // IMT infos
+        Preconditions.checkState(resultImt != null);
+        msg.stream_agg_node.setAgg_result_imt(resultImt.toThrift());
+        if (intermediateImt != null) {
+            msg.stream_agg_node.setAgg_intermediate_imt(intermediateImt.toThrift());
+        }
+        if (detailImt != null) {
+            msg.stream_agg_node.setAgg_detail_imt(detailImt.toThrift());
+        }
+        // TODO: refactor this
+        msg.stream_agg_node.setIs_append_only(true);
+        msg.stream_agg_node.setIs_generate_retract(false);
 
         msg.stream_agg_node.setAgg_func_set_version(3);
     }

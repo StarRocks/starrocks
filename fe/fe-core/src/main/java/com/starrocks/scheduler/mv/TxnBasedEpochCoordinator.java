@@ -18,10 +18,12 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.stream.IMTStateTable;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -31,9 +33,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 /**
  * EpochCoordinator based on transaction:
@@ -87,7 +90,14 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
         MaterializedView view = mvMaintenanceJob.getView();
         long dbId = view.getDbId();
-        List<Long> tableIdList =  Arrays.asList(view.getId());
+
+        List<IMTStateTable> imtStateTables = mvMaintenanceJob.getImtInfos();
+
+        // TableIds: imt table ids + view's id
+        List<Long> tableIdList =
+                imtStateTables.stream().map(info -> info.getOlapTable().getId()).collect(Collectors.toList());
+        tableIdList.add(view.getId());
+
         long currentTs = System.currentTimeMillis();
         String label = String.format("MV_REFRESH_%d-%d-%d", dbId, view.getId(), currentTs);
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
@@ -96,6 +106,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
+            epoch.setLoadId(UUIDUtil.genTUniqueId());
 
             // Init OlapSink's txnId
             OlapTableSink olapTableSink = mvMaintenanceJob.getMVOlapTableSink();
@@ -193,6 +204,9 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             taskMsg.setPer_node_scan_ranges(task.getBinlogConsumeState());
             taskMsg.setMax_exec_millis(MAX_EXEC_MILLIS);
             taskMsg.setMax_scan_rows(MAX_SCAN_ROWS);
+            // set imt versions
+            Map<Integer, Long> imtVersions = mvMaintenanceJob.getIMTVersions();
+            taskMsg.setImt_version_map(imtVersions);
 
             LOG.info("runEpoch: {}", request);
             try {

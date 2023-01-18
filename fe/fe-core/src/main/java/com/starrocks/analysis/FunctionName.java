@@ -103,6 +103,10 @@ public class FunctionName implements Writable {
         return fn_;
     }
 
+    public void setFunction(String fn) {
+        this.fn_ = fn;
+    }
+
     public boolean isFullyQualified() {
         return db_ != null;
     }
