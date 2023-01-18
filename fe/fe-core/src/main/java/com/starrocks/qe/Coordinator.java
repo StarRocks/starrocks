@@ -490,6 +490,8 @@ public class Coordinator {
         if (workgroup != null) {
             connect.getAuditEventBuilder().setResourceGroup(workgroup.getName());
             connect.setWorkGroup(workgroup);
+        } else {
+            connect.getAuditEventBuilder().setResourceGroup(WorkGroup.DEFAULT_WORKGROUP_NAME);
         }
 
         return workgroup;
