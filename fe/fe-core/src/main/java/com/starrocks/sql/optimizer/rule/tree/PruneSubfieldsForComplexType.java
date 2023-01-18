@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.log4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -46,6 +47,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class PruneSubfieldsForComplexType implements TreeRewriteRule {
+
+    private static final Logger LOGGER = Logger.getLogger(PruneSubfieldsForComplexType.class);
 
     private static final MarkSubfieldsOptVisitor MARK_SUBFIELDS_OPT_VISITOR = new MarkSubfieldsOptVisitor();
 
@@ -279,8 +282,11 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             if (projection != null) {
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                     if (entry.getKey().getType().isComplexType()) {
-                        Preconditions.checkArgument(entry.getKey().getType().equals(entry.getValue().getType()),
-                                "ColumnRefOperator and ScalarOperator should has the same type.");
+                        if (!entry.getKey().getType().equals(entry.getValue().getType())) {
+                            context.setEnablePruneComplexTypes(false);
+                            LOGGER.warn("ColumnRefOperator and ScalarOperator should has the same type.");
+                            return null;
+                        }
                         pruneForComplexType(entry.getKey(), context);
                         entry.getValue().setType(entry.getKey().getType());
                     }
@@ -289,8 +295,11 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getCommonSubOperatorMap()
                         .entrySet()) {
                     if (entry.getKey().getType().isComplexType()) {
-                        Preconditions.checkArgument(entry.getKey().getType().equals(entry.getValue().getType()),
-                                "ColumnRefOperator and ScalarOperator should has the same type.");
+                        if (!entry.getKey().getType().equals(entry.getValue().getType())) {
+                            context.setEnablePruneComplexTypes(false);
+                            LOGGER.warn("ColumnRefOperator and ScalarOperator should has the same type.");
+                            return null;
+                        }
                         pruneForComplexType(entry.getKey(), context);
                         entry.getValue().setType(entry.getKey().getType());
                     }
