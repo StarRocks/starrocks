@@ -229,21 +229,21 @@ INTO TABLE <table_name>
 > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 > - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
 
-#### Google CGS
+#### Google GCS
 
-如果数据源为 Google CGS，需要提供如下配置信息。
+如果数据源为 Google GCS，需要提供如下配置信息。
 
 | **参数名称**      | **参数说明**                                                 |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | 访问 Google CGS 存储空间的 Access Key。      |
-| fs.s3a.secret.key | 访问 Google CGS 存储空间的 Secret Key。 |
-| fs.s3a.endpoint   | 访问 Google CGS 存储空间的连接地址。                         |
+| fs.s3a.access.key | 访问 Google GCS 存储空间的 Access Key。      |
+| fs.s3a.secret.key | 访问 Google GCS 存储空间的 Secret Key。 |
+| fs.s3a.endpoint   | 访问 Google GCS 存储空间的连接地址。                         |
 
 > **说明**
 >
 > 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
 
-创建访问 Google CGS 存储空间的密钥对的操作步骤如下：
+创建访问 Google GCS 存储空间的密钥对的操作步骤如下：
 
 1. 登录 [Google GCP](https://console.cloud.google.com/storage/settings)。
 
