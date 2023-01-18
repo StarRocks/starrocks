@@ -479,7 +479,7 @@ PROPERTIES (
 
 #### 设置动态分区
 
-如果希望使用动态分区特性，需要在 properties 中指定：
+如果希望使用动态分区特性，需要在 properties 中指定如下参数：
 
 ``` sql
 PROPERTIES (
@@ -518,7 +518,7 @@ PROPERTIES (
 
 #### 【公测中】设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，您可以在建表时通过增加属性（PROPERTIES） `write_quorum` 指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。
+如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `write_quorum` 参数来指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。
 
 `write_quorum` 的取值及其对应描述如下：
 
@@ -530,6 +530,22 @@ PROPERTIES (
 >
 > * 设置较低的导入数据安全等级会增加数据不可访问甚至丢失的风险。例如，在 StarRocks 集群有两个数据副本的情况下设置 `write_quorum` 为 `ONE`，如果某个 Tablet 实际只成功导入了一个副本，而此副本所在机器后续下线，则会导致该 Tablet 中的数据因为没有存活副本而无法访问。如果服务器磁盘受损，则会导致该 Tablet 中的数据丢失。
 > * 仅当所有数据副本返回导入状态后，StarRocks 才会返回导入任务状态。当有副本导入状态未知时，StarRocks 不会返回导入任务状态。导入超时的副本亦会被标记为失败。
+
+#### 指定数据在多副本间的写入和同步方式
+
+如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `single_leader_replication` 参数来指定数据在多副本间的写入和同步方式。
+
+* 设置为 `true` 表示数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。
+* 设置为 `false` 表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。
+
+2.4 及之前版本只支持 leaderless replication，2.5 版本同时支持 single leader replication 和 leaderless replication。
+
+如果要修改已有表的多副本写入和同步方式，可执行 ALTER TABLE 命令，举例：
+
+```sql
+    ALTER TABLE <tbl_name>
+    SET ("single_leader_replication" = "false");
+```
 
 #### 建表时批量创建多个 Rollup
 
