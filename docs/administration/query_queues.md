@@ -1,4 +1,4 @@
-# [Preview] Query queues
+# Query queues
 
 This topic describes how to manage query queues in StarRocks.
 
