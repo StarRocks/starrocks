@@ -53,7 +53,7 @@ The properties of the Hudi catalog. This parameter is required. You need to conf
   >
   > Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
-- [Preview] If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+- If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
 
   | **Property**                           | **Required** | **Description**                                              |
   | -------------------------------------- | ------------ | ------------------------------------------------------------ |

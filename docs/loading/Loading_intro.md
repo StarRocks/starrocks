@@ -154,7 +154,7 @@ When you load data, you can choose not to load the data from a specific field of
 
 For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-### [Preview] Set write quorum for data loading
+### Set write quorum for data loading
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md), or add this property to an existing table using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 

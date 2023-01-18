@@ -248,7 +248,7 @@ Rollup supports the following creation modes:
 
 ## Examples
 
-1. Modify the table name
+1. Modify the table name.
 
     Syntax:
 
@@ -256,7 +256,7 @@ Rollup supports the following creation modes:
     RENAME new_table_name;
     ```
 
-2. Modify the rollup index name
+2. Modify the rollup index name.
 
     Syntax:
 
@@ -264,7 +264,7 @@ Rollup supports the following creation modes:
     RENAME ROLLUP old_rollup_name new_rollup_name;
     ```
 
-3. Modify the partition name
+3. Modify the partition name.
 
     Syntax:
 
@@ -274,7 +274,7 @@ Rollup supports the following creation modes:
 
 bitmap index supports the following modifications:
 
-1. Create a bitmap index
+1. Create a bitmap index.
 
     Syntax:
 
@@ -289,7 +289,7 @@ bitmap index supports the following modifications:
     2. A BITMAP index is created only in a single column.
     ```
 
-2. Drop index
+2. Drop index.
 
     Syntax:
 
@@ -309,18 +309,25 @@ bitmap index supports the following modifications:
 
 [table]
 
-1. Alter the default number of replications of the table, which is used as the default number of the replications.
+1. Modify the default number of replicas of the table, which is used as the default number of the replicas.
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("default.replication_num" = "2");
     ```
 
-2. Alter the actual number of replications of  a single-partition table (single-partition table only).
+2. Modify the actual number of replicas of a single-partition table (single-partition table only).
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("replication_num" = "3");
+    ```
+
+3. Modify data writing and replication mode among replicas.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    SET ("single_leader_replication" = "false");
     ```
 
 [partition]

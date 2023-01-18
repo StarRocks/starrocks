@@ -120,7 +120,7 @@ This section describes the window functions supported in StarRocks.
 Syntax:
 
 ~~~SQL
-AVG([DISTINCT | ALL] *expression*) [OVER (*analytic_clause*)]
+AVG(expression) [OVER (*analytic_clause*)]
 ~~~
 
 Example:
@@ -161,7 +161,7 @@ where property in ('odd','even');
 Syntax:
 
 ~~~SQL
-COUNT([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+COUNT(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -501,7 +501,7 @@ Returns the maximum value of the specified rows in the current window.
 Syntax：
 
 ~~~SQL
-MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MAX(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -554,7 +554,7 @@ Returns the minimum value of the specified rows in the current window.
 Syntax：
 
 ~~~SQL
-MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MIN(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -809,7 +809,7 @@ The execution order of clauses in a query with QUALIFY is evaluated in the follo
 Syntax：
 
 ~~~SQL
-SUM([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+SUM(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:

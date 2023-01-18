@@ -1,4 +1,4 @@
-# [Preview] Delta Lake catalog
+# Delta Lake catalog
 
 This topic describes how to create a Delta Lake catalog and how to configure your StarRocks cluster for querying data from Delta Lake.
 
