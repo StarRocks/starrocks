@@ -2,11 +2,7 @@
 
 ## 2.5.0
 
-<<<<<<< HEAD
-Release date: December 15, 2022
-=======
 Release date: January 18, 2023
->>>>>>> 663b6c19c (2.5 release notes and other bugs (#16782))
 
 ### New Features
 
