@@ -31,8 +31,23 @@ public:
     }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
+    // When the pipeline of this source operator wants to insert a local shuffle for some complex operators,
+    // such as hash join and aggregate, use this method to decide whether really need to insert a local shuffle.
+    // There are two source operators returning false.
+    // - The scan operator, which has been assigned tablets with the specific bucket sequences.
+    // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+    virtual bool could_local_shuffle() const { return _could_local_shuffle; }
+    void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
+    virtual TPartitionType::type partition_type() const { return _partition_type; }
+    void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; };
+    virtual const std::vector<ExprContext*>& partition_exprs() const { return _empty_partition_exprs; }
+
 protected:
     size_t _degree_of_parallelism = 1;
+    bool _could_local_shuffle = true;
+    TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
+    // Because partition_exprs() returns const reference, we need a non-temporal empty vector here.
+    const std::vector<ExprContext*> _empty_partition_exprs;
 };
 
 class SourceOperator : public Operator {

@@ -63,7 +63,7 @@ public class AuditEvent {
     @AuditField(value = "AuthorizedUser")
     public String authorizedUser = "";
     @AuditField(value = "ResourceGroup")
-    public String resourceGroup = "default_wg";
+    public String resourceGroup = "";
     @AuditField(value = "Catalog")
     public String catalog = "";
     @AuditField(value = "Db")

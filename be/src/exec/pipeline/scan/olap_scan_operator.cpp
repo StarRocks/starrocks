@@ -33,6 +33,11 @@ OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_seque
     return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, dop, _scan_node, _buffer_limiter.get(), _ctx);
 }
 
+const std::vector<ExprContext*>& OlapScanOperatorFactory::partition_exprs() const {
+    auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+    return olap_scan_node->bucket_exprs();
+}
+
 // ==================== OlapScanOperator ====================
 
 OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
