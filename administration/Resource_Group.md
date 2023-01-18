@@ -1,4 +1,4 @@
-# 资源隔离【公测中】
+# 资源隔离
 
 本文介绍如何使用资源隔离功能。
 
@@ -29,23 +29,27 @@
   > 说明：例如，在 16 核的 BE 节点中设置三个资源组 rg1、rg2、rg3，`cpu_core_limit` 分别设置为 `2`、`6`、`8`。当在该 BE 节点满载时，资源组 rg1、rg2、rg3 能分配到的 CPU 核数分别为 BE 节点总 CPU 核数 ×（2/16）= 2、 BE 节点总 CPU 核数 ×（6/16）= 6、BE 节点总 CPU 核数 ×（8/16）= 8。如果当前 BE 节点资源非满载，rg1、rg2 有负载，rg3 无负载，则 rg1、rg2 分配到的 CPU 核数分别为 BE 节点总 CPU 核数 ×（2/8）= 4、 BE 节点总 CPU 核数 ×（6/8）= 12。
 - `mem_limit`：该资源组在当前 BE 节点可使用于查询的内存（query_pool）占总内存的百分比（%）。取值范围为 (0,1)。
   > 说明：query_pool 的查看方式，参见 [内存管理](Memory_management.md)。
-- `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。
+- `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
 
-在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行配置：
+在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行如下的配置：
 
-- `big_query_cpu_second_limit`：大查询任务可以使用 CPU 的时间上限，其中的并行任务将累加 CPU 使用时间。单位为秒。
-- `big_query_scan_rows_limit`：大查询任务可以扫描的行数上限。
-- `big_query_mem_limit`：大查询任务可以使用的内存上限。单位为 Byte。
+- `big_query_cpu_second_limit`：大查询任务可以使用 CPU 的时间上限，其中的并行任务将累加 CPU 使用时间。单位为秒。只有大于 0 时才生效，默认值为 0。
+- `big_query_scan_rows_limit`：大查询任务可以扫描的行数上限。只有大于 0 时才生效，默认值为 0。
+- `big_query_mem_limit`：大查询任务可以使用的内存上限。单位为 Byte。只有大于 0 时才生效，默认值为 0。
 
 > 说明
 > 当资源组中运行的查询超过以上大查询限制时，查询将会终止，并返回错误。您也可以在 FE 节点 **fe.audit.log** 的 `ErrorCode` 列中查看错误信息。
 
 资源组的类型 `type` 支持 `short_query` 与 `normal`。
 
-- 当 `short_query` 资源组有查询正在运行时，当前 BE 节点会为其预留 `short_query.cpu_core_limit` 的 CPU 资源，所有 `normal` 资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `short_query.cpu_core_limit`。
+- 默认为 `normal` 资源组，无需通过 `type` 参数指定。
+- 当 `short_query` 资源组有查询正在运行时，当前 BE 节点会为其预留 `short_query.cpu_core_limit` 的 CPU 资源，即所有 `normal` 资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `short_query.cpu_core_limit`。
 - 当 `short_query` 资源组没有查询正在运行时，所有 `normal` 资源组的 CPU 核数没有硬限制。
 
-> 注意：您最多只能创建一个 `short_query` 资源组。
+> **注意**
+>
+> - 您最多只能创建一个 `short_query` 资源组。
+> - StarRocks 不会硬限制 `short_query` 资源组的 CPU 资源。
 
 ### 分类器
 
@@ -63,6 +67,15 @@
 
 > 说明：
 > 您可以在 FE 节点 **fe.audit.log** 的 `ResourceGroup` 列中查看特定查询任务最终所匹配的资源组。
+>
+> 如果没有匹配到分类器，那么会使用默认资源组 `default_wg`，它的资源配置如下：
+>
+> - `cpu_core_limit`：1 (<=2.3.7 版本) 或 BE 的 CPU 核数（>2.3.7版本）。
+> - `mem_limit`：100%。
+> - `concurrency_limit`：0。
+> - `big_query_cpu_second_limit`：0。
+> - `big_query_scan_rows_limit`：0。
+> - `big_query_mem_limit`：0。
 
 匹配度的计算方式如下：
 
@@ -201,8 +214,7 @@ mysql> SHOW RESOURCE GROUPS ALL;
 ```SQL
 ALTER RESOURCE GROUP group_name WITH (
     'cpu_core_limit' = 'INT',
-    'mem_limit' = 'm%',
-    'type' = 'normal'
+    'mem_limit' = 'm%'
 );
 ```
 

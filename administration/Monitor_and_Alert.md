@@ -356,7 +356,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |starrocks_fe_query_resource_group_latency|秒|平均值|该资源组的查询延迟百分位数|
 |starrocks_fe_query_resource_group_err|个|累计值|该资源组中报错的查询任务的数量|
 |starrocks_be_resource_group_cpu_limit_ratio|百分比|瞬时值|该资源组 CPU 配额比率的瞬时值|
-|starrocks_be_resource_group_cpu_use_ratio|百分比|瞬时值|该资源组 CPU 使用率瞬时值|
+|starrocks_be_resource_group_cpu_use_ratio|百分比|平均值|该资源组 CPU 使用时间占所有资源组 CPU 时间的比率|
 |starrocks_be_resource_group_mem_limit_bytes|Byte|瞬时值|该资源组内存配额比率的瞬时值|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|瞬时值|该资源组内存使用率瞬时值|
 
