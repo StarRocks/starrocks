@@ -33,6 +33,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -574,6 +575,8 @@ public class Coordinator {
         if (resourceGroup != null) {
             connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
             connect.setResourceGroup(resourceGroup);
+        } else {
+            connect.getAuditEventBuilder().setResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         return resourceGroup;
