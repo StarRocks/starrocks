@@ -570,6 +570,8 @@ MySQL [test_db]> SELECT * FROM table4;
 > - 不支持删除操作。
 >
 > - 不支持同部分更新一并使用。
+>
+> - 当前仅 Stream Load 和 Routine Load 支持条件更新。
 
 ### 数据样例
 
@@ -620,23 +622,6 @@ MySQL [test_db]> SELECT * FROM table4;
       -H "merge_condition:version" \
       -T example5.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
-  ```
-
-- 通过 Broker Load 导入：
-
-  ```SQL
-  LOAD LABEL test_db.table10
-  (
-      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
-      into table table5
-      format as "csv"
-      (id, version, score)
-  )
-  with broker
-  properties
-  (
-      "merge_condition" = "version"
-  );
   ```
 
 - 通过 Routine Load 导入：
