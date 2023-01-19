@@ -311,10 +311,13 @@ public abstract class BaseAction implements IAction {
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws UnauthorizedException {
         try {
             Set<Long> userOwnedRoles = PrivilegeManager.getOwnedRolesByUser(currentUser);
-            if (!userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) ||
-                    !userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)) {
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    userOwnedRoles.contains(PrivilegeManager.ROOT_ROLE_ID) ||
+                    (userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) &&
+                            userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)))) {
                 throw new UnauthorizedException(
-                        "Access denied; you need own db_admin and user_admin roles for this operation");
+                        "Access denied; you need own root role or own db_admin and user_admin roles for this " +
+                                "operation");
             }
         } catch (PrivilegeException e) {
             UnauthorizedException newException = new UnauthorizedException(

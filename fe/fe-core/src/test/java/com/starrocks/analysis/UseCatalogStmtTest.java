@@ -72,6 +72,7 @@ public class UseCatalogStmtTest {
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         StmtExecutor executor = new StmtExecutor(ctx, "use catalog hive_catalog");
         executor.execute();
 

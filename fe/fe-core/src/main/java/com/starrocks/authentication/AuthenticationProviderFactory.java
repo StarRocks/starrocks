@@ -29,7 +29,7 @@ public class AuthenticationProviderFactory {
 
     public static void installPlugin(String pluginName, AuthenticationProvider provider) {
         if (pluginNameToAuthenticationProvider.containsKey(pluginName)) {
-            LOG.warn("Plugin {} has already installed!", pluginName);
+            LOG.warn("Plugin {} has already been installed!", pluginName);
         }
         pluginNameToAuthenticationProvider.put(pluginName, provider);
     }

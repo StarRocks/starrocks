@@ -15,46 +15,45 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class AlterUserStmtTest {
+    private static StarRocksAssert starRocksAssert;
 
-    @Before
-    public void setUp() {
-        ConnectContext ctx = new ConnectContext(null);
-        ctx.setQualifiedUser("root");
-        ctx.setRemoteIP("192.168.1.1");
-        UserIdentity currentUserIdentity = new UserIdentity("root", "192.168.1.1");
-        currentUserIdentity.setIsAnalyzed();
-        ctx.setCurrentUserIdentity(currentUserIdentity);
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        ctx.setThreadLocalInfo();
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        String createUserSql = "CREATE USER 'user' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
+
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        authenticationManager.createUser(createUserStmt);
     }
 
     @Test
-    public void testToString(@Mocked Auth auth) throws Exception {
-
-        new Expectations() {
-            {
-                auth.doesUserExist((UserIdentity) any);
-                result = true;
-            }
-        };
-
+    public void testToString() throws Exception {
         String sql = "ALTER USER 'user' IDENTIFIED BY 'passwd'";
         AlterUserStmt stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY '*XXX'", stmt.toString());
+        Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY '*XXX'",
+                stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
@@ -128,26 +127,14 @@ public class AlterUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testBadPass(@Mocked Auth auth) throws Exception {
-        new Expectations() {
-            {
-                auth.doesUserExist((UserIdentity) any);
-                result = true;
-            }
-        };
-        String sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD 'passwd'";
+    public void testBadPass() throws Exception {
+        String sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD 'passwd12345'";
         UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");
     }
 
     @Test(expected = AnalysisException.class)
-    public void testInvalidAuthPlugin(@Mocked Auth auth) throws Exception {
-        new Expectations() {
-            {
-                auth.doesUserExist((UserIdentity) any);
-                result = true;
-            }
-        };
+    public void testInvalidAuthPlugin() throws Exception {
         String sql = "ALTER USER 'user' IDENTIFIED WITH authentication_ldap_sasl";
         UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");

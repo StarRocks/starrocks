@@ -44,6 +44,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -64,7 +65,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -91,7 +91,6 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -349,6 +348,7 @@ public class AlterTest {
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -451,6 +451,7 @@ public class AlterTest {
         alterMaterializedView(alterStmt, false);
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -1663,14 +1664,16 @@ public class AlterTest {
 
     @Test
     public void testRenameDb() throws Exception {
-        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
-        auth.createUser(createUserStmt);
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        authenticationManager.createUser(createUserStmt);
 
-        String sql = "grant ALTER_PRIV on test to testuser";
-        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+        String sql = "grant ALTER on database test to testuser";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
         testUser.analyze();

@@ -1312,7 +1312,7 @@ public class ShowExecutor {
         ProcNodeInterface procNodeI = showStmt.getNode();
         Preconditions.checkNotNull(procNodeI);
         List<List<String>> rows;
-        //Only SchemaChangeProc support where/order by/limit syntax
+        // Only SchemaChangeProc support where/order by/limit syntax
         if (procNodeI instanceof SchemaChangeProcDir) {
             rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
