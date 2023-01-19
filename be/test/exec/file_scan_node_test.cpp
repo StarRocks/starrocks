@@ -132,7 +132,6 @@ std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
