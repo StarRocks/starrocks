@@ -27,11 +27,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-<<<<<<< HEAD
-=======
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
->>>>>>> 5f89adda9 ([Feature]Support show create external catalog (#16509))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
