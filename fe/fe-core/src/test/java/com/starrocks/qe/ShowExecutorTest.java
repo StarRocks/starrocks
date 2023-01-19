@@ -67,14 +67,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
@@ -115,7 +113,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
 public class ShowExecutorTest {
@@ -199,6 +197,9 @@ public class ShowExecutorTest {
             }
         };
 
+        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(
+                "default_catalog", "testDb", "testTbl");
+
         // mock materialized view
         MaterializedView mv = new MaterializedView();
         new Expectations(mv) {
@@ -206,6 +207,10 @@ public class ShowExecutorTest {
                 mv.getName();
                 minTimes = 0;
                 result = "testMv";
+
+                mv.getBaseTableInfos();
+                minTimes = 0;
+                result = baseTableInfo;
 
                 mv.getType();
                 minTimes = 0;
@@ -254,7 +259,7 @@ public class ShowExecutorTest {
                 mv.getTableProperty();
                 minTimes = 0;
                 result = new TableProperty(
-                        Collections.singletonMap(PROPERTIES_STORAGE_COLDOWN_TIME, "100"));
+                        Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
             }
         };
 
@@ -268,7 +273,15 @@ public class ShowExecutorTest {
                 db.readUnlock();
                 minTimes = 0;
 
-                db.getTable(anyString);
+                db.getTable("testMv");
+                minTimes = 0;
+                result = mv;
+
+                db.getTable("testTbl");
+                minTimes = 0;
+                result = table;
+
+                db.getTable("emptyTable");
                 minTimes = 0;
                 result = table;
 
@@ -279,11 +292,12 @@ public class ShowExecutorTest {
                 db.getMaterializedViews();
                 minTimes = 0;
                 result = Lists.newArrayList(mv);
+
+                db.getFullName();
+                minTimes = 0;
+                result = "testDb";
             }
         };
-
-        // mock auth
-        Auth auth = AccessTestUtil.fetchAdminAccess();
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -296,10 +310,6 @@ public class ShowExecutorTest {
                 globalStateMgr.getDb("emptyDb");
                 minTimes = 0;
                 result = null;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
 
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
@@ -354,6 +364,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowDb() throws AnalysisException, DdlException {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowDbStmt stmt = new ShowDbStmt(null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -382,6 +393,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowTable() throws AnalysisException, DdlException {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -554,6 +566,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowTableVerbose() throws AnalysisException, DdlException {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -758,32 +771,6 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowAuthentication() throws AnalysisException, DdlException {
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(null, false);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
-        Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("Password", resultSet.getMetaData().getColumn(1).getName());
-        Assert.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2).getName());
-        Assert.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3).getName());
-        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
-
-        stmt = new ShowAuthenticationStmt(null, true);
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
-
-        stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, true);
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-        Assert.assertEquals(resultSet.getResultRows().toString(), "[['root'@'%', No, \\N, \\N]]");
-    }
-
-    @Test
     public void testShowEngine() throws AnalysisException, DdlException {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -878,6 +865,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
@@ -895,6 +883,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewPattern() throws AnalysisException, DdlException {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", "bcd%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();

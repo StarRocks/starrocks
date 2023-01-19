@@ -22,39 +22,53 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class BrokerFileGroupTest {
-    @Mocked
-    private Auth auth;
     @Mocked
     private Database db;
     @Mocked
     private OlapTable olapTable;
     @Mocked
     private HiveTable hiveTable;
-    @Mocked
-    private ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
 
-    @Before
-    public void setUp() {
-        MockedAuth.mockedAuth(auth);
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        starRocksAssert.withDatabase("testDb");
+        List<String> tables = Arrays.asList("olapTable");
+        String sql = "create table testDb.%s (k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+
+        tables.forEach(t -> {
+            try {
+                starRocksAssert.withTable(String.format(sql, t));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test

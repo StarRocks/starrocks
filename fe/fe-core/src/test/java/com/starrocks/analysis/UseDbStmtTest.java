@@ -17,8 +17,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
+
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
@@ -32,6 +31,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import javax.xml.crypto.Data;
+
 public class UseDbStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
@@ -42,6 +43,7 @@ public class UseDbStmtTest {
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
+        starRocksAssert.withDatabase("db");
         ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
     }
@@ -62,7 +64,9 @@ public class UseDbStmtTest {
     }
 
     @Test
-    public void testUse(@Mocked CatalogMgr catalogMgr, @Mocked MetadataMgr metadataMgr, @Mocked Auth auth) throws Exception {
+    public void testUse(@Mocked CatalogMgr catalogMgr,
+                        @Mocked MetadataMgr metadataMgr) throws Exception {
+        Database db = new Database(1, "db");
         new Expectations() {
             {
                 CatalogMgr.isInternalCatalog("default_catalog");
@@ -73,15 +77,13 @@ public class UseDbStmtTest {
                 minTimes = 0;
 
                 metadataMgr.getDb("default_catalog", "db");
-                result = new Database();
+                result = db;
                 minTimes = 0;
-
-                auth.checkDbPriv(ctx, "db", PrivPredicate.SHOW);
-                result = true;
             }
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         StmtExecutor executor = new StmtExecutor(ctx, "use default_catalog.db");
         executor.execute();
 

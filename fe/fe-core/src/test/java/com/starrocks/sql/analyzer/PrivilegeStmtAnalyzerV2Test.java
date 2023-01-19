@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -72,21 +71,18 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("%", stmt.getUserIdent().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
-        Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, stmt.getAuthPlugin());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("10.1.1.1", stmt.getUserIdent().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
-        Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, stmt.getAuthPlugin());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("%", stmt.getUserIdent().getHost());
         Assert.assertEquals("abc", stmt.getOriginalPassword());
-        Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, stmt.getAuthPlugin());
 
         sql = "create user 'aaa~bbb'";
         try {
@@ -197,7 +193,6 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("test_user", alterUserStmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("%", alterUserStmt.getUserIdent().getHost());
         Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
-        Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, alterUserStmt.getAuthPlugin());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
         try {
