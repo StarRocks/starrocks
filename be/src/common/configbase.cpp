@@ -216,6 +216,11 @@ bool Properties::load(const char* filename) {
         key = std::regex_replace(key, doris_start, "");
 
         if (key.compare("webserver_port") == 0) {
+            // Avoid overwriting the existing config.
+            if (file_conf_map.find("be_http_port") != file_conf_map.end()) {
+                continue;
+            }
+
             key = "be_http_port";
         }
 
