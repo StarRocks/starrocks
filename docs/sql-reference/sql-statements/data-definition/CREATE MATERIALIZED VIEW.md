@@ -315,7 +315,7 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey
 order by lo_orderkey;
 
--- Partition the MV with `date_trunc(dt)` in per-month granularity
+-- Use the date_trunc() function to partition the materilized view by month.
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 10
