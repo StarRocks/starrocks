@@ -361,8 +361,8 @@ public class Replica implements Writable {
             long lastFailedVersion,
             long lastSuccessVersion) {
 
-        LOG.warn("update replica {} on backend {}'s version for recovery. version: {}."
-                        + " last failed version: {}:{}, last success version: {}:{}",
+        LOG.warn("update replica {} on backend {}'s version for recovery. current_version: {}, new_version: {}."
+                 + " last failed version: {}:{}, last success version: {}:{}",
                 this.id, this.backendId, this.version, newVersion,
                 this.lastFailedVersion, lastFailedVersion,
                 this.lastSuccessVersion, lastSuccessVersion);
