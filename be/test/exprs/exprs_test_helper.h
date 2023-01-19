@@ -105,7 +105,6 @@ public:
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = slot_id;
         slot_ref.slot_ref.tuple_id = tuple_id;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(is_nullable);
         return slot_ref;
     }

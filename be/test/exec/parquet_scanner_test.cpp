@@ -85,7 +85,6 @@ class ParquetScannerTest : public ::testing::Test {
         e.nodes[0].__set_is_nullable(is_nullable);
         e.nodes[0].__set_slot_ref(TSlotRef());
         e.nodes[0].slot_ref.__set_slot_id((::starrocks::TSlotId)slot_id);
-        e.nodes[0].use_vectorized = true;
         return e;
     }
 
@@ -99,7 +98,6 @@ class ParquetScannerTest : public ::testing::Test {
         to_expr.__set_node_type(TExprNodeType::CAST_EXPR);
         to_expr.__set_is_nullable(true);
         to_expr.__set_num_children(1);
-        to_expr.use_vectorized = true;
         return e;
     }
 

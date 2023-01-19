@@ -230,7 +230,6 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
     TIntLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_int_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -242,7 +241,6 @@ static TExprNode create_string_literal_node(TPrimitiveType::type value_type, con
     TStringLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_string_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -254,7 +252,6 @@ static TExprNode create_datetime_literal_node(TPrimitiveType::type value_type, c
     TDateLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_date_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -267,7 +264,6 @@ static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpco
     eq_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
     eq_node.__set_opcode(opcode);
     eq_node.__set_num_children(2);
-    eq_node.__set_use_vectorized(true);
 
     TExprNode slot_node;
     slot_node.__set_node_type(TExprNodeType::SLOT_REF);
@@ -277,7 +273,6 @@ static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpco
     slot_ref.__set_slot_id(slot_desc->id());
     slot_ref.__set_tuple_id(slot_desc->parent());
     slot_node.__set_slot_ref(slot_ref);
-    slot_node.__set_use_vectorized(true);
 
     nodes.emplace_back(eq_node);
     nodes.emplace_back(slot_node);

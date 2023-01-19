@@ -604,7 +604,6 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     node0.__isset.opcode = true;
     node0.__isset.child_type = true;
     node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
     nodes.emplace_back(node0);
 
     TExprNode node1;
@@ -615,7 +614,6 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     t_slot_ref.slot_id = slot_id;
     t_slot_ref.tuple_id = 0;
     node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
     node1.is_nullable = true;
     nodes.emplace_back(node1);
 
@@ -626,7 +624,6 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     TIntLiteral int_literal;
     int_literal.value = value;
     node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
     node2.is_nullable = false;
     nodes.emplace_back(node2);
 
@@ -653,7 +650,6 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     node0.__isset.opcode = true;
     node0.__isset.child_type = true;
     node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
     nodes.emplace_back(node0);
 
     TExprNode node1;
@@ -664,7 +660,6 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     t_slot_ref.slot_id = slot_id;
     t_slot_ref.tuple_id = 0;
     node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
     node1.is_nullable = true;
     nodes.emplace_back(node1);
 
@@ -675,7 +670,6 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     TStringLiteral string_literal;
     string_literal.value = value;
     node2.__set_string_literal(string_literal);
-    node2.use_vectorized = true;
     node2.is_nullable = false;
     nodes.emplace_back(node2);
 

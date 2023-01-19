@@ -94,15 +94,11 @@ Status ExchangeNode::prepare(RuntimeState* state) {
 Status ExchangeNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    if (_use_vectorized) {
-        if (_is_merging) {
-            RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-            RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
-        }
-        return Status::OK();
+    if (_is_merging) {
+        RETURN_IF_ERROR(_sort_exec_exprs.open(state));
+        RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
     }
-
-    return Status::InternalError("Non-vectorized runtime engine is not supported now");
+    return Status::OK();
 }
 
 Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {

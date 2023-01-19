@@ -201,7 +201,6 @@ void PushHandlerTest::_create_expr_info() {
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = 4;
         slot_ref.slot_ref.tuple_id = 1;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(true);
 
         TExpr expr;
@@ -229,7 +228,6 @@ void PushHandlerTest::_create_expr_info() {
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = 5;
         slot_ref.slot_ref.tuple_id = 1;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(true);
 
         TExpr expr;
@@ -258,7 +256,6 @@ void PushHandlerTest::_create_expr_info() {
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = 6;
         slot_ref.slot_ref.tuple_id = 1;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(true);
 
         TExpr expr;
@@ -286,7 +283,6 @@ void PushHandlerTest::_create_expr_info() {
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = 7;
         slot_ref.slot_ref.tuple_id = 1;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(true);
 
         TExpr expr;

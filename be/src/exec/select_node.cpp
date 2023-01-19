@@ -53,9 +53,7 @@ SelectNode::~SelectNode() {
 
 Status SelectNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    if (use_vectorized()) {
-        _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
-    }
+    _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
     return Status::OK();
 }
 

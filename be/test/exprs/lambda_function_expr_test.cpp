@@ -105,7 +105,6 @@ public:
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = 100000;
         slot_ref.slot_ref.tuple_id = 0;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(true);
 
         ColumnRef* col1 = _objpool.add(new ColumnRef(slot_ref));
@@ -263,7 +262,6 @@ public:
         TIntLiteral lit_value;
         lit_value.__set_value(value_literal);
         lit_node.__set_int_literal(lit_value);
-        lit_node.__set_use_vectorized(true);
         return lit_node;
     }
 

@@ -144,7 +144,7 @@ EsPredicate::~EsPredicate() {
     _disjuncts.clear();
 }
 
-Status EsPredicate::build_disjuncts_list(bool use_vectorized) {
+Status EsPredicate::build_disjuncts_list() {
     return _vec_build_disjuncts_list(_context->root());
 }
 
