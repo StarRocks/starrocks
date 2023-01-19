@@ -5515,6 +5515,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type.setAssignedStrLenInColDefinition();
             }
             return type;
+        } else if (context.TINYTEXT() != null) {
+            return ScalarType.TINYTEXT;
+        } else if (context.MEDIUMTEXT() != null) {
+            return ScalarType.MEDIUM_TEXT;
+        } else if (context.TEXT() != null) {
+            if (length != -1) {
+                ScalarType type = ScalarType.createVarcharType(length);
+                type.setAssignedStrLenInColDefinition();
+                return type;
+            } else {
+                return ScalarType.TEXT;
+            }
+        } else if (context.LONG() != null) {
+            return ScalarType.MEDIUM_TEXT;
         } else {
             return ScalarType.createType(context.getChild(0).getText());
         }

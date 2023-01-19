@@ -2090,6 +2090,10 @@ baseType
     | CHAR typeParameter?
     | VARCHAR typeParameter?
     | STRING
+    | TINYTEXT
+    | TEXT typeParameter?
+    | MEDIUMTEXT
+    | LONG VARCHAR
     | BITMAP
     | HLL
     | PERCENTILE

@@ -695,4 +695,30 @@ public class CreateTableTest {
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
     }
+
+    @Test
+    public void testCreateTextType() {
+        // duplicate table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.text_tbl\n" +
+                        "(k1 int, " +
+                        "v1 TEXT(10), " +
+                        "v2 TINYTEXT, " +
+                        "v3 MEDIUMTEXT, " +
+                        "v4 LONG VARCHAR, " +
+                        "v5 TEXT " +
+                        ")\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("text_tbl");
+        Assert.assertEquals(ScalarType.createVarcharType(10), table.getColumn("v1").getType());
+        Assert.assertEquals(Type.TINYTEXT, table.getColumn("v2").getType());
+        Assert.assertEquals(Type.MEDIUM_TEXT, table.getColumn("v3").getType());
+        Assert.assertEquals(Type.LONG_VARCHAR, table.getColumn("v4").getType());
+        Assert.assertEquals(Type.TEXT, table.getColumn("v5").getType());
+    }
 }

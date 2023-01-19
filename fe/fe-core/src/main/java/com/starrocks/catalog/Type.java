@@ -116,11 +116,16 @@ public abstract class Type implements Cloneable {
     public static final ScalarType DECIMAL128_INT =
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
+    public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
     public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
+    public static final ScalarType TINYTEXT = ScalarType.createVarchar(255);
+    public static final ScalarType MEDIUM_TEXT = ScalarType.createVarchar(16777215);
+    public static final ScalarType LONG_VARCHAR = Type.MEDIUM_TEXT;
+    public static final ScalarType TEXT = ScalarType.createVarchar(-1);
+
     public static final ScalarType HLL = ScalarType.createHllType();
-    public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
