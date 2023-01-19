@@ -217,8 +217,7 @@ public class Tablet {
             totalReadFailed.incrementAndGet();
             lastFailedReadVersion = version;
             String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
-                    PseudoBackend.getCurrentBackend().getId(), version,
-                    currentVersion);
+                    PseudoBackend.getCurrentBackend().getId(), id, version, currentVersion);
             LOG.warn(msg);
             throw new Exception(msg);
         }
