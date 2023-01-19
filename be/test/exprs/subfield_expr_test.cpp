@@ -33,7 +33,8 @@ public:
     ColumnPtr _column;
 };
 
-std::unique_ptr<Expr> create_subfield_expr(const TypeDescriptor& type, const std::vector<std::string>& used_subfield_name) {
+std::unique_ptr<Expr> create_subfield_expr(const TypeDescriptor& type,
+                                           const std::vector<std::string>& used_subfield_name) {
     TExprNode node;
     node.__set_node_type(TExprNodeType::SUBFIELD_EXPR);
     node.__set_is_nullable(true);

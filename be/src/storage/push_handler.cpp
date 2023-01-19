@@ -42,7 +42,6 @@ Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, c
                                                 PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
               << ", txn_id: " << request.transaction_id;
-    DCHECK(request.__isset.use_vectorized && request.use_vectorized);
 
     _request = request;
     std::vector<TabletVars> tablet_vars(1);

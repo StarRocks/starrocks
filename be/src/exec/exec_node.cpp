@@ -63,7 +63,6 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/project_node.h"
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
@@ -76,7 +75,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_pool.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -101,7 +99,6 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_counter(nullptr),
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
-          _use_vectorized(tnode.use_vectorized),
           _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
