@@ -535,8 +535,8 @@ PROPERTIES (
 
 如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `single_leader_replication` 参数来指定数据在多副本间的写入和同步方式。
 
-* 设置为 `true` 表示数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。
-* 设置为 `false` 表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。
+* 设置为 `true` 表示数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。
+* 设置为 `false` 表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。该模式 CPU 成本比较高。
 
 2.4 及之前版本只支持 leaderless replication，2.5 版本同时支持 single leader replication 和 leaderless replication。
 
