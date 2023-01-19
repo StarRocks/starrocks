@@ -30,7 +30,7 @@ public interface ColumnValue {
     public double getDouble();
 
     public String getString();
-
+    public String getTimestamp(ColumnType.TypeValue type);
     public byte[] getBytes();
 
     public void unpackArray(List<ColumnValue> values);
