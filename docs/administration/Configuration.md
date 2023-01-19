@@ -423,7 +423,7 @@ BE static parameters are as follows.
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
 | be_http_port | 8040 | N/A | The HTTP server port. |
-| webserver_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
+| be_http_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
 | load_data_reserve_hours | 4 | Hour | The reservation time for the files produced by small-scale loadings. |
 | number_tablet_writer_threads | 16 | N/A | The number of threads used for Stream Load. |
 | streaming_load_rpc_max_alive_time_sec | 1200 | Second | The RPC timeout for Stream Load. |
