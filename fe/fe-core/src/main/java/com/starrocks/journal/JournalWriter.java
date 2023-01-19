@@ -41,7 +41,7 @@ public class JournalWriter {
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
     // increment journal id
-    // this is the persist journal id
+    // this is the persisted journal id
     protected long nextVisibleJournalId = -1;
 
     // belows are variables that will reset every batch
@@ -160,7 +160,7 @@ public class JournalWriter {
      * task.markAbort();
      *
      * But now we have to exit for historical reason.
-     * Note that if we exit here, the finally clause(commit current batch) will not be executed.
+     * Note that if we exit here, the final clause(commit current batch) will not be executed.
      */
     protected void abortJournalTask(JournalTask task, String msg) {
         LOG.error(msg);

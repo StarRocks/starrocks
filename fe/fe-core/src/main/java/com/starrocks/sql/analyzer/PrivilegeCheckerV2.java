@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -202,7 +203,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         checkTableAction(context, tableName.getDb(), tableName.getTbl(), action);
     }
@@ -223,7 +225,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         checkAnyActionOnTable(context, tableName.getDb(), tableName.getTbl());
     }
@@ -243,7 +246,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -275,7 +279,8 @@ public class PrivilegeCheckerV2 {
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
@@ -299,7 +304,8 @@ public class PrivilegeCheckerV2 {
 
     static void checkAnyActionOnDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
 
         if (!PrivilegeManager.checkAnyActionOnDb(context, dbName)) {
@@ -310,7 +316,8 @@ public class PrivilegeCheckerV2 {
 
     static void checkAnyActionOnOrInDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
 
         if (!PrivilegeManager.checkAnyActionOnOrInDb(context, dbName)) {
@@ -325,7 +332,8 @@ public class PrivilegeCheckerV2 {
             catalogName = context.getCurrentCatalog();
         }
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            // throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+            return;
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -687,8 +695,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
-            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
-            // Also need to check the `CREATE_DATABASE` action on corresponding catalog
+            // Need to check the `CREATE_DATABASE` action on corresponding catalog
             checkCatalogAction(context, statement.getCatalogName(), PrivilegeType.CatalogAction.CREATE_DATABASE);
             return null;
         }
@@ -707,7 +714,18 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (globalStateMgr.getDb(statement.getDbName()) == null) {
+                return null;
+            }
+
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
+            checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CatalogAction.CREATE_DATABASE);
             return null;
         }
 
@@ -1148,6 +1166,12 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (statement.isSetIfExists() &&
+                    globalStateMgr.getDb(statement.getDbName()).getTable(statement.getTableName()) == null) {
+                return null;
+            }
+
             if (statement.isView()) {
                 checkViewAction(session, statement.getTbl(), PrivilegeType.ViewAction.DROP);
             } else {
@@ -1184,7 +1208,6 @@ public class PrivilegeCheckerV2 {
                 catalog = context.getCurrentCatalog();
             }
             checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.DbAction.CREATE_TABLE);
-            checkTableAction(context, tableName, PrivilegeType.TableAction.DROP);
             return null;
         }
 
@@ -1210,7 +1233,29 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
-            checkTableAction(context, statement.getDbTableName(), PrivilegeType.TableAction.ALTER);
+            if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        Table table = db.getTable(statement.getTableName());
+                        if (table == null || !table.isMaterializedView()) {
+                            // ignore privilege check for old mv
+                            return null;
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
+                if (!PrivilegeManager.checkMaterializedViewAction(context,
+                        statement.getDbName(),
+                        statement.getTableName(),
+                        PrivilegeType.MaterializedViewAction.ALTER)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+                }
+            } else {
+                checkTableAction(context, statement.getDbTableName(), PrivilegeType.TableAction.ALTER);
+            }
             return null;
         }
 
@@ -1365,9 +1410,9 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitSetStatement(SetStmt statement, ConnectContext context) {
             List<SetVar> varList = statement.getSetVars();
-            varList.forEach(setVer -> {
-                if ((setVer instanceof SetPassVar)) {
-                    UserIdentity prepareChangeUser = ((SetPassVar) setVer).getUserIdent();
+            varList.forEach(setVar -> {
+                if ((setVar instanceof SetPassVar)) {
+                    UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
                     try {
                         prepareChangeUser.analyze();
                     } catch (AnalysisException e) {
@@ -1380,7 +1425,8 @@ public class PrivilegeCheckerV2 {
                     }
                     return;
                 }
-                if (setVer.getType().equals(SetType.GLOBAL)) {
+                SetType type = setVar.getType();
+                if (type != null && type.equals(SetType.GLOBAL)) {
                     checkStmtOperatePrivilege(context);
                 }
             });
@@ -1498,21 +1544,39 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
-            // Step 1 check system.Repository
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            // check repository on system
             checkSystemRepository(context);
-            // Step 2 check any action on db
-            if (!PrivilegeManager.checkAnyActionOnDb(context, statement.getDbName())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getDbName());
-            }
-            // Step 3 check table.insert
+
             List<TableRef> tableRefs = statement.getTableRefs();
-            for (TableRef tableRef : tableRefs) {
-                checkTableAction(context,
-                        statement.getDbName(),
-                        tableRef.getName().getTbl(),
-                        PrivilegeType.TableAction.INSERT);
+            // check create_database on current catalog if we're going to restore the whole database
+            if (tableRefs == null || tableRefs.isEmpty()) {
+                checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CatalogAction.CREATE_DATABASE);
+            } else {
+                // going to restore some tables in database or some partitions in table
+                Database db = globalStateMgr.getDb(statement.getDbName());
+                if (db != null) {
+                    try {
+                        db.readLock();
+                        // check create_table on specified database
+                        checkDbAction(context, context.getCurrentCatalog(), db.getFullName(),
+                                PrivilegeType.DbAction.CREATE_TABLE);
+                        // check insert on specified table
+                        for (TableRef tableRef : tableRefs) {
+                            Table table = db.getTable(tableRef.getName().getTbl());
+                            if (table != null) {
+                                checkTableAction(context,
+                                        statement.getDbName(),
+                                        tableRef.getName().getTbl(),
+                                        PrivilegeType.TableAction.INSERT);
+                            }
+                        }
+                    } finally {
+                        db.readUnlock();
+                    }
+                }
             }
+
             return null;
         }
 
@@ -1554,7 +1618,7 @@ public class PrivilegeCheckerV2 {
                     statement.getMvName().getTbl(),
                     PrivilegeType.MaterializedViewAction.REFRESH)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATETIALIZED VIEW");
+                        "REFRESH MATERIALIZED VIEW");
             }
             return null;
         }
@@ -1567,7 +1631,7 @@ public class PrivilegeCheckerV2 {
                     statement.getMvName().getTbl(),
                     PrivilegeType.MaterializedViewAction.REFRESH)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "REFRESH MATETIALIZED VIEW");
+                        "REFRESH MATERIALIZED VIEW");
             }
             return null;
         }
@@ -1582,13 +1646,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
-            if (!PrivilegeManager.checkMaterializedViewAction(context,
-                    statement.getDbName(),
-                    statement.getMvName(),
-                    PrivilegeType.MaterializedViewAction.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "DROP MATETIALIZED VIEW");
-            }
+            // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
             return null;
         }
 

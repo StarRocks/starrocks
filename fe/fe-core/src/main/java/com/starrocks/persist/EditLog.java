@@ -1026,8 +1026,8 @@ public class EditLog {
                     Thread.sleep(1000);
                 }
                 // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
-                // will simplely exit the whole process
+                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such
+                // scenario JournalWriter will simply exit the whole process
                 result = task.get();
                 break;
             } catch (InterruptedException | ExecutionException e) {
