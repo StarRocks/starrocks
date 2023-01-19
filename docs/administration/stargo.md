@@ -102,7 +102,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -114,7 +114,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -126,7 +126,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -510,7 +510,7 @@ be_servers:
   - host: 192.168.xx.xx # The IP address of the new BE node.
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
