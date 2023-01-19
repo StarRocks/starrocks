@@ -58,13 +58,7 @@ public class ShowCatalogsStmtTest {
 
         ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-    }
-
-    @Test
-    public void testShowCatalogsParserAndAnalyzer() {
-        String sql_1 = "SHOW CATALOGS";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof ShowCatalogsStmt);
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
     }
 
     @Test
@@ -79,5 +73,12 @@ public class ShowCatalogsStmtTest {
         Assert.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
                 resultSet.getResultRows().get(0).toString());
         Assert.assertEquals("[hive_catalog_1, hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
+    }
+
+    @Test
+    public void testShowCatalogsParserAndAnalyzer() {
+        String sql_1 = "SHOW CATALOGS";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertTrue(stmt instanceof ShowCatalogsStmt);
     }
 }

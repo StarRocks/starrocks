@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.LocalTablet;
@@ -38,7 +39,9 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final int NUM_TABLE2_ROWS = 10000;
@@ -837,6 +840,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t0, t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
         /// ===== union =====
@@ -885,7 +893,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10015,10017,10019\n" +
+                    "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
@@ -895,7 +903,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     preAggregation: on\n" +
                     "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10006,10008,10010\n" +
+                    "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
@@ -1002,6 +1010,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
         setTableStatistics(t2, 100);
@@ -1015,7 +1028,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                "     tabletList=10015,10017,10019\n" +
+                "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                 "     actualRows=0, avgRowSize=1.0\n" +
                 "     cardinality: 400000");
 

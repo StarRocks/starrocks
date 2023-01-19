@@ -14,12 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
+import com.starrocks.authentication.LDAPAuthenticationProvider;
+import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -27,6 +30,7 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.PEntryObject;
@@ -109,20 +113,54 @@ public class PrivilegeStmtAnalyzerV2 {
             }
         }
 
+        /**
+         * Get scrambled password from plain password
+         */
+        private byte[] analysePassword(String originalPassword, boolean isPasswordPlain) {
+            if (Strings.isNullOrEmpty(originalPassword)) {
+                return new byte[0];
+            }
+            try {
+                if (isPasswordPlain) {
+                    return MysqlPassword.makeScrambledPassword(originalPassword);
+                } else {
+                    return MysqlPassword.checkPassword(originalPassword);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
         @Override
         public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
+            String authPluginUsing = null;
             if (stmt.getAuthPlugin() == null) {
-                stmt.setAuthPlugin(authenticationManager.getDefaultPlugin());
+                authPluginUsing = authenticationManager.getDefaultPlugin();
+                stmt.setScramblePassword(
+                        analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain()));
+            } else {
+                authPluginUsing = stmt.getAuthPlugin();
+                if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
+                    // In this case, authString is the password
+                    stmt.setScramblePassword(
+                            analysePassword(stmt.getAuthString(), stmt.isPasswordPlain()));
+                } else {
+                    stmt.setScramblePassword(new byte[0]);
+                }
+
+                if (authPluginUsing.equals(LDAPAuthenticationProvider.PLUGIN_NAME)) {
+                    stmt.setUserForAuthPlugin(stmt.getAuthString());
+                }
             }
+
             try {
-                String pluginName = stmt.getAuthPlugin();
-                AuthenticationProvider provider = AuthenticationProviderFactory.create(pluginName);
+                AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
                 UserIdentity userIdentity = stmt.getUserIdent();
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
                         userIdentity, stmt.getOriginalPassword(), stmt.getAuthString());
-                info.setAuthPlugin(pluginName);
+                info.setAuthPlugin(authPluginUsing);
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
                 if (stmt instanceof AlterUserStmt) {

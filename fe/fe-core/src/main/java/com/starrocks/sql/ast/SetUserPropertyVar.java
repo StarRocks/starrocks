@@ -55,20 +55,20 @@ public class SetUserPropertyVar extends SetVar {
             throw new AnalysisException("User property value is null");
         }
 
-        // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkAccess(isSelf);
-        }
+        checkAccess(isSelf);
     }
 
     private void checkAccess(boolean isSelf) throws AnalysisException {
         for (Pattern advPattern : UserProperty.ADVANCED_PROPERTIES) {
             Matcher matcher = advPattern.matcher(key);
             if (matcher.find()) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "ADMIN");
+                // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "ADMIN");
+                    }
                 }
                 return;
             }
@@ -77,10 +77,13 @@ public class SetUserPropertyVar extends SetVar {
         for (Pattern commPattern : UserProperty.COMMON_PROPERTIES) {
             Matcher matcher = commPattern.matcher(key);
             if (matcher.find()) {
-                if (!isSelf && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                        PrivPredicate.ADMIN)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "GRANT");
+                // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!isSelf && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                            PrivPredicate.ADMIN)) {
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "GRANT");
+                    }
                 }
                 return;
             }

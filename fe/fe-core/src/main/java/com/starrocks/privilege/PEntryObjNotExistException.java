@@ -15,9 +15,8 @@
 
 package com.starrocks.privilege;
 
-public class PrivilegeException extends Exception {
-    public PrivilegeException(String msg) {
+public class PEntryObjNotExistException extends PrivilegeException {
+    public PEntryObjNotExistException(String msg) {
         super(msg);
     }
 }
-

@@ -52,7 +52,7 @@ public class IcebergCachingFileIOTest {
         Map<String, String> icebergProperties = new HashMap<>();
         cachingFileIO.initialize(icebergProperties);
 
-        // get inputfile by hadoopFileIO and cachingFileIO
+        // get input file by hadoopFileIO and cachingFileIO
         InputFile hadoopFileIOInputFile = hadoopFileIO.newInputFile(path);
         InputFile cachingFileIOInputFile = cachingFileIO.newInputFile(path);
         cachingFileIOInputFile.newStream();

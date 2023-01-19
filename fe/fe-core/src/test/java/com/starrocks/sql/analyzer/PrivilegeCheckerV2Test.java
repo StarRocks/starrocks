@@ -32,6 +32,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.PrivilegeManager;
@@ -44,8 +45,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
@@ -911,6 +914,13 @@ public class PrivilegeCheckerV2Test {
                         "revoke select on table db1.tbl1 from test"
                 ),
                 "Access denied for user 'test' to database 'db1'");
+
+        // check drop non-existed table
+        statement = UtFrameUtils.parseStmtWithNewParser(
+                "drop table if exists db1.tbl_not_exist1", ctx);
+        ctxToRoot();
+        DDLStmtExecutor.execute(statement, ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 
     @Test
@@ -1333,13 +1343,11 @@ public class PrivilegeCheckerV2Test {
         verifyMultiGrantRevoke(
                 "recover database " + testDbName + ";",
                 Arrays.asList(
-                        "grant DROP on database " + testDbName + " to test",
                         "grant CREATE_DATABASE on catalog default_catalog to test"),
                 Arrays.asList(
-                        "revoke DROP on database " + testDbName + " from test",
                         "revoke CREATE_DATABASE on catalog default_catalog from test;"
                 ),
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied for user 'test' to catalog 'default_catalog'");
         grantRevokeSqlAsRoot("grant DROP on database " + testDbName + " to test");
         try {
             verifyMultiGrantRevoke(
@@ -1386,6 +1394,26 @@ public class PrivilegeCheckerV2Test {
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `create database`: check CREATE_DATABASE on catalog
+        verifyGrantRevoke(
+                "create database db8;",
+                "grant CREATE_DATABASE on catalog default_catalog to test",
+                "revoke CREATE_DATABASE on catalog default_catalog from test",
+                "Access denied for user 'test' to catalog 'default_catalog'");
+        verifyGrantRevoke(
+                "create database if not exists db8;",
+                "grant CREATE_DATABASE on catalog default_catalog to test",
+                "revoke CREATE_DATABASE on catalog default_catalog from test",
+                "Access denied for user 'test' to catalog 'default_catalog'");
+
+        // check drop non-existed database
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                "drop database if exists db_not_exist1", ctx);
+        ctxToRoot();
+        DDLStmtExecutor.execute(statement, ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 
     @Test
@@ -1980,7 +2008,7 @@ public class PrivilegeCheckerV2Test {
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
-        grantOrRevoke("grant create_view on database db1 to test");
+        grantOrRevoke("grant create_table on database db1 to test");
 
         verifyGrantRevoke(restoreSql,
                 "grant SELECT,INSERT on db1.tbl1 to test",
@@ -2053,12 +2081,12 @@ public class PrivilegeCheckerV2Test {
                 "REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized_view db1.mv2 to test",
                 "revoke refresh on materialized_view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATETIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
         verifyGrantRevoke(
                 "CANCEL REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized_view db1.mv2 to test",
                 "revoke refresh on materialized_view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATETIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
 
         ctxToRoot();
         starRocksAssert.dropMaterializedView("db1.mv2");
@@ -2113,14 +2141,21 @@ public class PrivilegeCheckerV2Test {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
-        verifyGrantRevoke(
-                "DROP MATERIALIZED VIEW db1.mv4;",
-                "grant drop on materialized_view db1.mv4 to test",
-                "revoke drop on materialized_view db1.mv4 from test",
-                "Access denied; you need (at least one of) the DROP MATETIALIZED VIEW privilege(s) for this operation");
 
-        ctxToRoot();
-        starRocksAssert.dropMaterializedView("db1.mv4");
+        DropMaterializedViewStmt statement = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                "drop materialized view db1.mv4", starRocksAssert.getCtx());
+
+        ctxToTestUser();
+        try {
+            GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the DROP MATERIALIZED VIEW privilege(s)"));
+        }
+
+        grantRevokeSqlAsRoot("grant drop on materialized_view db1.mv4 to test");
+        GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
         ctxToTestUser();
     }
 
@@ -2323,5 +2358,35 @@ public class PrivilegeCheckerV2Test {
         } finally {
             Config.enable_udf = false;
         }
+    }
+
+    @Test
+    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException {
+        ctxToTestUser();
+        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("Password", resultSet.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("AuthPlugin", resultSet.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("UserForAuthPlugin", resultSet.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("[['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
+
+        stmt = new ShowAuthenticationStmt(null, true);
+        executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
+                        "['test2'@'%', No, " +
+                        "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
+
+        stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
+        executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
+        resultSet = executor.execute();
+        Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                resultSet.getResultRows().toString());
     }
 }

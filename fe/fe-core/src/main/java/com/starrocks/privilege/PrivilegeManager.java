@@ -68,6 +68,9 @@ public class PrivilegeManager {
     public static final long USER_ADMIN_ROLE_ID = -4;
     public static final long PUBLIC_ROLE_ID = -5;
 
+    public static final Set<String> BUILT_IN_ROLE_NAMES =
+            new HashSet<>(Arrays.asList("root", "db_admin", "user_admin", "cluster_admin", "public"));
+
     @SerializedName(value = "r")
     private final Map<String, Long> roleNameToId;
     @SerializedName(value = "i")
@@ -482,7 +485,7 @@ public class PrivilegeManager {
             invalidateUserInCache(user);
             LOG.info("grant role {} to user {}", roleName, user);
         } finally {
-            userWriteLock();
+            userWriteUnlock();
         }
     }
 
@@ -570,7 +573,7 @@ public class PrivilegeManager {
             invalidateUserInCache(user);
             LOG.info("revoke role {} from user {}", roleName, user);
         } finally {
-            userWriteLock();
+            userWriteUnlock();
         }
     }
 
@@ -1227,7 +1230,8 @@ public class PrivilegeManager {
             throws PrivilegeException {
         UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
         if (userCollection == null) {
-            throw new PrivilegeException("cannot find " + userIdentity.toString());
+            throw new PrivilegeException("cannot find user " + (userIdentity == null ? "null" :
+                    userIdentity.toString()));
         }
         return userCollection;
     }

@@ -37,7 +37,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
         }
         Table table = database.getTable(tokens.get(1));
         if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
-            throw new PrivilegeException("cannot find materialized view" + tokens.get(1) + " in db " + tokens.get(0));
+            throw new PrivilegeException("cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
         }
         return new MaterializedViewPEntryObject(database.getId(), table.getId());
     }

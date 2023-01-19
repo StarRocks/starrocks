@@ -209,7 +209,7 @@ public class Alter {
                 }
             }
             if (table == null) {
-                throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not find");
+                throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not found");
             }
             // check table type
             if (table.getType() != TableType.OLAP) {

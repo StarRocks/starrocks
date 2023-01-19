@@ -24,7 +24,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class SetUserPropertyVarTest {
-
     @Test
     public void testNormal() throws UserException {
         SetUserPropertyVar var = new SetUserPropertyVar("quota.normal", "1000");
