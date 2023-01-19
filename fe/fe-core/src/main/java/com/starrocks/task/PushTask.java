@@ -123,13 +123,13 @@ public class PushTask extends AgentTask {
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
-                    TDescriptorTable tDescriptorTable, boolean useVectorized, String timezone, TTabletType tabletType) {
+                    TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
-        this.useVectorized = useVectorized;
+        this.useVectorized = true;
         this.timezone = timezone;
         this.tabletType = tabletType;
     }
