@@ -83,7 +83,8 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             }
         } catch (Exception e) {
             LOG.error("Failed to get hudi remote file's metadata on path: {}", partitionPath, e);
-            throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s", pathKey);
+            throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s. msg: %s",
+                    pathKey, e.getMessage());
         }
         return resultPartitions.put(pathKey, fileDescs).build();
     }

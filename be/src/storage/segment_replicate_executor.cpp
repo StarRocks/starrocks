@@ -49,7 +49,7 @@ ReplicateChannel::~ReplicateChannel() {
 }
 
 std::string ReplicateChannel::debug_string() {
-    return fmt::format("SyncChannnel [host={}, port={}, load_id={}, tablet_id={}, txn_id={}]", _host, _port,
+    return fmt::format("SyncChannnel [host: {}, port: {}, load_id: {}, tablet_id: {}, txn_id: {}]", _host, _port,
                        print_id(_opt->load_id), _opt->tablet_id, _opt->txn_id);
 }
 
@@ -94,6 +94,9 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
+    VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+            << " eos " << eos << " to [" << _host << ":" << _port;
+
     // 1. init sync channel
     _st = _init();
     RETURN_IF_ERROR(_st);
@@ -109,8 +112,9 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
-    VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
+    VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
+            << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
+            << "] res " << _closure->result.DebugString();
 
     return _st;
 }
@@ -176,22 +180,6 @@ void ReplicateChannel::cancel() {
     // cancel rpc request, accelerate the release of related resources
     // Cancel an already-cancelled call_id has no effect.
     _closure->cancel();
-
-    PTabletWriterCancelRequest request;
-    request.set_allocated_id(const_cast<starrocks::PUniqueId*>(&_opt->load_id));
-    request.set_sender_id(0);
-    request.set_tablet_id(_opt->tablet_id);
-    request.set_txn_id(_opt->txn_id);
-    request.set_index_id(_opt->index_id);
-
-    auto closure = new ReusableClosure<PTabletWriterCancelResult>();
-
-    closure->ref();
-    closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
-    request.release_id();
-
-    VLOG(1) << "Cancel request " << debug_string();
 }
 
 ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_token, const DeltaWriterOptions* opt)
@@ -219,10 +207,14 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
     return _replicate_token->submit(std::move(task));
 }
 
-void ReplicateToken::cancel() {
+void ReplicateToken::cancel(const Status& st) {
     for (auto& channel : _replicate_channels) {
         channel->cancel();
     }
+    set_status(st);
+}
+
+void ReplicateToken::shutdown() {
     _replicate_token->shutdown();
 }
 

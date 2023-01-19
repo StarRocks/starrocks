@@ -118,6 +118,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+    public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -277,6 +278,16 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
         return tables;
+    }
+
+    public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
+        boolean forceExternalTableQueryRewrite = false;
+        if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
+                        get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
+            properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        }
+        return forceExternalTableQueryRewrite;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)

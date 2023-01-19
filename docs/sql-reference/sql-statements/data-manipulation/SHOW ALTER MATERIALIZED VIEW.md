@@ -7,7 +7,7 @@ Shows the refresh tasks of the single-table sync refresh materialized views.
 ## Syntax
 
 ```SQL
-SHOW ALTER MATERIALIZED VIEW [FROM db_name];
+SHOW ALTER MATERIALIZED VIEW [FROM <db_name>]
 ```
 
 Parameters in brackets [] is optional.

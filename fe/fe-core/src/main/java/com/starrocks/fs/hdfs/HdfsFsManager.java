@@ -21,8 +21,11 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TObjectStoreType;
 import org.apache.hadoop.conf.Configuration;
@@ -311,6 +314,16 @@ public class HdfsFsManager {
         ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType); 
     }
 
+    private static void tryWriteCloudCredentialToProperties(CloudConfiguration cloudConfiguration,
+                                                            THdfsProperties tHdfsProperties) {
+        if (cloudConfiguration == null) {
+            return;
+        }
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        tHdfsProperties.setCloud_configuration(tCloudConfiguration);
+    }
+
     /**
      * visible for test
      *
@@ -486,33 +499,42 @@ public class HdfsFsManager {
     public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
         throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
+        HdfsFsIdentity fileSystemIdentity = null;
+
         String accessKey = loadProperties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
 
-        if (accessKey.equals("")) {
-            LOG.warn("Invalid load_properties, S3 must provide access_key");
-            throw new UserException("Invalid load_properties, S3 must provide access_key");
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.tryBuildForStorage(loadProperties);
+        if (cloudConfiguration != null) {
+            String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
+            fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());
+        } else {
+            if (accessKey.equals("")) {
+                LOG.warn("Invalid load_properties, S3 must provide access_key");
+                throw new UserException("Invalid load_properties, S3 must provide access_key");
+            }
+            if (secretKey.equals("")) {
+                LOG.warn("Invalid load_properties, S3 must provide secret_key");
+                throw new UserException("Invalid load_properties, S3 must provide secret_key");
+            }
+            if (endpoint.equals("")) {
+                LOG.warn("Invalid load_properties, S3 must provide endpoint");
+                throw new UserException("Invalid load_properties, S3 must provide endpoint");
+            }
+            // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+            // we should use these two params as the host identity, because FileSystem will
+            // cache both.
+            String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+            String s3aUgi = accessKey + "," + secretKey;
+            fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
         }
-        if (secretKey.equals("")) {
-            LOG.warn("Invalid load_properties, S3 must provide secret_key");
-            throw new UserException("Invalid load_properties, S3 must provide secret_key");
-        }
-        if (endpoint.equals("")) {
-            LOG.warn("Invalid load_properties, S3 must provide endpoint");
-            throw new UserException("Invalid load_properties, S3 must provide endpoint");
-        }
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
-        // we should use these two params as the host identity, because FileSystem will
-        // cache both.
-        String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
-        String s3aUgi = accessKey + "," + secretKey;
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
-        HdfsFs fileSystem = null;
+
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
             // it means it is removed concurrently by checker thread
             return null;
@@ -528,20 +550,29 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                conf.set(FS_S3A_ACCESS_KEY, accessKey);
-                conf.set(FS_S3A_SECRET_KEY, secretKey);
-                conf.set(FS_S3A_ENDPOINT, endpoint);
+                if (cloudConfiguration != null) {
+                    cloudConfiguration.applyToConfiguration(conf);
+                } else {
+                    conf.set(FS_S3A_ACCESS_KEY, accessKey);
+                    conf.set(FS_S3A_SECRET_KEY, secretKey);
+                    conf.set(FS_S3A_ENDPOINT, endpoint);
+                    // Only set ssl for origin logic
+                    conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                }
+
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
-                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem s3AFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(s3AFileSystem);
                 fileSystem.setConfiguration(conf);
                 if (tProperties != null) {
                     convertObjectStoreConfToProperties(path, conf, tProperties, TObjectStoreType.S3);
+                    tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
                 }
             } else {
                 if (tProperties != null) {
-                    convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties, TObjectStoreType.S3);
+                    convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties,
+                            TObjectStoreType.S3);
+                    tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
                 }
             }
             return fileSystem;

@@ -21,7 +21,7 @@
 
 package com.starrocks.catalog;
 
-import avro.shaded.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;

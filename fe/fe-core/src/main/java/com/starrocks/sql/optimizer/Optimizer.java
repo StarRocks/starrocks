@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
@@ -298,9 +299,13 @@ public class Optimizer {
 
         if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && sessionVariable.isEnableMaterializedViewRewrite()
-                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
+                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            // external table need to to re-compute scanOperatorPredicates because of the predicates of scan operator
+            // may changed
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         }
         return tree.getInputs().get(0);
     }
@@ -401,7 +406,7 @@ public class Optimizer {
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
-
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result.setPlanCount(planCount);
         return result;
     }

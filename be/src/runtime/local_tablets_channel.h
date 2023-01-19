@@ -49,7 +49,9 @@ public:
 
     void cancel() override;
 
-    void cancel(int64_t tablet_id);
+    void abort() override;
+
+    void abort(const std::vector<int64_t>& tablet_ids);
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -146,6 +148,9 @@ private:
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
+    void _commit_tablets(const PTabletWriterAddChunkRequest& request,
+                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -175,6 +180,8 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
 
     bool _is_replicated_storage = false;
+
+    std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

@@ -14,13 +14,13 @@ DATETIME days_sub(DATETIME|DATE d, INT n);
 
 `d`: the date or datetime expression.
 
-`n`: the number of days shall be subtracted from the `d`.
+`n`: the number of days to subtract from `d`.
 
 ## Return value
 
 Returns a value of the datetime type, NULL is returned if any parameter is NULL or invalid.
 
-NULL is returned in case that the result exceeds the range [0000-01-01 00:00:00, 9999-12-31 00:00:00].
+NULL is returned if the result exceeds the range [0000-01-01 00:00:00, 9999-12-31 00:00:00].
 
 ## Examples
 

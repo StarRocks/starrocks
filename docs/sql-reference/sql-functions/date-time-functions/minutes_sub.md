@@ -12,9 +12,9 @@ DATETIME minutes_sub(DATETIME|DATE date, INT minutes);
 
 ## Parameters
 
-- `date`: the start time. It must be of the DATETIME or DATE type.
+- `date`: the base date. It must be of the DATETIME or DATE type.
 
-- `minutes`: the subed minute. It must be INT type, it could be greater, equal or less than zero.
+- `minutes`: the minutes to reduce. It must be of the INT type, it could be greater, equal or less than zero.
 
 ## Return value
 

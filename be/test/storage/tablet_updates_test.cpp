@@ -2219,6 +2219,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(segment_path));
 
     ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());
+    LOG(INFO) << "parse segment footer success";
 }
 
 void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(bool enable_persistent_index) {

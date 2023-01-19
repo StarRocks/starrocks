@@ -7,12 +7,12 @@ Removes the trailing spaces from the end of the `str` argument.
 ## Syntax
 
 ```Haskell
-rtrim(expr);
+rtrim(str);
 ```
 
 ## Parameters
 
-`expr`: the string to trim. The supported data type is VARCHAR.
+`str`: the string to trim. The supported data type is VARCHAR.
 
 ## Return value
 

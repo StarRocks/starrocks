@@ -2,7 +2,7 @@
 
 ## Description
 
-HLL columns can only be queried or used through the matching hll_union_agg, hll_raw_agg, hll_cardinality, and hll_hash functions.
+HLL columns can only be queried or used through the matching [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) functions.
 
 ## Example
 

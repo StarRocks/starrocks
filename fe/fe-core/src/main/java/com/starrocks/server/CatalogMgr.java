@@ -209,17 +209,13 @@ public class CatalogMgr {
             }
             checksum ^= catalogCount;
             LOG.info("finished replaying CatalogMgr from image");
-
-            LOG.info("start to replay resource mapping catalog");
-            loadResourceMappingCatalog();
-            LOG.info("finished replaying resource mapping catalogs from resources");
         } catch (EOFException e) {
             LOG.info("no CatalogMgr to replay.");
         }
         return checksum;
     }
 
-    private void loadResourceMappingCatalog() throws DdlException {
+    public void loadResourceMappingCatalog() {
         List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
         for (Resource resource : resources) {
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
@@ -231,7 +227,11 @@ public class CatalogMgr {
             String catalogName = getResourceMappingCatalogName(resource.getName(), type);
             properties.put("type", type);
             properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
-            createCatalog(type, catalogName, "mapping " + type + " catalog", properties);
+            try {
+                createCatalog(type, catalogName, "mapping " + type + " catalog", properties);
+            } catch (Exception e) {
+                LOG.error("Failed to load resource mapping inside catalog {}", catalogName, e);
+            }
         }
     }
 
@@ -277,6 +277,8 @@ public class CatalogMgr {
     }
 
     public class CatalogProcNode implements ProcDirInterface {
+        private static final String DEFAULT_CATALOG_COMMENT =
+                "An internal catalog contains this cluster's self-managed tables.";
 
         @Override
         public boolean register(String name, ProcNodeInterface node) {
@@ -307,7 +309,7 @@ public class CatalogMgr {
             } finally {
                 readUnlock();
             }
-            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", DEFAULT_CATALOG_COMMENT));
             return result;
         }
     }

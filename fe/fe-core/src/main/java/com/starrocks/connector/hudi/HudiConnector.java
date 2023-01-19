@@ -7,22 +7,28 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 
 import java.util.Map;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
+    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final HudiConnectorInternalMgr internalMgr;
     private final HudiMetadataFactory metadataFactory;
 
     public HudiConnector(ConnectorContext context) {
         this.properties = context.getProperties();
+        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
         this.catalogName = context.getCatalogName();
-        this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties);
+        this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();
         onCreate();
@@ -54,6 +60,10 @@ public class HudiConnector implements Connector {
     }
 
     public void onCreate() {
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 
     @Override

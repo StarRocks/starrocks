@@ -83,7 +83,8 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             }
         } catch (Exception e) {
             LOG.error("Failed to get hive remote file's metadata on path: {}", path, e);
-            throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s", pathKey);
+            throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s. msg: %s",
+                    pathKey, e.getMessage());
         }
 
         return resultPartitions.put(pathKey, fileDescs).build();

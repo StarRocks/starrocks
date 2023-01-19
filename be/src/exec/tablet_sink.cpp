@@ -287,7 +287,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();
@@ -1338,6 +1339,11 @@ bool OlapTableSink::is_close_done() {
     }
 
     return _close_done;
+}
+
+void OlapTableSink::cancel() {
+    Status st = Status::Cancelled("cancel");
+    for_each_index_channel([&st](NodeChannel* ch) { ch->cancel(st); });
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {

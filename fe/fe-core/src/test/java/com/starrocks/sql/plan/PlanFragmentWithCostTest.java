@@ -4,6 +4,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -15,10 +16,13 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -484,7 +488,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
     }
 
-    // todo(ywb) disable replicate join temporarily
+    @Test
+    @Ignore("disable replicate join temporarily")
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
@@ -1741,5 +1746,25 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "         AND v1 = 99))\n" +
                 "        AND v1 = 100;";
         getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testPruneLimit() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        setTableStatistics(table2, 10);
+
+        new MockUp<LocalTablet>() {
+            @Mock
+            public long getRowCount(long version) {
+                return 10;
+            }
+        };
+
+        String sql = "select * from lineitem_partition limit 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "     partitions=7/7\n" +
+                "     rollup: lineitem_partition\n" +
+                "     tabletRatio=1");
     }
 }

@@ -255,6 +255,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    void cancel() override;
+
     // sync open interface
     Status open(RuntimeState* state) override;
 

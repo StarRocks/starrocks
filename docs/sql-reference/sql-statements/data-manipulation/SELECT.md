@@ -139,7 +139,7 @@ The various joins supported by StarRocks can be classified as equi-joins and non
 
 | **Equi****-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
 | -------------------------- | ------------------------------------------------------------ |
-| **Non-****equi****-joins** | cross joins, inner joins, and outer joins                    |
+| **Non-****equi****-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
 
 - Equi-joins
   

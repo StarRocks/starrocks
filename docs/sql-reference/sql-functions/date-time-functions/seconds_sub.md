@@ -18,7 +18,7 @@ DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 
 ## Return value
 
-Returns a value of the DATETIME type. 
+Returns a value of the DATETIME type.
 
 If the input value is of the DATE type，the hour, minute, and seconds parts are processed as `00:00:00`.
 

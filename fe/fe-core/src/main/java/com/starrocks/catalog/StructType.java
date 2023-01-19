@@ -44,7 +44,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -100,20 +99,15 @@ public class StructType extends Type {
             return false;
         }
 
-        if (((StructType) t).getFields().size() != fields.size()) {
+        StructType rhsType = (StructType) t;
+        if (fields.size() != rhsType.fields.size()) {
             return false;
         }
-
-        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
-            StructField tField = ((StructType) t).getField(field.getValue().getName());
-            if (tField == null) {
-                return false;
-            }
-            if (!tField.getType().matchesType(field.getValue().getType())) {
+        for (int i = 0; i < fields.size(); ++i) {
+            if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -167,6 +161,23 @@ public class StructType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        for (int pos = selectedFields.length - 1; pos >= 0; pos--) {
+            StructField structField = fields.get(pos);
+            if (!selectedFields[pos]) {
+                fields.remove(pos);
+                fieldMap.remove(structField.getName());
+            }
+        }
+
+        for (StructField structField : fields) {
+            Type type = structField.getType();
+            if (type.isComplexType()) {
+                type.pruneUnusedSubfields();
+            }
+        }
+    }
+
     @Override
     public void selectAllFields() {
         Arrays.fill(selectedFields, true);
@@ -205,8 +216,6 @@ public class StructType extends Type {
         Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
-        Preconditions.checkArgument(selectedFields.length == fields.size());
-        node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);
         }

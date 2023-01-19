@@ -5,7 +5,7 @@ You can execute the SHOW FILE statement to view the information about a file sto
 ## Syntax
 
 ```SQL
-SHOW FILE [FROM database];
+SHOW FILE [FROM database]
 ```
 
 The file information returned by this statement is as follows:

@@ -312,7 +312,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     st = index.load(_tablet.get());
     std::vector<uint32_t> read_column_ids = {2};
     state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
-                              latest_applied_version, read_column_ids, index);
+                              0, latest_applied_version, read_column_ids, index);
 
     // check data of write column
     const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();

@@ -1,6 +1,6 @@
 package com.starrocks.analysis;
 
-import avro.shaded.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;

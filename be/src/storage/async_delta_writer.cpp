@@ -33,10 +33,14 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
                                      .replicate_token = writer->replicate_token()};
         if (st.ok() && iter->commit_after_write) {
             if (st = writer->close(); !st.ok()) {
+                LOG(WARNING) << "Fail to write or commit. txn_id: " << writer->txn_id()
+                             << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
                 iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
             if (st = writer->commit(); !st.ok()) {
+                LOG(WARNING) << "Fail to write or commit. txn_id: " << writer->txn_id()
+                             << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
                 iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
@@ -49,8 +53,8 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
             iter->write_cb->run(st, nullptr, &failed_info);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
-        LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id=" << writer->txn_id()
-                                << " tablet_id=" << writer->tablet()->tablet_id() << ": " << st;
+        LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id: " << writer->txn_id()
+                                << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
     return 0;
 }
@@ -78,9 +82,11 @@ Status AsyncDeltaWriter::_init() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get()); r != 0) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
-    _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
-    if (_segment_flush_executor == nullptr) {
-        return Status::InternalError("SegmentFlushExecutor init failed");
+    if (replica_state() == Secondary) {
+        _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        if (_segment_flush_executor == nullptr) {
+            return Status::InternalError("SegmentFlushExecutor init failed");
+        }
     }
     return Status::OK();
 }
@@ -124,13 +130,16 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     }
 }
 
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 void AsyncDeltaWriter::abort(bool with_log) {
     Task task;
     task.abort = true;
     task.abort_with_log = with_log;
 
     bthread::TaskOptions options;
-    options.high_priority = true;
     int r = bthread::execution_queue_execute(_queue_id, task, &options);
     LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
 

@@ -49,6 +49,8 @@ public:
 
     void cancel() override;
 
+    void abort() override;
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -339,10 +341,14 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     return Status::OK();
 }
 
-void LakeTabletsChannel::cancel() {
+void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }
+}
+
+void LakeTabletsChannel::cancel() {
+    //TODO: Current LakeDeltaWriter don't support fast cancel
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(

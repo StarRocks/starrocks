@@ -552,7 +552,7 @@ syncStatement
     : SYNC
     ;
 
-// ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
+// ------------------------------------------- Cluster Management Statement ---------------------------------------------
 
 alterSystemStatement
     : ALTER SYSTEM alterClause
@@ -1713,6 +1713,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1748,9 +1749,16 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     ;
 
+specialDateTimeExpression
+    : name = CURRENT_DATE ('(' ')')?
+    | name = CURRENT_TIME ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = LOCALTIME ('(' ')')?
+    | name = LOCALTIMESTAMP ('(' ')')?
+    ;
+
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
@@ -1781,8 +1789,8 @@ windowFunction
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
 
 whenClause
@@ -1795,6 +1803,10 @@ over
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
+    ;
+
+ignoreNulls
+    : IGNORE NULLS
     ;
 
 windowFrame
@@ -1982,16 +1994,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameColonType
-    : identifier ':' type comment?
+subfieldDesc
+    : identifier type
     ;
 
-columnNameColonTypeList
-    : columnNameColonType (',' columnNameColonType)*
+subfieldDescs
+    : subfieldDesc (',' subfieldDesc)*
     ;
 
 structType
-    : STRUCT '<' columnNameColonTypeList '>'
+    : STRUCT '<' subfieldDescs '>'
     ;
 
 typeParameter

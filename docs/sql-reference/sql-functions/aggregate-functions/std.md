@@ -18,8 +18,8 @@ Returns a `double` value which is the standard deviation of the selected field.
 
 Sample dataset
 
-```sql
-MySQL [test]> select * from std_test;
+```plain
+MySQL > select * from std_test;
 +------+------+
 | col0 | col1 |
 +------+------+
@@ -31,10 +31,10 @@ MySQL [test]> select * from std_test;
 +------+------+
 ```
 
-Calculate the standard deviation of col0 and col1.
+Calculate the standard deviation of `col0` and `col1`.
 
 ```sql
-MySQL [test]> select std(col0) as std_of_col0, std(col1) as std_of_col1 from std_test;
+MySQL > select std(col0) as std_of_col0, std(col1) as std_of_col1 from std_test;
 +--------------------+--------------------+
 | std_of_col0        | std_of_col1        |
 +--------------------+--------------------+
@@ -43,4 +43,5 @@ MySQL [test]> select std(col0) as std_of_col0, std(col1) as std_of_col1 from std
 ```
 
 ## keyword
+
 STD

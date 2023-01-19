@@ -140,6 +140,7 @@ public:
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
+    Status reload_segment(int32_t segment_id);
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
@@ -279,6 +280,8 @@ public:
             }
         }
     }
+
+    uint64_t refs_by_reader() { return _refs_by_reader; }
 
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;

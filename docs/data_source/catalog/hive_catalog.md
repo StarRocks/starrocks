@@ -125,13 +125,13 @@ The properties of the Hive catalog. This parameter is required. You can configur
     | **Property**        | **Required** | **Description**                                              |
     | ------------------- | ------------ | ------------------------------------------------------------ |
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+    | hive.metastore.uris | Yes          | The URI of the Hive metastore. Format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
     > **Note**
     >
     > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
-- [Preview] If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+- If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
 
     | **Property**                           | **Required** | **Description**                                              |
     | -------------------------------------- | ------------ | ------------------------------------------------------------ |
@@ -177,6 +177,8 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
     | **Property**                       | **Required** | **Description**                                              |
     | ---------------------------------- | ------------ | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
+
+After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## Update policies for cached metadata
 
@@ -267,10 +269,6 @@ You can also tune the following parameters in the **$FE_HOME/conf/fe.conf** file
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
-
-## What to do next
-
-After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

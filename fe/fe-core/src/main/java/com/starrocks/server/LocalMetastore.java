@@ -958,7 +958,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (backendNum <= 3) {
             bucketNum = 2 * backendNum;
         } else if (backendNum <= 6) {
-            bucketNum = backendNum;
+            bucketNum = (int) (1.5 * backendNum);
         } else if (backendNum <= 12) {
             bucketNum = 12;
         } else {
@@ -1032,7 +1032,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            distributionInfo = defaultDistributionInfo;
+            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
+                    && Config.enable_auto_tablet_distribution) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
+                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
+            } else {
+                distributionInfo = defaultDistributionInfo;
+            }
         }
         return distributionInfo;
     }
@@ -1316,7 +1322,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
 
-            if (distributionInfo.getBucketNum() == 0) {
+            if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
                 int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
                 distributionInfo.setBucketNum(numBucket);
             }
@@ -2033,7 +2039,7 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else {
-            if (distributionInfo.getBucketNum() == 0) {
+            if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
                 int bucketNum = calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
@@ -3228,7 +3234,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
-        if (distributionInfo.getBucketNum() == 0) {
+        if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
             int numBucket = calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
@@ -3366,6 +3372,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+                boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
+                        analyzeForceExternalTableQueryRewrite(properties);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                                String.valueOf(forceExternalTableQueryReWrite));
+                materializedView.getTableProperty().setForceExternalTableQueryRewrite(forceExternalTableQueryReWrite);
             }
             if (!properties.isEmpty()) {
                 // here, all properties should be checked

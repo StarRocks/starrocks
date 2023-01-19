@@ -188,6 +188,36 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+
+    if (!col->has_null()) {
+        return 0;
+    }
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    return SIMD::find_zero(null, start, end - start);
+}
+
+size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+    DCHECK_LE(end, col->size());
+
+    if (!col->has_null()) {
+        return end - 1;
+    }
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    for (size_t i = end - 1;;) {
+        if (null[i] == 0) {
+            return i;
+        }
+        if (i == start) {
+            break;
+        }
+        i--;
+    }
+    return end;
+}
+
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
@@ -254,22 +284,25 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
-        auto keys = create_column(type_desc.children[0], true, is_const, size);
-        auto values = create_column(type_desc.children[1], true, is_const, size);
+        ColumnPtr keys = nullptr;
+        ColumnPtr values = nullptr;
+        if (type_desc.children[0].is_unknown_type()) {
+            keys = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            keys = create_column(type_desc.children[0], true, is_const, size);
+        }
+        if (type_desc.children[1].is_unknown_type()) {
+            values = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
+        } else {
+            values = create_column(type_desc.children[1], true, is_const, size);
+        }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
-        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        DCHECK_EQ(field_size, type_desc.field_names.size());
         Columns columns;
         BinaryColumn::Ptr field_names = BinaryColumn::create();
         for (size_t i = 0; i < field_size; i++) {
-            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
-            // We should optimize it in future.
-            // if (!type_desc.selected_fields.at(i)) {
-            //     continue;
-            // }
-
-            // Subfield column must be nullable column.
             ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
             field_names->append_string(type_desc.field_names[i]);

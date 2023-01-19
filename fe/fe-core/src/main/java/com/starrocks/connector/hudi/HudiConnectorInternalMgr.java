@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.CachingHiveMetastore;
@@ -13,7 +14,6 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
-import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 public class HudiConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
+    private final HdfsEnvironment hdfsEnvironment;
     private final boolean enableMetastoreCache;
     private CachingHiveMetastoreConf hmsConf;
 
@@ -35,9 +36,10 @@ public class HudiConnectorInternalMgr {
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
 
-    public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties) {
+    public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
         this.hmsConf = new CachingHiveMetastoreConf(properties);
 
@@ -85,8 +87,7 @@ public class HudiConnectorInternalMgr {
 
     public RemoteFileIO createRemoteFileIO() {
         // TODO(stephen): Abstract the creator class to construct RemoteFiloIO
-        Configuration configuration = new Configuration();
-        RemoteFileIO remoteFileIO = new HudiRemoteFileIO(configuration);
+        RemoteFileIO remoteFileIO = new HudiRemoteFileIO(hdfsEnvironment.getConfiguration());
 
         RemoteFileIO baseRemoteFileIO;
         if (!enableRemoteFileCache) {

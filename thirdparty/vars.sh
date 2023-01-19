@@ -183,10 +183,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=incubator-brpc-1.3.0.tar.gz
-BRPC_SOURCE=incubator-brpc-1.3.0
-BRPC_MD5SUM="ee5d00e203e9ef7b8dd25d0c882914c6"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
+BRPC_NAME=brpc-1.3.0.tar.gz
+BRPC_SOURCE=brpc-1.3.0
+BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -327,10 +327,10 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20221213.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230117.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="0741b8a9b0bd41f3b5798ca08e34bb61"
+CACHELIB_MD5SUM="9ed7137220d25b6c591966fdcb03208e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"

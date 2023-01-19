@@ -32,7 +32,7 @@ import java.util.List;
 public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BeId").add("PathHash").add("AvailSlots").add("TotalSlots")
-            .add("BalanceSlot").add("AvgRate").build();
+            .add("AvgRate").build();
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {

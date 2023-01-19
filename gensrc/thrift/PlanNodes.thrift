@@ -28,6 +28,7 @@ include "Opcodes.thrift"
 include "Descriptors.thrift"
 include "Partitions.thrift"
 include "RuntimeFilter.thrift"
+include "CloudConfiguration.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
@@ -177,6 +178,7 @@ struct THdfsProperties {
   9: optional i32 max_connection
   10: optional string region
   11: optional string hdfs_username
+  12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TBrokerScanRangeParams {
@@ -894,6 +896,8 @@ struct THdfsScanNode {
 
     // Flag to indicate wheather the column names are case sensitive
     12: optional bool case_sensitive;
+
+    13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 }
 
 struct TProjectNode {

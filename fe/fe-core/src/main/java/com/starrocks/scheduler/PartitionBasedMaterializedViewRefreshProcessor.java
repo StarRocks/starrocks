@@ -361,17 +361,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return Pair.create(null, null);
     }
 
-    private Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
-            throws UserException {
-        if (table.isLocalTable()) {
-            return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
-            return PartitionUtil.getPartitionRange(table, partitionColumn);
-        } else {
-            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-        }
-    }
-
     private void syncPartitionsForExpr() {
         Expr partitionExpr = getPartitionExpr();
         Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
@@ -385,7 +374,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         database.readLock();
         try {
-            basePartitionMap = getPartitionRange(partitionBaseTable, partitionColumn);
+            basePartitionMap = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {
                 partitionDiff = SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
             } else if (partitionExpr instanceof FunctionCallExpr) {

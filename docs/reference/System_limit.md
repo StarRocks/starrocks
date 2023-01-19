@@ -28,4 +28,4 @@ The default length is 1 byte.
 
 - StarRocks does not support modifying column names in tables.
 
-- By default, an expression can have a maximum of 10,000 children.
+- By default, a query can be nested with a maximum of 10,000 subqueries.

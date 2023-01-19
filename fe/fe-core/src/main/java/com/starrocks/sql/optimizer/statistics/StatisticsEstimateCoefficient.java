@@ -40,5 +40,9 @@ public class StatisticsEstimateCoefficient {
     // default push down aggregate row count limit, 100w
     public static final long DEFAULT_PUSH_DOWN_AGGREGATE_ROWS_LIMIT = 1000000;
     // default or predicate limit
-    public static final int DEFAULT_OR_OPERATOR_LIMIT = 15;
+    public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
+
+    public static final int CROSS_JOIN_COST_PENALTY = 2;
+    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
+    public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 }

@@ -861,6 +861,15 @@ Status TabletManager::start_trash_sweep() {
             continue;
         }
 
+        if (tablet->updates() != nullptr) {
+            Status st = tablet->updates()->check_and_remove_rowset();
+            if (!st.ok()) {
+                LOG(WARNING) << "there are some rowsets still been referenced, drop tablet: " << tablet->tablet_id()
+                             << " later";
+                continue;
+            }
+        }
+
         bool remove_meta = false;
         TabletMeta tablet_meta;
         Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash(),
@@ -1307,6 +1316,15 @@ void TabletManager::_remove_tablet_from_partition(const Tablet& tablet) {
     _partition_tablet_map[tablet.partition_id()].erase(tablet.get_tablet_info());
     if (_partition_tablet_map[tablet.partition_id()].empty()) {
         _partition_tablet_map.erase(tablet.partition_id());
+    }
+}
+
+void TabletManager::get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos) {
+    std::shared_lock rlock(_partition_tablet_map_lock);
+    auto search = _partition_tablet_map.find(partition_id);
+    if (search != _partition_tablet_map.end()) {
+        tablet_infos.reserve(search->second.size());
+        tablet_infos.assign(search->second.begin(), search->second.end());
     }
 }
 

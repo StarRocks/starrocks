@@ -36,6 +36,8 @@ public class StructField {
     private final String name;
     @SerializedName(value = "type")
     private final Type type;
+
+    // comment is not used now, it's always null.
     @SerializedName(value = "comment")
     private final String comment;
     private int position;  // in struct
@@ -72,10 +74,11 @@ public class StructField {
 
     public String toSql(int depth) {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toSql(depth) : "...";
-        StringBuilder sb = new StringBuilder(name);
-        if (type != null) {
-            sb.append(":" + typeSql);
+        StringBuilder sb = new StringBuilder();
+        if (name != null) {
+            sb.append(name).append(' ');
         }
+        sb.append(typeSql);
         if (comment != null) {
             sb.append(String.format(" COMMENT '%s'", comment));
         }

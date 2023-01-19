@@ -2,7 +2,7 @@
 
 ## Description
 
-Add the specified minute from the date, accurate to the minute.
+Adds the specified minutes to the date, accurate to the minute.
 
 ## Syntax
 
@@ -14,7 +14,7 @@ DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 
 - `date`: the start time. It must be of the DATETIME or DATE type.
 
-- `minutes`: the added minute. It must be INT type, it could be greater, equal or less than zero.
+- `minutes`: the minutes to add. It must be of the INT type, it could be greater, equal or less than zero.
 
 ## Return value
 

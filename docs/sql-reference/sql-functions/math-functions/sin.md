@@ -2,58 +2,30 @@
 
 ## Description
 
-Computes the sine of the argument.
+Returns the sine of `x`, where `x` is in radians.
 
 ## Syntax
 
 ```Haskell
-DOUBLE sin(DOUBLE arg)
+SIN(x);
 ```
 
-### Parameters
+## Parameters
 
-`arg`: You can specify only a numeric value. This function converts the numeric value into a DOUBLE value before it computes the sine of the value.
+`x`: supports the DOUBLE data type.
 
 ## Return value
 
 Returns a value of the DOUBLE data type.
 
-## Usage notes
-
-If you specify a non-numeric value, this function returns `NULL`.
-
 ## Examples
 
 ```Plain
-mysql> select sin(-1);
-+---------------------+
-| sin(-1)             |
-+---------------------+
-| -0.8414709848078965 |
-+---------------------+
-
-mysql> select sin(0);
-+--------+
-| sin(0) |
-+--------+
-|      0 |
-+--------+
-
-mysql> select sin(1);
-+--------------------+
-| sin(1)             |
-+--------------------+
-| 0.8414709848078965 |
-+--------------------+
-
-mysql> select sin("");
-+---------+
-| sin('') |
-+---------+
-|    NULL |
-+---------+
+mysql> select sin(3.14);
++-----------------------+
+| sin(3.14)             |
++-----------------------+
+| 0.0015926529164868282 |
++-----------------------+
+1 row in set (0.21 sec)
 ```
-
-## keyword
-
-SIN

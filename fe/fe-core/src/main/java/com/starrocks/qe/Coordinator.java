@@ -32,6 +32,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -149,6 +150,7 @@ import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
+    private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -701,6 +703,8 @@ public class Coordinator {
         if (resourceGroup != null) {
             connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
             connect.setResourceGroup(resourceGroup);
+        } else {
+            connect.getAuditEventBuilder().setResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         return resourceGroup;
@@ -2490,7 +2494,13 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                int timeout;
+                // connectContext can be null for broker export task coordinator
+                if (connectContext != null) {
+                    timeout = connectContext.getSessionVariable().getProfileTimeout();
+                } else {
+                    timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
+                }
                 // Waiting for other fragment instances to finish execution
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {

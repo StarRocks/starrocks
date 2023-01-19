@@ -47,9 +47,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        Table table = hmsOps.getTable(dbName, tblName);
-        HiveTable hiveTable = (HiveTable) table;
-        String path = hiveTable.getTableLocation();
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, configuration);
+        try {
+            Table table = hmsOps.getTable(dbName, tblName);
+            HiveTable hiveTable = (HiveTable) table;
+            String path = hiveTable.getTableLocation();
+            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, configuration);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            return null;
+        }
     }
 }

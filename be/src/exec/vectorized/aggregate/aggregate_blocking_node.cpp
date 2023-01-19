@@ -68,9 +68,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
                 TRY_CATCH_ALLOC_SCOPE_START()
-                _aggregator->hash_map_variant().visit([&](auto& hash_table_with_key) {
-                    _aggregator->build_hash_map(*hash_table_with_key, chunk_size, agg_group_by_with_limit);
-                });
+                _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
                 _aggregator->try_convert_to_two_level_map();
@@ -136,11 +134,9 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     int32_t chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->convert_to_chunk_no_groupby(chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
-        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, chunk);
-        });
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
     }
 
     size_t old_size = (*chunk)->num_rows();

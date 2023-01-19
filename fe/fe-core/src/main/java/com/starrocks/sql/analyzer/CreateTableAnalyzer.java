@@ -283,8 +283,7 @@ public class CreateTableAnalyzer {
                         properties = Maps.newHashMap();
                         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
                     }
-                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
-                            Lists.newArrayList(columnDefs.get(0).getName()));
+                    distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
                 } else {
                     throw new SemanticException("Create olap table should contain distribution desc");
                 }

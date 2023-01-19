@@ -2,7 +2,7 @@
 
 ## Description
 
-Add hours to a date or datetime.
+Adds hours to a date or datetime.
 
 ## Syntax
 

@@ -7,7 +7,7 @@ Views databases in your current StarRocks cluster or an external data source. No
 ## Syntax
 
 ```SQL
-SHOW DATABASES [FROM catalog_name];
+SHOW DATABASES [FROM <catalog_name>]
 ```
 
 ## Parameters

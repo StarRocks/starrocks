@@ -7,6 +7,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -36,24 +37,25 @@ public class IcebergMetadata implements ConnectorMetadata {
     private IcebergCatalog icebergCatalog;
     private Map<String, String> customProperties;
 
-    public IcebergMetadata(String catalogName, Map<String, String> properties) {
+    public IcebergMetadata(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
+
         if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
             metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
-            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties);
+            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties, hdfsEnvironment);
             Util.validateMetastoreUris(metastoreURI);
         } else if (IcebergCatalogType.CUSTOM_CATALOG ==
                 IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
             catalogImpl = properties.get(ICEBERG_IMPL);
-            icebergCatalog = getIcebergCustomCatalog(catalogImpl, properties);
+            icebergCatalog = getIcebergCustomCatalog(catalogImpl, properties, hdfsEnvironment);
             properties.remove(ICEBERG_CATALOG_TYPE);
             properties.remove(ICEBERG_IMPL);
             customProperties = properties;
         } else if (IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
-            icebergCatalog = getIcebergGlueCatalog(catalogName, properties);
+            icebergCatalog = getIcebergGlueCatalog(catalogName, properties, hdfsEnvironment);
         } else {
             throw new RuntimeException(String.format("Property %s is missing or not supported now.",
                     ICEBERG_CATALOG_TYPE));
@@ -106,7 +108,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tblName) {
         org.apache.iceberg.Table icebergTable
                 = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)) {
+        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)
+                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
             throw new StarRocksIcebergException(
                     "Do not support get partitions from catalog type: " + catalogType);
         }

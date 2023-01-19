@@ -2,7 +2,7 @@
 
 package com.starrocks.metric;
 
-import avro.shaded.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.metric.Metric.MetricUnit;
 
 import java.util.List;

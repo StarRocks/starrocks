@@ -13,6 +13,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergUtil;
@@ -35,6 +36,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class IcebergTable extends Table {
@@ -127,7 +129,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
+        return getPartitionColumns().stream().filter(Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
     }
 
@@ -250,11 +252,14 @@ public class IcebergTable extends Table {
             copiedProps.remove(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
         }
 
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(icebergProperties, null);
         IcebergCatalog icebergCatalog;
         switch (type) {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
-                icebergCatalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs(), icebergProperties);
+                icebergCatalog =
+                        IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs(), icebergProperties,
+                                hdfsEnvironment);
                 break;
             case CUSTOM_CATALOG:
                 icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());
@@ -262,7 +267,8 @@ public class IcebergTable extends Table {
                     icebergProperties.put(key, copiedProps.remove(key));
                 }
                 icebergCatalog =
-                        IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
+                        IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties,
+                                hdfsEnvironment);
                 break;
             default:
                 throw new DdlException("unsupported catalog type " + type.name());

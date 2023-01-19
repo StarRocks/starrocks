@@ -4470,8 +4470,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
-            return new FunctionCallExpr(context.name.getText().toLowerCase(),
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
+            functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+            return functionCallExpr;
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
     }
@@ -4518,11 +4520,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
+        if (context.name.getText().equalsIgnoreCase("current_timestamp")
+                || context.name.getText().equalsIgnoreCase("current_time")
+                || context.name.getText().equalsIgnoreCase("current_date")
+                || context.name.getText().equalsIgnoreCase("localtime")
+                || context.name.getText().equalsIgnoreCase("localtimestamp")) {
+            return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        }
+        throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
-        } else if (context.CURRENT_TIMESTAMP() != null) {
-            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {
@@ -4816,10 +4828,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
             parts.add(fieldName);
             return new SlotRef(QualifiedName.of(parts));
+        } else if (base instanceof SubfieldExpr) {
+            // Merge multi-level subfield access
+            SubfieldExpr subfieldExpr = (SubfieldExpr) base;
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+            for (String tmpFieldName : subfieldExpr.getFieldNames()) {
+                builder.add(tmpFieldName);
+            }
+            builder.add(fieldName);
+            return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
         } else {
-            // If left is not a SlotRef, we can left must be an StructType,
+            // If left is not a SlotRef, we can assume left node must be an StructType,
             // and fieldName must be StructType's subfield name.
-            return new SubfieldExpr(base, fieldName);
+            return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
 
@@ -5354,12 +5375,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public StructType getStructType(StarRocksParser.StructTypeContext context) {
         ArrayList<StructField> fields = new ArrayList<>();
-        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
-                context.columnNameColonTypeList().columnNameColonType();
-        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
-            String comment = (type.comment() == null) ? null :
-                    ((StringLiteral) visit(type.comment().string())).getStringValue();
-            fields.add(new StructField(type.identifier().getText(), getType(type.type()), comment));
+        List<StarRocksParser.SubfieldDescContext> subfields =
+                context.subfieldDescs().subfieldDesc();
+        for (StarRocksParser.SubfieldDescContext type : subfields) {
+            fields.add(new StructField(type.identifier().getText(), getType(type.type()), null));
         }
 
         return new StructType(fields);

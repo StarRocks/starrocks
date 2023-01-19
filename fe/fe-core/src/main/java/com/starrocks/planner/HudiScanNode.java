@@ -5,11 +5,17 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hudi.HudiConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -23,10 +29,12 @@ public class HudiScanNode extends ScanNode {
 
     private HudiTable hudiTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private CloudConfiguration cloudConfiguration = null;
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.hudiTable = (HudiTable) desc.getTable();
+        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -47,6 +55,18 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
         scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+    }
+
+    private void setupCloudCredential() {
+        String catalog = hudiTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
+        HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(catalog);
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -89,6 +109,15 @@ public class HudiScanNode extends ScanNode {
 
         output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+        }
 
         return output.toString();
     }
@@ -137,6 +166,12 @@ public class HudiScanNode extends ScanNode {
         if (hudiTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hudiTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hudiTable.getName());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

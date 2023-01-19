@@ -2,7 +2,7 @@
 
 The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, the Primary Key model does not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
 
-StarRocks also supports partial updates. This feature is in preview.
+StarRocks also supports partial updates and conditional updates.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
@@ -571,6 +571,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - Partial updates and conditional updates cannot be used simultaneously.
+> - Only Stream Load and Routine Load support conditional updates.
 
 ### Data examples
 
@@ -621,23 +622,6 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -H "merge_condition:version" \
       -T example5.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
-  ```
-
-- Run a Broker Load job:
-
-  ```SQL
-  LOAD LABEL test_db.table10
-  (
-      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
-      into table table5
-      format as "csv"
-      (id, version, score)
-  )
-  with broker
-  properties
-  (
-      "merge_condition" = "version"
-  );
   ```
 
 - Run a Routine Load job:

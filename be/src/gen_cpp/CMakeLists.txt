@@ -97,6 +97,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_constants.cpp
     ${GEN_CPP_DIR}/version.cpp
+    ${GEN_CPP_DIR}/CloudConfiguration_constants.cpp
+    ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
 )
 
 # keep everything in one library, the object files reference

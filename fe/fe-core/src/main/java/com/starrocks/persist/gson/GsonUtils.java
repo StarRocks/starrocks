@@ -253,6 +253,7 @@ public class GsonUtils {
     // Add any other adapters if necessary.
     private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
             .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
+            .addDeserializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())

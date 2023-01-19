@@ -507,7 +507,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -630,6 +630,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int thrift_server_max_worker_threads = 4096;
+
+    /**
+     * If there is no thread to handle new request, the request will be pend to a queue,
+     * the pending queue size is thrift_server_queue_size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
 
     /**
      * Maximal wait seconds for straggler node in load
@@ -1034,7 +1041,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 2;
+    public static int tablet_sched_slot_num_per_path = 4;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1059,9 +1066,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
-
-    @ConfField(aliases = {"tablet_balancer_strategy"})
-    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
 
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
@@ -1697,11 +1701,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
     /**
-     * default bucket number when create OLAP table without buckets info
+     * default storage cache ttl of lake table
      */
     @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
@@ -1791,7 +1802,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = true;
+    public static boolean enable_new_publish_mechanism = false;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
@@ -1865,4 +1876,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
 }

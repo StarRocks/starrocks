@@ -146,6 +146,9 @@ public:
     // get info's version, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
 
+    // get average row size
+    int64_t get_average_row_size();
+
     std::string debug_string() const;
 
     // Return nullptr if the delta rowset does not exist.
@@ -225,9 +228,16 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
+    /*
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
+    */
+    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
+                                         std::vector<uint64_t>* rss_rowids);
+
+    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
+                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -236,6 +246,8 @@ public:
 
     void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
+
+    Status check_and_remove_rowset();
 
 private:
     friend class Tablet;
@@ -298,14 +310,6 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    // Find all but the latest already-applied versions whose creation time is less than or
-    // equal to |expire_time|, then append them into |expire_list| and erase them from the
-    // in-memory version list.
-    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
-                                 int64_t* min_readable_version);
-
-    std::set<uint32_t> _active_rowsets();
-
     void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
@@ -333,7 +337,7 @@ private:
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
     // thread-safe
-    void _remove_unused_rowsets();
+    void _remove_unused_rowsets(bool drop_tablet = false);
 
     // REQUIRE: |_lock| is held.
     void _to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const;

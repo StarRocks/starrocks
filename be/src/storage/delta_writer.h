@@ -6,6 +6,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/tracer.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
@@ -82,6 +83,8 @@ public:
     // [NOT thread-safe]
     [[nodiscard]] Status close();
 
+    void cancel(const Status& st);
+
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
@@ -102,6 +105,8 @@ public:
     int64_t partition_id() const;
 
     int64_t node_id() const { return _opt.node_id; }
+
+    const std::vector<PNetworkAddress>& replicas() const { return _opt.replicas; }
 
     const Tablet* tablet() const { return _tablet.get(); }
 
@@ -164,6 +169,8 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
+    // initial value is max value
+    size_t _memtable_buffer_row = -1;
 };
 
 } // namespace vectorized
