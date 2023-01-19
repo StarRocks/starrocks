@@ -16,7 +16,7 @@ StarRocks supports scalar UDFs, user-defined aggregate functions (UDAFs), user-d
 
 ## Enable UDFs
 
-In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_ud``f` to `true`. Then, restart that FE to make the new setting take effect.
+In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_udf` to `true`. Then, restart that FE to make the new setting take effect.
 
 ## Create and use UDFs
 
@@ -216,73 +216,42 @@ For more information, see "Step 1: Create a Maven project" in the "Create and us
     Suppose that you want to create a UDAF named MY_SUM_INT. Unlike the built-in aggregate function SUM, which returns BIGINT values, the SUMINT aggregate function supports only input and return parameters of the INT data type.
 
     ```Java
+    
     package com.starrocks.udf.sample;
 
-
-
     public class SumInt {
-
         public static class State {
-
             int counter = 0;
-
             public int serializeLength() { return 4; }
-
         }
-
-
 
         public State create() {
-
             return new State();
-
         }
-
-
 
         public void destroy(State state) {
-
         }
-
-
 
         public final void update(State state, Integer val) {
-
             if (val != null) {
-
                 state.counter+= val;
-
             }
-
         }
-
-
 
         public void serialize(State state, java.nio.ByteBuffer buff) {
-
             buff.putInt(state.counter);
-
         }
-
-
 
         public void merge(State state, java.nio.ByteBuffer buffer) {
-
             int val = buffer.getInt();
-
             state.counter += val;
-
         }
-
-
 
         public Integer finalize(State state) {
-
             return state.counter;
-
         }
-
     }
+    
     ```
 
     The class that you define must implement the methods that are described in the following table.
