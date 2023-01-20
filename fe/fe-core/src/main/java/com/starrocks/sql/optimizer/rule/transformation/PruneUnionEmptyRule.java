@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 615338dd4 ([BugFix] Fix projection may reuse column ref when prune union empty (#16646))
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -12,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -76,7 +93,13 @@ public class PruneUnionEmptyRule extends TransformationRule {
         for (List<ColumnRefOperator> childOutputColumn : unionOperator.getChildOutputColumns()) {
             if (newInputs.get(0).getOutputColumns().isIntersect(new ColumnRefSet(childOutputColumn))) {
                 for (int i = 0; i < unionOperator.getOutputColumnRefOp().size(); i++) {
-                    projectMap.put(unionOperator.getOutputColumnRefOp().get(i), childOutputColumn.get(i));
+                    ColumnRefOperator unionOutputColumn = unionOperator.getOutputColumnRefOp().get(i);
+                    // TODO: if we implement COW in BE, we could remove it
+                    if (childOutputColumn.get(i).isColumnRef() && projectMap.containsValue(childOutputColumn.get(i))) {
+                        projectMap.put(unionOutputColumn, new CloneOperator(childOutputColumn.get(i)));
+                    } else {
+                        projectMap.put(unionOutputColumn, childOutputColumn.get(i));
+                    }
                 }
                 break;
             }
