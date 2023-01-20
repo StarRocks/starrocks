@@ -46,6 +46,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class SelectStmtTest {
@@ -179,5 +180,33 @@ public class SelectStmtTest {
             Assert.assertTrue(ex.getMessage().contains("Invalid tablet"));
         }
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testNegateEqualForNullInWhereClause() throws Exception {
+        String[] queryList = {
+                "select * from db1.tbl1 where not(k1 <=> NULL)",
+                "select * from db1.tbl1 where not(k1 <=> k2)",
+                "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
+        };
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+        for (String q: queryList) {
+            String s = starRocksAssert.query(q).explainQuery();
+            Assert.assertTrue(re.matcher(s).find());
+        }
+    }
+
+    @Test
+    public void testSimplifiedPredicateRuleApplyToNegateEuqualForNull() throws Exception {
+        String[] queryList = {
+                "select not(k1 <=> NULL) from db1.tbl1",
+                "select not(NULL <=> k1) from db1.tbl1",
+                "select not(k1 <=> 'abc-def') from db1.tbl1",
+        };
+        Pattern re = Pattern.compile("NOT.*<=>.*");
+        for (String q: queryList) {
+            String s = starRocksAssert.query(q).explainQuery();
+            Assert.assertTrue(re.matcher(s).find());
+        }
     }
 }
