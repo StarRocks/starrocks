@@ -1173,7 +1173,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 // otherwise we may recurse infinitely.
                 Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
                 return pushNegationToOperands(root.getChild(0).negate());
-            } catch (NoSuchMethodException e) {
+            } catch (NoSuchMethodException|IllegalStateException e) {
                 // The 'negate' function is not implemented. Break the recursion.
                 return root;
             }
