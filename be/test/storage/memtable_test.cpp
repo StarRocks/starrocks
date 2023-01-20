@@ -407,7 +407,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
     }
 
-    VectorizedSchema read_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    VectorizedSchema read_schema = ChunkHelper::convert_schema(*tablet_schema);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
