@@ -120,6 +120,9 @@ public:
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
 
+    // dynamic update max threads num
+    Status update_max_threads(int max_threads);
+
     // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
     std::unique_ptr<FlushToken> create_flush_token(
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
