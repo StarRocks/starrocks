@@ -596,6 +596,7 @@
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
   + Development Environment
+    + [IDE Setup](./developers/development-environment/ide-setup.md)
     + [IDEA](./developers/development-environment/IDEA.md)
     + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
     + [Build_Handbook](./developers/build-starrocks/handbook.md)
