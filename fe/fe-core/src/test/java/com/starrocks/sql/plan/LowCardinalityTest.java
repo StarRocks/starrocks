@@ -1331,12 +1331,42 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testProjectWithUnionEmptySet() throws Exception {
-        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+        sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 16> : <string id 15>"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
+
+        // COW Case
+        sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 14> : 8\n" +
+                "  |  <slot 15> : clone(8)\n" +
+                "  |  \n" +
+                "  2:Decode\n" +
+                "  |  <dict id 16> : <string id 8>\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 16: S_ADDRESS");
+
+        sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
+                "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 20> : 9: S_ADDRESS\n" +
+                "  |  <slot 21> : 24: cast\n" +
+                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  <slot 23> : CAST(16: expr AS VARCHAR)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 24> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 9: S_ADDRESS, 15: expr, 16: expr");
+
     }
 
     @Test
