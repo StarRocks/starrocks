@@ -94,8 +94,7 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
     }
 }
 
-void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected,
-                                     bool* all_zero) {
+void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
     for (size_t i = 0; i < num_rows; i++) {

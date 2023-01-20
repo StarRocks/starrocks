@@ -723,8 +723,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     return Status::OK();
 }
 
-Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
-                                                     bool& hit_all) {
+Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);

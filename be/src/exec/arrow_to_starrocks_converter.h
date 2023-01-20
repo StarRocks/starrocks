@@ -68,8 +68,7 @@ typedef Status (*ConvertFunc)(const arrow::Array* array, size_t array_start_idx,
 // or simd optimization to speed up construction of each layer.
 typedef Status (*ListConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
                                   Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                                  Filter* column_filter, ArrowConvertContext* ctx,
-                                  const TypeDescriptor* type_desc);
+                                  Filter* column_filter, ArrowConvertContext* ctx, const TypeDescriptor* type_desc);
 
 typedef Status (*ListCheckDepthFunc)(const arrow::Array* array, size_t expected_depth);
 

@@ -866,9 +866,8 @@ struct ArrowListConverter {
     }
 
     static Status convert_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                               Filter* column_filter, ArrowConvertContext* ctx,
-                               const TypeDescriptor* type_desc) {
+                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
+                               ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         auto* col_array = down_cast<ArrayColumn*>(column);
         UInt32Column* col_offsets = col_array->offsets_column().get() + column_start_idx;
 

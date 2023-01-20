@@ -346,8 +346,7 @@ Status HashJoiner::_build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
-                                                   bool& hit_all) {
+Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
