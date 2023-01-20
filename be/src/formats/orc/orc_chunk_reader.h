@@ -18,6 +18,7 @@
 #include <orc/OrcFile.hh>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -98,7 +99,7 @@ public:
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
-    std::shared_ptr<Column::Filter> get_broker_load_fiter() { return _broker_load_filter; }
+    std::shared_ptr<Filter> get_broker_load_fiter() { return _broker_load_filter; }
 
     void set_hive_column_names(const std::vector<std::string>* v) {
         if (v != nullptr && v->size() != 0) {
@@ -191,7 +192,7 @@ private:
     // fields related to broker load.
     bool _broker_load_mode;
     bool _strict_mode;
-    std::shared_ptr<Column::Filter> _broker_load_filter;
+    std::shared_ptr<Filter> _broker_load_filter;
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;

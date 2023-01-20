@@ -260,7 +260,7 @@ private:
     int _filter_data(detail::ChunkHolder* chunk_holder, int row_sz);
 
     template <LogicalType TYPE>
-    void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter, int row_sz);
+    void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz);
 
     std::vector<JoinRuntimeFilter*> _runtime_filter;
 
@@ -269,7 +269,7 @@ private:
             detail::SortingHeap<detail::ChunkRowCursor, CursorContainer, detail::ChunkCursorComparator>;
 
     std::unique_ptr<CommonCursorSortHeap> _sort_heap = nullptr;
-    std::function<void(detail::ChunkHolder*, Column::Filter*, int)> _do_filter_data;
+    std::function<void(detail::ChunkHolder*, Filter*, int)> _do_filter_data;
 
     const size_t _offset;
     const size_t _limit;

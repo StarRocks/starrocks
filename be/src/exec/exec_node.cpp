@@ -40,6 +40,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -592,8 +593,8 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
 }
 
 Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk) {
-    Column::Filter filter(chunk->num_rows(), 1);
-    Column::Filter* raw_filter = &filter;
+    Filter filter(chunk->num_rows(), 1);
+    Filter* raw_filter = &filter;
 
     // prune chunk when pruned size is large enough
     // these constants are just came up without any specific reason.
@@ -667,11 +668,11 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     if (!apply_filter) {
         DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
     }
-    FilterPtr filter(new Column::Filter(chunk->num_rows(), 1));
+    FilterPtr filter(new Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
     }
-    Column::Filter* raw_filter = filter.get();
+    Filter* raw_filter = filter.get();
 
     for (auto* ctx : ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));

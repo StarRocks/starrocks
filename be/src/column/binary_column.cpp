@@ -19,6 +19,7 @@
 #endif
 
 #include "column/bytes.h"
+#include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
@@ -411,7 +412,7 @@ ColumnPtr BinaryColumnBase<T>::cut(size_t start, size_t length) const {
 }
 
 template <typename T>
-size_t BinaryColumnBase<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size_t to) {
     auto start_offset = from;
     auto result_offset = from;
 
