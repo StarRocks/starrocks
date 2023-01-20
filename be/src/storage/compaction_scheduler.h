@@ -28,6 +28,8 @@ public:
 
     void notify();
 
+    Status update_max_threads(int max_threads);
+
 private:
     // wait until current running tasks are below max_concurrent_num
     void _wait_to_run();

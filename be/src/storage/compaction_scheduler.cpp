@@ -63,6 +63,14 @@ void CompactionScheduler::notify() {
     _cv.notify_one();
 }
 
+Status CompactionScheduler::update_max_threads(int max_threads) {
+    if (_compaction_pool != nullptr) {
+        return _compaction_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
+}
+
 bool CompactionScheduler::_can_schedule_next() {
     return !StorageEngine::instance()->compaction_manager()->check_if_exceed_max_task_num() &&
            StorageEngine::instance()->compaction_manager()->candidates_size() > 0;
