@@ -42,7 +42,6 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.LT, BinaryType.GE)
                     .put(BinaryType.GE, BinaryType.LT)
                     .put(BinaryType.GT, BinaryType.LE)
-                    .put(BinaryType.EQ_FOR_NULL, BinaryType.NE)
                     .build();
 
     private final BinaryType type;
@@ -134,7 +133,11 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     public BinaryPredicateOperator negative() {
-        return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
+        if (BINARY_NEGATIVE_MAP.containsKey(this.getBinaryType())) {
+            return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
+        } else {
+            return null;
+        }
     }
 
     @Override
