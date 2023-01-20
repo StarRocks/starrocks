@@ -617,7 +617,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     0, id, TPushType.LOAD_V2,
                     TPriority.NORMAL, transactionId, taskSignature,
                     tBrokerScanRange, params.tDescriptorTable,
-                    params.useVectorized, timezone, tabletType);
+                    timezone, tabletType);
             if (AgentTaskQueue.addTask(pushTask)) {
                 batchTask.addTask(pushTask);
                 if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
@@ -964,12 +964,10 @@ public class SparkLoadJob extends BulkLoadJob {
     private static class PushBrokerReaderParams {
         TBrokerScanRange tBrokerScanRange;
         TDescriptorTable tDescriptorTable;
-        boolean useVectorized;
 
         public PushBrokerReaderParams() {
             this.tBrokerScanRange = new TBrokerScanRange();
             this.tDescriptorTable = null;
-            this.useVectorized = true;
         }
 
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
@@ -1008,24 +1006,13 @@ public class SparkLoadJob extends BulkLoadJob {
                 srcSlotDesc.setIsMaterialized(true);
                 srcSlotDesc.setIsNullable(true);
                 Type type = column.getType();
-                if (useVectorized) {
-                    if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
-                        // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
-                        srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
-                        srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
-                    } else {
-                        srcSlotDesc.setType(type);
-                        srcSlotDesc.setColumn(new Column(column.getName(), type));
-                    }
+                if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
+                    // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
+                    srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
+                    srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
                 } else {
-                    if (type.isBitmapType() || type.isHllType()) {
-                        // VARCHAR to BITMAP|HLL cast is disabled, so use origin type.
-                        srcSlotDesc.setType(type);
-                        srcSlotDesc.setColumn(new Column(column.getName(), type));
-                    } else {
-                        srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
-                        srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
-                    }
+                    srcSlotDesc.setType(type);
+                    srcSlotDesc.setColumn(new Column(column.getName(), type));
                 }
                 params.addToSrc_slot_ids(srcSlotDesc.getId().asInt());
                 srcSlotDescByName.put(column.getName(), srcSlotDesc);
@@ -1070,7 +1057,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 // so we cast VARCHAR to TINYINT first, then cast TINYINT to BOOLEAN
                 return new CastExpr(Type.BOOLEAN, new CastExpr(Type.TINYINT, expr));
             } else if (dstType.isScalarType()) {
-                if (useVectorized && (dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
+                if ((dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
                     // there is no cast VARCHAR to BITMAP|HLL function,
                     // bitmap and hll data will be converted from varchar in be push.
                     return expr;

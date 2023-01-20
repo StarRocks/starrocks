@@ -39,32 +39,41 @@ import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class DataDescriptionTest {
+    private static StarRocksAssert starRocksAssert;
 
-    @Mocked
-    private Auth auth;
-    @Mocked
-    private ConnectContext ctx;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        starRocksAssert.withDatabase("testDb");
+        List<String> tables = Arrays.asList("testTable", "testHiveTable");
+        String sql = "create table testDb.%s (k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
 
-    @Before
-    public void setUp() {
-        MockedAuth.mockedAuth(auth);
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+        tables.forEach(t -> {
+            try {
+                starRocksAssert.withTable(String.format(sql, t));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test

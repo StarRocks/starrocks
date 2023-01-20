@@ -31,10 +31,10 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb(10002);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("t0");
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, olapTable.getId(), null,
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -47,9 +47,9 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testDroppedDB() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, 10003, null,
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 10003, null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));

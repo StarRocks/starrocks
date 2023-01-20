@@ -20,3 +20,4 @@ public class PrivilegeException extends Exception {
         super(msg);
     }
 }
+

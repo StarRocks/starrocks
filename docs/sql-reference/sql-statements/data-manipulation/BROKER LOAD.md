@@ -229,21 +229,21 @@ For more information, see AWS documentation [Managing access keys for IAM users]
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 > - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
-#### Google CGS
+#### Google GCS
 
-If the source data is stored in a Google CGS bucket, provide the following configurations.
+If the source data is stored in a Google GCS bucket, provide the following configurations.
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key that you can use to access the Google CGS bucket. |
-| fs.s3a.secret.key | The Secret Key that you can use to access the Google CGS bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Google CGS bucket. |
+| fs.s3a.access.key | The Access Key that you can use to access the Google GCS bucket. |
+| fs.s3a.secret.key | The Secret Key that you can use to access the Google GCS bucket. |
+| fs.s3a.endpoint   | The endpoint that you can use to access the Google GCS bucket. |
 
 > **NOTE**
 >
-> Broker Load supports accessing Google CGS only according to the S3A protocol. Therefore, when you load data from Google CGS, you must replace the prefix in the CGS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
-To create an Access/Secret key pair to access your Google CGS bucket, follow these steps:
+To create an Access/Secret key pair to access your Google GCS bucket, follow these steps:
 
 1. Log in to [Google GCP](https://console.cloud.google.com/storage/settings).
 
@@ -326,14 +326,6 @@ The following parameters are supported:
   Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
 
     You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
-
-- `merge_condition`
-
-  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
-
-  > **NOTE**
-  >
-  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates.
 
 ## Column mapping
 

@@ -20,12 +20,30 @@ namespace java com.starrocks.thrift
 
 include "Metrics.thrift"
 
+enum TCounterAggregateType {
+    SUM,
+    AVG,
+}
+
+enum TCounterMergeType {
+    MERGE_ALL, 
+    SKIP_ALL,
+    SKIP_FIRST_MERGE,
+    SKIP_SECOND_MERGE,
+}
+
+struct TCounterStrategy {
+    1: required TCounterAggregateType aggregate_type
+    2: required TCounterMergeType merge_type
+    3: required i64 display_threshold = 0
+}
+
 // Counter data
 struct TCounter {
   1: required string name
   2: required Metrics.TUnit type
   3: required i64 value 
-  4: optional bool skip_merge = false
+  5: optional TCounterStrategy strategy 
 }
 
 // A single runtime profile

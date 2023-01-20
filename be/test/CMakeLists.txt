@@ -162,7 +162,6 @@ set(EXEC_FILES
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
         ./storage/file_utils_test.cpp
-        ./storage/fs/file_block_manager_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
@@ -186,6 +185,8 @@ set(EXEC_FILES
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
+        ./storage/lake/primary_key_compaction_task_test.cpp
+        ./storage/lake/primary_key_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -308,6 +309,7 @@ set(EXEC_FILES
         ./util/path_util_test.cpp
         ./util/priority_queue_test.cpp
         ./util/rle_encoding_test.cpp
+        ./util/runtime_profile_test.cpp
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp

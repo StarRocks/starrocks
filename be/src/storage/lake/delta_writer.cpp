@@ -24,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -144,20 +145,17 @@ private:
     // for partial update
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
-    std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
 };
 
 Status DeltaWriterImpl::build_schema_and_writer() {
-    if (_tablet_schema == nullptr) {
+    if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
-        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
-            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(_rowset_txn_meta.get(), _tablet_schema));
-        } else {
-            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        if (_partial_update_tablet_schema != nullptr) {
+            _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -255,7 +253,6 @@ Status DeltaWriterImpl::handle_partial_update() {
             LOG(WARNING) << "table with sort key do not support partial update";
             return Status::NotSupported("table with sort key do not support partial update");
         }
-        LOG(INFO) << "handle_partial_update col num: " << partial_cols_num;
         _tablet_schema = _partial_update_tablet_schema;
     }
     return Status::OK();
@@ -289,12 +286,17 @@ Status DeltaWriterImpl::finish() {
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
     // handle partial update
-    if (_rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
-        op_write->mutable_txn_meta()->CopyFrom(*_rowset_txn_meta);
+    RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
+    if (rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
+        op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
         for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
             const auto& tablet_column = _partial_update_tablet_schema->column(i);
             op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
             op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+        }
+        // generate rewrite segment names to avoid gc in rewrite operation
+        for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+            op_write->add_rewrite_segments(random_segment_filename());
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
@@ -318,7 +320,6 @@ void DeltaWriterImpl::close() {
     _flush_token.reset();
     _tablet_schema.reset();
     _partial_update_tablet_schema.reset();
-    _rowset_txn_meta.reset();
 }
 
 //// DeltaWriter
