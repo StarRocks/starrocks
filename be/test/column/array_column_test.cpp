@@ -175,7 +175,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{i, i * 2});
         }
 
-        Column::Filter filter(N, 1);
+        Filter filter(N, 1);
 
         column->filter_range(filter, 0, N);
         column->filter_range(filter, N / 10, N);
@@ -259,7 +259,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{i, i * 2});
         }
 
-        Column::Filter filter(N, 0);
+        Filter filter(N, 0);
         for (int i = 0; i < 32; i++) {
             filter[i] = i % 2;
         }
@@ -300,7 +300,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             }
             column->append_datum(array);
         }
-        Column::Filter filter(4096);
+        Filter filter(4096);
         for (int i = 0; i < 4096; i++) {
             filter[i] = i % 2;
         }
@@ -335,7 +335,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{DatumArray{i * 3, i * 3 + 1}, DatumArray{i * 2, i * 2 + 1}});
         }
 
-        Column::Filter filter(N, 1);
+        Filter filter(N, 1);
         column->filter_range(filter, 0, N);
         column->filter_range(filter, N / 10, N);
         column->filter_range(filter, N / 2, N);

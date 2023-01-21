@@ -38,7 +38,7 @@ struct DictOptimizeContext {
     bool result_nullable = false;
     // size: DICT_DECODE_MAX_SIZE + 1
     std::vector<int16_t> code_convert_map;
-    Column::Filter filter;
+    Filter filter;
     // for no-string column convert map
     ColumnPtr convert_column;
 };

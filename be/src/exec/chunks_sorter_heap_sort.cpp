@@ -191,8 +191,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
 }
 
 template <LogicalType TYPE>
-void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter,
-                                                    int row_sz) {
+void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz) {
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
 
@@ -273,7 +272,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     const int cursor_rid = top_cursor.row_id();
     const int column_sz = top_cursor.data_segment()->order_by_columns.size();
 
-    Column::Filter filter(row_sz);
+    Filter filter(row_sz);
 
     // For single column special optimization
     if (_do_filter_data) {
