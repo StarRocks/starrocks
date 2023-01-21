@@ -300,17 +300,17 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
                                              const OrcMappingPtr& mapping, TypeDescriptor* result) {
     orc::TypeKind kind = orc_type->getKind();
     switch (kind) {
-        case orc::LIST:
-            [[fallthrough]];
-        case orc::MAP:
-            [[fallthrough]];
-        case orc::STRUCT:
-            if (mapping == nullptr) {
-                return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-            }
-            break;
-        default:
-            break;
+    case orc::LIST:
+        [[fallthrough]];
+    case orc::MAP:
+        [[fallthrough]];
+    case orc::STRUCT:
+        if (mapping == nullptr) {
+            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
+        }
+        break;
+    default:
+        break;
     }
 
     if (kind == orc::LIST) {
