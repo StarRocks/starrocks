@@ -803,9 +803,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-                                    size_t nbucket) const override {
+                                    size_t nbucket, bool without_null) const override {
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(KeySize, npage_hint, nbucket, kvs));
             }
@@ -1198,9 +1198,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-                                    size_t nbucket) const override {
+                                    size_t nbucket, bool without_null) const override {
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(kKeySizeMagicNum, npage_hint, nbucket, kvs));
             }
@@ -1879,7 +1879,7 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
             const auto expand_exponent = nshard / shard_size;
             for (auto i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(writer, expand_exponent, npage_hint,
-                                                                                    nbucket));
+                                                                                    nbucket, !write_tmp_l1));
             }
         }
     }
