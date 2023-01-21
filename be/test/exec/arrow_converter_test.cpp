@@ -25,6 +25,7 @@
 #include "arrow/array/builder_base.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "runtime/datetime_value.h"
 
@@ -72,7 +73,7 @@ void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value
     auto array = create_constant_array<ArrowType>(num_elements, value, counter);
     auto conv_func = get_arrow_converter(AT, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
@@ -98,7 +99,7 @@ void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppT
     auto* null_column = nullable_column->null_column().get();
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), data_column, data_column->size(), null_data,
@@ -240,7 +241,7 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
     auto array = create_constant_binary_array<ArrowType, false>(num_elements, value, counter);
     auto conv_func = get_arrow_converter(AT, PT, false, strict_mode);
     ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
@@ -292,7 +293,7 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
@@ -480,7 +481,7 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     auto array = create_constant_fixed_size_binary_array<bytes_width, false>(num_elements, value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
@@ -516,7 +517,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
@@ -697,7 +698,7 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
     auto array = create_constant_datetime_array<ArrowType, false>(num_elements, arrow_datetime, type, counter);
     auto conv_func = get_arrow_converter(AT, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
@@ -730,7 +731,7 @@ void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Colu
     auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     fill_null_column(array.get(), 0, num_elements, null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), datetime_column, datetime_column->size(), null_data,
@@ -918,7 +919,7 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
     auto array = create_const_decimal_array<false>(num_elements, std::move(type), value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
@@ -950,7 +951,7 @@ void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal12
     auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     auto status = conv_func(array.get(), 0, array->length(), decimal_column, decimal_column->size(), null_data,
@@ -1224,7 +1225,7 @@ void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std
     auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_JSON, false, false);
     ASSERT_TRUE(conv_func != nullptr);
 
-    Column::Filter filter;
+    Filter filter;
     filter.resize(array->length(), 1);
     auto* filter_data = &filter.front();
     ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));

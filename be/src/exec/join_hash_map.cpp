@@ -17,6 +17,7 @@
 #include <column/chunk.h>
 #include <runtime/descriptors.h>
 
+#include "column/vectorized_fwd.h"
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
@@ -495,7 +496,7 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
     _table_items->row_count += chunk->num_rows();
 }
 
-void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
+void JoinHashTable::remove_duplicate_index(Filter* filter) {
     if (_hash_map_type == JoinHashMapType::empty) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
@@ -665,7 +666,7 @@ size_t JoinHashTable::_get_size_of_fixed_and_contiguous_type(LogicalType data_ty
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) {
     size_t row_count = filter->size();
 
     for (size_t i = 0; i < row_count; i++) {
@@ -687,7 +688,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Column::Filter* 
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_left_semi_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_left_semi_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if ((*filter)[i] == 1) {
@@ -700,7 +701,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_semi_join(Column::Filter* f
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_left_anti_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_left_anti_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {
@@ -716,7 +717,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_anti_join(Column::Filter* f
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_right_outer_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_right_outer_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if ((*filter)[i] == 1) {
@@ -725,7 +726,7 @@ void JoinHashTable::_remove_duplicate_index_for_right_outer_join(Column::Filter*
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_right_semi_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_right_semi_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if ((*filter)[i] == 1) {
@@ -738,7 +739,7 @@ void JoinHashTable::_remove_duplicate_index_for_right_semi_join(Column::Filter* 
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_right_anti_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_right_anti_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if ((*filter)[i] == 1) {
@@ -747,7 +748,7 @@ void JoinHashTable::_remove_duplicate_index_for_right_anti_join(Column::Filter* 
     }
 }
 
-void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Column::Filter* filter) {
+void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {

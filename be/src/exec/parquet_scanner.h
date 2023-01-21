@@ -75,7 +75,7 @@ private:
     std::vector<ConvertFunc> _conv_funcs;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
-    Column::Filter _chunk_filter;
+    Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
 };
 

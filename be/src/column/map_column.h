@@ -18,6 +18,7 @@
 
 #include "column/column.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 

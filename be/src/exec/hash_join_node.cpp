@@ -723,8 +723,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     return Status::OK();
 }
 
-Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
-                                                     bool& hit_all) {
+Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
@@ -762,7 +761,7 @@ Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Fi
 }
 
 void HashJoinNode::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
-                                                   bool filter_all, bool hit_all, const Column::Filter& filter) {
+                                                   bool filter_all, bool hit_all, const Filter& filter) {
     if (filter_all) {
         for (size_t i = start_column; i < start_column + column_count; i++) {
             auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
@@ -794,7 +793,7 @@ Status HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, si
                                                              size_t column_count) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
@@ -808,7 +807,7 @@ Status HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, si
 Status HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
@@ -821,7 +820,7 @@ Status HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
 Status HashJoinNode::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
