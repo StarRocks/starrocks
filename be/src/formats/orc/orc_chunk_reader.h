@@ -196,8 +196,8 @@ private:
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
     std::unordered_map<std::string, int> _name_to_column_id;
-    RuntimeState* _state;
-    SlotDescriptor* _current_slot;
+    RuntimeState* _state = nullptr;
+    SlotDescriptor* _current_slot = nullptr;
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
