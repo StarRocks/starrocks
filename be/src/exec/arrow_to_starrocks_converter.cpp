@@ -84,7 +84,7 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
     return null_count;
 }
 
-void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
+void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
                  size_t column_start_idx) {
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);
     auto* filter_data = (&filter->front()) + column_start_idx;
@@ -866,9 +866,8 @@ struct ArrowListConverter {
     }
 
     static Status convert_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                               Column::Filter* column_filter, ArrowConvertContext* ctx,
-                               const TypeDescriptor* type_desc) {
+                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
+                               ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         auto* col_array = down_cast<ArrayColumn*>(column);
         UInt32Column* col_offsets = col_array->offsets_column().get() + column_start_idx;
 
@@ -937,7 +936,7 @@ struct ArrowListConverter {
 
     static Status convert_list_with_null(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
                                          Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                                         Column::Filter* column_filter, ArrowConvertContext* ctx,
+                                         Filter* column_filter, ArrowConvertContext* ctx,
                                          const TypeDescriptor* type_desc) {
         auto nullable_column = down_cast<NullableColumn*>(column);
         auto null_column = nullable_column->mutable_null_column();
@@ -948,7 +947,7 @@ struct ArrowListConverter {
     }
 
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Column::Filter* column_filter,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
                         ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         if (column->is_nullable()) {
             return convert_list_with_null(array, array_start_idx, num_elements, column, column_start_idx, null_data,

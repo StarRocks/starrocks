@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -287,7 +288,7 @@ MutableColumnPtr MapColumn::clone_empty() const {
     return create_mutable(_keys->clone_empty(), _values->clone_empty(), UInt32Column::create());
 }
 
-size_t MapColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     DCHECK_EQ(size(), to);
     auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];

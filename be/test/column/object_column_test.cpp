@@ -18,6 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/percentile_functions.h"
 #include "runtime/types.h"
 #include "types/hll.h"
@@ -34,7 +35,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         c->filter(filter);
         ASSERT_EQ(100, c->size());
     }
@@ -43,7 +44,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         auto c = HyperLogLogColumn::create();
         c->resize(100);
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter(filter);
         ASSERT_EQ(0, c->size());
     }
@@ -53,7 +54,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 90; i < 100; i++) {
             filter[i] = 0;
         }
@@ -66,7 +67,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 0; i < 10; i++) {
             filter[i] = 0;
         }
@@ -79,7 +80,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 0; i < 100; i++) {
             filter[i] = i % 2;
         }
@@ -96,7 +97,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         c->filter_range(filter, 0, 100);
         ASSERT_EQ(100, c->size());
     }
@@ -105,7 +106,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         auto c = HyperLogLogColumn::create();
         c->resize(100);
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 0, 100);
         ASSERT_EQ(0, c->size());
     }
@@ -115,7 +116,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 90, 100);
         ASSERT_EQ(90, c->size());
     }
@@ -125,7 +126,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 0, 10);
         ASSERT_EQ(90, c->size());
     }
@@ -135,7 +136,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 20, 32);
         ASSERT_EQ(88, c->size());
     }

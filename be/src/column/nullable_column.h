@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/logging.h"
 
 namespace starrocks {
@@ -194,7 +195,7 @@ public:
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
                                        size_t count) override;
 
-    size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 

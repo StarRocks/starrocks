@@ -309,7 +309,6 @@ public:
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
-    using Filter = Buffer<uint8_t>;
     inline size_t filter(const Filter& filter) {
         DCHECK_EQ(size(), filter.size());
         return filter_range(filter, 0, filter.size());

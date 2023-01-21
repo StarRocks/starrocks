@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
+#include "column/vectorized_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_hdfs.h"
@@ -159,7 +160,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
     int ctx_index = 0;
     int before_rows = cast->num_rows();
-    Column::Filter filter(cast->num_rows(), 1);
+    Filter filter(cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1
     // on table COLUMNS (k1,k2,k3=k1)

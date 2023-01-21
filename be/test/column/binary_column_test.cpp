@@ -20,6 +20,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -139,7 +140,7 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
         column->append(std::to_string(i));
     }
 
-    Column::Filter filter;
+    Filter filter;
     for (int k = 0; k < 100; ++k) {
         filter.push_back(k % 2);
     }

@@ -18,6 +18,7 @@
 
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -138,7 +139,7 @@ public:
 
     ColumnPtr clone_shared() const override;
 
-    size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 

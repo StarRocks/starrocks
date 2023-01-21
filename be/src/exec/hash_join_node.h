@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/join_hash_map.h"
 #include "util/phmap/phmap.h"
@@ -72,9 +73,9 @@ private:
 
     Status _evaluate_build_keys(const ChunkPtr& chunk);
 
-    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
-                                                bool filter_all, bool hit_all, const Column::Filter& filter);
+                                                bool filter_all, bool hit_all, const Filter& filter);
 
     Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
     Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);

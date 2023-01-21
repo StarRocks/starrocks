@@ -19,6 +19,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -184,8 +185,8 @@ public:
 
     class RunningContext {
     public:
-        Column::Filter selection;
-        Column::Filter merged_selection;
+        Filter selection;
+        Filter merged_selection;
         bool use_merged_selection;
         std::vector<uint32_t> hash_values;
         const std::vector<int32_t>* bucketseq_to_partition;
@@ -697,7 +698,7 @@ private:
     template <bool hash_partition = false>
     void _t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
-        Column::Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
+        Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         _selection_filter.resize(size);
         uint8_t* _selection = _selection_filter.data();
 

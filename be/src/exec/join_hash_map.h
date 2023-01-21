@@ -25,6 +25,7 @@
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "util/phmap/phmap.h"
 
 #if defined(__aarch64__)
@@ -703,7 +704,7 @@ public:
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
 
-    void remove_duplicate_index(Column::Filter* filter);
+    void remove_duplicate_index(Filter* filter);
 
     int64_t mem_usage();
 
@@ -713,13 +714,13 @@ private:
 
     Status _upgrade_key_columns_if_overflow();
 
-    void _remove_duplicate_index_for_left_outer_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_left_semi_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_left_anti_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_outer_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_semi_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
+    void _remove_duplicate_index_for_left_outer_join(Filter* filter);
+    void _remove_duplicate_index_for_left_semi_join(Filter* filter);
+    void _remove_duplicate_index_for_left_anti_join(Filter* filter);
+    void _remove_duplicate_index_for_right_outer_join(Filter* filter);
+    void _remove_duplicate_index_for_right_semi_join(Filter* filter);
+    void _remove_duplicate_index_for_right_anti_join(Filter* filter);
+    void _remove_duplicate_index_for_full_outer_join(Filter* filter);
 
     std::unique_ptr<JoinHashMapForEmpty> _empty = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;

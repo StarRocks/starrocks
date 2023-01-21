@@ -15,6 +15,7 @@
 #include "column/nullable_column.h"
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "simd/simd.h"
@@ -222,7 +223,7 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::OK();
 }
 
-size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t NullableColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
     if (!_has_null) {
         _null_column->resize(s1);

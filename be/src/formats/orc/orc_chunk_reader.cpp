@@ -26,6 +26,7 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
@@ -526,7 +527,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
     if (_broker_load_mode) {
         // always allocate load filter. it's much easier to use in fill chunk function.
         if (_broker_load_filter == nullptr) {
-            _broker_load_filter = std::make_shared<Column::Filter>(_read_chunk_size);
+            _broker_load_filter = std::make_shared<Filter>(_read_chunk_size);
         }
         _broker_load_filter->assign(_batch->numElements, 1);
     }

@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
@@ -99,7 +100,7 @@ Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* 
 }
 
 template <typename T>
-size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from, size_t to) {
     auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
     this->resize(size);
     return size;

@@ -17,6 +17,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "util/slice.h"
 
@@ -227,7 +228,7 @@ public:
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
-    size_t filter_range(const Column::Filter& filter, size_t start, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
