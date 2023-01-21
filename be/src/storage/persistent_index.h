@@ -168,7 +168,7 @@ public:
                                                                  bool without_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket) const = 0;
+                                            size_t npage_hint, size_t nbucket, bool without_null) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
