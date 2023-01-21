@@ -272,7 +272,7 @@ PARALLEL_TEST(JsonColumnTest, test_filter) {
         json_column->append(JsonValue::parse(json_str).value());
     }
 
-    Column::Filter filter(N, 1);
+    Filter filter(N, 1);
     json_column->filter_range(filter, 0, N);
     ASSERT_EQ(N, json_column->size());
 }

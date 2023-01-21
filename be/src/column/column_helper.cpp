@@ -35,7 +35,7 @@ NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
 NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
-Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
+Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
         auto nulls = nullable_column->null_column_data().data();
@@ -53,7 +53,7 @@ Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     }
 }
 
-void ColumnHelper::merge_two_filters(const ColumnPtr& column, Column::Filter* __restrict filter, bool* all_zero) {
+void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict filter, bool* all_zero) {
     if (column->is_nullable()) {
         auto* nullable_column = as_raw_column<NullableColumn>(column);
 
@@ -81,7 +81,7 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Column::Filter* __
     }
 }
 
-void ColumnHelper::merge_filters(const Columns& columns, Column::Filter* __restrict filter) {
+void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filter) {
     DCHECK_GT(columns.size(), 0);
 
     // All filters must be the same length, there is no const filter
@@ -94,8 +94,7 @@ void ColumnHelper::merge_filters(const Columns& columns, Column::Filter* __restr
     }
 }
 
-void ColumnHelper::merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
-                                     bool* all_zero) {
+void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
     for (size_t i = 0; i < num_rows; i++) {
@@ -106,7 +105,7 @@ void ColumnHelper::merge_two_filters(Column::Filter* __restrict filter, const ui
     }
 }
 
-void ColumnHelper::or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected) {
+void ColumnHelper::or_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected) {
     or_two_filters(filter->size(), filter->data(), selected);
 }
 

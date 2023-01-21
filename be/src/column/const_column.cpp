@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 
@@ -75,7 +76,7 @@ int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return 0;
 }
 
-size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t ConstColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     size_t count = SIMD::count_nonzero(&filter[from], to - from);
     this->resize(from + count);
     return from + count;
