@@ -9,7 +9,7 @@ You can deploy a StarRocks cluster with one BE node using [**docker-compose.yaml
 Run the following command to deploy StarRocks using Docker Compose:
 
 ```shell
-docker compose up
+docker-compose up -d
 ```
 
 ## Docker Compose YAML files
