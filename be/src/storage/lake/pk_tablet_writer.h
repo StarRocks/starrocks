@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -16,27 +28,21 @@ class SegmentWriter;
 
 namespace starrocks::lake {
 
-class GeneralTabletWriter : public TabletWriter {
+class PkTabletWriter : public TabletWriter {
 public:
-    explicit GeneralTabletWriter(Tablet tablet);
+    explicit PkTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet);
 
-    ~GeneralTabletWriter() override;
+    ~PkTabletWriter() override;
 
-    DISALLOW_COPY(GeneralTabletWriter);
+    DISALLOW_COPY(PkTabletWriter);
 
     int64_t tablet_id() const override { return _tablet.id(); }
 
     Status open() override;
 
-<<<<<<< HEAD
-    Status write(const starrocks::vectorized::Chunk& data) override;
-=======
     Status write(const starrocks::Chunk& data) override;
 
-    Status flush_del_file(const Column& deletes) override {
-        return Status::NotSupported("GeneralTabletWriter flush_del_file not support");
-    }
->>>>>>> b2dea2979 ([Refactor] Make AWS SDK library path independent (#16837))
+    Status flush_del_file(const Column& deletes) override;
 
     Status flush() override;
 
@@ -50,23 +56,20 @@ public:
 
     int64_t num_rows() const override { return _num_rows; }
 
-<<<<<<< HEAD
-=======
-    RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
+    RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
->>>>>>> b2dea2979 ([Refactor] Make AWS SDK library path independent (#16837))
 private:
     Status reset_segment_writer();
     Status flush_segment_writer();
 
     Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _schema;
     std::unique_ptr<SegmentWriter> _seg_writer;
     std::vector<std::string> _files;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
 };
 
 } // namespace starrocks::lake
