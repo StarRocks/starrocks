@@ -9,6 +9,7 @@
   + [Features](./introduction/Features.md)
 + Quick Start
   + [Deploy StarRocks](./quick_start/Deploy.md)
+    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
 + Table Design
