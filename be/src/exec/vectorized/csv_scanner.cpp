@@ -186,12 +186,101 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     return std::move(chunk);
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/csv_scanner.cpp
+=======
+Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
+    const int capacity = _state->chunk_size();
+    DCHECK_EQ(0, chunk->num_rows());
+    Status status;
+
+    int num_columns = chunk->num_columns();
+    _column_raw_ptrs.resize(num_columns);
+    for (int i = 0; i < num_columns; i++) {
+        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+    }
+
+    csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+        status = _curr_reader->next_record(row);
+        if (!status.ok() && !status.is_end_of_file()) {
+            return status;
+        }
+
+        // skip empty row
+        if (row.columns.size() == 0) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            continue;
+        }
+
+        const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
+        CSVReader::Record record(data, row.parsed_end - row.parsed_start);
+        if (row.columns.size() != _num_fields_in_csv) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            if (_counter->num_rows_filtered++ < 50) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
+
+                _report_error(record.to_string(), error_msg.str());
+            }
+            continue;
+        }
+        if (!validate_utf8(record.data, record.size)) {
+            if (_counter->num_rows_filtered++ < 50) {
+                _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            continue;
+        }
+
+        SCOPED_RAW_TIMER(&_counter->fill_ns);
+        bool has_error = false;
+        for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
+                continue;
+            }
+            const CSVColumn& column = row.columns[j];
+            char* basePtr = nullptr;
+            if (column.is_escaped_column) {
+                basePtr = _curr_reader->escapeDataPtr();
+            } else {
+                basePtr = _curr_reader->buffBasePtr();
+            }
+
+            const Slice data(basePtr + column.start_pos, column.length);
+            options.type_desc = &(slot->type());
+            if (!_converters[k]->read_string(_column_raw_ptrs[k], data, options)) {
+                chunk->set_num_rows(num_rows);
+                if (_counter->num_rows_filtered++ < 50) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << data.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error(record.to_string(), error_msg.str());
+                }
+                has_error = true;
+                break;
+            }
+            k++;
+        }
+        num_rows += !has_error;
+        if (status.is_end_of_file()) {
+            break;
+        }
+    }
+    row.columns.clear();
+    return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+}
+
+>>>>>>> 43b05b0d5 ([Enhancement] optimize memcpy in bytebuffer (#16772)):be/src/exec/csv_scanner.cpp
 Status CSVScanner::_parse_csv(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;
-    CSVReader::Fields fields;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -255,6 +344,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         }
         num_rows += !has_error;
     }
+    fields.clear();
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 

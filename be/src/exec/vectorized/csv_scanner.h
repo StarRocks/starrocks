@@ -64,6 +64,12 @@ private:
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
+<<<<<<< HEAD:be/src/exec/vectorized/csv_scanner.h
+=======
+    bool _use_v2;
+    CSVReader::Fields fields;
+    CSVRow row;
+>>>>>>> 43b05b0d5 ([Enhancement] optimize memcpy in bytebuffer (#16772)):be/src/exec/csv_scanner.h
 };
 
 } // namespace starrocks::vectorized
