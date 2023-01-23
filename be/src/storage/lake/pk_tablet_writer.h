@@ -56,7 +56,7 @@ public:
 
     int64_t num_rows() const override { return _num_rows; }
 
-    RowsetTxnMetaPB* rowset_txn_meta() { return _rowset_txn_meta.get(); }
+    RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
 private:
     Status reset_segment_writer();
