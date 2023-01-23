@@ -159,27 +159,17 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   The commands affected by this parameter are as follows:
 
-* SHOW FRONTENDS;
+  * `SHOW FRONTENDS`: Forwarding to leader allows users to view the last heartbeat message.
 
-  Forwarding to leader allows users to view the last heartbeat message.
+  * `SHOW BACKEND`: Forwarding to leader allows users to view the boot time, last heartbeat information, and disk capacity information.
 
-* SHOW BACKENDS;
+  * `SHOW BROKER`: Forwarding to leader allows users to view the boot time and last heartbeat information.
 
-  Forwarding to leader allows users to view the boot time, last heartbeat information, and disk capacity information.
+  * `SHOW TABLET`;
+  * `ADMIN SHOW REPLICA DISTRIBUTION`;
+  * `ADMIN SHOW REPLICA STATUS`: Forwarding to leader allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
 
-* SHOW BROKER;
-
-  Forwarding to leader allows users to view the boot time and last heartbeat information.
-
-* SHOW TABLET;
-* ADMIN SHOW REPLICA DISTRIBUTION;
-* ADMIN SHOW REPLICA STATUS;
-
-  Forwarding to leader allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
-
-* Show PROC;
-
-  Forwarding to leader allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
+  * `Show PROC`: Forwarding to leader allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
 
 * hash_join_push_down_right_table
 
