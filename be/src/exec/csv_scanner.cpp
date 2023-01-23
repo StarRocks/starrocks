@@ -245,7 +245,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
-    CSVRow row;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -325,6 +324,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             break;
         }
     }
+    row.columns.clear();
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
@@ -333,7 +333,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;
-    CSVReader::Fields fields;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -397,6 +396,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         }
         num_rows += !has_error;
     }
+    fields.clear();
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
