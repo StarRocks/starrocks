@@ -629,7 +629,7 @@ include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-	${AWSSDK_LINK_LIBRARIES}
+    ${AWSSDK_LINK_LIBRARIES}
 )
 set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
