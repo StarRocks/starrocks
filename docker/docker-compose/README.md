@@ -12,52 +12,8 @@ Run the following command to deploy StarRocks using Docker Compose:
 docker-compose up -d
 ```
 
-## Docker Compose YAML files
-
-The following example shows the Docker Compose YAML file that deploys a StarRocks cluster with one BE node:
-
-```yaml
-version: "3.9"
-services:
-  starrocks-fe:
-    image: starrocks/fe-ubuntu:2.5.0-rc03 
-    hostname: starrocks-fe
-    container_name: starrocks-fe
-    #user: root
-    command: /opt/starrocks/fe/bin/start_fe.sh
-    ports:
-      - 1030:8030
-      - 2020:9020
-      - 3030:9030
-    volumes:
-      - ../../conf/fe.conf:/opt/starrocks/fe/conf/fe.conf
-      #- ./data/fe/meta:/opt/starrocks/fe/meta
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9030"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
-  starrocks-be1:
-    image: starrocks/be-ubuntu:2.5.0-rc03
-    #user: root
-    command:
-      - /bin/bash
-      - -c
-      - |
-        sleep 15s; mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "alter system add backend \"starrocks-be1:9050\";"
-        /opt/starrocks/be/bin/start_be.sh 
-
-    hostname: starrocks-be1
-    container_name: starrocks-be1
-    depends_on:
-      - "starrocks-fe"
-    volumes:
-      - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
-      #- ./data/starrocks-be1/storage:/opt/starrocks/be/storage
-```
-
-The commented-out sections in the above example YAML file define the mount paths and volumes that FE and BE use to persist data. Note that root privilege is required to deploy StarRocks with Docker with persistent volume. 
+The commented-out sections in the above example YAML file define the mount paths and volumes that FE and BE use to persist data.
+Note that root privilege is required to deploy StarRocks with Docker with persistent volume. 
 
 ## Check cluster status
 
