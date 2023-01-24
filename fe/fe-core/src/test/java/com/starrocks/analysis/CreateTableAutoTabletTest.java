@@ -14,16 +14,13 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.AlterJobV2Test;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.jetbrains.annotations.TestOnly;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -126,7 +123,8 @@ public class CreateTableAutoTabletTest {
             UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
             Assert.fail(); // should raise Exception
         } catch (Exception e) {
-            Assert.assertEquals("Incorrect database name '" + longDbName + "'", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Incorrect database name '"
+                    + longDbName + "'.", e.getMessage());
         }
     }
 
