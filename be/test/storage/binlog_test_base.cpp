@@ -164,9 +164,9 @@ void BinlogTestBase::verify_file_meta(BinlogFileMetaPB* expect_file_meta,
     ASSERT_TRUE(rowset_set.empty());
 }
 
-void BinlogTestBase::verify_seek_and_next(const std::string& file_path, const std::shared_ptr<BinlogFileMetaPB>& file_meta,
-                                          int64_t seek_version, int64_t seek_seq_id,
-                                          std::vector<std::shared_ptr<TestLogEntryInfo>>& expected,
+void BinlogTestBase::verify_seek_and_next(const std::string& file_path,
+                                          const std::shared_ptr<BinlogFileMetaPB>& file_meta, int64_t seek_version,
+                                          int64_t seek_seq_id, std::vector<std::shared_ptr<TestLogEntryInfo>>& expected,
                                           int expected_first_entry_index) {
     std::shared_ptr<BinlogFileReader> file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
     Status st = file_reader->seek(seek_version, seek_seq_id);
@@ -205,7 +205,8 @@ void BinlogTestBase::verify_dup_key_multiple_versions(std::vector<DupKeyVersionI
                 ASSERT_TRUE(st.ok());
                 bool end_of_version = (n + 1) == version_info.num_entries;
                 expect_entry = build_insert_segment_log_entry(version, version, n, start_seq_id,
-                                          version_info.num_rows_per_entry, end_of_version, version_info.timestamp);
+                                                              version_info.num_rows_per_entry, end_of_version,
+                                                              version_info.timestamp);
                 LogEntryInfo* actual_entry = reader->log_entry();
                 verify_log_entry_info(expect_entry, actual_entry);
                 st = reader->next();

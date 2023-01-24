@@ -289,8 +289,8 @@ void BinlogFileTest::test_reset_and_reopen(bool is_reset) {
     if (is_reset) {
         ASSERT_OK(file_writer->reset(file_meta_1.get()));
     } else {
-	ASSERT_OK(file_writer->close(true));
-	auto status_or = BinlogFileWriter::reopen(1, file_path, 50, LZ4_FRAME, file_meta_1.get());
+        ASSERT_OK(file_writer->close(true));
+        auto status_or = BinlogFileWriter::reopen(1, file_path, 50, LZ4_FRAME, file_meta_1.get());
         ASSERT_OK(status_or.status());
         file_writer = status_or.value();
     }
@@ -351,7 +351,7 @@ TEST_F(BinlogFileTest, test_random_write_read) {
         version_info.timestamp = version_info.version;
         versions.push_back(version_info);
         ASSERT_OK(file_writer->begin(version_info.version, 0, version_info.timestamp));
-	if (version_info.num_entries == 0) {
+        if (version_info.num_entries == 0) {
             ASSERT_OK(file_writer->add_empty());
         } else {
             for (int32_t n = 0; n < version_info.num_entries; n++) {
@@ -392,9 +392,9 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
         int32_t num_pages = std::rand() % 5;
         version_info.num_entries = num_pages * num_log_entries_per_page;
         version_info.num_rows_per_entry = std::rand() % 100 + 1;
-	version_info.timestamp = version_info.version;
-        ASSERT_OK(file_writer->begin(version_info.version, 0, version_info.timestamp));        
-	if (version_info.num_entries == 0) {
+        version_info.timestamp = version_info.version;
+        ASSERT_OK(file_writer->begin(version_info.version, 0, version_info.timestamp));
+        if (version_info.num_entries == 0) {
             ASSERT_OK(file_writer->add_empty());
         } else {
             for (int32_t n = 0; n < version_info.num_entries; n++) {

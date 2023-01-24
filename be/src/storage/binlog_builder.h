@@ -84,15 +84,6 @@ public:
     // this build will be put into *result*.
     void abort(BinlogBuildResult* result);
 
-    // For testing
-    int32_t num_files() {
-        return (_params->active_file_meta == nullptr ? 0 : 1 ) + _new_files.size();
-    }
-
-    int64_t current_write_file_size() {
-        return _current_writer == nullptr ? 0 : _current_writer->file_size();
-    }
-
     // Delete binlog files in *file_paths*. Returns Status::OK() if all of them are deleted
     // successfully, otherwise return other status if some of them fail to delete
     static Status delete_binlog_files(std::vector<std::string>& file_paths);
@@ -105,6 +96,11 @@ public:
     // Generate binlog for duplicate key table.
     static Status build_duplicate_key(int64_t version, const RowsetSharedPtr& rowset,
                                       BinlogBuilderParamsPtr& builder_params, BinlogBuildResult* result);
+
+    // For testing
+    int32_t num_files() { return (_params->active_file_meta == nullptr ? 0 : 1) + _new_files.size(); }
+
+    int64_t current_write_file_size() { return _current_writer == nullptr ? 0 : _current_writer->file_size(); }
 
 private:
     Status _switch_writer_if_full();
