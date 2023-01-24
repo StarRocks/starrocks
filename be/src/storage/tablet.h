@@ -128,6 +128,23 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
+    bool binlog_enable() {
+        auto config = tablet_meta()->get_binlog_config();
+        return config != nullptr && config->binlog_enable;
+    }
+    // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
+    // prepare_binlog: persist the binlog file before saving the rowset meta in add_inc_rowset()
+    //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog
+    //              is not visible
+    // commit_binlog: if successful to save rowset meta in add_inc_rowset(), make the newly binlog
+    //              file visible. commit_binlog is expected to be always successful because it just
+    //              modifies the in-memory binlog metas
+    // abort_binlog: if failed to save rowset meta, clean up the binlog file generated in
+    //              prepare_binlog
+    Status prepare_binlog(const RowsetSharedPtr& rowset, int64_t version);
+    void commit_binlog(int64_t version);
+    void abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
+
     Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
@@ -266,6 +283,8 @@ public:
 
     void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
 
+    BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
+
     Status contains_version(const Version& version);
 
 protected:
@@ -349,6 +368,8 @@ private:
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
+
+    std::shared_ptr<BinlogManager> _binlog_manager;
 };
 
 inline bool Tablet::init_succeeded() {
