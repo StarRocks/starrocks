@@ -1,10 +1,5 @@
-FROM ubuntu:22.04
+FROM starrocks/dev-toolchain-ubuntu:main
 
-RUN apt-get update -y \
-        && apt-get install --no-install-recommends -y automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make cmake gcc g++ default-jdk git patch \
-        && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/lib/jvm/java-1.11.0-openjdk-amd64
 ENV STARROCKS_THIRDPARTY=/opt/starrocks/thirdparty
 
 WORKDIR /root
