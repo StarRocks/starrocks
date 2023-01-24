@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Resource;
@@ -48,6 +49,7 @@ public class ResourceDesc implements ParseNode {
         this(name, properties, NodePosition.ZERO);
     }
 
+    @VisibleForTesting
     public ResourceDesc(String name, Map<String, String> properties, NodePosition pos) {
         this.pos = pos;
         this.name = name;
@@ -57,7 +59,6 @@ public class ResourceDesc implements ParseNode {
         }
         this.etlJobType = EtlJobType.UNKNOWN;
     }
-
 
     public String getName() {
         return name;
