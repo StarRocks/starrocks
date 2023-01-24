@@ -17,12 +17,12 @@ usage() {
 Usage: $0 [options] 
 
     Build StarRocks developement environment docker image on ubuntu.
-    After this command execute successfully, will build image named sr-dev-ubuntu.
+    After this command execute successfully, will build image named starrocks/dev-ubuntu.
 
 Optional options:
     -b, --branch                build for branch, default is main
     -h, --help                  print usage
-    -i, --image                 image name, default is sr-dev-ubuntu
+    -i, --image                 image name, default is starrocks/dev-ubuntu
 
 Examples:
     $0 starrocks
@@ -45,7 +45,7 @@ eval set -- "$OPTS"
 
 HELP=0
 BRANCH="main"
-IMAGENAME="sr-dev-ubuntu"
+IMAGENAME="starrocks/dev-ubuntu"
 while true; do
     case "$1" in
         -b | --branch) BRANCH="$2"; shift 2 ;;
@@ -66,7 +66,7 @@ if [[ $# -eq 1 ]];then
 fi
 
 build_docker() {
-    DOCKER_CONTEXT=${CURDIR}/.build-dev-ubuntu
+    DOCKER_CONTEXT=${CURDIR}/../.build-dev-ubuntu
     # create directory to build docker image
     if [[ -d ${DOCKER_CONTEXT} ]]; then
         rm -rf ${DOCKER_CONTEXT}
@@ -75,7 +75,7 @@ build_docker() {
 
     # prepare the thirdparty to copy
     if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
-        STARROCKS_THIRDPARTY=${CURDIR}/../thirdparty
+        STARROCKS_THIRDPARTY=${CURDIR}/../../thirdparty
     fi
 
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
@@ -89,7 +89,7 @@ build_docker() {
 
     # build docker image
     echo "Start building the image"
-    docker build ${DOCKER_CONTEXT} -f ${CURDIR}/dockerfiles/Dockerfile-dev-ubuntu -t $IMAGENAME:$BRANCH --no-cache
+    docker build ${DOCKER_CONTEXT} -f ${CURDIR}/../dockerfiles/Dockerfile-dev-ubuntu -t $IMAGENAME:$BRANCH --no-cache
     echo "Building finished and clean the context"
     rm -rf ${DOCKER_CONTEXT}
 }
