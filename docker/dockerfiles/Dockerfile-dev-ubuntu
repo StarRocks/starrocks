@@ -1,6 +1,7 @@
 FROM starrocks/dev-toolchain-ubuntu:main
 
 ENV STARROCKS_THIRDPARTY=/opt/starrocks/thirdparty
+ENV STARROCKS_LINKER=lld
 
 WORKDIR /root
 
