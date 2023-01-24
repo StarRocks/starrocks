@@ -19,6 +19,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.sql.ast.SetType.SESSION;
 
 /**
  * Show Status statement
@@ -40,10 +43,15 @@ public class ShowStatusStmt extends ShowStmt {
     private Expr where;
 
     public ShowStatusStmt() {
-        this.type = SetType.SESSION;
+        this(SESSION, null, null, NodePosition.ZERO);
     }
 
     public ShowStatusStmt(SetType type, String pattern, Expr where) {
+        this(type, pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowStatusStmt(SetType type, String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.pattern = pattern;
         this.where = where;

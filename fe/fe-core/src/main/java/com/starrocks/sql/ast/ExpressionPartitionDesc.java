@@ -43,11 +43,13 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     private RangePartitionDesc rangePartitionDesc = null;
 
     public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr) {
+        super(expr.getPos());
         this.rangePartitionDesc = rangePartitionDesc;
         this.expr = expr;
     }
 
     public ExpressionPartitionDesc(Expr expr) {
+        super(expr.getPos());
         Preconditions.checkState(expr != null);
         this.expr = expr;
     }

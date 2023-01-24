@@ -15,6 +15,11 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class CancelStmt extends DdlStmt {
 
+    public CancelStmt(NodePosition pos) {
+        super(pos);
+    }
 }

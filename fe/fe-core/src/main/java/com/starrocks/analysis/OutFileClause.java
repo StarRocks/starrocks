@@ -43,6 +43,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TCompressionType;
@@ -97,13 +98,21 @@ public class OutFileClause implements ParseNode {
     private long maxParquetRowGroupBytes = DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES;
     private boolean useDict = true;
 
+    private final NodePosition pos;
+
     public OutFileClause(String filePath, String format, Map<String, String> properties) {
+        this(filePath, format, properties, NodePosition.ZERO);
+    }
+
+    public OutFileClause(String filePath, String format, Map<String, String> properties, NodePosition pos) {
+        this.pos = pos;
         this.filePath = filePath;
         this.format = Strings.isNullOrEmpty(format) ? "csv" : format.toLowerCase();
         this.properties = properties;
     }
 
     public OutFileClause(OutFileClause other) {
+        this.pos = other.pos;
         this.filePath = other.filePath;
         this.format = other.format;
         this.properties = other.properties == null ? null : Maps.newHashMap(other.properties);
@@ -255,6 +264,11 @@ public class OutFileClause implements ParseNode {
             sb.append(")");
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public TResultFileSinkOptions toSinkOptions(List<String> columnOutputNames) {

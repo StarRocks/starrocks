@@ -17,15 +17,27 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ColumnSeparator implements ParseNode {
     private final String oriSeparator;
     private final String separator;
 
+    private final NodePosition pos;
+
     public ColumnSeparator(String separator) {
+        this(separator, NodePosition.ZERO);
+    }
+
+
+    public ColumnSeparator(String separator, NodePosition pos) {
+        this.pos = pos;
         this.oriSeparator = separator;
         this.separator = Delimiter.convertDelimiter(oriSeparator);
     }
+
+
+
 
     public String getColumnSeparator() {
         return separator;
@@ -33,6 +45,11 @@ public class ColumnSeparator implements ParseNode {
 
     public String toSql() {
         return "'" + oriSeparator + "'";
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     @Override

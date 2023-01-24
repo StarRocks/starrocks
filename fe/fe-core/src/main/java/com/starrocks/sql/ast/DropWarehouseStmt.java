@@ -14,12 +14,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class DropWarehouseStmt extends DdlStmt {
     private final boolean ifExists;
     private final String warehouseName;
 
-    public DropWarehouseStmt(boolean ifExists,
-                             String warehouseName) {
+    public DropWarehouseStmt(boolean ifExists, String warehouseName) {
+        this(ifExists, warehouseName, NodePosition.ZERO);
+    }
+
+    public DropWarehouseStmt(boolean ifExists, String warehouseName, NodePosition pos) {
+        super(pos);
         this.ifExists = ifExists;
         this.warehouseName = warehouseName;
     }

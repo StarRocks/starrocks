@@ -15,12 +15,19 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class AlterDatabaseRenameStatement extends DdlStmt {
     private String catalog;
     private String dbName;
     private final String newDbName;
 
     public AlterDatabaseRenameStatement(String dbName, String newDbName) {
+        this(dbName, newDbName, NodePosition.ZERO);
+    }
+
+    public AlterDatabaseRenameStatement(String dbName, String newDbName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.newDbName = newDbName;
     }

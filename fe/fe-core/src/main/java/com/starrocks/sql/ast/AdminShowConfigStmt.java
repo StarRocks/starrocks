@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AdminSetConfigStmt.ConfigType;
+import com.starrocks.sql.parser.NodePosition;
 
 // admin show frontend config;
 public class AdminShowConfigStmt extends ShowStmt {
@@ -32,6 +33,11 @@ public class AdminShowConfigStmt extends ShowStmt {
     private final String pattern;
 
     public AdminShowConfigStmt(ConfigType type, String pattern) {
+        this(type, pattern, NodePosition.ZERO);
+    }
+
+    public AdminShowConfigStmt(ConfigType type, String pattern, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.pattern = pattern;
     }

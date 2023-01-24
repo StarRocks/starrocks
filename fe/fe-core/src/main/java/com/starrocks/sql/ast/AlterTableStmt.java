@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -25,6 +26,11 @@ public class AlterTableStmt extends DdlStmt {
     private final List<AlterClause> ops;
 
     public AlterTableStmt(TableName tbl, List<AlterClause> ops) {
+        this(tbl, ops, NodePosition.ZERO);
+    }
+
+    public AlterTableStmt(TableName tbl, List<AlterClause> ops, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.ops = ops;
     }

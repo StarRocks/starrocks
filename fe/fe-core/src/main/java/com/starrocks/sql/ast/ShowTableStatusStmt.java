@@ -25,6 +25,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW TABLE STATUS
 public class ShowTableStatusStmt extends ShowStmt {
@@ -56,6 +57,11 @@ public class ShowTableStatusStmt extends ShowStmt {
     private Expr where;
 
     public ShowTableStatusStmt(String db, String wild, Expr where) {
+        this(db, wild, where, NodePosition.ZERO);
+    }
+
+    public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
+        super(pos);
         this.db = db;
         this.wild = wild;
         this.where = where;
@@ -157,7 +163,7 @@ public class ShowTableStatusStmt extends ShowStmt {
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                where, null, null), NodePosition.ZERO);
     }
 
     @Override
