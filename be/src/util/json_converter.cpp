@@ -56,38 +56,38 @@ public:
     }
 
 private:
-    static Status convert(SimdJsonValue value, std::string_view field_name, bool has_name, vpack::Builder* builder) {
+    static Status convert(SimdJsonValue value, std::string_view field_name, bool is_object, vpack::Builder* builder) {
         switch (value.type()) {
         case so::json_type::array: {
-            convert(value.get_array().value(), field_name, has_name, builder);
+            convert(value.get_array().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::object: {
-            convert(value.get_object().value(), field_name, has_name, builder);
+            convert(value.get_object().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::number: {
-            convert(value.get_number().value(), field_name, has_name, builder);
+            convert(value.get_number().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::string: {
-            convert(value.get_string().value(), field_name, has_name, builder);
+            convert(value.get_string().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::boolean: {
-            convert(value.get_bool().value(), field_name, has_name, builder);
+            convert(value.get_bool().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::null: {
-            convert_null(field_name, has_name, builder);
+            convert_null(field_name, is_object, builder);
             break;
         }
         }
         return Status::OK();
     }
 
-    static Status convert(SimdJsonObject obj, std::string_view field_name, bool has_name, vpack::Builder* builder) {
-        if (has_name) {
+    static Status convert(SimdJsonObject obj, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+        if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Object));
         } else {
             builder->add(vpack::Value(vpack::ValueType::Object));
@@ -101,8 +101,8 @@ private:
         return Status::OK();
     }
 
-    static Status convert(SimdJsonArray arr, std::string_view field_name, bool has_name, vpack::Builder* builder) {
-        if (has_name) {
+    static Status convert(SimdJsonArray arr, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+        if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Array));
         } else {
             builder->add(vpack::Value(vpack::ValueType::Array));
@@ -114,11 +114,11 @@ private:
         return Status::OK();
     }
 
-    static inline Status convert(SimdJsonNumber num, std::string_view field_name, bool has_name,
+    static inline Status convert(SimdJsonNumber num, std::string_view field_name, bool is_object,
                                  vpack::Builder* builder) {
         switch (num.get_number_type()) {
         case SimdJsonNumberType::floating_point_number: {
-            if (has_name) {
+            if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_double())));
             } else {
                 builder->add(vpack::Value((num.get_double())));
@@ -126,7 +126,7 @@ private:
             break;
         }
         case SimdJsonNumberType::signed_integer: {
-            if (has_name) {
+            if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_int64())));
             } else {
                 builder->add(vpack::Value((num.get_int64())));
@@ -134,7 +134,7 @@ private:
             break;
         }
         case SimdJsonNumberType::unsigned_integer: {
-            if (has_name) {
+            if (is_object) {
                 builder->add(toStringRef(field_name), vpack::Value((num.get_uint64())));
             } else {
                 builder->add(vpack::Value((num.get_uint64())));
@@ -147,9 +147,9 @@ private:
         return Status::OK();
     }
 
-    static inline Status convert(std::string_view str, std::string_view field_name, bool has_name,
+    static inline Status convert(std::string_view str, std::string_view field_name, bool is_object,
                                  vpack::Builder* builder) {
-        if (has_name) {
+        if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(str));
         } else {
             builder->add(vpack::Value(str));
@@ -157,8 +157,8 @@ private:
         return Status::OK();
     }
 
-    static inline Status convert(bool value, std::string_view field_name, bool has_name, vpack::Builder* builder) {
-        if (has_name) {
+    static inline Status convert(bool value, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+        if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(value));
         } else {
             builder->add(vpack::Value(value));
@@ -166,8 +166,8 @@ private:
         return Status::OK();
     }
 
-    static inline Status convert_null(std::string_view field_name, bool has_name, vpack::Builder* builder) {
-        if (has_name) {
+    static inline Status convert_null(std::string_view field_name, bool is_object, vpack::Builder* builder) {
+        if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Null));
         } else {
             builder->add(vpack::Value(vpack::ValueType::Null));
