@@ -11,13 +11,13 @@ FROM ubuntu:22.04
 
 # copy from builder
 RUN apt-get update -y \
-        && apt-get install -y --no-install-recommends openjdk-11-jdk curl \
+        && apt-get install -y --no-install-recommends default-jdk curl \
         && rm -rf /var/lib/apt/lists/*
 
 # copy from builder
-COPY --chown=starrocks:starrocks --from=builder /opt/starrocks/fe /opt/starrocks/fe
+COPY --from=builder /opt/starrocks/fe /opt/starrocks/fe
 
+RUN mkdir -p /opt/starrocks/fe/meta
 ENV JAVA_HOME=/lib/jvm/default-java
 WORKDIR /opt/starrocks
-USER starrocks
 
