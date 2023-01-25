@@ -1,0 +1,22 @@
+FROM starrocks/dev-ubuntu:main as builder
+
+ARG BRANCH=main
+WORKDIR /root
+
+RUN git clone https://github.com/StarRocks/starrocks.git --branch $BRANCH --single-branch \
+        && cd starrocks && ./build.sh --be \
+        && cp -r output/be /opt/starrocks && cd /root && rm -rf starrocks
+
+FROM ubuntu:22.04
+
+RUN apt-get update -y \
+        && apt-get install -y --no-install-recommends binutils-dev mysql-client openjdk-11-jdk \
+        && rm -rf /var/lib/apt/lists/*
+
+# copy from builder
+COPY --chown=starrocks:starrocks --from=builder /opt/starrocks/be /opt/starrocks/be
+
+RUN mkdir -p /opt/starrocks/be/storage
+ENV JAVA_HOME=/lib/jvm/default-java
+WORKDIR /opt/starrocks
+USER starrocks
