@@ -2,12 +2,8 @@
 
 #include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
 
-<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_task_runs_scanner.cpp
+#include "exec/vectorized/schema_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
-=======
-#include "exec/schema_scanner.h"
-#include "exec/schema_scanner/schema_helper.h"
->>>>>>> b757100f1 (Use system timezone instead of default timezone (#16844)):be/src/exec/schema_scanner/schema_task_runs_scanner.cpp
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
