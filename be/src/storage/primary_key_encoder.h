@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/vectorized_field.h"
+#include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 
@@ -35,7 +35,7 @@ namespace starrocks {
 //           add a tailing 0x00 0x00, then append
 class PrimaryKeyEncoder {
 public:
-    static bool is_supported(const VectorizedField& f);
+    static bool is_supported(const Field& f);
 
     static bool is_supported(const VectorizedSchema& schema, const std::vector<ColumnId>& key_idxes);
 

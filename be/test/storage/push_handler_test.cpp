@@ -43,11 +43,11 @@ private:
 };
 
 VectorizedSchema PushHandlerTest::_create_schema() {
-    VectorizedFields fields;
-    fields.emplace_back(std::make_shared<VectorizedField>(0, "k1_int", get_type_info(TYPE_INT), true));
-    fields.emplace_back(std::make_shared<VectorizedField>(1, "k2_smallint", get_type_info(TYPE_SMALLINT), true));
-    fields.emplace_back(std::make_shared<VectorizedField>(2, "k3_varchar", get_type_info(TYPE_VARCHAR), true));
-    fields.emplace_back(std::make_shared<VectorizedField>(3, "k4_bigint", get_type_info(TYPE_BIGINT), true));
+    Fields fields;
+    fields.emplace_back(std::make_shared<Field>(0, "k1_int", get_type_info(TYPE_INT), true));
+    fields.emplace_back(std::make_shared<Field>(1, "k2_smallint", get_type_info(TYPE_SMALLINT), true));
+    fields.emplace_back(std::make_shared<Field>(2, "k3_varchar", get_type_info(TYPE_VARCHAR), true));
+    fields.emplace_back(std::make_shared<Field>(3, "k4_bigint", get_type_info(TYPE_BIGINT), true));
     fields.back()->set_aggregate_method(STORAGE_AGGREGATE_SUM);
     return VectorizedSchema(fields);
 }

@@ -108,10 +108,10 @@ public:
     std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const VectorizedFieldPtr& field);
+    void append_column(ColumnPtr column, const FieldPtr& field);
 
     void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field);
+    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
 

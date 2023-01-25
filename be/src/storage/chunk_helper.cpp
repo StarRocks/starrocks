@@ -103,7 +103,7 @@ struct CppColumnTraits<TYPE_VARBINARY> {
     using ColumnType = BinaryColumn;
 };
 
-VectorizedField ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
+Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     LogicalType type = c.type();
 
     TypeInfoPtr type_info = nullptr;
@@ -116,7 +116,7 @@ VectorizedField ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     } else {
         type_info = get_type_info(type);
     }
-    starrocks::VectorizedField f(id, std::string(c.name()), type_info, c.is_nullable());
+    starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_length(c.length());
 
@@ -217,7 +217,7 @@ inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precisio
 template <bool force>
 struct ColumnPtrBuilder {
     template <LogicalType ftype>
-    ColumnPtr operator()(size_t chunk_size, const VectorizedField& field, int precision, int scale) {
+    ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
         auto nullable = [&](ColumnPtr c) -> ColumnPtr {
             return field.is_nullable()
                            ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
@@ -261,7 +261,7 @@ struct ColumnPtrBuilder {
 };
 
 template <bool force>
-ColumnPtr column_from_pool(const VectorizedField& field, size_t chunk_size) {
+ColumnPtr column_from_pool(const Field& field, size_t chunk_size) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
@@ -272,7 +272,7 @@ Chunk* ChunkHelper::new_chunk_pooled(const VectorizedSchema& schema, size_t chun
     Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
-        const VectorizedFieldPtr& f = schema.field(i);
+        const FieldPtr& f = schema.field(i);
         auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
                                                               : column_from_pool<false>(*f, chunk_size);
         column->reserve(chunk_size);
@@ -361,7 +361,7 @@ ColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
     return field_type_dispatch_column(type, ColumnBuilder(), nullable);
 }
 
-ColumnPtr ChunkHelper::column_from_field(const VectorizedField& field) {
+ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
         return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
     };
@@ -400,7 +400,7 @@ ChunkPtr ChunkHelper::new_chunk(const VectorizedSchema& schema, size_t n) {
     Columns columns;
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
-        const VectorizedFieldPtr& f = schema.field(i);
+        const FieldPtr& f = schema.field(i);
         columns.emplace_back(column_from_field(*f));
         columns.back()->reserve(n);
     }

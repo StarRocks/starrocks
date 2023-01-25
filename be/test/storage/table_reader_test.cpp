@@ -140,7 +140,7 @@ public:
                              std::vector<const ColumnPredicate*>& predicates) {
         predicates.clear();
         for (size_t i = 0; i < scan_key_schema.num_fields(); i++) {
-            const VectorizedFieldPtr& field = scan_key_schema.field(i);
+            const FieldPtr& field = scan_key_schema.field(i);
             ColumnPredicate* predicate = new_column_eq_predicate(field->type(), field->id(),
                                                                  datum_to_string(field->type().get(), tuple.get(i)));
             _object_pool.add(predicate);

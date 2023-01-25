@@ -48,11 +48,11 @@ public:
     }
 
     static VectorizedSchema schema() {
-        VectorizedFieldPtr f1 = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
-        VectorizedFieldPtr f2 = std::make_shared<VectorizedField>(1, "c2", get_type_info(TYPE_VARCHAR), false);
-        VectorizedFieldPtr f3 = std::make_shared<VectorizedField>(2, "c3", get_type_info(TYPE_INT), false);
+        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+        FieldPtr f2 = std::make_shared<Field>(1, "c2", get_type_info(TYPE_VARCHAR), false);
+        FieldPtr f3 = std::make_shared<Field>(2, "c3", get_type_info(TYPE_INT), false);
         f1->set_is_key(true);
-        return VectorizedSchema(std::vector<VectorizedFieldPtr>{f1, f2, f3});
+        return VectorizedSchema(std::vector<FieldPtr>{f1, f2, f3});
     }
 
     void close() override {}
@@ -113,8 +113,8 @@ TEST_F(ProjectionIteratorTest, all) {
     // select c3, c1
     {
         child->reset();
-        VectorizedFieldPtr f1 = child->schema().field(0);
-        VectorizedFieldPtr f3 = child->schema().field(2);
+        FieldPtr f1 = child->schema().field(0);
+        FieldPtr f3 = child->schema().field(2);
         VectorizedSchema schema({f3, f1});
         auto iter = new_projection_iterator(schema, child);
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);

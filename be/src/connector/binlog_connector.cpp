@@ -63,23 +63,23 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {
     BinlogMetaFieldMap fields;
     ColumnId cid = start_cid;
-    VectorizedFieldPtr op_field = std::make_shared<VectorizedField>(cid, BINLOG_OP, get_type_info(TYPE_TINYINT),
-                                                                    STORAGE_AGGREGATE_NONE, 1, false, false);
+    FieldPtr op_field = std::make_shared<Field>(cid, BINLOG_OP, get_type_info(TYPE_TINYINT), STORAGE_AGGREGATE_NONE, 1,
+                                                false, false);
     fields.emplace(BINLOG_OP, op_field);
     cid += 1;
 
-    VectorizedFieldPtr version_field = std::make_shared<VectorizedField>(
-            cid, BINLOG_VERSION, get_type_info(TYPE_BIGINT), STORAGE_AGGREGATE_NONE, 8, false, false);
+    FieldPtr version_field = std::make_shared<Field>(cid, BINLOG_VERSION, get_type_info(TYPE_BIGINT),
+                                                     STORAGE_AGGREGATE_NONE, 8, false, false);
     fields.emplace(BINLOG_VERSION, version_field);
     cid += 1;
 
-    VectorizedFieldPtr seq_id_field = std::make_shared<VectorizedField>(cid, BINLOG_SEQ_ID, get_type_info(TYPE_BIGINT),
-                                                                        STORAGE_AGGREGATE_NONE, 8, false, false);
+    FieldPtr seq_id_field = std::make_shared<Field>(cid, BINLOG_SEQ_ID, get_type_info(TYPE_BIGINT),
+                                                    STORAGE_AGGREGATE_NONE, 8, false, false);
     fields.emplace(BINLOG_SEQ_ID, seq_id_field);
     cid += 1;
 
-    VectorizedFieldPtr timestamp_field = std::make_shared<VectorizedField>(
-            cid, BINLOG_TIMESTAMP, get_type_info(TYPE_BIGINT), STORAGE_AGGREGATE_NONE, 8, false, false);
+    FieldPtr timestamp_field = std::make_shared<Field>(cid, BINLOG_TIMESTAMP, get_type_info(TYPE_BIGINT),
+                                                       STORAGE_AGGREGATE_NONE, 8, false, false);
     fields.emplace(BINLOG_TIMESTAMP, timestamp_field);
     cid += 1;
 
@@ -90,7 +90,7 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
     BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
-    VectorizedFields meta_fields;
+    Fields meta_fields;
     int slot_index = -1;
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());

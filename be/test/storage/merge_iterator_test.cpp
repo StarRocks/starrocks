@@ -41,9 +41,9 @@ static inline std::string to_string(const std::vector<T>& v) {
 class MergeIteratorTest : public testing::Test {
 protected:
     void SetUp() override {
-        auto f = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
+        auto f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
         f->set_is_key(true);
-        _schema = VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
+        _schema = VectorizedSchema(std::vector<FieldPtr>{f});
     }
 
     void TearDown() override {}

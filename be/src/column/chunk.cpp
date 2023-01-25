@@ -133,7 +133,7 @@ std::string_view Chunk::get_column_name(size_t idx) const {
     return _schema->field(idx)->name();
 }
 
-void Chunk::append_column(ColumnPtr column, const VectorizedFieldPtr& field) {
+void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _columns.emplace_back(std::move(column));
@@ -152,7 +152,7 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
-void Chunk::insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field) {
+void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));
     _schema->insert(idx, field);

@@ -31,9 +31,9 @@ class TupleDescriptor;
 
 class ChunkHelper {
 public:
-    // Convert TabletColumn to VectorizedField. This function will generate format
+    // Convert TabletColumn to Field. This function will generate format
     // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
-    static VectorizedField convert_field(ColumnId id, const TabletColumn& c);
+    static Field convert_field(ColumnId id, const TabletColumn& c);
 
     // Convert TabletSchema to VectorizedSchema with changing format v1 type to format v2 type.
     static VectorizedSchema convert_schema(const TabletSchema& schema);
@@ -68,7 +68,7 @@ public:
     static std::shared_ptr<Column> column_from_field_type(LogicalType type, bool nullable);
 
     // Create a vectorized column from field.
-    static std::shared_ptr<Column> column_from_field(const VectorizedField& field);
+    static std::shared_ptr<Column> column_from_field(const Field& field);
 
     // Get char column indexes
     static std::vector<size_t> get_char_field_indexes(const VectorizedSchema& schema);

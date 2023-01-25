@@ -240,7 +240,7 @@ inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
     return Status::OK();
 }
 
-bool PrimaryKeyEncoder::is_supported(const VectorizedField& f) {
+bool PrimaryKeyEncoder::is_supported(const Field& f) {
     switch (f.type()->type()) {
     case TYPE_BOOLEAN:
     case TYPE_TINYINT:

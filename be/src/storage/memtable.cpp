@@ -42,8 +42,8 @@ VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                      LogicalType::TYPE_TINYINT, false);
+        auto op_column =
+                std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN, LogicalType::TYPE_TINYINT, false);
         op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
         schema.append(op_column);
     }

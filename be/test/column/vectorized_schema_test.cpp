@@ -23,8 +23,8 @@ public:
     void SetUp() override {}
     void TearDown() override {}
 
-    VectorizedFields make_fields(size_t size) {
-        VectorizedFields fields;
+    Fields make_fields(size_t size) {
+        Fields fields;
         for (size_t i = 0; i < size; i++) {
             fields.emplace_back(make_field(i));
         }
@@ -33,16 +33,14 @@ public:
 
     std::string make_string(size_t i) { return std::string("c").append(std::to_string(static_cast<int32_t>(i))); }
 
-    VectorizedFieldPtr make_field(size_t i) {
-        return std::make_shared<VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
-    }
+    FieldPtr make_field(size_t i) { return std::make_shared<Field>(i, make_string(i), get_type_info(TYPE_INT), false); }
 
     VectorizedSchema* make_schema(size_t i) {
-        VectorizedFields fields = make_fields(i);
+        Fields fields = make_fields(i);
         return new VectorizedSchema(fields);
     }
 
-    void check_field(const VectorizedFieldPtr& field, size_t i) {
+    void check_field(const FieldPtr& field, size_t i) {
         ASSERT_EQ(make_string(i), field->name());
         ASSERT_EQ(i, field->id());
         ASSERT_FALSE(field->is_nullable());
@@ -51,19 +49,19 @@ public:
     void check_schema(VectorizedSchema* schema, size_t size) {
         ASSERT_EQ(schema->num_fields(), size);
         for (size_t i = 0; i < size; i++) {
-            VectorizedFieldPtr field = schema->get_field_by_name(make_string(i));
+            FieldPtr field = schema->get_field_by_name(make_string(i));
             check_field(field, i);
         }
     }
 };
 
 TEST_F(SchemaTest, test_construct) {
-    VectorizedFields fields1 = make_fields(2);
+    Fields fields1 = make_fields(2);
     auto* schema1 = new VectorizedSchema(fields1);
     check_schema(schema1, 2);
     delete schema1;
 
-    VectorizedFields fields2 = make_fields(2);
+    Fields fields2 = make_fields(2);
     auto* schema2 = new VectorizedSchema(std::move(fields2));
     check_schema(schema2, 2);
     delete schema2;
@@ -97,7 +95,7 @@ TEST_F(SchemaTest, remove) {
 
 TEST_F(SchemaTest, field) {
     VectorizedSchema* schema = make_schema(2);
-    const VectorizedFieldPtr& ptr = schema->field(0);
+    const FieldPtr& ptr = schema->field(0);
 
     check_field(ptr, 0);
     delete schema;
@@ -117,10 +115,10 @@ TEST_F(SchemaTest, field_names) {
 TEST_F(SchemaTest, get_field_by_name) {
     VectorizedSchema* schema = make_schema(2);
 
-    VectorizedFieldPtr ptr1 = schema->get_field_by_name("c0");
+    FieldPtr ptr1 = schema->get_field_by_name("c0");
     check_field(ptr1, 0);
 
-    VectorizedFieldPtr ptr2 = schema->get_field_by_name("c2");
+    FieldPtr ptr2 = schema->get_field_by_name("c2");
     ASSERT_EQ(ptr2, nullptr);
     delete schema;
 }

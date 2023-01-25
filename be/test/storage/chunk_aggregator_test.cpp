@@ -25,15 +25,15 @@
 namespace starrocks {
 
 TEST(ChunkAggregatorTest, testNoneAggregator) {
-    VectorizedFieldPtr key = std::make_shared<VectorizedField>(1, "key", LogicalType::TYPE_INT, false);
+    FieldPtr key = std::make_shared<Field>(1, "key", LogicalType::TYPE_INT, false);
     key->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_NONE);
     key->set_is_key(true);
 
-    VectorizedFieldPtr value = std::make_shared<VectorizedField>(1, "value", LogicalType::TYPE_INT, false);
+    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::TYPE_INT, false);
     value->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_SUM);
     value->set_is_key(false);
 
-    VectorizedFields fields;
+    Fields fields;
     fields.emplace_back(key);
     fields.emplace_back(value);
 
@@ -79,11 +79,11 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 }
 
 TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
-    VectorizedFieldPtr value = std::make_shared<VectorizedField>(1, "value", LogicalType::TYPE_INT, false);
+    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::TYPE_INT, false);
     value->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_SUM);
     value->set_is_key(false);
 
-    VectorizedFields fields;
+    Fields fields;
     fields.emplace_back(value);
 
     VectorizedSchemaPtr schema = std::make_shared<VectorizedSchema>(fields);

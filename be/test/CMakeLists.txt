@@ -8,7 +8,7 @@ set(EXEC_FILES
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
-        ./column/vectorized_field_test.cpp
+        ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
         ./column/map_column_test.cpp

@@ -51,7 +51,7 @@ public:
     Status rewrite_predicate(ObjectPool* pool);
 
 private:
-    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field);
+    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
     StatusOr<bool> _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
                                            const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
     void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);

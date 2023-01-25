@@ -78,7 +78,7 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
 
 static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) {
     unique_ptr<VectorizedSchema> ret;
-    VectorizedFields fields;
+    Fields fields;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     for (int i = 0; i < cs.size(); i++) {
         auto& c = cs[i];
@@ -112,7 +112,7 @@ static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) 
         if (fs.size() == 3 && fs[2] == "null") {
             nullable = true;
         }
-        auto fd = new VectorizedField(cid, name, type, nullable);
+        auto fd = new Field(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
         fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
         fields.emplace_back(fd);

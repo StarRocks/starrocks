@@ -21,17 +21,17 @@ namespace starrocks {
 
 #ifdef BE_TEST
 
-VectorizedSchema::VectorizedSchema(VectorizedFields fields) : VectorizedSchema(fields, KeysType::DUP_KEYS, {}) {}
+VectorizedSchema::VectorizedSchema(Fields fields) : VectorizedSchema(fields, KeysType::DUP_KEYS, {}) {}
 
 #endif
 
-VectorizedSchema::VectorizedSchema(VectorizedFields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
+VectorizedSchema::VectorizedSchema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
         : _fields(std::move(fields)),
           _sort_key_idxes(std::move(sort_key_idxes)),
           _name_to_index_append_buffer(nullptr),
 
           _keys_type(static_cast<uint8_t>(keys_type)) {
-    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
+    auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
 }
@@ -43,7 +43,7 @@ VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<C
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
     }
-    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
+    auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
 }
@@ -58,7 +58,7 @@ VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<C
         _fields[i] = schema->_fields[cids[i]];
     }
     _sort_key_idxes = scids;
-    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
+    auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
 }
@@ -127,7 +127,7 @@ VectorizedSchema& VectorizedSchema::operator=(const VectorizedSchema& other) {
     return *this;
 }
 
-void VectorizedSchema::append(const VectorizedFieldPtr& field) {
+void VectorizedSchema::append(const FieldPtr& field) {
     _fields.emplace_back(field);
     _num_keys += field->is_key();
     if (!_share_name_to_index) {
@@ -144,7 +144,7 @@ void VectorizedSchema::append(const VectorizedFieldPtr& field) {
 }
 
 // it's not being used, especially in sort key scenario, so do not handle this case
-void VectorizedSchema::insert(size_t idx, const VectorizedFieldPtr& field) {
+void VectorizedSchema::insert(size_t idx, const FieldPtr& field) {
     DCHECK_LT(idx, _fields.size());
 
     _fields.emplace(_fields.begin() + idx, field);
@@ -184,7 +184,7 @@ void VectorizedSchema::remove(size_t idx) {
     }
 }
 
-const VectorizedFieldPtr& VectorizedSchema::field(size_t idx) const {
+const FieldPtr& VectorizedSchema::field(size_t idx) const {
     DCHECK_GE(idx, 0);
     DCHECK_LT(idx, _fields.size());
     return _fields[idx];
@@ -199,12 +199,12 @@ std::vector<std::string> VectorizedSchema::field_names() const {
     return names;
 }
 
-VectorizedFieldPtr VectorizedSchema::get_field_by_name(const std::string& name) const {
+FieldPtr VectorizedSchema::get_field_by_name(const std::string& name) const {
     size_t idx = get_field_index_by_name(name);
     return idx == -1 ? nullptr : _fields[idx];
 }
 
-void VectorizedSchema::_build_index_map(const VectorizedFields& fields) {
+void VectorizedSchema::_build_index_map(const Fields& fields) {
     _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
     for (size_t i = 0; i < fields.size(); i++) {
         _name_to_index->emplace(fields[i]->name(), i);

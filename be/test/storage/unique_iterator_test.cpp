@@ -55,9 +55,9 @@ protected:
         void close() override {}
 
         static VectorizedSchema new_schema() {
-            VectorizedFieldPtr f = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
+            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
             f->set_is_key(true);
-            return VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
+            return VectorizedSchema(std::vector<FieldPtr>{f});
         }
 
     private:

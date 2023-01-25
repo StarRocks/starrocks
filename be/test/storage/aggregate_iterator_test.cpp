@@ -43,15 +43,15 @@ protected:
 TEST_F(AggregateIteratorTest, agg_max) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -122,15 +122,15 @@ TEST_F(AggregateIteratorTest, agg_max) {
 TEST_F(AggregateIteratorTest, agg_min) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -201,15 +201,15 @@ TEST_F(AggregateIteratorTest, agg_min) {
 TEST_F(AggregateIteratorTest, agg_sum) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_TINYINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_SMALLINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_INT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_BIGINT, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_LARGEINT, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_FLOAT, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DOUBLE, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_DECIMALV2, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_TINYINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_SMALLINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_INT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_BIGINT, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_LARGEINT, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_FLOAT, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DOUBLE, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_DECIMALV2, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -275,15 +275,15 @@ TEST_F(AggregateIteratorTest, agg_sum) {
 TEST_F(AggregateIteratorTest, agg_replace) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -354,8 +354,8 @@ TEST_F(AggregateIteratorTest, agg_replace) {
 TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -405,8 +405,8 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
 TEST_F(AggregateIteratorTest, agg_max_empty) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -434,8 +434,8 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
 TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -479,8 +479,8 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
 TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -522,8 +522,8 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
 TEST_F(AggregateIteratorTest, agg_boolean_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BOOLEAN, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BOOLEAN, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -566,8 +566,8 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -664,8 +664,8 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
 TEST_F(AggregateIteratorTest, agg_date_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_DATE, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_DATE, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -759,8 +759,8 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
 TEST_F(AggregateIteratorTest, agg_decimal_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_DECIMALV2, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_DECIMALV2, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -854,9 +854,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, false);
-    auto k2 = std::make_shared<VectorizedField>(1, "k2", TYPE_DATE, false);
-    auto c1 = std::make_shared<VectorizedField>(2, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, false);
+    auto k2 = std::make_shared<Field>(1, "k2", TYPE_DATE, false);
+    auto c1 = std::make_shared<Field>(2, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k2->set_is_key(true);
@@ -987,9 +987,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, true);
-    auto k2 = std::make_shared<VectorizedField>(1, "k2", TYPE_DATE, true);
-    auto c1 = std::make_shared<VectorizedField>(2, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, true);
+    auto k2 = std::make_shared<Field>(1, "k2", TYPE_DATE, true);
+    auto c1 = std::make_shared<Field>(2, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k2->set_is_key(true);
@@ -1043,7 +1043,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
 TEST_F(AggregateIteratorTest, gen_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
 
@@ -1080,7 +1080,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
 TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
     VectorizedSchema schema({c1});
@@ -1125,7 +1125,7 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
 TEST_F(AggregateIteratorTest, max_from_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({c1});

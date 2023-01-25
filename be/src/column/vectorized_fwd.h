@@ -31,7 +31,7 @@ class TimestampValue;
 typedef __int128 int128_t;
 
 class Chunk;
-class VectorizedField;
+class Field;
 class Column;
 class VectorizedSchema;
 struct ProtobufChunkMeta;
@@ -106,8 +106,8 @@ using Chunks = std::vector<ChunkPtr>;
 
 using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
 
-using VectorizedFields = std::vector<std::shared_ptr<VectorizedField>>;
-using VectorizedFieldPtr = std::shared_ptr<VectorizedField>;
+using Fields = std::vector<std::shared_ptr<Field>>;
+using FieldPtr = std::shared_ptr<Field>;
 
 using Filter = Buffer<uint8_t>;
 using FilterPtr = std::shared_ptr<Filter>;

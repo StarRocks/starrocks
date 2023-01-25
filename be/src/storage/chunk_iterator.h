@@ -88,7 +88,7 @@ public:
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
             if (dict_maps.count(cid)) {
-                _encoded_schema.append(VectorizedField::convert_to_dict_field(*field));
+                _encoded_schema.append(Field::convert_to_dict_field(*field));
             } else {
                 _encoded_schema.append(field);
             }

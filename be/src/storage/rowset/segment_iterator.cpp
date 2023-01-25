@@ -228,10 +228,10 @@ private:
 
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
     // before you calling this method, otherwise the result is incorrect.
-    bool _can_using_dict_code(const VectorizedFieldPtr& field) const;
+    bool _can_using_dict_code(const FieldPtr& field) const;
 
     // check field use low_cardinality global dict optimization
-    bool _can_using_global_dict(const VectorizedFieldPtr& field) const;
+    bool _can_using_global_dict(const FieldPtr& field) const;
 
     Status _init_bitmap_index_iterators();
 
@@ -409,7 +409,7 @@ Status SegmentIterator::_init_column_iterators(const VectorizedSchema& schema) {
 
     bool has_predicate = !_opts.predicates.empty();
     _predicate_need_rewrite.resize(n, false);
-    for (const VectorizedFieldPtr& f : schema.fields()) {
+    for (const FieldPtr& f : schema.fields()) {
         const ColumnId cid = f->id();
         if (_column_iterators[cid] == nullptr) {
             bool check_dict_enc;
@@ -735,7 +735,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Vectorized
 
 Status SegmentIterator::_seek_columns(const VectorizedSchema& schema, rowid_t pos) {
     SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
-    for (const VectorizedFieldPtr& f : schema.fields()) {
+    for (const FieldPtr& f : schema.fields()) {
         RETURN_IF_ERROR(_column_iterators[f->id()]->seek_to_ordinal(pos));
     }
     return Status::OK();
@@ -964,7 +964,7 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         _encoded_schema.clear();
         for (const auto& field : schema().fields()) {
             if (_can_using_global_dict(field)) {
-                _encoded_schema.append(VectorizedField::convert_to_dict_field(*field));
+                _encoded_schema.append(Field::convert_to_dict_field(*field));
             } else {
                 _encoded_schema.append(field);
             }
@@ -1086,7 +1086,7 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
     return chunk_size;
 }
 
-inline bool SegmentIterator::_can_using_dict_code(const VectorizedFieldPtr& field) const {
+inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     if (_opts.predicates.find(field->id()) != _opts.predicates.end()) {
         return _predicate_need_rewrite[field->id()];
     } else {
@@ -1095,7 +1095,7 @@ inline bool SegmentIterator::_can_using_dict_code(const VectorizedFieldPtr& fiel
     }
 }
 
-bool SegmentIterator::_can_using_global_dict(const VectorizedFieldPtr& field) const {
+bool SegmentIterator::_can_using_global_dict(const FieldPtr& field) const {
     auto cid = field->id();
     return _opts.global_dictmaps->find(cid) != _opts.global_dictmaps->end() &&
            !_column_decoders[cid].need_force_encode_to_global_id();
@@ -1124,7 +1124,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     for (size_t i = 0; i < early_materialize_fields; i++) {
-        const VectorizedFieldPtr& f = _schema.field(i);
+        const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
@@ -1137,7 +1137,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
-            auto f2 = std::make_shared<VectorizedField>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
@@ -1178,7 +1178,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         // ordinal column
         ColumnId cid = _schema.field(predicate_count)->id();
         static_assert(std::is_same_v<rowid_t, TypeTraits<TYPE_UNSIGNED_INT>::CppType>);
-        auto f = std::make_shared<VectorizedField>(cid, "ordinal", TYPE_UNSIGNED_INT, -1, -1, false);
+        auto f = std::make_shared<Field>(cid, "ordinal", TYPE_UNSIGNED_INT, -1, -1, false);
         auto* iter = new RowIdColumnIterator();
         _obj_pool.add(iter);
         ctx->_read_schema.append(f);
@@ -1190,7 +1190,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     for (size_t i = 0; i < num_fields; ++i) {
-        const VectorizedFieldPtr& f = _schema.field(i);
+        const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
@@ -1254,7 +1254,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
     // init decoder for all columns
     // in some case _build_context<false> won't be called
     for (int i = 0; i < _schema.num_fields(); ++i) {
-        const VectorizedFieldPtr& f = _schema.field(i);
+        const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
@@ -1279,7 +1279,7 @@ Status SegmentIterator::_rewrite_predicates() {
     // so that the input is of type INT (the original input is of type String)
     std::vector<uint8_t> disable_dict_rewrites(_column_decoders.size());
     for (size_t i = 0; i < _schema.num_fields(); i++) {
-        const VectorizedFieldPtr& field = _schema.field(i);
+        const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         disable_dict_rewrites[cid] = _column_decoders[cid].need_force_encode_to_global_id();
     }
@@ -1303,7 +1303,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     const size_t n = decode_schema.num_fields();
     bool may_has_del_row = ctx->_read_chunk->delete_state() != DEL_NOT_SATISFIED;
     for (size_t i = 0; i < n; i++) {
-        const VectorizedFieldPtr& f = decode_schema.field(i);
+        const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
         if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
             ctx->_dict_chunk->get_column_by_index(i)->swap_column(*ctx->_read_chunk->get_column_by_index(i));
@@ -1334,7 +1334,7 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
     _predicate_need_rewrite.resize(1 + ChunkHelper::max_column_id(_schema), false);
     const size_t n = _opts.predicates.size();
     for (size_t i = 0; i < n; i++) {
-        const VectorizedFieldPtr& field = _schema.field(i);
+        const FieldPtr& field = _schema.field(i);
         const LogicalType type = field->type()->type();
         if (type != TYPE_CHAR && type != TYPE_VARCHAR) {
             continue;
@@ -1363,7 +1363,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     const size_t n = _schema.num_fields();
     const size_t start_pos = ctx->_read_index_map.size();
     for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
-        const VectorizedFieldPtr& f = _schema.field(i);
+        const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
         col->reserve(ordinals->size());
@@ -1395,7 +1395,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     auto final_chunk = ctx->_final_chunk;
 
     for (size_t i = 0; i < num_columns; i++) {
-        const VectorizedFieldPtr& f = _schema.field(i);
+        const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
         ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
@@ -1572,7 +1572,7 @@ void SegmentIterator::close() {
 // materialization easier.
 inline VectorizedSchema reorder_schema(const VectorizedSchema& input,
                                        const std::unordered_map<ColumnId, PredicateList>& predicates) {
-    const std::vector<VectorizedFieldPtr>& fields = input.fields();
+    const std::vector<FieldPtr>& fields = input.fields();
 
     VectorizedSchema output;
     output.reserve(fields.size());

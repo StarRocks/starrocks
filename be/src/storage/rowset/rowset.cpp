@@ -401,7 +401,7 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
             auto f = ChunkHelper::convert_field(cid, col);
-            segment_schema.append(std::make_shared<VectorizedField>(std::move(f)));
+            segment_schema.append(std::make_shared<Field>(std::move(f)));
         }
     }
 

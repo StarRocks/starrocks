@@ -15,14 +15,14 @@
 #pragma once
 
 #include "column/datum.h"
-#include "column/vectorized_field.h"
+#include "column/field.h"
 #include "column/vectorized_schema.h"
 #include "exec/stream/state/state_table.h"
 #include "storage/chunk_iterator.h"
 
 namespace starrocks::stream {
 
-using VectorizedFields = VectorizedFields;
+using Fields = Fields;
 using VectorizedSchema = VectorizedSchema;
 using DatumKeyRow = std::vector<DatumKey>;
 
