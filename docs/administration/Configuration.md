@@ -422,8 +422,8 @@ BE static parameters are as follows.
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
-| webserver_port | 8040 | N/A | The HTTP server port. |
-| webserver_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
+| be_http_port | 8040 | N/A | The HTTP server port. |
+| be_http_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
 | load_data_reserve_hours | 4 | Hour | The reservation time for the files produced by small-scale loadings. |
 | number_tablet_writer_threads | 16 | N/A | The number of threads used for Stream Load. |
 | streaming_load_rpc_max_alive_time_sec | 1200 | Second | The RPC timeout for Stream Load. |
