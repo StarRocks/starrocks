@@ -95,7 +95,7 @@ TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
         : _env(env), _worker_thread_condition_variable(new std::condition_variable()), _worker_count(worker_count) {
     _backend.__set_host(BackendOptions::get_localhost());
     _backend.__set_be_port(config::be_port);
-    _backend.__set_http_port(config::webserver_port);
+    _backend.__set_http_port(config::be_http_port);
 }
 
 template <class AgentTaskRequest>

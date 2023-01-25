@@ -47,16 +47,16 @@ Explanation:
 
 ~~~ bash
 //View the overall memory statistics
-<http://be_ip:be_web_port/mem_tracker>
+<http://be_ip:be_http_port/mem_tracker>
 
 // View fine-grained memory statistics
-<http://be_ip:be_web_port/mem_tracker?type=query_pool&upper_level=3>
+<http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
 * **tcmalloc**
 
 ~~~ bash
-<http://be_ip:be_web_port/memz>
+<http://be_ip:be_http_port/memz>
 ~~~
 
 ~~~plain text
@@ -88,8 +88,8 @@ Here `Bytes in use by application` refers to the memory currently in use.
 * **metrics**
 
 ~~~bash
-curl -XGET http://be_ip:be_web_port/metrics | grep 'mem'
-curl -XGET http://be_ip:be_web_port/metrics | grep 'column_pool'
+curl -XGET http://be_ip:be_http_port/metrics | grep 'mem'
+curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 ~~~
 
 The value of metrics is updated every 10 seconds. It is possible to monitor some of the memory statistics with older versions.

@@ -69,7 +69,7 @@ absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() const {
     worker_info.service_id = _service_id;
     worker_info.properties["port"] = std::to_string(config::starlet_port);
     worker_info.properties["be_port"] = std::to_string(config::be_port);
-    worker_info.properties["be_http_port"] = std::to_string(config::webserver_port);
+    worker_info.properties["be_http_port"] = std::to_string(config::be_http_port);
     worker_info.properties["be_brpc_port"] = std::to_string(config::brpc_port);
     worker_info.properties["be_version"] = get_short_version();
     for (auto& iter : _shards) {
