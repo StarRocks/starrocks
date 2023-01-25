@@ -3,8 +3,13 @@
 #include "exec/vectorized/schema_scanner/schema_tables_scanner.h"
 
 #include "column/nullable_column.h"
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_tables_scanner.cpp
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
+=======
+#include "exec/schema_scanner/schema_helper.h"
+#include "runtime/runtime_state.h"
+>>>>>>> b757100f1 (Use system timezone instead of default timezone (#16844)):be/src/exec/schema_scanner/schema_tables_scanner.cpp
 #include "runtime/string_value.h"
 
 namespace starrocks::vectorized {
@@ -40,10 +45,15 @@ SchemaTablesScanner::SchemaTablesScanner()
 SchemaTablesScanner::~SchemaTablesScanner() = default;
 
 Status SchemaTablesScanner::start(RuntimeState* state) {
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_tables_scanner.cpp
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
     TGetDbsParams db_params;
+=======
+    RETURN_IF_ERROR(SchemaScanner::start(state));
+    TAuthInfo auth_info;
+>>>>>>> b757100f1 (Use system timezone instead of default timezone (#16844)):be/src/exec/schema_scanner/schema_tables_scanner.cpp
     if (nullptr != _param->db) {
         db_params.__set_pattern(*(_param->db));
     }
@@ -207,7 +217,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -220,7 +230,23 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // update_time
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_tables_scanner.cpp
                 fill_data_column_with_null(column.get());
+=======
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (table_info.__isset.update_time) {
+                    int64_t create_time = table_info.update_time;
+                    if (create_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+>>>>>>> b757100f1 (Use system timezone instead of default timezone (#16844)):be/src/exec/schema_scanner/schema_tables_scanner.cpp
             }
             break;
         }
@@ -235,7 +261,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(check_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(check_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
