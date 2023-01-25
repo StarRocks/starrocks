@@ -352,10 +352,10 @@ CONF_mInt64(min_base_compaction_size, "21474836480");
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
 CONF_Int64(max_row_source_mask_memory_bytes, "209715200");
 
-// Port to start debug webserver on
-CONF_Int32(webserver_port, "8040");
-// Number of webserver workers
-CONF_Int32(webserver_num_workers, "48");
+// Port to start debug http server in BE
+CONF_Int32(be_http_port, "8040");
+// Number of http workers in BE
+CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 

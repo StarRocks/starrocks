@@ -23,6 +23,7 @@
 #include <list>
 #include <map>
 #include <regex>
+#include <string>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
@@ -213,6 +214,15 @@ bool Properties::load(const char* filename) {
 
         // compatible with doris_config
         key = std::regex_replace(key, doris_start, "");
+
+        if (key.compare("webserver_port") == 0) {
+            // Avoid overwriting the existing config.
+            if (file_conf_map.find("be_http_port") != file_conf_map.end()) {
+                continue;
+            }
+
+            key = "be_http_port";
+        }
 
         // Insert into 'file_conf_map'.
         file_conf_map[key] = value;

@@ -152,7 +152,7 @@ After FE node is started, you need to start the BE node. BE is the executing lay
 2. Check the connection status of the following ports.
 
    - BE thrift server port (`be_port`, Default: `9060`)
-   - BE HTTP server port (`webserver_port`, Default: `8040`)
+   - BE HTTP server port (`be_http_port`, Default: `8040`)
    - heartbeat service port (`heartbeat_service_port`, Default: `9050`)
    - BE BRPC port (`brpc_port`, Default: `8060`)
 
@@ -181,7 +181,7 @@ After FE node is started, you need to start the BE node. BE is the executing lay
 
     ```Plain
     be_port = vvvv
-    webserver_port = xxxx
+    be_http_port = xxxx
     heartbeat_service_port = yyyy
     brpc_port = zzzz
     ```

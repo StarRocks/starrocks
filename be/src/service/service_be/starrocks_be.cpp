@@ -68,7 +68,7 @@ void start_be() {
 
     // 3. Start HTTP service.
     std::unique_ptr<starrocks::HttpServiceBE> http_service = std::make_unique<starrocks::HttpServiceBE>(
-            exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
+            exec_env, starrocks::config::be_http_port, starrocks::config::be_http_num_workers);
     if (auto status = http_service->start(); !status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
