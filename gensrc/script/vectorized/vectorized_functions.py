@@ -802,4 +802,7 @@ vectorized_functions = [
     [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
+
+
+    [180001, 'test_array', 'ARRAY_INT', ['ARRAY_INT'], 'TestArray::test_array'],
 ]

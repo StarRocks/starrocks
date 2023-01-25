@@ -81,6 +81,7 @@ set(EXPR_FILES
   vectorized/split.cpp
   vectorized/split_part.cpp
   vectorized/string_functions.cpp
+  vectorized/test_array.cpp
   vectorized/time_functions.cpp
   vectorized/utility_functions.cpp
   agg/java_udaf_function.cpp
