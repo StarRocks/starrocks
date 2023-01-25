@@ -16,6 +16,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
+#include "util/json.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
@@ -181,11 +182,19 @@ private:
 
 // Convert SIMD-JSON object/value to a JsonValue
 StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value) {
-    return SimdJsonConverter::create(value);
+    try {
+        return SimdJsonConverter::create(value);
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
 }
 
 StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value) {
-    return SimdJsonConverter::create(value);
+    try {
+        return SimdJsonConverter::create(value);
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
 }
 
 } //namespace starrocks
