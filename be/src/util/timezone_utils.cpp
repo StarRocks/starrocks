@@ -35,6 +35,8 @@
 
 #include "util/timezone_utils.h"
 
+#include <cctz/time_zone.h>
+
 #include <charconv>
 #include <string_view>
 #include <utility>
@@ -51,6 +53,10 @@ const std::string TimezoneUtils::default_time_zone = "+08:00";
 
 static phmap::flat_hash_map<std::string_view, cctz::time_zone> _s_cached_timezone;
 static phmap::flat_hash_map<std::pair<std::string_view, std::string_view>, int64_t> _s_cached_offsets;
+
+cctz::time_zone TimezoneUtils::local_time_zone() {
+    return cctz::local_time_zone();
+}
 
 void TimezoneUtils::init_time_zones() {
     // timezone cache list

@@ -95,6 +95,7 @@ protected:
     std::vector<SlotDescriptor*> _slot_descs;
 
     static StarRocksServer* _s_starrocks_server;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks
