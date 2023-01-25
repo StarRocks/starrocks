@@ -2,12 +2,8 @@
 
 #include "exec/vectorized/schema_scanner/schema_tasks_scanner.h"
 
-<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_tasks_scanner.cpp
 #include "exec/vectorized/schema_scanner/schema_helper.h"
-=======
-#include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
->>>>>>> b757100f1 (Use system timezone instead of default timezone (#16844)):be/src/exec/schema_scanner/schema_tasks_scanner.cpp
 #include "runtime/string_value.h"
 
 namespace starrocks::vectorized {
