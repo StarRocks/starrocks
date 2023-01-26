@@ -383,7 +383,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
     return nullptr;
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const starrocks::VectorizedFieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const starrocks::FieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method != STORAGE_AGGREGATE_NONE) {
@@ -408,8 +408,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const 
     }
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::VectorizedFieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(const starrocks::FieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method == STORAGE_AGGREGATE_NONE) {

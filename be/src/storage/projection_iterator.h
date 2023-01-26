@@ -24,6 +24,6 @@ namespace starrocks {
 // the relative order of columns in |schema| can be different from that in |child|'s schema, e.g,
 // |child| may return columns in the order `c1`, `c2`, `c3`, the projection iterator may return
 // columns in the order `c3`, `c1`.
-ChunkIteratorPtr new_projection_iterator(const VectorizedSchema& schema, const ChunkIteratorPtr& child);
+ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child);
 
 } //  namespace starrocks

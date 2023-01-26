@@ -72,7 +72,7 @@ protected:
         Status res = engine->create_tablet(create_tablet_req);
         ASSERT_TRUE(res.ok());
         TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-        VectorizedSchema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        Schema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         for (size_t i = 0; i < 4; ++i) {
             ColumnPtr& base_col = base_chunk->get_column_by_index(i);
@@ -125,8 +125,8 @@ protected:
                 SetTabletSchema("SrcColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
 
-        VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-        VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+        Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+        Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         src_datum.set<T>(val);
@@ -145,8 +145,8 @@ protected:
         auto dst_tablet_schema =
                 SetTabletSchema("DstColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
 
-        VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-        VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+        Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+        Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         Slice slice;
@@ -225,8 +225,8 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     auto src_tablet_schema = SetTabletSchema("SrcColumn", "FLOAT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "DOUBLE", "REPLACE", 8, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_float(1.2345);
@@ -243,8 +243,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     auto src_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -269,8 +269,8 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     auto src_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -293,8 +293,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE V2", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -315,8 +315,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -342,8 +342,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -366,8 +366,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string str = "test string";
@@ -392,8 +392,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    VectorizedField f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    VectorizedField f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -438,7 +438,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -511,7 +511,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -566,7 +566,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -635,7 +635,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -699,7 +699,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());

@@ -59,7 +59,7 @@ public:
     ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation);
     virtual ~ChunkAllocator() = default;
 
-    static Status allocate(ChunkPtr& chunk, size_t num_rows, VectorizedSchema& schema);
+    static Status allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema);
     bool is_memory_enough_to_sort(size_t num_rows) const;
     void set_cur_mem_usage(size_t mem_usage) { _memory_allocated = mem_usage; }
     void set_row_len(size_t row_len) { _row_len = row_len; }

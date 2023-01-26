@@ -64,7 +64,7 @@ public:
     int64_t num_rows_read() const { return _num_rows_read; }
 
     // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
-    const VectorizedSchema& chunk_schema() const { return _prj_iter->output_schema(); }
+    const Schema& chunk_schema() const { return _prj_iter->output_schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }

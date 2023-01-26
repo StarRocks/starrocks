@@ -14,7 +14,7 @@
 
 #include "storage/lake/tablet.h"
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -84,7 +84,7 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
     }
 }
 
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, VectorizedSchema schema) {
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Schema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 

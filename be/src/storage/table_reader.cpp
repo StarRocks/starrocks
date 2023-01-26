@@ -52,7 +52,7 @@ Status TableReader::multi_get(const Chunk& keys, const std::vector<std::string>&
         return Status::OK();
     }
 
-    VectorizedSchema value_schema;
+    Schema value_schema;
     RETURN_IF_ERROR(_build_value_schema(value_columns, &value_schema));
     ChunkPtr read_chunk = ChunkHelper::new_chunk(value_schema, 1);
 
@@ -94,12 +94,12 @@ StatusOr<ChunkIteratorPtr> TableReader::scan(const std::vector<std::string>& val
         return new_empty_iterator(_tablet_schema, 0);
     }
 
-    VectorizedSchema value_schema;
+    Schema value_schema;
     RETURN_IF_ERROR(_build_value_schema(value_columns, &value_schema));
     return _base_scan(value_schema, predicates);
 }
 
-StatusOr<ChunkIteratorPtr> TableReader::_base_scan(VectorizedSchema& value_schema,
+StatusOr<ChunkIteratorPtr> TableReader::_base_scan(Schema& value_schema,
                                                    const std::vector<const ColumnPredicate*>& predicates) {
     TabletReaderParams tablet_reader_params;
     tablet_reader_params.predicates = predicates;
@@ -126,7 +126,7 @@ void TableReader::_build_get_predicates(DatumTuple& tuple, std::vector<const Col
                                         ObjectPool& obj_pool) {
     for (size_t i = 0; i < tuple.size(); i++) {
         const Datum& datum = tuple.get(i);
-        const VectorizedFieldPtr& field = _tablet_schema.field(i);
+        const FieldPtr& field = _tablet_schema.field(i);
         ColumnPredicate* predicate =
                 new_column_eq_predicate(field->type(), field->id(), datum_to_string(field->type().get(), datum));
         obj_pool.add(predicate);
@@ -134,9 +134,9 @@ void TableReader::_build_get_predicates(DatumTuple& tuple, std::vector<const Col
     }
 }
 
-Status TableReader::_build_value_schema(const std::vector<std::string>& value_columns, VectorizedSchema* schema) {
+Status TableReader::_build_value_schema(const std::vector<std::string>& value_columns, Schema* schema) {
     for (auto& name : value_columns) {
-        VectorizedFieldPtr field = _tablet_schema.get_field_by_name(name);
+        FieldPtr field = _tablet_schema.get_field_by_name(name);
         if (field == nullptr) {
             return Status::InternalError("can't find value column " + name);
         }

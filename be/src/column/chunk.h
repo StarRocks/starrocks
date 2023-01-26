@@ -21,7 +21,7 @@
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
 #include "util/phmap/phmap.h"
@@ -56,12 +56,12 @@ public:
     using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
-    Chunk(Columns columns, VectorizedSchemaPtr schema);
+    Chunk(Columns columns, SchemaPtr schema);
     Chunk(Columns columns, SlotHashMap slot_map);
     Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     // Chunk with extra data implements.
-    Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data);
+    Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
     Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
     Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data);
 
@@ -98,8 +98,8 @@ public:
 
     void swap_chunk(Chunk& other);
 
-    const VectorizedSchemaPtr& schema() const { return _schema; }
-    VectorizedSchemaPtr& schema() { return _schema; }
+    const SchemaPtr& schema() const { return _schema; }
+    SchemaPtr& schema() { return _schema; }
 
     const Columns& columns() const { return _columns; }
     Columns& columns() { return _columns; }
@@ -108,10 +108,10 @@ public:
     std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const VectorizedFieldPtr& field);
+    void append_column(ColumnPtr column, const FieldPtr& field);
 
     void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field);
+    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
 
@@ -284,7 +284,7 @@ private:
     void rebuild_cid_index();
 
     Columns _columns;
-    std::shared_ptr<VectorizedSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     ColumnIdHashMap _cid_to_index;
     // For compatibility
     SlotHashMap _slot_id_to_index;

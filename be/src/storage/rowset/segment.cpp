@@ -40,7 +40,7 @@
 
 #include <memory>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "segment_chunk_iterator_adapter.h"
@@ -212,8 +212,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     return Status::OK();
 }
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const VectorizedSchema& schema,
-                                                  const SegmentReadOptions& read_options) {
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
     for (const auto& pair : read_options.predicates_for_zone_map) {
@@ -229,8 +228,7 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const VectorizedSchema& schema
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
-StatusOr<ChunkIteratorPtr> Segment::new_iterator(const VectorizedSchema& schema,
-                                                 const SegmentReadOptions& read_options) {
+StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     if (read_options.stats == nullptr) {
         return Status::InvalidArgument("stats is null pointer");
     }

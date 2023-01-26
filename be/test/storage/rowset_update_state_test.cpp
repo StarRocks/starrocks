@@ -162,7 +162,7 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
-static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -198,7 +198,7 @@ static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {

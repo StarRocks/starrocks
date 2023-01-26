@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
+#include "column/field.h"
 #include "column/fixed_length_column.h"
-#include "column/vectorized_field.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 
@@ -32,21 +32,21 @@ std::string make_string(size_t i) {
     return std::string("c").append(std::to_string(static_cast<int32_t>(i)));
 }
 
-VectorizedFieldPtr make_field(size_t i) {
-    return std::make_shared<VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
+FieldPtr make_field(size_t i) {
+    return std::make_shared<Field>(i, make_string(i), get_type_info(TYPE_INT), false);
 }
 
-VectorizedFields make_fields(size_t size) {
-    VectorizedFields fields;
+Fields make_fields(size_t size) {
+    Fields fields;
     for (size_t i = 0; i < size; i++) {
         fields.emplace_back(make_field(i));
     }
     return fields;
 }
 
-VectorizedSchemaPtr make_schema(size_t i) {
-    VectorizedFields fields = make_fields(i);
-    return std::make_shared<VectorizedSchema>(fields);
+SchemaPtr make_schema(size_t i) {
+    Fields fields = make_fields(i);
+    return std::make_shared<Schema>(fields);
 }
 
 ColumnPtr make_column(size_t start) {

@@ -22,8 +22,8 @@
 namespace starrocks {
 
 class SeekTuple;
-class VectorizedSchema;
-using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
+class Schema;
+using SchemaPtr = std::shared_ptr<Schema>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 
@@ -36,7 +36,7 @@ public:
     ShortKeyOption(const SeekTuple* tuple_key, bool inclusive)
             : tuple_key(tuple_key), short_key_schema(nullptr), short_key(""), inclusive(inclusive) {}
 
-    ShortKeyOption(VectorizedSchemaPtr short_key_schema, const Slice& short_key, bool inclusive)
+    ShortKeyOption(SchemaPtr short_key_schema, const Slice& short_key, bool inclusive)
             : tuple_key(nullptr),
               short_key_schema(std::move(short_key_schema)),
               short_key(short_key),
@@ -48,7 +48,7 @@ public:
     // Only one of tuple_key and short_key_schema has value.
     const SeekTuple* const tuple_key;
 
-    const VectorizedSchemaPtr short_key_schema;
+    const SchemaPtr short_key_schema;
     const Slice short_key;
 
     const bool inclusive;

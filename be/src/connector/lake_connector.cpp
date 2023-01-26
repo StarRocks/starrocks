@@ -413,14 +413,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
-    starrocks::VectorizedSchema child_schema = ChunkHelper::convert_schema(*_tablet_schema, reader_columns);
+    starrocks::Schema child_schema = ChunkHelper::convert_schema(*_tablet_schema, reader_columns);
 
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_scan_range.tablet_id));
     ASSIGN_OR_RETURN(_reader, tablet.new_reader(_version, std::move(child_schema)));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::VectorizedSchema output_schema = ChunkHelper::convert_schema(*_tablet_schema, scanner_columns);
+        starrocks::Schema output_schema = ChunkHelper::convert_schema(*_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 

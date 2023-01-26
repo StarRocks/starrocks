@@ -29,7 +29,7 @@ namespace starrocks::lake {
 
 using ChunkChanger = ChunkChanger;
 using ChunkPtr = ChunkPtr;
-using VectorizedSchema = VectorizedSchema;
+using Schema = Schema;
 using SchemaChangeUtils = SchemaChangeUtils;
 using TabletReaderParams = TabletReaderParams;
 
@@ -78,8 +78,8 @@ protected:
 
     TabletReaderParams _read_params;
     std::shared_ptr<const TabletSchema> _new_tablet_schema;
-    VectorizedSchema _base_schema;
-    VectorizedSchema _new_schema;
+    Schema _base_schema;
+    Schema _new_schema;
     ChunkPtr _base_chunk;
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;

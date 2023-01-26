@@ -26,7 +26,7 @@ public:
             : ChunkIterator(children[0]->schema(), children[0]->chunk_size()), _children(std::move(children)) {
 #ifndef NDEBUG
         for (auto& iter : _children) {
-            const VectorizedSchema& child_schema = iter->schema();
+            const Schema& child_schema = iter->schema();
             CHECK_EQ(_schema.num_fields(), child_schema.num_fields());
             for (int i = 0; i < _schema.num_fields(); i++) {
                 CHECK_EQ(_schema.field(i)->to_string(), child_schema.field(i)->to_string());

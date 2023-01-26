@@ -24,11 +24,11 @@ add_library(Column STATIC
         datum.cpp
         datum_convert.cpp
         datum_tuple.cpp
-        vectorized_field.cpp
+        field.cpp
         fixed_length_column_base.cpp
         fixed_length_column.cpp
         nullable_column.cpp
-        vectorized_schema.cpp
+        schema.cpp
         binary_column.cpp
         object_column.cpp
         decimalv3_column.cpp

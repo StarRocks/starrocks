@@ -29,7 +29,7 @@ namespace starrocks {
 class FlushToken;
 class ReplicateToken;
 class MemTracker;
-class VectorizedSchema;
+class Schema;
 class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
@@ -171,7 +171,7 @@ private:
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
     bool _schema_initialized;
-    VectorizedSchema _vectorized_schema;
+    Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;

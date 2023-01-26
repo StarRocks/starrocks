@@ -40,7 +40,7 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const VectorizedSchema& pk_schema);
+    PrimaryIndex(const Schema& pk_schema);
     ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -132,7 +132,7 @@ public:
     size_t key_size() { return _key_size; }
 
 protected:
-    void _set_schema(const VectorizedSchema& pk_schema);
+    void _set_schema(const Schema& pk_schema);
 
 private:
     Status _do_load(Tablet* tablet);
@@ -170,7 +170,7 @@ protected:
 private:
     size_t _key_size = 0;
     int64_t _table_id = 0;
-    VectorizedSchema _pk_schema;
+    Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
     std::unique_ptr<PersistentIndex> _persistent_index;
@@ -181,6 +181,6 @@ inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
     return os;
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const VectorizedSchema& pk_schema);
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema);
 
 } // namespace starrocks

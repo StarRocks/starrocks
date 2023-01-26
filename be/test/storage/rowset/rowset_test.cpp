@@ -242,7 +242,7 @@ private:
     std::string _default_storage_root_path;
 };
 
-static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -616,7 +616,7 @@ static ssize_t read_and_compare(const ChunkIteratorPtr& iter, int64_t nkeys) {
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
                                        const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
                                        int64_t nkeys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(*partial_schema);
+    Schema schema = ChunkHelper::convert_schema(*partial_schema);
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {

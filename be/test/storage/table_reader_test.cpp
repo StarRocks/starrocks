@@ -136,11 +136,11 @@ public:
         value_chunk->get_column_by_index(1)->append_datum(tuple.get(4));
     }
 
-    void build_eq_predicates(VectorizedSchema& scan_key_schema, DatumTuple& tuple,
+    void build_eq_predicates(Schema& scan_key_schema, DatumTuple& tuple,
                              std::vector<const ColumnPredicate*>& predicates) {
         predicates.clear();
         for (size_t i = 0; i < scan_key_schema.num_fields(); i++) {
-            const VectorizedFieldPtr& field = scan_key_schema.field(i);
+            const FieldPtr& field = scan_key_schema.field(i);
             ColumnPredicate* predicate = new_column_eq_predicate(field->type(), field->id(),
                                                                  datum_to_string(field->type().get(), tuple.get(i)));
             _object_pool.add(predicate);
@@ -148,7 +148,7 @@ public:
         }
     }
 
-    void build_scan_request(DatumTupleVector& tuples, VectorizedSchema& scan_key_schema, std::vector<int> tuple_index,
+    void build_scan_request(DatumTupleVector& tuples, Schema& scan_key_schema, std::vector<int> tuple_index,
                             std::vector<int> value_column_index, std::vector<const ColumnPredicate*>& predicates,
                             Chunk* result) {
         build_eq_predicates(scan_key_schema, tuples[tuple_index[0]], predicates);
@@ -190,8 +190,8 @@ protected:
     int64_t version;
     std::vector<TabletSharedPtr> _tablets;
     ObjectPool _object_pool;
-    VectorizedSchema _key_schema;
-    VectorizedSchema _value_schema;
+    Schema _key_schema;
+    Schema _value_schema;
 };
 
 void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk& result) {
@@ -211,7 +211,7 @@ void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk&
     iterator->close();
 }
 
-void verify_chunk_eq(VectorizedSchema& schema, Chunk* expect_chunk, Chunk* actual_chunk) {
+void verify_chunk_eq(Schema& schema, Chunk* expect_chunk, Chunk* actual_chunk) {
     ASSERT_EQ(expect_chunk->num_rows(), actual_chunk->num_rows());
     for (int i = 0; i < expect_chunk->num_rows(); i++) {
         DatumTuple expect_tuple = expect_chunk->get(i);
@@ -303,8 +303,8 @@ TEST_F(TableReaderTest, test_basic_read) {
     verify_chunk_eq(_value_schema, expected_value_chunk.get(), value_chunk.get());
 
     // 4. verify scan
-    VectorizedSchema scan_key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1});
-    VectorizedSchema scan_value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {2, 3, 4});
+    Schema scan_key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1});
+    Schema scan_value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {2, 3, 4});
 
     ChunkPtr expect_scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
     ChunkPtr scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);

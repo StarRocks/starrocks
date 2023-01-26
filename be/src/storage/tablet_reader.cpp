@@ -38,13 +38,13 @@
 
 namespace starrocks {
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema)
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version) {}
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                            const std::vector<RowsetSharedPtr>& captured_rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
@@ -52,7 +52,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Vecto
           _delete_predicates_version(version),
           _rowsets(captured_rowsets) {}
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
@@ -396,11 +396,11 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
-    VectorizedSchema schema;
+    Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {

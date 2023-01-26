@@ -31,7 +31,7 @@ class MetaFileBuilder;
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const VectorizedSchema& pk_schema) : PrimaryIndex(pk_schema) {}
+    LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
     ~LakePrimaryIndex() {}
 
     // Fetch all primary keys from the tablet associated with this index into memory

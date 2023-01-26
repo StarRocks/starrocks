@@ -23,7 +23,7 @@ class TabletSchema;
 class DelVector;
 
 class ChunkIterator;
-class VectorizedSchema;
+class Schema;
 class Column;
 
 namespace lake {

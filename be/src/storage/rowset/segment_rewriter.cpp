@@ -4,7 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"

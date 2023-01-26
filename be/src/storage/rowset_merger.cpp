@@ -38,7 +38,7 @@ public:
 
     virtual ~RowsetMerger() = default;
 
-    virtual Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
+    virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
 };
 
@@ -53,7 +53,7 @@ struct MergeEntry {
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
-    const VectorizedSchema* encode_schema = nullptr;
+    const Schema* encode_schema = nullptr;
     uint16_t order;
     std::vector<RowSourceMask>* source_masks = nullptr;
 
@@ -222,8 +222,8 @@ public:
         return Status::EndOfFile("merge end");
     }
 
-    Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
-                    const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) override {
+    Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
+                    RowsetWriter* writer, const MergeConfig& cfg) override {
         _chunk_size = cfg.chunk_size;
 
         size_t total_input_size = 0;
@@ -263,7 +263,7 @@ public:
     }
 
 private:
-    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
+    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const Schema& schema,
                                   const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
@@ -421,9 +421,9 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            VectorizedSchema schema = tablet.tablet_schema().sort_key_idxes().empty()
-                                              ? ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[0])
-                                              : ChunkHelper::get_sort_key_schema(tablet.tablet_schema());
+            Schema schema = tablet.tablet_schema().sort_key_idxes().empty()
+                                    ? ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[0])
+                                    : ChunkHelper::get_sort_key_schema(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -440,7 +440,7 @@ private:
             vector<ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            VectorizedSchema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
+            Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 rowsets_mask_buffer[j]->flip_to_read();
@@ -529,7 +529,7 @@ private:
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg) {
-    VectorizedSchema schema = [&tablet]() {
+    Schema schema = [&tablet]() {
         if (tablet.tablet_schema().sort_key_idxes().empty()) {
             return ChunkHelper::get_sort_key_schema_by_primary_key(tablet.tablet_schema());
         } else {

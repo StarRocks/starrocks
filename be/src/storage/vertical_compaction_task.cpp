@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
@@ -113,7 +113,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      const std::vector<uint32_t>& column_group,
                                                      RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
@@ -176,9 +176,9 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 }
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
-                                                       const std::vector<uint32_t>& column_group,
-                                                       const VectorizedSchema& schema, TabletReader* reader,
-                                                       RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
+                                                       const std::vector<uint32_t>& column_group, const Schema& schema,
+                                                       TabletReader* reader, RowsetWriter* output_rs_writer,
+                                                       RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;

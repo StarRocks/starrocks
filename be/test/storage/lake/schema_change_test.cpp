@@ -34,7 +34,7 @@ namespace starrocks::lake {
 
 using namespace starrocks;
 
-using VSchema = starrocks::VectorizedSchema;
+using VSchema = starrocks::Schema;
 using VChunk = starrocks::Chunk;
 
 class SchemaChangeTest : public testing::Test {

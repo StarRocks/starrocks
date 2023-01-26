@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/vectorized_field.h"
+#include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 
@@ -35,32 +35,31 @@ namespace starrocks {
 //           add a tailing 0x00 0x00, then append
 class PrimaryKeyEncoder {
 public:
-    static bool is_supported(const VectorizedField& f);
+    static bool is_supported(const Field& f);
 
-    static bool is_supported(const VectorizedSchema& schema, const std::vector<ColumnId>& key_idxes);
+    static bool is_supported(const Schema& schema, const std::vector<ColumnId>& key_idxes);
 
     // Return |TYPE_NONE| if no primary key contained in |schema|.
-    static LogicalType encoded_primary_key_type(const VectorizedSchema& schema, const std::vector<ColumnId>& key_idxes);
+    static LogicalType encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes);
 
     // Return -1 if encoded key is not fixed size
-    static size_t get_encoded_fixed_size(const VectorizedSchema& schema);
+    static size_t get_encoded_fixed_size(const Schema& schema);
 
-    static Status create_column(const VectorizedSchema& schema, std::unique_ptr<Column>* pcolumn);
-    static Status create_column(const VectorizedSchema& schema, std::unique_ptr<Column>* pcolumn,
+    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn);
+    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn,
                                 const std::vector<ColumnId>& key_idxes);
 
-    static void encode(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
-    static void encode_sort_key(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                Column* dest);
+    static void encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
-    static void encode_selective(const VectorizedSchema& schema, const Chunk& chunk, const uint32_t* indexes,
-                                 size_t len, Column* dest);
+    static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
+                                 Column* dest);
 
-    static bool encode_exceed_limit(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
+    static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                     size_t limit_size);
 
-    static Status decode(const VectorizedSchema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest);
+    static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest);
 };
 
 } // namespace starrocks

@@ -23,7 +23,7 @@ namespace starrocks {
 
 class ProjectionIterator final : public ChunkIterator {
 public:
-    ProjectionIterator(VectorizedSchema schema, ChunkIteratorPtr child)
+    ProjectionIterator(Schema schema, ChunkIteratorPtr child)
             : ChunkIterator(std::move(schema), child->chunk_size()), _child(std::move(child)) {
         build_index_map(this->_schema, _child->schema());
     }
@@ -49,7 +49,7 @@ protected:
     Status do_get_next(Chunk* chunk) override;
 
 private:
-    void build_index_map(const VectorizedSchema& output, const VectorizedSchema& input);
+    void build_index_map(const Schema& output, const Schema& input);
 
     ChunkIteratorPtr _child;
     // mapping from index of column in output chunk to index of column in input chunk.
@@ -57,7 +57,7 @@ private:
     ChunkPtr _chunk;
 };
 
-void ProjectionIterator::build_index_map(const VectorizedSchema& output, const VectorizedSchema& input) {
+void ProjectionIterator::build_index_map(const Schema& output, const Schema& input) {
     DCHECK_LE(output.num_fields(), input.num_fields());
 
     std::unordered_map<ColumnId, size_t> input_indexes;
@@ -103,7 +103,7 @@ void ProjectionIterator::close() {
     }
 }
 
-ChunkIteratorPtr new_projection_iterator(const VectorizedSchema& schema, const ChunkIteratorPtr& child) {
+ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child) {
     return std::make_shared<ProjectionIterator>(schema, child);
 }
 

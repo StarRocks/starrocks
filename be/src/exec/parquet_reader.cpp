@@ -136,7 +136,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             //save column type
             std::shared_ptr<arrow::Schema> field_schema = _batch->schema();
             if (!field_schema) {
-                LOG(INFO) << "Ignore the parquet file because of an expected nullptr VectorizedSchema";
+                LOG(INFO) << "Ignore the parquet file because of an expected nullptr Schema";
                 return Status::EndOfFile("Unexpected nullptr RecordBatch");
             }
         }

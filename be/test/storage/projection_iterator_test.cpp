@@ -24,7 +24,7 @@
 
 namespace starrocks {
 
-// VectorizedSchema with 3 columns: INT, VARCHAR, INT.
+// Schema with 3 columns: INT, VARCHAR, INT.
 class VectorIterator final : public ChunkIterator {
 public:
     explicit VectorIterator(std::vector<int32_t> c1, std::vector<std::string> c2, std::vector<int32_t> c3)
@@ -47,12 +47,12 @@ public:
         _encoded_schema.clear();
     }
 
-    static VectorizedSchema schema() {
-        VectorizedFieldPtr f1 = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
-        VectorizedFieldPtr f2 = std::make_shared<VectorizedField>(1, "c2", get_type_info(TYPE_VARCHAR), false);
-        VectorizedFieldPtr f3 = std::make_shared<VectorizedField>(2, "c3", get_type_info(TYPE_INT), false);
+    static Schema schema() {
+        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+        FieldPtr f2 = std::make_shared<Field>(1, "c2", get_type_info(TYPE_VARCHAR), false);
+        FieldPtr f3 = std::make_shared<Field>(2, "c3", get_type_info(TYPE_INT), false);
         f1->set_is_key(true);
-        return VectorizedSchema(std::vector<VectorizedFieldPtr>{f1, f2, f3});
+        return Schema(std::vector<FieldPtr>{f1, f2, f3});
     }
 
     void close() override {}
@@ -79,7 +79,7 @@ TEST_F(ProjectionIteratorTest, all) {
     auto child = std::make_shared<VectorIterator>(c1, c2, c3);
     // select c1
     {
-        VectorizedSchema schema = child->schema();
+        Schema schema = child->schema();
         schema.remove(2);
         schema.remove(1);
         auto iter = new_projection_iterator(schema, child);
@@ -96,7 +96,7 @@ TEST_F(ProjectionIteratorTest, all) {
     // select c2, c3
     {
         child->reset();
-        VectorizedSchema schema = child->schema();
+        Schema schema = child->schema();
         schema.remove(0);
         auto iter = new_projection_iterator(schema, child);
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
@@ -113,9 +113,9 @@ TEST_F(ProjectionIteratorTest, all) {
     // select c3, c1
     {
         child->reset();
-        VectorizedFieldPtr f1 = child->schema().field(0);
-        VectorizedFieldPtr f3 = child->schema().field(2);
-        VectorizedSchema schema({f3, f1});
+        FieldPtr f1 = child->schema().field(0);
+        FieldPtr f3 = child->schema().field(2);
+        Schema schema({f3, f1});
         auto iter = new_projection_iterator(schema, child);
         iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->encoded_schema(), config::vector_chunk_size);

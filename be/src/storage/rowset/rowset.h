@@ -61,7 +61,7 @@ class RowsetReadOptions;
 class TabletSchema;
 class KVStore;
 
-class VectorizedSchema;
+class Schema;
 class ChunkIterator;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
@@ -156,12 +156,12 @@ public:
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
 
-    StatusOr<ChunkIteratorPtr> new_iterator(const VectorizedSchema& schema, const RowsetReadOptions& options);
+    StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const RowsetReadOptions& options);
 
     // For each segment in this rowset, create a `ChunkIterator` for it and *APPEND* it into
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
-    Status get_segment_iterators(const VectorizedSchema& schema, const RowsetReadOptions& options,
+    Status get_segment_iterators(const Schema& schema, const RowsetReadOptions& options,
                                  std::vector<ChunkIteratorPtr>* seg_iterators);
 
     // estimate the number of compaction segment iterator
@@ -180,8 +180,8 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
-    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const VectorizedSchema& schema, KVStore* meta,
-                                                                   int64_t version, OlapReaderStatistics* stats);
+    StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema, KVStore* meta, int64_t version,
+                                                                   OlapReaderStatistics* stats);
 
     // publish rowset to make it visible to read
     void make_visible(Version version);
