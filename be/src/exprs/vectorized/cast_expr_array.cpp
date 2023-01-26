@@ -80,15 +80,10 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
             } else {
                 container.push_back(src[i]);
             }
-<<<<<<< HEAD:be/src/exprs/vectorized/cast_expr_array.cpp
-        }
-        if (src[i] == ']') {
-=======
         } else if (src[i] == '[') {
             container.push_back(src[i]);
             has_bracket = true;
         } else if (src[i] == ']') {
->>>>>>> a4ae06405 ([BugFix] validate array syntax in casting string to array (#16866)):be/src/exprs/cast_expr_array.cpp
             if (!container.empty() && container.back() == '[') {
                 container.pop_back();
             } else {
