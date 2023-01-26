@@ -1086,27 +1086,6 @@ public class ReportHandler extends Daemon {
                                 }
                                 break;
                             }
-
-                            if (replica.getVersion() > tTabletInfo.getVersion()) {
-                                LOG.warn("recover for replica {} of tablet {} on backend {}",
-                                        replica.getId(), tabletId, backendId);
-                                if (replica.getVersion() == tTabletInfo.getVersion() + 1) {
-                                    // this missing version is the last version of this replica
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            replica.getVersion(), /* set LFV to current FE version */
-                                            tTabletInfo.getVersion()); /* set LSV to BE report version */
-                                } else {
-                                    // this missing version is a hole
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            tTabletInfo.getVersion() + 1, /* LFV */
-                                            /* remain LSV unchanged, which should be equal to replica.version */
-                                            replica.getLastSuccessVersion());
-                                }
-                                // no need to write edit log, if FE crashed, this will be recovered again
-                                break;
-                            }
                         }
                     }
                 }
