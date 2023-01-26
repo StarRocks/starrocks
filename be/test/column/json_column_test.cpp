@@ -371,9 +371,6 @@ PARALLEL_TEST(JsonColumnTest, test_assign) {
     }
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::vectorized
-=======
 PARALLEL_TEST(JsonColumnTest, test_serialize) {
     auto column = RunTimeColumnType<TYPE_JSON>::create();
     JsonValue json = JsonValue::parse("1").value();
@@ -423,5 +420,4 @@ INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
                                  // clang-format on
                                  ));
 
-} // namespace starrocks
->>>>>>> 60fde1b10 ([BugFix] Fix convert json object with empty key (#16852))
+} // namespace starrocks::vectorized
