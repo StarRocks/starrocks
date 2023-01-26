@@ -139,7 +139,7 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
-    VectorizedSchema _vectorized_schema;
+    Schema _vectorized_schema;
     bool _schema_initialized;
 
     // for partial update

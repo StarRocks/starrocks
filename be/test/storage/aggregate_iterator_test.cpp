@@ -64,7 +64,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_MAX);
     c8->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -143,7 +143,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_MIN);
     c8->set_aggregate_method(STORAGE_AGGREGATE_MIN);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -222,7 +222,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_SUM);
     c8->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
     auto v1 = std::vector<int64_t>{1, 2, 3, 1, -1};
     auto v2 = std::vector<const char*>{"1", "2", "3", "1", "-1"};
@@ -296,7 +296,7 @@ TEST_F(AggregateIteratorTest, agg_replace) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
     c8->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -361,7 +361,7 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 2, 3, 4, 5};
@@ -412,7 +412,7 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{};
@@ -441,7 +441,7 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{+1, +2, +3, +4, +5, +6, +7, +8, +9};
@@ -486,7 +486,7 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{+1, +1, +1, +1, +1, +1, +1, +1, +1};
@@ -529,7 +529,7 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<uint8_t>{0, 0, 0, 1, 1, 1, 1, 1, 1};
@@ -573,7 +573,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"a", "b", "c", "d", "e", "f"};
@@ -671,7 +671,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"1990-01-01", "1991-01-01", "1992-01-01", "1993-01-01"};
@@ -766,7 +766,7 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"0.0001", "0.0002", "0.0003", "0.0004"};
@@ -864,7 +864,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
     k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, k2, c1});
+    Schema schema({k1, k2, c1});
 
     {
         auto pk1 = std::vector<std::string>{"aaa", "aaa", "aaa", "aaa"};
@@ -997,7 +997,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({k1, k2, c1});
+    Schema schema({k1, k2, c1});
 
     {
         auto pk1 = std::vector<std::string>{"aaa", "aaa", "aaa", "aaa"};
@@ -1047,7 +1047,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
 
-    VectorizedSchema schema({k1});
+    Schema schema({k1});
 
     auto pk = std::vector<int64_t>{1, 1, 2, 3, 3, 3, 4, 5, 5};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_BIGINT(pk));
@@ -1083,7 +1083,7 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({c1});
+    Schema schema({c1});
 
     auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
@@ -1128,7 +1128,7 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
     auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({c1});
+    Schema schema({c1});
 
     auto v1 = std::vector<int16_t>{2, 1, 3, 4, 6, 5, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));

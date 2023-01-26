@@ -49,7 +49,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
-    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok());

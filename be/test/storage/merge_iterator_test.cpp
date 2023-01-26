@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "column/fixed_length_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/config.h"
 #include "storage/vector_chunk_iterator.h"
 
@@ -43,12 +43,12 @@ protected:
     void SetUp() override {
         auto f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
         f->set_is_key(true);
-        _schema = VectorizedSchema(std::vector<FieldPtr>{f});
+        _schema = Schema(std::vector<FieldPtr>{f});
     }
 
     void TearDown() override {}
 
-    VectorizedSchema _schema;
+    Schema _schema;
 };
 
 // NOLINTNEXTLINE

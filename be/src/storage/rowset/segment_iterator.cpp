@@ -84,7 +84,7 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     return 0;
 }
 
-static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const VectorizedSchema& short_key_schema) {
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
     DCHECK_GE(rhs_chunk.num_rows(), 1u);
 
     SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
@@ -96,7 +96,7 @@ static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Vec
 
 class SegmentIterator final : public ChunkIterator {
 public:
-    SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema _schema, SegmentReadOptions options);
+    SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
 
     ~SegmentIterator() override = default;
 
@@ -150,8 +150,8 @@ private:
 
         size_t column_size() { return _column_iterators.size(); }
 
-        VectorizedSchema _read_schema;
-        VectorizedSchema _dict_decode_schema;
+        Schema _read_schema;
+        Schema _dict_decode_schema;
         std::vector<bool> _is_dict_column;
         std::vector<ColumnIterator*> _column_iterators;
         ScanContext* _next{nullptr};
@@ -183,7 +183,7 @@ private:
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
     template <bool check_global_dict>
-    Status _init_column_iterators(const VectorizedSchema& schema);
+    Status _init_column_iterators(const Schema& schema);
     Status _get_row_ranges_by_keys();
     Status _get_row_ranges_by_key_ranges();
     Status _get_row_ranges_by_short_key_ranges();
@@ -195,10 +195,10 @@ private:
     uint32_t num_rows() const { return _segment->num_rows(); }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
-    Status _lookup_ordinal(const Slice& index_key, const VectorizedSchema& short_key_schema, bool lower, rowid_t end,
+    Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
                            rowid_t* rowid);
-    Status _seek_columns(const VectorizedSchema& schema, rowid_t pos);
-    Status _read_columns(const VectorizedSchema& schema, Chunk* chunk, size_t nrows);
+    Status _seek_columns(const Schema& schema, rowid_t pos);
+    Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
     StatusOr<uint16_t> _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
     StatusOr<uint16_t> _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
@@ -295,7 +295,7 @@ private:
     bool _has_bitmap_index = false;
 };
 
-SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema schema, SegmentReadOptions options)
+SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
@@ -398,7 +398,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
 }
 
 template <bool check_global_dict>
-Status SegmentIterator::_init_column_iterators(const VectorizedSchema& schema) {
+Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
 
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
@@ -678,8 +678,8 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
     return Status::OK();
 }
 
-Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const VectorizedSchema& short_key_schema, bool lower,
-                                        rowid_t end, rowid_t* rowid) {
+Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
+                                        rowid_t* rowid) {
     uint32_t start_block_id;
     auto start_iter = _segment->lower_bound(index_key);
     if (start_iter.valid()) {
@@ -733,7 +733,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Vectorized
     return Status::OK();
 }
 
-Status SegmentIterator::_seek_columns(const VectorizedSchema& schema, rowid_t pos) {
+Status SegmentIterator::_seek_columns(const Schema& schema, rowid_t pos) {
     SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
     for (const FieldPtr& f : schema.fields()) {
         RETURN_IF_ERROR(_column_iterators[f->id()]->seek_to_ordinal(pos));
@@ -741,7 +741,7 @@ Status SegmentIterator::_seek_columns(const VectorizedSchema& schema, rowid_t po
     return Status::OK();
 }
 
-Status SegmentIterator::_read_columns(const VectorizedSchema& schema, Chunk* chunk, size_t nrows) {
+Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t nrows) {
     SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
     const size_t n = schema.num_fields();
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
@@ -1299,7 +1299,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
         return Status::OK();
     }
 
-    const VectorizedSchema& decode_schema = ctx->_dict_decode_schema;
+    const Schema& decode_schema = ctx->_dict_decode_schema;
     const size_t n = decode_schema.num_fields();
     bool may_has_del_row = ctx->_read_chunk->delete_state() != DEL_NOT_SATISFIED;
     for (size_t i = 0; i < n; i++) {
@@ -1570,11 +1570,10 @@ void SegmentIterator::close() {
 
 // put the field that has predicated on it ahead of those without one, for handle late
 // materialization easier.
-inline VectorizedSchema reorder_schema(const VectorizedSchema& input,
-                                       const std::unordered_map<ColumnId, PredicateList>& predicates) {
+inline Schema reorder_schema(const Schema& input, const std::unordered_map<ColumnId, PredicateList>& predicates) {
     const std::vector<FieldPtr>& fields = input.fields();
 
-    VectorizedSchema output;
+    Schema output;
     output.reserve(fields.size());
     for (const auto& field : fields) {
         if (predicates.count(field->id())) {
@@ -1589,12 +1588,12 @@ inline VectorizedSchema reorder_schema(const VectorizedSchema& input,
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const VectorizedSchema& schema,
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
-        VectorizedSchema ordered_schema = reorder_schema(schema, options.predicates);
+        Schema ordered_schema = reorder_schema(schema, options.predicates);
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
         return new_projection_iterator(schema, seg_iter);
     }

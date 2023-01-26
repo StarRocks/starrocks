@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"

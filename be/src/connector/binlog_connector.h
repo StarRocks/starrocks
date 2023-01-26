@@ -75,14 +75,14 @@ public:
 private:
     StatusOr<TabletSharedPtr> _get_tablet();
     BinlogMetaFieldMap _build_binlog_meta_fields(ColumnId start_cid);
-    StatusOr<VectorizedSchema> _build_binlog_schema();
+    StatusOr<Schema> _build_binlog_schema();
 
     const BinlogDataSourceProvider* _provider;
     const TBinlogScanRange _scan_range;
     RuntimeState* _runtime_state = nullptr;
     TabletSharedPtr _tablet;
     // TODO this will be used by BinlogReader
-    VectorizedSchema _binlog_read_schema;
+    Schema _binlog_read_schema;
 
     int64_t _rows_read_number = 0;
     int64_t _bytes_read = 0;

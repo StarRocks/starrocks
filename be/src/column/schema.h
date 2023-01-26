@@ -24,34 +24,33 @@
 namespace starrocks {
 
 // TODO: move constructor and move assignment
-class VectorizedSchema {
+class Schema {
 public:
-    VectorizedSchema() = default;
-    VectorizedSchema(VectorizedSchema&&) = default;
-    VectorizedSchema& operator=(VectorizedSchema&&) = default;
+    Schema() = default;
+    Schema(Schema&&) = default;
+    Schema& operator=(Schema&&) = default;
 
 #ifdef BE_TEST
-    explicit VectorizedSchema(Fields fields);
+    explicit Schema(Fields fields);
 #endif
 
-    explicit VectorizedSchema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes);
+    explicit Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes);
 
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!
-    explicit VectorizedSchema(VectorizedSchema* schema);
+    explicit Schema(Schema* schema);
 
-    explicit VectorizedSchema(VectorizedSchema* schema, const std::vector<ColumnId>& cids);
+    explicit Schema(Schema* schema, const std::vector<ColumnId>& cids);
 
-    explicit VectorizedSchema(VectorizedSchema* schema, const std::vector<ColumnId>& cids,
-                              const std::vector<ColumnId>& scids);
-
-    // if we use this constructor and share the name_to_index with another schema,
-    // we must make sure another shema is read only!!!
-    VectorizedSchema(const VectorizedSchema& schema);
+    explicit Schema(Schema* schema, const std::vector<ColumnId>& cids, const std::vector<ColumnId>& scids);
 
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!
-    VectorizedSchema& operator=(const VectorizedSchema& other);
+    Schema(const Schema& schema);
+
+    // if we use this constructor and share the name_to_index with another schema,
+    // we must make sure another shema is read only!!!
+    Schema& operator=(const Schema& other);
 
     size_t num_fields() const { return _fields.size(); }
 
@@ -83,7 +82,7 @@ public:
 
     size_t get_field_index_by_name(const std::string& name) const;
 
-    void convert_to(VectorizedSchema* new_schema, const std::vector<LogicalType>& new_types) const;
+    void convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const;
 
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
 
@@ -114,7 +113,7 @@ private:
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
 };
 
-inline std::ostream& operator<<(std::ostream& os, const VectorizedSchema& schema) {
+inline std::ostream& operator<<(std::ostream& os, const Schema& schema) {
     const Fields& fields = schema.fields();
     os << "(";
     if (!fields.empty()) {

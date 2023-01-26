@@ -336,8 +336,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     return true;
 }
 
-bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
-                                   const VectorizedSchema& new_schema, MemPool* mem_pool) {
+bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
+                                   const Schema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()

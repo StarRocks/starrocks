@@ -41,9 +41,9 @@ public:
         return fields;
     }
 
-    VectorizedSchemaPtr make_schema(size_t i) {
+    SchemaPtr make_schema(size_t i) {
         Fields fields = make_fields(i);
-        return std::make_shared<VectorizedSchema>(fields);
+        return std::make_shared<Schema>(fields);
     }
 
     ColumnPtr make_column(size_t start, size_t size = 100) {

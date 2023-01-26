@@ -105,7 +105,7 @@ ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) {}
 ChunkSorter::~ChunkSorter() = default;
 
 bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
         Status st = ChunkAllocator::allocate(_swap_chunk, chunk->num_rows(), new_schema);
         if (_swap_chunk == nullptr || !st.ok()) {
@@ -157,7 +157,7 @@ bool ChunkAllocator::is_memory_enough_to_sort(size_t num_rows) const {
     return static_cast<double>(_memory_allocated + chunk_size) < static_cast<double>(_memory_limitation) * 0.8;
 }
 
-Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, VectorizedSchema& schema) {
+Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema) {
     chunk = ChunkHelper::new_chunk(schema, num_rows);
     if (chunk == nullptr) {
         LOG(WARNING) << "ChunkAllocator allocate chunk failed.";
@@ -204,7 +204,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
 
     _make_heap(chunk_arr);
     size_t nread = 0;
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
@@ -312,10 +312,10 @@ Status LinkedSchemaChange::process_v2(TabletReader* reader, RowsetWriter* new_ro
 
 bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -386,10 +386,10 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
 Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                         RowsetSharedPtr rowset) {
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
-                                                               *_chunk_changer->get_mutable_selected_column_indexs());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
+                                                     *_chunk_changer->get_mutable_selected_column_indexs());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
@@ -477,8 +477,8 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
         }
     }
     std::vector<ChunkPtr> chunk_arr;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -511,7 +511,7 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
         if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows() * 2)) {
             VLOG(3) << "do internal sorting because of memory limit";
             if (chunk_arr.empty()) {
-                LOG(WARNING) << "Memory limitation is too small for VectorizedSchema Change."
+                LOG(WARNING) << "Memory limitation is too small for Schema Change."
                              << "memory_limitation=" << _memory_limitation;
                 return false;
             }
@@ -576,9 +576,9 @@ Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* n
                                            TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                            RowsetSharedPtr rowset) {
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
-                                                               *_chunk_changer->get_mutable_selected_column_indexs());
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
+                                                     *_chunk_changer->get_mutable_selected_column_indexs());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
@@ -821,7 +821,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
         VLOG(3) << "versions to be changed size:" << versions_to_be_changed.size();
 
-        VectorizedSchema base_schema;
+        Schema base_schema;
         if (config::enable_schema_change_v2) {
             base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(),
                                                       *sc_params.chunk_changer->get_mutable_selected_column_indexs());

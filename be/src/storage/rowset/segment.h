@@ -57,7 +57,7 @@ class TabletSchema;
 class ShortKeyIndexDecoder;
 
 class ChunkIterator;
-class VectorizedSchema;
+class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
 
@@ -107,7 +107,7 @@ public:
     ~Segment();
 
     // may return EndOfFile
-    StatusOr<ChunkIteratorPtr> new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
     uint64_t id() const { return _segment_id; }
 
@@ -207,7 +207,7 @@ private:
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(SegmentFooterPB* footer);
 
-    StatusOr<ChunkIteratorPtr> _new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
     void _prepare_adapter_info();
 

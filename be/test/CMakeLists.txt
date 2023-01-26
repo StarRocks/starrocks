@@ -16,7 +16,7 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
-        ./column/vectorized_schema_test.cpp
+        ./column/schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp

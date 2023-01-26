@@ -36,9 +36,8 @@ namespace starrocks {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
-VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
-                                          const std::vector<SlotDescriptor*>* slot_descs) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(*tablet_schema);
+Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
+    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
@@ -59,7 +58,7 @@ void MemTable::_init_aggregator_if_needed() {
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -75,7 +74,7 @@ MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std:
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -91,7 +90,7 @@ MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std:
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),

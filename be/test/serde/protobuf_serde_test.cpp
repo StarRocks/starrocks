@@ -20,7 +20,7 @@
 #include "column/chunk_extra_data.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 
@@ -44,9 +44,9 @@ Fields make_fields(size_t size) {
     return fields;
 }
 
-VectorizedSchemaPtr make_schema(size_t i) {
+SchemaPtr make_schema(size_t i) {
     Fields fields = make_fields(i);
-    return std::make_shared<VectorizedSchema>(fields);
+    return std::make_shared<Schema>(fields);
 }
 
 ColumnPtr make_column(size_t start) {

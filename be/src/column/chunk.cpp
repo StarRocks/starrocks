@@ -69,7 +69,7 @@ bool Chunk::has_large_column() const {
     return false;
 }
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
+Chunk::Chunk(Columns columns, SchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
 
 // TODO: FlatMap don't support std::move
 Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), std::move(slot_map), nullptr) {}
@@ -78,7 +78,7 @@ Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), 
 Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
         : Chunk(std::move(columns), std::move(slot_map), std::move(tuple_map), nullptr) {}
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data)
+Chunk::Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data)
         : _columns(std::move(columns)), _schema(std::move(schema)), _extra_data(std::move(extra_data)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));

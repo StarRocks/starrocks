@@ -346,7 +346,7 @@ private:
     ChunkIteratorPtr _iter;
 };
 
-StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const VectorizedSchema& schema, const RowsetReadOptions& options) {
+StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const Schema& schema, const RowsetReadOptions& options) {
     std::vector<ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
     if (seg_iters.empty()) {
@@ -358,7 +358,7 @@ StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const VectorizedSchema& schema, 
     }
 }
 
-Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptions& options,
                                      std::vector<ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
@@ -448,7 +448,7 @@ Status Rowset::get_segment_iterators(const VectorizedSchema& schema, const Rowse
     return Status::OK();
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const VectorizedSchema& schema, KVStore* meta,
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema, KVStore* meta,
                                                                        int64_t version, OlapReaderStatistics* stats) {
     RETURN_IF_ERROR(load());
 

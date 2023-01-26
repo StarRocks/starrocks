@@ -71,7 +71,7 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
+    SchemaPtr schema(new Schema());
     auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
     auto c1_field = std::make_shared<Field>(1, "c1", TYPE_CHAR, true);
     auto c2_field = std::make_shared<Field>(2, "c2", TYPE_DATE, true);
@@ -171,7 +171,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
+    SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
@@ -210,7 +210,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
+    SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);

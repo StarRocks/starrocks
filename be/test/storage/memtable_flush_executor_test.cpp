@@ -73,8 +73,8 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     return std::make_shared<TabletSchema>(tspb);
 }
 
-static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) {
-    unique_ptr<VectorizedSchema> ret;
+static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
+    unique_ptr<Schema> ret;
     Fields fields;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     for (int i = 0; i < cs.size(); i++) {
@@ -114,7 +114,7 @@ static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) 
         fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
         fields.emplace_back(fd);
     }
-    ret = std::make_unique<VectorizedSchema>(std::move(fields));
+    ret = std::make_unique<Schema>(std::move(fields));
     return ret;
 }
 
@@ -229,7 +229,7 @@ public:
 
     void checkResult(size_t n) {
         RowsetSharedPtr rowset = *_writer->build();
-        unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
+        unique_ptr<Schema> read_schema = create_schema("pk int", 1);
         OlapReaderStatistics stats;
         RowsetReadOptions rs_opts;
         rs_opts.sorted = false;
@@ -265,7 +265,7 @@ public:
     shared_ptr<TabletSchema> _schema;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
-    VectorizedSchema _vectorized_schema;
+    Schema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 

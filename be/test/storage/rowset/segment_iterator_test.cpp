@@ -125,7 +125,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    VectorizedSchema vec_schema;
+    Schema vec_schema;
     vec_schema.append(std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false));
     vec_schema.append(std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 
@@ -256,7 +256,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
-    VectorizedSchema vec_schema;
+    Schema vec_schema;
     vec_schema.append(std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false));
     vec_schema.append(std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 

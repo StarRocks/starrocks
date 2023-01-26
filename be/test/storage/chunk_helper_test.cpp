@@ -19,7 +19,7 @@
 #include "column/column.h"
 #include "column/field.h"
 #include "column/nullable_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
@@ -35,7 +35,7 @@ class ChunkHelperTest : public testing::Test {
 public:
     void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
                            int32_t length, bool is_nullable);
-    VectorizedSchemaPtr gen_v_schema(bool is_nullable);
+    SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
     void check_column(Column* column, LogicalType type, size_t row_size);
@@ -117,7 +117,7 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
     column->set_aggregation("NONE");
 }
 
-VectorizedSchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
+SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
     Fields fields;
     fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(TYPE_TINYINT), is_nullable));
     fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(TYPE_SMALLINT), is_nullable));
@@ -128,7 +128,7 @@ VectorizedSchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
     fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(TYPE_DOUBLE), is_nullable));
     fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(TYPE_VARCHAR), is_nullable));
     fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(TYPE_CHAR), is_nullable));
-    return std::make_shared<VectorizedSchema>(fields);
+    return std::make_shared<Schema>(fields);
 }
 
 void ChunkHelperTest::check_chunk(Chunk* chunk, size_t column_size, size_t row_size) {

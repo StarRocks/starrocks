@@ -86,7 +86,7 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
     return fields;
 }
 
-StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
+StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
@@ -122,7 +122,7 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
     }
 
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];
         if (index >= schema.num_fields()) {

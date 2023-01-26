@@ -72,7 +72,7 @@ protected:
         Status res = engine->create_tablet(create_tablet_req);
         ASSERT_TRUE(res.ok());
         TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-        VectorizedSchema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        Schema base_schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         for (size_t i = 0; i < 4; ++i) {
             ColumnPtr& base_col = base_chunk->get_column_by_index(i);
@@ -438,7 +438,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -511,7 +511,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -566,7 +566,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -635,7 +635,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -699,7 +699,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());

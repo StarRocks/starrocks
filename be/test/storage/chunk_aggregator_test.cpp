@@ -37,7 +37,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
     fields.emplace_back(key);
     fields.emplace_back(value);
 
-    VectorizedSchemaPtr schema = std::make_shared<VectorizedSchema>(fields);
+    SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0.9);
 
@@ -86,7 +86,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     Fields fields;
     fields.emplace_back(value);
 
-    VectorizedSchemaPtr schema = std::make_shared<VectorizedSchema>(fields);
+    SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0, true, false);
 

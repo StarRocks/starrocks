@@ -117,7 +117,7 @@ ChunkIteratorPtrOr MemStateTable::prefix_scan(const DatumRow& key) const {
     return std::make_shared<DatumRowIterator>(schema, std::move(rows));
 }
 
-VectorizedSchema MemStateTable::_make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const {
+Schema MemStateTable::_make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const {
     Fields fields;
     for (auto& slot : slots) {
         auto type_desc = slot->type();
@@ -125,7 +125,7 @@ VectorizedSchema MemStateTable::_make_schema_from_slots(const std::vector<SlotDe
         auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_desc.type, false);
         fields.emplace_back(std::move(field));
     }
-    return VectorizedSchema(std::move(fields), KeysType::PRIMARY_KEYS, {});
+    return Schema(std::move(fields), KeysType::PRIMARY_KEYS, {});
 }
 
 std::vector<ChunkIteratorPtrOr> MemStateTable::prefix_scan(const std::vector<DatumRow>& keys) const {

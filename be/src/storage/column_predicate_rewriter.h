@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/object_pool.h"
 #include "runtime/global_dict/types.h"
 #include "storage/column_predicate.h"
@@ -39,7 +39,7 @@ public:
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(const ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
-                            const VectorizedSchema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
+                            const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
@@ -60,7 +60,7 @@ private:
 
     const ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
-    const VectorizedSchema& _schema;
+    const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
     SparseRange& _scan_range;

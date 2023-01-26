@@ -301,10 +301,10 @@ void TabletSchema::_init_schema() const {
         auto f = ChunkHelper::convert_field(cid, column(cid));
         fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
     }
-    _schema = std::make_unique<VectorizedSchema>(std::move(fields), keys_type(), _sort_key_idxes);
+    _schema = std::make_unique<Schema>(std::move(fields), keys_type(), _sort_key_idxes);
 }
 
-VectorizedSchema* TabletSchema::schema() const {
+Schema* TabletSchema::schema() const {
     std::call_once(_init_schema_once_flag, [this] { return _init_schema(); });
     return _schema.get();
 }
