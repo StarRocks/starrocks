@@ -651,7 +651,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
     return tablet1;
 }
 
-static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -714,7 +714,7 @@ static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
 }
 
 static Status read_with_cancel(const TabletSharedPtr& tablet, int64_t version) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     TabletReaderParams params;
     RuntimeState state;
@@ -743,7 +743,7 @@ static Status read_with_cancel(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -753,7 +753,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -764,7 +764,7 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -799,7 +799,7 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
 
 static ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& tablet, int64_t version,
                                                                 const vector<int64_t>& keys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -834,7 +834,7 @@ static ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletShar
 
 static ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& tablet, int64_t version,
                                                                 const vector<int64_t>& keys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -869,7 +869,7 @@ static ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletShar
 
 static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSharedPtr& tablet, int64_t version,
                                                                   const vector<int64_t>& keys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -903,7 +903,7 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
 
 static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& tablet, int64_t version,
                                                          const vector<vector<int64_t>>& all_cols) {
-    VectorizedSchema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -1250,7 +1250,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader1(_tablet, Version(0, 1), schema);
     TabletReader reader2(_tablet, Version(0, 2), schema);
     TabletReader reader3(_tablet, Version(0, 3), schema);

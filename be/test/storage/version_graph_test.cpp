@@ -361,7 +361,7 @@ TEST(VersionGraphTest, max_continuous_version) {
     EXPECT_EQ(graph.min_readable_version(), 1);
 
     // The following case may be happened in schema change
-    // 1. VectorizedSchema change first remove the existing rowset
+    // 1. Schema change first remove the existing rowset
     // 2. Add new version rowset into new tablet
     graph.delete_version_from_graph(Version(0, 1));
     EXPECT_EQ(graph.min_readable_version(), 1);

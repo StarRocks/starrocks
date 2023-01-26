@@ -2408,7 +2408,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
 }
 
 Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
-                                        const VectorizedSchema& pkey_schema, int64_t apply_version,
+                                        const Schema& pkey_schema, int64_t apply_version,
                                         std::unique_ptr<Column> pk_column) {
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;

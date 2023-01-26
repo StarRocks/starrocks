@@ -29,10 +29,10 @@ namespace starrocks {
 
 class Datum;
 
-class VectorizedField {
+class Field {
 public:
-    VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
-                    uint8_t short_key_length, bool is_key, bool nullable)
+    Field(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
+          uint8_t short_key_length, bool is_key, bool nullable)
             : _id(id),
               _agg_method(agg),
               _name(name),
@@ -42,13 +42,12 @@ public:
               _flags(static_cast<uint8_t>((is_key << kIsKeyShift) | (nullable << kNullableShift))) {}
 
     // Non-key field of any type except for ARRAY
-    VectorizedField(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
-            : VectorizedField(id, name, get_type_info(type, precision, scale), STORAGE_AGGREGATE_NONE, 0, false,
-                              nullable) {}
+    Field(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
+            : Field(id, name, get_type_info(type, precision, scale), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
-    VectorizedField(ColumnId id, std::string_view name, LogicalType type, bool nullable)
-            : VectorizedField(id, name, type, -1, -1, nullable) {
+    Field(ColumnId id, std::string_view name, LogicalType type, bool nullable)
+            : Field(id, name, type, -1, -1, nullable) {
         DCHECK(type != TYPE_DECIMAL32);
         DCHECK(type != TYPE_DECIMAL64);
         DCHECK(type != TYPE_DECIMAL128);
@@ -56,23 +55,23 @@ public:
     }
 
     // Non-key field of any type
-    VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, bool nullable = true)
-            : VectorizedField(id, name, std::move(type), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
+    Field(ColumnId id, std::string_view name, TypeInfoPtr type, bool nullable = true)
+            : Field(id, name, std::move(type), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
 
-    ~VectorizedField() { delete _sub_fields; }
+    ~Field() { delete _sub_fields; }
 
-    VectorizedFieldPtr copy() const { return std::make_shared<VectorizedField>(*this); }
+    FieldPtr copy() const { return std::make_shared<Field>(*this); }
 
-    VectorizedField(const VectorizedField& rhs)
+    Field(const Field& rhs)
             : _id(rhs._id),
               _agg_method(rhs._agg_method),
               _name(rhs._name),
               _type(rhs._type),
-              _sub_fields(rhs._sub_fields ? new Buffer<VectorizedField>(*rhs._sub_fields) : nullptr),
+              _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags) {}
 
-    VectorizedField(VectorizedField&& rhs) noexcept
+    Field(Field&& rhs) noexcept
             : _id(rhs._id),
               _agg_method(rhs._agg_method),
               _name(std::move(rhs._name)),
@@ -83,7 +82,7 @@ public:
         rhs._sub_fields = nullptr;
     }
 
-    VectorizedField& operator=(const VectorizedField& rhs) {
+    Field& operator=(const Field& rhs) {
         if (&rhs != this) {
             delete _sub_fields;
             _id = rhs._id;
@@ -92,12 +91,12 @@ public:
             _agg_method = rhs._agg_method;
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
-            _sub_fields = rhs._sub_fields ? new Buffer<VectorizedField>(*rhs._sub_fields) : nullptr;
+            _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
         }
         return *this;
     }
 
-    VectorizedField& operator=(VectorizedField&& rhs) noexcept {
+    Field& operator=(Field&& rhs) noexcept {
         if (&rhs != this) {
             _id = rhs._id;
             _name = std::move(rhs._name);
@@ -111,13 +110,13 @@ public:
     }
 
     // return a copy of this field with the replaced type
-    VectorizedFieldPtr with_type(const TypeInfoPtr& type);
+    FieldPtr with_type(const TypeInfoPtr& type);
 
     // return a copy of this field with the replaced name
-    VectorizedFieldPtr with_name(std::string_view name);
+    FieldPtr with_name(std::string_view name);
 
     // return a copy of this field with the replaced nullability
-    VectorizedFieldPtr with_nullable(bool nullable);
+    FieldPtr with_nullable(bool nullable);
 
     std::string to_string() const;
 
@@ -148,19 +147,19 @@ public:
 
     starrocks::StorageAggregateType aggregate_method() const { return _agg_method; }
 
-    VectorizedFieldPtr convert_to(LogicalType to_type) const;
+    FieldPtr convert_to(LogicalType to_type) const;
 
-    void add_sub_field(const VectorizedField& sub_field);
+    void add_sub_field(const Field& sub_field);
 
-    const VectorizedField& sub_field(int i) const;
+    const Field& sub_field(int i) const;
 
-    const std::vector<VectorizedField>& sub_fields() const { return *_sub_fields; }
+    const std::vector<Field>& sub_fields() const { return *_sub_fields; }
 
     ColumnPtr create_column() const;
 
-    static VectorizedFieldPtr convert_to_dict_field(const VectorizedField& field) {
+    static FieldPtr convert_to_dict_field(const Field& field) {
         DCHECK(field.type()->type() == TYPE_VARCHAR);
-        VectorizedFieldPtr res = std::make_shared<VectorizedField>(field);
+        FieldPtr res = std::make_shared<Field>(field);
         res->_type = get_type_info(TYPE_INT);
         return res;
     }
@@ -173,21 +172,21 @@ private:
     starrocks::StorageAggregateType _agg_method;
     CString _name;
     TypeInfoPtr _type = nullptr;
-    std::vector<VectorizedField>* _sub_fields;
+    std::vector<Field>* _sub_fields;
     int32_t _length = 0;
     uint8_t _short_key_length;
     uint8_t _flags;
 };
 
-inline bool VectorizedField::is_nullable() const {
+inline bool Field::is_nullable() const {
     return _flags & (1 << kNullableShift);
 }
 
-inline bool VectorizedField::is_key() const {
+inline bool Field::is_key() const {
     return _flags & (1 << kIsKeyShift);
 }
 
-inline void VectorizedField::set_is_key(bool is_key) {
+inline void Field::set_is_key(bool is_key) {
     if (is_key) {
         _flags |= static_cast<uint8_t>(1 << kIsKeyShift);
     } else {
@@ -195,39 +194,39 @@ inline void VectorizedField::set_is_key(bool is_key) {
     }
 }
 
-inline void VectorizedField::add_sub_field(const VectorizedField& sub_field) {
+inline void Field::add_sub_field(const Field& sub_field) {
     if (_sub_fields == nullptr) {
-        _sub_fields = new std::vector<VectorizedField>();
+        _sub_fields = new std::vector<Field>();
     }
     _sub_fields->emplace_back(sub_field);
 }
 
-inline const VectorizedField& VectorizedField::sub_field(int i) const {
+inline const Field& Field::sub_field(int i) const {
     return (*_sub_fields)[i];
 }
 
-inline VectorizedFieldPtr VectorizedField::with_type(const TypeInfoPtr& type) {
-    return std::make_shared<VectorizedField>(_id, std::string_view(_name.data(), _name.size()), type, _agg_method,
-                                             _short_key_length, is_key(), is_nullable());
+inline FieldPtr Field::with_type(const TypeInfoPtr& type) {
+    return std::make_shared<Field>(_id, std::string_view(_name.data(), _name.size()), type, _agg_method,
+                                   _short_key_length, is_key(), is_nullable());
 }
 
-inline VectorizedFieldPtr VectorizedField::with_name(std::string_view name) {
-    return std::make_shared<VectorizedField>(_id, name, _type, _agg_method, _short_key_length, is_key(), is_nullable());
+inline FieldPtr Field::with_name(std::string_view name) {
+    return std::make_shared<Field>(_id, name, _type, _agg_method, _short_key_length, is_key(), is_nullable());
 }
 
-inline VectorizedFieldPtr VectorizedField::with_nullable(bool nullable) {
-    return std::make_shared<VectorizedField>(_id, std::string_view(_name.data(), _name.size()), _type, _agg_method,
-                                             _short_key_length, is_key(), nullable);
+inline FieldPtr Field::with_nullable(bool nullable) {
+    return std::make_shared<Field>(_id, std::string_view(_name.data(), _name.size()), _type, _agg_method,
+                                   _short_key_length, is_key(), nullable);
 }
 
-inline std::ostream& operator<<(std::ostream& os, const VectorizedField& field) {
+inline std::ostream& operator<<(std::ostream& os, const Field& field) {
     os << field.id() << ":" << field.name() << " " << field.type()->type() << " "
        << (field.is_nullable() ? "NULL" : "NOT NULL") << (field.is_key() ? " KEY" : "") << " "
        << field.aggregate_method();
     return os;
 }
 
-inline std::string VectorizedField::to_string() const {
+inline std::string Field::to_string() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();

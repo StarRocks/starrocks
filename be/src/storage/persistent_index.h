@@ -28,7 +28,7 @@
 namespace starrocks {
 
 class Tablet;
-class VectorizedSchema;
+class Schema;
 class Column;
 
 // Add version for persistent index file to support future upgrade compatibility
@@ -598,7 +598,7 @@ private:
     Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const VectorizedSchema& pkey_schema,
+    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const Schema& pkey_schema,
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,

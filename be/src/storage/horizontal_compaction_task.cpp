@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -58,7 +58,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
-    VectorizedSchema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema);
     TabletReaderParams reader_params;
@@ -114,8 +114,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     return Status::OK();
 }
 
-StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, TabletReader& reader,
-                                                         const VectorizedSchema& schema,
+StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, TabletReader& reader, const Schema& schema,
                                                          RowsetWriter* output_rs_writer) {
     TRACE("[Compaction] start to compact data");
     auto status = Status::OK();

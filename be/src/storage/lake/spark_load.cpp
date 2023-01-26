@@ -54,7 +54,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     DeferOp defer([&]() { writer->close(); });
 
     ASSIGN_OR_RETURN(auto tablet_schema, cur_tablet.get_schema());
-    VectorizedSchema schema = ChunkHelper::convert_schema(*tablet_schema);
+    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, 0);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
