@@ -53,13 +53,13 @@ public class MVActiveChecker extends LeaderDaemon {
             for (MaterializedView mv : db.getMaterializedViews()) {
                 for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
-                    if (table == null) {
+                    if (table == null && mv.isActive()) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
                                 baseTableInfo.getTableName(), mv.getId());
                         mv.setActive(false);
                         continue;
                     }
-                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    if (mv.isActive() && table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                         LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                                 baseTableInfo.getTableName(), mv.getId());
                         mv.setActive(false);

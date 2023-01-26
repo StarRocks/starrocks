@@ -334,7 +334,9 @@ public class TaskManager {
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                killTask(task.getName(), true);
+                if (!killTask(task.getName(), true)) {
+                    LOG.error("kill task failed: " + task.getName());
+                }
                 idToTaskMap.remove(task.getId());
                 nameToTaskMap.remove(task.getName());
             }
