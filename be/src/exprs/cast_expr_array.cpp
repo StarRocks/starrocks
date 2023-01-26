@@ -38,6 +38,7 @@ inline bool is_quote(char c) {
 
 bool is_valid_array(const Slice& src, std::vector<char>& container) {
     size_t length = src.get_size();
+    bool has_bracket = false;
     container.clear();
 
     for (size_t i = 0; i < length; ++i) {
@@ -55,6 +56,7 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
             }
         } else if (src[i] == '[') {
             container.push_back(src[i]);
+            has_bracket = true;
         } else if (src[i] == ']') {
             if (!container.empty() && container.back() == '[') {
                 container.pop_back();
@@ -64,7 +66,7 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
         }
     }
 
-    return container.empty();
+    return has_bracket && container.empty();
 }
 
 // [[],[]] -> [],[]
