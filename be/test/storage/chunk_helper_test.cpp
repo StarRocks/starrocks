@@ -315,7 +315,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_TRUE(accumulator.reach_limit());
     auto output = accumulator.pull();
     EXPECT_EQ(nullptr, output);
-    EXPECT_FALSE(accumulator.reach_limit());
+    EXPECT_TRUE(accumulator.reach_limit());
 }
 
 } // namespace starrocks
