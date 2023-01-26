@@ -43,7 +43,7 @@ class TTabletInfo;
 
 class ChunkIterator;
 class CompactionState;
-class VectorizedSchema;
+class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;

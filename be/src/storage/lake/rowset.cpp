@@ -40,7 +40,7 @@ Rowset::~Rowset() = default;
 // TODO: support
 //  1. primary key table
 //  2. rowid range and short key range
-StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const RowsetReadOptions& options) {
+StatusOr<ChunkIteratorPtr> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = options.stats;
@@ -64,8 +64,8 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
     }
 
-    std::unique_ptr<VectorizedSchema> segment_schema_guard;
-    auto* segment_schema = const_cast<VectorizedSchema*>(&schema);
+    std::unique_ptr<Schema> segment_schema_guard;
+    auto* segment_schema = const_cast<Schema*>(&schema);
     // Append the columns with delete condition to segment schema.
     std::set<ColumnId> delete_columns;
     seg_options.delete_predicates.get_column_ids(&delete_columns);
@@ -76,11 +76,11 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
         }
         // copy on write
         if (segment_schema == &schema) {
-            segment_schema = new VectorizedSchema(schema);
+            segment_schema = new Schema(schema);
             segment_schema_guard.reset(segment_schema);
         }
         auto f = ChunkHelper::convert_field(cid, col);
-        segment_schema->append(std::make_shared<VectorizedField>(std::move(f)));
+        segment_schema->append(std::make_shared<Field>(std::move(f)));
     }
 
     std::vector<ChunkIteratorPtr> segment_iterators;
@@ -124,7 +124,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     }
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const VectorizedSchema& schema,
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema,
                                                                           OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
@@ -146,7 +146,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const VectorizedSchema& schema,
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const Schema& schema,
                                                                                       int64_t version,
                                                                                       const MetaFileBuilder* builder,
                                                                                       OlapReaderStatistics* stats) {

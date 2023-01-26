@@ -15,21 +15,21 @@
 #pragma once
 
 #include "column/datum.h"
-#include "column/vectorized_field.h"
-#include "column/vectorized_schema.h"
+#include "column/field.h"
+#include "column/schema.h"
 #include "exec/stream/state/state_table.h"
 #include "storage/chunk_iterator.h"
 
 namespace starrocks::stream {
 
-using VectorizedFields = VectorizedFields;
-using VectorizedSchema = VectorizedSchema;
+using Fields = Fields;
+using Schema = Schema;
 using DatumKeyRow = std::vector<DatumKey>;
 
 // NOTE: This class is only used in testing. DatumRowIterator is used to convert datum to chunk iter.
 class DatumRowIterator final : public ChunkIterator {
 public:
-    explicit DatumRowIterator(VectorizedSchema schema, std::vector<DatumRow>&& rows)
+    explicit DatumRowIterator(Schema schema, std::vector<DatumRow>&& rows)
             : ChunkIterator(schema, rows.size()), _rows(std::move(rows)) {}
     void close() override {}
 
@@ -74,7 +74,7 @@ public:
     Status flush(RuntimeState* state, StreamChunk* chunk) override;
 
 private:
-    VectorizedSchema _make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const;
+    Schema _make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const;
     static DatumKeyRow _convert_datum_row_to_key(const DatumRow& row, size_t start, size_t end);
     static DatumKeyRow _make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx);
     static DatumRow _make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx);
@@ -86,7 +86,7 @@ private:
     size_t _cols_num;
     std::map<DatumKeyRow, DatumRow> _kv_mapping;
     // value's schema
-    VectorizedSchema _v_schema;
+    Schema _v_schema;
 };
 
 } // namespace starrocks::stream
