@@ -55,8 +55,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -139,6 +141,7 @@ import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
 import io.trino.sql.tree.WindowFrame;
 import io.trino.sql.tree.WindowSpecification;
+import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -154,6 +157,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final long sqlMode;
@@ -249,7 +253,34 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         // fetch
         // offset
         // with
+        List<CTERelation> withQuery = new ArrayList<>();
+        if (node.getWith().isPresent()) {
+            withQuery = visit(node.getWith().get().getQueries(), context, CTERelation.class);
+        }
+        withQuery.forEach(queryRelation::addCTERelation);
+
         return new QueryStatement(queryRelation);
+    }
+
+    @Override
+    protected ParseNode visitWithQuery(WithQuery node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getQuery(), context);
+
+        return new CTERelation(
+                RelationId.of(queryStatement.getQueryRelation()).hashCode(),
+                node.getName().getValue(),
+                getColumnNames(node.getColumnNames()),
+                queryStatement);
+    }
+
+    public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
+        if (!columnNames.isPresent() || columnNames.get().isEmpty()) {
+            return null;
+        }
+
+        // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+        // to lowercase characters to facilitate subsequent matching.
+        return columnNames.get().stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
     }
 
     @Override
@@ -430,11 +461,26 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
 
         if (node instanceof Union) {
-            return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+            if (left instanceof UnionRelation && ((UnionRelation) left).getQualifier().equals(setQualifier)) {
+                ((UnionRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+            }
         } else if (node instanceof Intersect) {
-            return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+            if (left instanceof IntersectRelation && ((IntersectRelation) left).getQualifier().equals(setQualifier)) {
+                ((IntersectRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+            }
         } else if (node instanceof Except) {
-            return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+            if (left instanceof ExceptRelation && ((ExceptRelation) left).getQualifier().equals(setQualifier)) {
+                ((ExceptRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+            }
         } else {
             throw new IllegalArgumentException("Unsupported set operation: " + node);
         }
