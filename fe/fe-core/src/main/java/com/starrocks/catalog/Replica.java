@@ -332,6 +332,7 @@ public class Replica implements Writable {
                 this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
     }
 
+<<<<<<< HEAD
     public void updateVersionInfoForRecovery(
             long newVersion,
             long lastFailedVersion,
@@ -348,6 +349,8 @@ public class Replica implements Writable {
         this.lastSuccessVersion = lastSuccessVersion;
     }
 
+=======
+>>>>>>> 0e9195117 ([BugFix] Fix the version fall back when the RPC lag (#16841))
     /* last failed version:  LFV
      * last success version: LSV
      * version:              V
