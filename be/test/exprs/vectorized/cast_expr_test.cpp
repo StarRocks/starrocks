@@ -1878,21 +1878,11 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     cast_expr.__isset.opcode = true;
     cast_expr.__isset.child_type = true;
 
-<<<<<<< HEAD:be/test/exprs/vectorized/cast_expr_test.cpp
     EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
-    EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "1,2,3"));
     EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, "[]"));
-    EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, ""));
     EXPECT_EQ("[NULL, NULL, NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[a,b,c]"));
     EXPECT_EQ("[NULL, NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
-=======
-    EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
-    EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
-    EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, "[]"));
-    EXPECT_EQ("[NULL,NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[a,b,c]"));
-    EXPECT_EQ("[NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
->>>>>>> a4ae06405 ([BugFix] validate array syntax in casting string to array (#16866)):be/test/exprs/cast_expr_test.cpp
 
     EXPECT_EQ("[1.1, 2.2, 3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
@@ -1911,14 +1901,8 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
 
     // test cast to string array
-<<<<<<< HEAD:be/test/exprs/vectorized/cast_expr_test.cpp
-    EXPECT_EQ(R"(['1', '2', '3'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
-=======
-    EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
-    EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
->>>>>>> a4ae06405 ([BugFix] validate array syntax in casting string to array (#16866)):be/test/exprs/cast_expr_test.cpp
     EXPECT_EQ(R"(['"a,"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
     EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
