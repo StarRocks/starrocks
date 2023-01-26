@@ -31,13 +31,25 @@ MVMaintenanceTaskInfo MVMaintenanceTaskInfo::from_maintenance_task(const TMVMain
     return res;
 }
 
+std::string BinlogOffset::debug_string() const {
+    return fmt::format("(tablet_id={},version={},lsn={})", tablet_id, tablet_version, lsn);
+}
+
 EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch) {
     EpochInfo res;
     res.epoch_id = start_epoch.epoch.epoch_id;
     res.txn_id = start_epoch.epoch.txn_id;
+    res.epoch_stage = start_epoch.epoch.epoch_stage;
     res.max_exec_millis = start_epoch.max_exec_millis;
     res.max_scan_rows = start_epoch.max_scan_rows;
     return res;
+}
+
+std::string EpochInfo::debug_string() const {
+    std::stringstream ss;
+    ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
+       << ", trigger_mode=" << (int)(trigger_mode) << ", stage=" << epoch_stage;
+    return ss.str();
 }
 
 } // namespace starrocks

@@ -16,6 +16,8 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionInfo;
@@ -73,17 +75,13 @@ public class MVManager {
      * Reload jobs from meta store
      */
     public long reload(DataInputStream input, long checksum) throws IOException {
-        Preconditions.checkState(jobMap.isEmpty());
-
         try {
             String str = Text.readString(input);
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
+            data.reload();
             if (CollectionUtils.isNotEmpty(data.jobList)) {
                 for (MVMaintenanceJob job : data.jobList) {
-                    // NOTE: job's view is not serialized, cannot use it directly!
-                    MvId mvId = new MvId(job.getDbId(), job.getViewId());
-                    job.restore();
-                    jobMap.put(mvId, job);
+                    jobMap.put(job.getMvId(), job);
                 }
                 LOG.info("reload MV maintenance jobs: {}", data.jobList);
                 LOG.debug("reload MV maintenance job details: {}", str);
@@ -98,16 +96,26 @@ public class MVManager {
      * Replay from journal
      */
     public void replay(MVMaintenanceJob job) throws IOException {
-        try {
-            job.restore();
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(job.getDbId(), job.getViewId());
-            jobMap.put(mvId, job);
-            LOG.info("Replay MV maintenance jobs: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn(e);
+        jobMap.put(job.getMvId(), job);
+    }
+
+    /**
+     * Post-processing after reload the image and journal
+     */
+    public void postReload() {
+        List<MvId> failedJobs = new ArrayList<>();
+        for (Map.Entry<MvId, MVMaintenanceJob> entry : jobMap.entrySet()) {
+            MVMaintenanceJob job = entry.getValue();
+            if (!job.restore() || job.getState().equals(MVMaintenanceJob.JobState.STOPPED) ||
+                    job.getState().equals(MVMaintenanceJob.JobState.FAILED)) {
+                failedJobs.add(entry.getKey());
+            }
         }
+        failedJobs.forEach(jobMap::remove);
+        if (CollectionUtils.isNotEmpty(failedJobs)) {
+            LOG.warn("[MV] Failed to reload jobs: {}", failedJobs);
+        }
+        LOG.info("[MV] Post reload jobs: {}", jobMap.keySet());
     }
 
     /**
@@ -167,9 +175,26 @@ public class MVManager {
             MVMaintenanceJob job = new MVMaintenanceJob(view);
             Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
 
+            // Create IMT for operators
             IMTCreator.createIMT(stmt, view);
 
+            // Enable the job of base tables
+            try {
+                BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+                for (MaterializedView.BaseTableInfo baseTable : view.getBaseTableInfos()) {
+                    Database db = baseTable.getDb();
+                    if (!binlogManager.tryEnableBinlogDefault(db, baseTable.getTableId())) {
+                        throw new DdlException(
+                                String.format("enable binlog failed for table: %s", baseTable.getTableName()));
+                    }
+                }
+                LOG.info("Enable binlog of tables {} for MV {}", view.getBaseTableInfos(), view.getName());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
+            // Log the job state
             GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
             LOG.info("create the maintenance job for MV: {}", view.getName());
         } catch (Exception e) {
@@ -204,7 +229,7 @@ public class MVManager {
     /**
      * Stop the maintenance job for MV after dropped
      */
-    public void stopMaintainMV(MaterializedView view) {
+    public void stopMaintainMV(MaterializedView view) throws DdlException {
         if (!view.getRefreshScheme().isIncremental()) {
             return;
         }
@@ -214,6 +239,20 @@ public class MVManager {
             return;
         }
         job.stopJob();
+
+        // Disable the binlog
+        BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+        for (MaterializedView.BaseTableInfo baseTable : view.getBaseTableInfos()) {
+            Database db = baseTable.getDb();
+            if (!binlogManager.tryDisableBinlog(db, baseTable.getTableId())) {
+                throw new DdlException(String.format("Disable binlog for table %s failed", baseTable.getTableName()));
+            }
+        }
+        LOG.info("Disable all binlog for MV {}", view.getBaseTableInfos());
+
+        // Log the job state
+        GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
+
         jobMap.remove(view.getMvId());
         LOG.info("Remove maintenance job for mv: {}", view.getName());
     }
@@ -231,9 +270,6 @@ public class MVManager {
         LOG.info("onReportEpoch: {}", request);
         Preconditions.checkArgument(request.isSetDb_id(), "required");
         Preconditions.checkArgument(request.isSetMv_id(), "required");
-        Preconditions.checkArgument(request.isSetTask_id(), "required");
-        Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
-
         long dbId = request.getDb_id();
         long mvId = request.getMv_id();
         long taskId = request.getTask_id();
@@ -251,6 +287,7 @@ public class MVManager {
         // TODO: handle exception
         MVMaintenanceTask task = job.getTask(taskId);
         task.updateEpochState(report);
+        job.onEpochReport(request);
     }
 
     /**
@@ -287,6 +324,12 @@ public class MVManager {
     static class SerializedJobs {
         @SerializedName("jobList")
         List<MVMaintenanceJob> jobList;
+
+        public void reload() {
+            for (MVMaintenanceJob job : jobList) {
+                job.reloadState();
+            }
+        }
     }
 
 }

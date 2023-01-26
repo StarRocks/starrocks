@@ -14,6 +14,9 @@
 
 #include "connector/binlog_connector.h"
 
+#include "exec/connector_scan_node.h"
+#include "exec/pipeline/query_context.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
@@ -32,30 +35,72 @@ BinlogDataSourceProvider::BinlogDataSourceProvider(ConnectorScanNode* scan_node,
         : _scan_node(scan_node), _binlog_scan_node(plan_node.stream_scan_node.binlog_scan) {}
 
 DataSourcePtr BinlogDataSourceProvider::create_data_source(const TScanRange& scan_range) {
-    return std::make_unique<BinlogDataSource>(this, scan_range);
+    return std::make_unique<BinlogDataSource>(this, scan_range, _scan_node->id());
 }
 
 // ================================
 
-BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
-        : _provider(provider), _scan_range(scan_range.binlog_scan_range) {}
+BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range,
+                                   int64_t plan_node_id)
+        : _provider(provider), _scan_range(scan_range.binlog_scan_range), _plan_node_id(plan_node_id) {}
 
 Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
+    auto* em = state->query_ctx()->stream_epoch_manager();
+    _is_baseline = em->epoch_info().epoch_stage == TMVEpochStage::BASELINE_RUNNING;
+
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
-    VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
-            << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
+    VLOG(2) << "Tablet id " << _tablet->tablet_id() << ", scan_range=" << _scan_range
+            << ", binlog_read_schema=" << _binlog_read_schema;
+
+    if (_is_baseline) {
+        // Reader scan range from epoch manager, instead of plan node
+        int64_t tablet_id = _tablet->tablet_id();
+        auto& instance_id = state->fragment_instance_id();
+        auto* binlog_offset = em->get_binlog_offset(instance_id, _plan_node_id, tablet_id);
+        if (!binlog_offset) {
+            return Status::InternalError(fmt::format("binlog scan range found: instance_id={} plan_node={} tablet={}",
+                                                     print_id(instance_id), _plan_node_id, tablet_id));
+        }
+        VLOG(2) << "Open binlog datasource for baseline "
+                << "tablet_id=" << _tablet->tablet_id() << ", scan_range=" << binlog_offset->debug_string()
+                << ", binlog_read_schema=" << _binlog_read_schema;
+
+        Version version(0, binlog_offset->tablet_version);
+
+        _tablet_reader = std::make_shared<TabletReader>(_tablet, version, _binlog_read_schema);
+        _reader_params.is_pipeline = true;
+        _reader_params.reader_type = READER_QUERY;
+        _reader_params.skip_aggregation = true;
+        _reader_params.profile = _runtime_profile;
+        _reader_params.runtime_state = _runtime_state;
+        _reader_params.use_page_cache = !config::disable_storage_page_cache;
+        _reader_params.chunk_size = state->chunk_size();
+        // TODO key_range
+
+        RETURN_IF_ERROR(_tablet_reader->prepare());
+        RETURN_IF_ERROR(_tablet_reader->open(_reader_params));
+    }
+
     return Status::OK();
 }
 
-void BinlogDataSource::close(RuntimeState* state) {}
+void BinlogDataSource::close(RuntimeState* state) {
+    if (_tablet_reader) {
+        _tablet_reader.reset();
+    }
+}
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
     _init_chunk(chunk, state->chunk_size());
+    // TODO switch to incremental stage after baseline stage
+    if (_is_baseline) {
+        return _tablet_reader->get_next(chunk->get());
+    }
     // TODO replace with BinlogReader
     return _mock_chunk(chunk->get());
 }

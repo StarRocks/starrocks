@@ -15,11 +15,14 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TMVEpochStage;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
@@ -37,7 +40,6 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * TODO(murphy) implement the Coordinator to compute task correctly
  * <p>
  * Runnable maintenance task on each executor
  * 1. After maintenance job started, generated tasks are deployed on executors
@@ -54,7 +56,9 @@ public class MVMaintenanceTask {
     private long taskId;
     private TNetworkAddress beRpcAddr;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
+    // InstanceId -> PlanNode -> ScanRange
     private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
+    private TMVEpochStage epochStage = TMVEpochStage.BASELINE_RUNNING;
 
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
@@ -64,6 +68,7 @@ public class MVMaintenanceTask {
         task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;
         task.fragmentInstances = fragmentInstances;
+
         return task;
     }
 
@@ -80,6 +85,23 @@ public class MVMaintenanceTask {
         task.setFragments(fragmentInstances);
 
         return request;
+    }
+
+    public synchronized void buildScanRangeForBaseline() {
+        for (TExecPlanFragmentParams instance : fragmentInstances) {
+            for (Map.Entry<Integer, List<TScanRangeParams>> scanRangeParamListEntry :
+                    instance.params.getPer_node_scan_ranges().entrySet()) {
+                int scanNodeId = scanRangeParamListEntry.getKey();
+                List<TScanRangeParams> scanRangeParamList = scanRangeParamListEntry.getValue();
+                List<TScanRange> scanRangeList =
+                        binlogConsumeState
+                                .computeIfAbsent(instance.params.getFragment_instance_id(), key -> Maps.newHashMap())
+                                .computeIfAbsent(scanNodeId, key -> Lists.newArrayList());
+                for (TScanRangeParams scanRangeParam : scanRangeParamList) {
+                    scanRangeList.add(scanRangeParam.getScan_range());
+                }
+            }
+        }
     }
 
     public MVMaintenanceJob getJob() {
@@ -127,7 +149,8 @@ public class MVMaintenanceTask {
         if (binlogConsumeState.isEmpty()) {
             for (TExecPlanFragmentParams params : fragmentInstances) {
                 Map<Integer, List<TScanRange>> nodeScanRangesMapping = new HashMap<>();
-                for (Map.Entry<Integer, List<TScanRangeParams>> entry : params.params.getPer_node_scan_ranges().entrySet()) {
+                for (Map.Entry<Integer, List<TScanRangeParams>> entry : params.params.getPer_node_scan_ranges()
+                        .entrySet()) {
                     List<TScanRange> scanRanges = new ArrayList<>();
                     for (TScanRangeParams scanRangeParams : entry.getValue()) {
                         if (scanRangeParams.scan_range.isSetBinlog_scan_range()) {
@@ -174,6 +197,39 @@ public class MVMaintenanceTask {
         });
 
         this.binlogConsumeState = reportTask.getBinlog_consume_state();
+
+        if (epochStage.equals(TMVEpochStage.BASELINE_RUNNING)) {
+            epochStage = TMVEpochStage.BASELINE_FINISHED;
+            LOG.info("[MV] {} task {} finish baseline scan", job.getView().getName(), taskId);
+        }
+    }
+
+    public synchronized TMVEpochStage getEpochStage() {
+        return epochStage;
+    }
+
+    /**
+     * @param availableVersion Table -> Partition -> AvailableVersion
+     */
+    public synchronized void enterBaselineStage(Map<Long, Map<Long, Long>> availableVersion) {
+        this.epochStage = TMVEpochStage.BASELINE_RUNNING;
+        binlogConsumeState.values().forEach(nodeState -> {
+            nodeState.values().forEach(scanRangeList -> {
+                scanRangeList.forEach(scanRange -> {
+                    TBinlogScanRange binlogRange = scanRange.getBinlog_scan_range();
+                    long tableId = binlogRange.getTable_id();
+                    long partitionId = binlogRange.getPartition_id();
+                    long version = availableVersion.get(tableId).get(partitionId);
+                    binlogRange.getOffset().setVersion(version);
+                    binlogRange.getOffset().setLsn(0);
+                });
+            });
+        });
+        LOG.info("[MV] Task {} enter baseline stage with scan range: {}", taskId, binlogConsumeState);
+    }
+
+    public synchronized void enterIncrementalStage() {
+        this.epochStage = TMVEpochStage.INCREMENTAL;
     }
 
     @Override

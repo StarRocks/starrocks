@@ -18,6 +18,7 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "agent/master_info.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -209,11 +210,13 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
         std::map<TPlanNodeId, std::vector<TScanRange>> node_id_scan_ranges;
         for (auto& [scan_node_id, scan_ranges] : node_id_to_scan_ranges) {
             for (auto& [tablet_id, scan_range] : scan_ranges) {
+                TBinlogScanRange binlog_scan_range;
+                binlog_scan_range.offset.tablet_id = scan_range.tablet_id;
+                binlog_scan_range.offset.version = scan_range.tablet_version;
+                binlog_scan_range.offset.lsn = scan_range.lsn;
                 TScanRange t_scan_range;
-                t_scan_range.binlog_scan_range.offset.tablet_id = scan_range.tablet_id;
-                t_scan_range.binlog_scan_range.offset.version = scan_range.tablet_version;
-                t_scan_range.binlog_scan_range.offset.lsn = scan_range.lsn;
-                node_id_scan_ranges[scan_node_id].push_back(t_scan_range);
+                t_scan_range.__set_binlog_scan_range(binlog_scan_range);
+                node_id_scan_ranges[scan_node_id].push_back(std::move(t_scan_range));
             }
         }
         binlog_consume_states[fragment_instance_id] = node_id_scan_ranges;

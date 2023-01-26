@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
@@ -22,6 +21,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TMVEpoch;
+import com.starrocks.thrift.TMVEpochStage;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
@@ -49,7 +49,7 @@ public class MVEpoch implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVEpoch.class);
 
     @SerializedName("dbId")
-    private long dbId;
+    private final long dbId;
     @SerializedName("mvId")
     private long mvId;
     @SerializedName("epochState")
@@ -60,15 +60,17 @@ public class MVEpoch implements Writable {
     private long startTimeMilli;
     @SerializedName("commitTimeMilli")
     private long commitTimeMilli;
+    @SerializedName("epochStage")
+    private TMVEpochStage epochStage;
 
     // Ephemeral states
     private transient long txnId;
 
-    private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
+    private final transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
 
-    private transient List<TabletFailInfo> failedInfos = new ArrayList<>();
+    private final transient List<TabletFailInfo> failedInfos = new ArrayList<>();
 
-    private transient AtomicLong numEpochFinished = new AtomicLong(0);
+    private final transient AtomicLong numEpochFinished = new AtomicLong(0);
 
     public MVEpoch(MvId mv) {
         this.dbId = mv.getDbId();
@@ -76,6 +78,7 @@ public class MVEpoch implements Writable {
         this.startTimeMilli = System.currentTimeMillis();
         this.state = EpochState.INIT;
         this.binlogState = new BinlogConsumeStateVO();
+        this.epochStage = TMVEpochStage.BASELINE_RUNNING;
     }
 
     public static MVEpoch readEpoch(DataInput input) throws IOException {
@@ -111,11 +114,11 @@ public class MVEpoch implements Writable {
         this.state = EpochState.COMMITTING;
     }
 
-    public void onCommitted(BinlogConsumeStateVO binlogState) {
+    public void onCommitted(BinlogConsumeStateVO binlog) {
         Preconditions.checkState(state.equals(EpochState.COMMITTING));
         this.state = EpochState.COMMITTED;
-        this.binlogState = binlogState;
         this.commitTimeMilli = System.currentTimeMillis();
+        this.binlogState = binlog;
     }
 
     public void onFailed() {
@@ -127,7 +130,7 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
-        this.commitInfos.clear();;
+        this.commitInfos.clear();
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }
@@ -161,6 +164,7 @@ public class MVEpoch implements Writable {
         res.setEpoch_id(txnId);
         res.setTxn_id(txnId);
         res.setStart_ts(startTimeMilli);
+        res.setEpoch_stage(epochStage);
 
         return res;
     }
@@ -223,14 +227,6 @@ public class MVEpoch implements Writable {
         this.state = state;
     }
 
-    public BinlogConsumeStateVO getBinlogState() {
-        return binlogState;
-    }
-
-    public void setBinlogState(BinlogConsumeStateVO binlogState) {
-        this.binlogState = binlogState;
-    }
-
     public long getStartTimeMilli() {
         return startTimeMilli;
     }
@@ -255,6 +251,14 @@ public class MVEpoch implements Writable {
         this.txnId = txnId;
     }
 
+    public TMVEpochStage getEpochStage() {
+        return epochStage;
+    }
+
+    public void setEpochStage(TMVEpochStage epochStage) {
+        this.epochStage = epochStage;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -264,14 +268,13 @@ public class MVEpoch implements Writable {
             return false;
         }
         MVEpoch mvEpoch = (MVEpoch) o;
-        return mvId == mvEpoch.mvId &&
-                commitTimeMilli == mvEpoch.commitTimeMilli && txnId == mvEpoch.txnId && state == mvEpoch.state &&
-                Objects.equals(binlogState, mvEpoch.binlogState);
+        return mvId == mvEpoch.mvId && txnId == mvEpoch.txnId && state == mvEpoch.state &&
+                epochStage.equals(mvEpoch.epochStage);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mvId, state, binlogState, txnId);
+        return Objects.hash(mvId, state, txnId, epochStage);
     }
 
     @Override
@@ -280,11 +283,11 @@ public class MVEpoch implements Writable {
                 "dbId=" + dbId +
                 ", mvId=" + mvId +
                 ", state=" + state +
-                ", binlogState=" + binlogState +
                 ", startTimeMilli=" + startTimeMilli +
                 ", commitTimeMilli=" + commitTimeMilli +
                 ", txnId=" + txnId +
                 ", numEpochFinished=" + numEpochFinished +
+                ", epochStage=" + epochStage +
                 '}';
     }
 }

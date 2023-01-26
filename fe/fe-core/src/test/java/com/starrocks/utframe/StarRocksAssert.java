@@ -53,6 +53,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -246,9 +247,15 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema (use cup)
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) stmt);
+        } else if (stmt instanceof CreateMaterializedViewStatement) {
+            StatementPlanner.plan(stmt, ctx);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) stmt);
+        } else {
+            throw new DdlException("unsupported");
+        }
         checkAlterJob();
         return this;
     }

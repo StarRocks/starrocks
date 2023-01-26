@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <sstream>
+
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -40,6 +42,25 @@ ScanRangeInfo ScanRangeInfo::from_start_epoch_start(const TMVStartEpochTask& sta
         }
     }
     return res;
+}
+
+std::string ScanRangeInfo::debug_string() const {
+    std::stringstream ss;
+    ss << "ScanRangeInfo(";
+    for (auto& [instance, instance_scan] : instance_scan_range_map) {
+        ss << "instance=" << instance << " {";
+        for (auto& [plan_node, node_scan] : instance_scan) {
+            ss << "plan_node=" << plan_node << "{";
+            for (auto& [tablet_id, scan_range] : node_scan) {
+                ss << scan_range.debug_string() << ", ";
+            }
+            ss << "}, ";
+        }
+        ss << "}, ";
+    }
+
+    ss << ")";
+    return ss.str();
 }
 
 // Start the new epoch from input epoch info
@@ -88,6 +109,10 @@ Status StreamEpochManager::start_epoch(ExecEnv* exec_env, const QueryContext* qu
 
     // Activate parked drivers must be at the last!
     RETURN_IF_ERROR(activate_parked_driver(exec_env, query_ctx->query_id(), _num_drivers, _enable_resource_group));
+
+    if (VLOG_ROW_IS_ON) {
+        VLOG_ROW << "start_epoch with scan range: " << scan_info.debug_string();
+    }
 
     return Status::OK();
 }

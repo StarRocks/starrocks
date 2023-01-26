@@ -57,7 +57,7 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
 
     // TODO(murphy) read from user property, support custom the ModifyOp behavior
     private ModifyOp visitOlapTable(Table table) {
-        if (!table.isOlapTable()) {
+        if (!table.isLocalTable()) {
             throw new NotImplementedException("Only OLAP table is supported");
         }
         OlapTable olapTable = (OlapTable) table;

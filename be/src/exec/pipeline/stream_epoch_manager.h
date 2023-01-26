@@ -42,6 +42,8 @@ struct ScanRangeInfo {
     std::unordered_map<TUniqueId, NodeId2ScanRanges> instance_scan_range_map;
 
     static ScanRangeInfo from_start_epoch_start(const TMVStartEpochTask& start_epoch);
+
+    std::string debug_string() const;
 };
 
 class StreamEpochManager {

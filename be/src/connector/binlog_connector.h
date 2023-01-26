@@ -20,6 +20,8 @@
 #include "connector/connector.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "storage/tablet.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 
 namespace starrocks::connector {
 
@@ -62,7 +64,7 @@ class BinlogDataSource final : public DataSource {
 public:
     ~BinlogDataSource() override = default;
 
-    BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range);
+    BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range, int64_t plan_node_id);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
@@ -83,6 +85,10 @@ private:
     TabletSharedPtr _tablet;
     // TODO this will be used by BinlogReader
     VectorizedSchema _binlog_read_schema;
+    bool _is_baseline;
+    int64_t _plan_node_id = 0;
+    TabletReaderParams _reader_params;
+    std::shared_ptr<TabletReader> _tablet_reader;
 
     int64_t _rows_read_number = 0;
     int64_t _bytes_read = 0;
