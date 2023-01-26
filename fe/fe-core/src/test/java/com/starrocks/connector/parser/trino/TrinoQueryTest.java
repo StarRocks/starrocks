@@ -407,9 +407,9 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testSelectSetOperation() throws Exception {
         String sql = "select * from t0 union select * from t1 union select * from t0";
-        assertPlanContains(sql, "12:AGGREGATE (update serialize)\n" +
+        assertPlanContains(sql, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 13: v1, 14: v2, 15: v3\n" +
+                "  |  group by: 10: v1, 11: v2, 12: v3\n" +
                 "  |  \n" +
                 "  0:UNION");
 
@@ -429,8 +429,8 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
                 "limit 2;";
-        assertPlanContains(sql, "0:UNION", " 9:TOP-N\n" +
-                "  |  order by: <slot 11> 11: v1 ASC\n" +
+        assertPlanContains(sql, "0:UNION", "7:TOP-N\n" +
+                "  |  order by: <slot 10> 10: v1 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 2");
 
@@ -438,10 +438,10 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "order by v1 limit 2;";
         assertPlanContains(sql, "0:INTERSECT\n" +
                 "  |  limit: 10",
-                "10:TOP-N\n" +
-                "  |  order by: <slot 11> 11: v1 ASC\n" +
-                "  |  offset: 0\n" +
-                "  |  limit: 2");
+                "8:TOP-N\n" +
+                        "  |  order by: <slot 10> 10: v1 ASC\n" +
+                        "  |  offset: 0\n" +
+                        "  |  limit: 2");
     }
 
     @Test
@@ -483,6 +483,59 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1, v2, sum(v3) from t0 group by GROUPING SETS ((v1, v2),(v1),(v2),())";
         assertPlanContains(sql, "group by: 1: v1, 2: v2, 5: GROUPING_ID");
+    }
+
+    @Test
+    public void testSelectCTE() throws Exception {
+        String sql = "with c1(a,b,c) as (select * from t0) select c1.* from c1";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1(a,b,c) as (select * from t0) select t.* from c1 t";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1 as (select * from t0) select c1.* from c1";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1 as (select * from t0) select a.* from c1 a";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2";
+        assertPlanContains(sql, "3:NESTLOOP JOIN");
+
+        sql = "with tbl1 as (select v1, v2 from t0), tbl2 as (select v4, v5 from t1) select tbl1.*, tbl2.* from " +
+                "tbl1 join tbl2 on tbl1.v1 = tbl2.v4";
+        assertPlanContains(sql, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v1 = 10: v4");
+
+        sql = "with cte1 as ( with cte1 as (select * from t0) select * from cte1) select * from cte1";
+        assertPlanContains(sql, "10: v1 | 11: v2 | 12: v3");
+
+        sql = "with cte1 as (select * from test.t0), cte2 as (select * from cte1) select * from cte1";
+        assertPlanContains(sql, "7: v1 | 8: v2 | 9: v3");
+
+        sql = "with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1";
+        assertPlanContains(sql, "4: v1 | 5: v2");
+
+        sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
+                "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
+                "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "with x0 as (select * from t0) " +
+                "select * from (with x1 as (select * from t1) select * from x1 join x0 on x1.v4 = x0.v1) tt";
+        assertPlanContains(sql, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v4 = 10: v1");
+
+        sql = "with x0 as (select * from t0) " +
+                "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
+        assertPlanContains(sql, "8:NESTLOOP JOIN", "LEFT SEMI JOIN (PARTITIONED)");
     }
 
     @Test
