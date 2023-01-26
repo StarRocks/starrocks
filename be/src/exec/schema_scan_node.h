@@ -32,15 +32,15 @@ public:
     SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SchemaScanNode() override;
 
-    // Prepare conjuncts, create VectorizedSchema columns to slots mapping
+    // Prepare conjuncts, create Schema columns to slots mapping
     // initialize _schema_scanner
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
 
-    // Prepare conjuncts, create VectorizedSchema columns to slots mapping
+    // Prepare conjuncts, create Schema columns to slots mapping
     // initialize _schema_scanner
     Status prepare(RuntimeState* state) override;
 
-    // Start VectorizedSchema scan using _schema_scanner.
+    // Start Schema scan using _schema_scanner.
     Status open(RuntimeState* state) override;
 
     // Fill the next chunk by calling next() on the _schema_scanner,
