@@ -2,13 +2,18 @@
 
 This topic describes the resource group feature of StarRocks.
 
-Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, maintaining the system stability. StarRocks v2.5 supports compute resource isolation for loading through resource groups, thereby indirectly controlling the consumption of cluster resources by loading tasks.
+![resource group](../assets/resource_group.png)
 
-With this feature, you can divide the computing resources of each backend (BE) into multiple resource groups and associate each resource group with one or more classifiers. When you run a query, StarRocks compares the conditions of each classifier with the information about the query to identify the classifier that best matches the query. Then, StarRocks allocates computing resources to the query based on the resource quotas of the resource group associated with the identified classifier.
+With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
-Enhancement plan of Resource Group feature
 
-|  | Internal Table | External Table | Big Query Resources | Short Query Resources | Load Compute Resources | Schema Change Resources |
+Roadmap of Resource Group feature:
+- Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. 
+- In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability. 
+- StarRocks v2.5 supports resource group of data ingestio,
+
+
+|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change |
 |---|---|---|---|---|---|---|
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ | √ | × | × |
