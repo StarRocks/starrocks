@@ -71,9 +71,6 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
     container.clear();
 
     for (size_t i = 0; i < length; ++i) {
-        if (src[i] == '[') {
-            container.push_back(src[i]);
-        }
         if ((src[i] == '\'' || src[i] == '"')) {
             if (!container.empty() && container.back() == src[i]) {
                 container.pop_back();
