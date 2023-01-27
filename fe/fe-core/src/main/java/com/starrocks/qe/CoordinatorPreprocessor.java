@@ -1519,6 +1519,7 @@ public class CoordinatorPreprocessor {
                 if (isEnablePipelineEngine) {
                     commonParams.setIs_pipeline(true);
                     commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
+                    commonParams.getQuery_options().setEnable_page_cache(sessionVariable.isEnablePageCache());
                     commonParams.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
