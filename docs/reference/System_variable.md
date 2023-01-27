@@ -223,6 +223,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
   
   Whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
 
+* enable_page_cache
+
+  Whether enable the storage page cache. Default is true, disabling it is usually for cold-run benchmark purpose.
+
 * language
 
   Used for MySQL client compatibility. No practical usage.
