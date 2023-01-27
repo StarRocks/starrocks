@@ -841,7 +841,6 @@ add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 
