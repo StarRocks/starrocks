@@ -305,6 +305,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+    public static final String ENABLE_PAGE_CACHE = "enable_page_cache";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -766,12 +767,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PAGE_CACHE)
+    private boolean enablePageCache = true;
+
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
-
-    public boolean getUseScanBlockCache() {
-        return useScanBlockCache;
-    }
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
@@ -836,6 +836,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    public boolean getUseScanBlockCache() {
+        return useScanBlockCache;
+    }
+
+    public boolean isEnablePageCache() {
+        return enablePageCache;
+    }
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
