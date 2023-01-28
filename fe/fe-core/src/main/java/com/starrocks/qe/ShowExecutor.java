@@ -122,6 +122,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1777,7 +1779,7 @@ public class ShowExecutor {
                         userPrivilegeCollectionList = new HashMap<>();
                         UserIdentity userIdentity = showStmt.getUserIdent();
                         if (userIdentity == null) {
-                            userIdentity = connectContext.getUserIdentity();
+                            userIdentity = connectContext.getCurrentUserIdentity();
                         }
                         UserPrivilegeCollection userPrivilegeCollection =
                                 privilegeManager.getUserPrivilegeCollectionUnlocked(userIdentity);
