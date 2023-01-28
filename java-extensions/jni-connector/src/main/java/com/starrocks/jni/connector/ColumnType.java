@@ -36,7 +36,12 @@ public class ColumnType {
         STRING,
         BINARY,
         DATE,
+        // INT96 timestamp type, hive compatible (hive version < 4.x)
         DATETIME,
+        // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)
+        DATETIME_MICROS,
+        // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)
+        DATETIME_MILLIS,
         DECIMAL,
         ARRAY,
         MAP,
@@ -65,6 +70,8 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("TimestampMicros", TypeValue.DATETIME_MICROS);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("TimestampMillis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
@@ -210,9 +217,10 @@ public class ColumnType {
         parse(scanner);
     }
 
-    public boolean isString() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL ||
-                typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME;
+    public boolean isByteStorageType() {
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL
+                || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
+                || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
     }
 
     public boolean isArray() {
@@ -254,8 +262,12 @@ public class ColumnType {
                 return res;
             }
             case STRING:
+            case BINARY:
             case DECIMAL:
             case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
                 // [null | offset | data ]
                 return 3;
             default:
