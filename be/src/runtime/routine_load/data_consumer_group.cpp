@@ -121,6 +121,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         LOG(ERROR) << "failed to create serdes handle: " << errstr;
         return Status::InternalError("failed to create serdes handle");
     }
+    DeferOp serdesDeleter([&] { free(serdes); });
 
     // consuming from queue and put data to stream load pipe
     int64_t left_time = ctx->max_interval_s * 1000;
