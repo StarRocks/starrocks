@@ -306,6 +306,8 @@ endif ()
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set_source_files_properties(./column/json_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./column/json_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
     set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)

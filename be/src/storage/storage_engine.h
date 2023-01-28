@@ -181,6 +181,8 @@ public:
 
     void compaction_check();
 
+    void increase_update_compaction_thread(const int num_threads_per_disk);
+
     // submit repair compaction tasks
     void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks);
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>

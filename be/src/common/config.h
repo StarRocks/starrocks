@@ -290,7 +290,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
-CONF_Int32(update_compaction_num_threads_per_disk, "1");
+CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
@@ -305,7 +305,7 @@ CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 //      C = (cumulative_compaction_num_threads_per_disk + base_compaction_num_threads_per_disk) * dir_num
 // set it to larger than C will be set to equal to C.
 // This config can be set to 0, which means to forbid any compaction, for some special cases.
-CONF_Int32(max_compaction_concurrency, "-1");
+CONF_mInt32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
 CONF_mInt32(compaction_trace_threshold, "60");
@@ -559,7 +559,7 @@ CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "1073741824"); // 1GB
 // Number of thread for flushing memtable per store.
-CONF_Int32(flush_thread_num_per_store, "2");
+CONF_mInt32(flush_thread_num_per_store, "2");
 
 // Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");

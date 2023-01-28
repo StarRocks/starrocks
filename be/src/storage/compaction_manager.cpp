@@ -151,4 +151,15 @@ void CompactionManager::_notify_schedulers() {
     }
 }
 
+Status CompactionManager::update_max_threads(int max_threads) {
+    std::lock_guard lg(_scheduler_mutex);
+    for (auto& scheduler : _schedulers) {
+        Status st = scheduler->update_max_threads(max_threads);
+        if (!st.ok()) {
+            return st;
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

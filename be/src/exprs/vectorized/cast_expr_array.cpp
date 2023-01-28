@@ -67,20 +67,20 @@ ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Ch
 
 bool is_valid_array(const Slice& src, std::vector<char>& container) {
     size_t length = src.get_size();
+    bool has_bracket = false;
     container.clear();
 
     for (size_t i = 0; i < length; ++i) {
-        if (src[i] == '[') {
-            container.push_back(src[i]);
-        }
         if ((src[i] == '\'' || src[i] == '"')) {
             if (!container.empty() && container.back() == src[i]) {
                 container.pop_back();
             } else {
                 container.push_back(src[i]);
             }
-        }
-        if (src[i] == ']') {
+        } else if (src[i] == '[') {
+            container.push_back(src[i]);
+            has_bracket = true;
+        } else if (src[i] == ']') {
             if (!container.empty() && container.back() == '[') {
                 container.pop_back();
             } else {
@@ -89,7 +89,7 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
         }
     }
 
-    return container.empty();
+    return has_bracket && container.empty();
 }
 
 Slice strip_array_wrapper(const Slice& src) {
