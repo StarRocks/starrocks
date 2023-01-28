@@ -177,9 +177,8 @@ public class WarehouseManager implements Writable {
 
     public void replayDropWarehouse(String warehouseName) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!fullNameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' already exists", warehouseName);
-
+            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
+                    "Warehouse '%s' doesn't exist", warehouseName);
             Warehouse warehouse = fullNameToWh.get(warehouseName);
             fullNameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());

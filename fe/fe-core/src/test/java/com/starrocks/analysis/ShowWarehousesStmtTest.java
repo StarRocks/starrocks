@@ -68,11 +68,11 @@ public class ShowWarehousesStmtTest {
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals("Warehouse", metaData.getColumn(0).getName());
-        Assert.assertEquals("state", metaData.getColumn(1).getName());
-        Assert.assertEquals("size", metaData.getColumn(2).getName());
-        Assert.assertEquals("min_cluster", metaData.getColumn(3).getName());
-        Assert.assertEquals("max_cluster", metaData.getColumn(4).getName());
-        Assert.assertEquals("cluster_count", metaData.getColumn(5).getName());
+        Assert.assertEquals("State", metaData.getColumn(1).getName());
+        Assert.assertEquals("Size", metaData.getColumn(2).getName());
+        Assert.assertEquals("MinCluster", metaData.getColumn(3).getName());
+        Assert.assertEquals("MaxCluster", metaData.getColumn(4).getName());
+        Assert.assertEquals("ClusterCount", metaData.getColumn(5).getName());
         Assert.assertEquals("INITIALIZING", resultSet.getResultRows().get(0).get(1).toString());
         Assert.assertEquals("S", resultSet.getResultRows().get(0).get(2).toString());
     }
