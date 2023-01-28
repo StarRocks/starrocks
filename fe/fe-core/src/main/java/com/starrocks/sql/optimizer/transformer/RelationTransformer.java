@@ -111,6 +111,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import org.apache.commons.lang3.tuple.Triple;
 
 import java.util.ArrayList;
@@ -237,6 +238,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return processSetOperation(node);
     }
 
+    // When transform SetOperationRelation into setOperation LogicalOperator, child exprs of the LogicalOperator
+    // are not processed by ReduceCastRule, that leads cast(string as string) is generated and propagated to BE
+    // unexpectedly.
+    public ScalarOperator foldCast(ScalarOperator operator) {
+        return new ScalarOperatorRewriter().rewrite(operator, Lists.newArrayList(new ReduceCastRule()));
+    }
+
     private LogicalPlan processSetOperation(SetOperationRelation setOperationRelation) {
         List<OptExprBuilder> childPlan = new ArrayList<>();
         /*
@@ -262,7 +270,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                             if (relationType.isNull()) {
                                 row.get(i).setType(outputType);
                             } else {
-                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                                ScalarOperator expr = foldCast(((ConstantOperator) row.get(i)).castTo(outputType));
+                                row.set(i, expr);
                             }
                             valuesOperator.getColumnRefSet().get(i).setType(outputType);
                         } catch (Exception e) {
@@ -279,7 +288,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())) {
                         ColumnRefOperator c = columnRefFactory.create("cast", outputType, true);
-                        projections.put(c, new CastOperator(outputType, childOutputColumn.get(i), true));
+                        ScalarOperator expr = foldCast(new CastOperator(outputType, childOutputColumn.get(i), true));
+                        projections.put(c, expr);
                         newChildOutputs.add(c);
                     } else {
                         projections.put(childOutputColumn.get(i), childOutputColumn.get(i));
