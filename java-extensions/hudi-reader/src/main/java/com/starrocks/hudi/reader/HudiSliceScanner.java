@@ -47,6 +47,7 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.hudi.reader.HudiScannerUtils.MARK_TYPE_VALUE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
@@ -96,7 +97,6 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     private JobConf makeJobConf(Properties properties) {
         Configuration conf = new Configuration();
-        conf.setBoolean("dfs.client.use.legacy.blockreader", false);
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
@@ -137,13 +137,20 @@ public class HudiSliceScanner extends ConnectorScanner {
     private Properties makeProperties() {
         Properties properties = new Properties();
         properties.setProperty("hive.io.file.readcolumn.ids",
-                Arrays.stream(this.requiredColumnIds).mapToObj(x -> String.valueOf(x))
+                Arrays.stream(this.requiredColumnIds).mapToObj(String::valueOf)
                         .collect(Collectors.joining(",")));
         properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
         if (this.nestedFields.length > 0) {
             properties.setProperty("hive.io.file.readNestedColumn.paths", String.join(",", this.nestedFields));
         }
         properties.setProperty("columns", this.hiveColumnNames);
+        // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
+        for (int i = 0; i < this.hiveColumnTypes.length; i++) {
+            String type = this.hiveColumnTypes[i];
+            if (MARK_TYPE_VALUE_MAPPING.containsKey(type)) {
+                this.hiveColumnTypes[i] = MARK_TYPE_VALUE_MAPPING.get(type);
+            }
+        }
         properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
         properties.setProperty("serialization.lib", this.serde);
         return properties;
@@ -284,9 +291,5 @@ public class HudiSliceScanner extends ConnectorScanner {
         sb.append(inputFormat);
         sb.append("\n");
         return sb.toString();
-    }
-
-    public String getRequiredField(int i) {
-        return requiredFields[i];
     }
 }
