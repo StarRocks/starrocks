@@ -81,7 +81,7 @@ Run the following command to stop a Broker.
 ./bin/stop_broker.sh --daemon
 ```
 
-## Configure broker
+## Configure a broker
 
 You can only set the configuration items of a broker by changing them in the corresponding configuration file **broker.conf**, and restart the broker to allow the change to take effect.
 
@@ -91,6 +91,7 @@ You can only set the configuration items of a broker by changing them in the cor
 | hdfs_write_buffer_size_kb | 1024 | KB | Size of the buffer that is used to write data into HDFS. |
 | client_expire_seconds | 300 | Second | Client sessions will be deleted if they do not receive any ping after the specified time. |
 | broker_ipc_port | 8000 | N/A | The HDFS thrift RPC port. |
+| disable_broker_client_expiration_checking | false | N/A | Whether to disable the checking and clearing of the expired OSS file descriptors, which, in some cases, causes the broker to stuck when OSS is close. To avoid this situation, you can set this parameter to `true` to disable the checking. |
 | sys_log_dir | ${BROKER_HOME}/log | N/A | The directory used to store system logs (including INFO, WARNING, ERROR, and FATAL). |
 | sys_log_level | INFO | N/A | The log level. Valid values include INFO, WARNING, ERROR, and FATAL. |
 | sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-nnn. The default value indicates that logs are segmented into rolls which are 1 GB each. |
