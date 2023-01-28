@@ -23,7 +23,9 @@
 namespace starrocks {
 
 OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : MetaScanNode(pool, tnode, descs) {}
+        : MetaScanNode(pool, tnode, descs) {
+    _name = "olap_meta_scan";
+}
 
 Status OlapMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {

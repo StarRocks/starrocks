@@ -23,7 +23,9 @@
 namespace starrocks {
 
 LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : MetaScanNode(pool, tnode, descs) {}
+        : MetaScanNode(pool, tnode, descs) {
+    _name = "lake_meta_scan";
+}
 
 Status LakeMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {
