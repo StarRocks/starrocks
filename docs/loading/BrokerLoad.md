@@ -157,17 +157,10 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-<<<<<<< HEAD
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)
-=======
     "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 );
->>>>>>> e3c793be9 ([Doc] update aws s3 parameter names in broker load docs (#16927))
 ```
 
 > **NOTE**
@@ -233,8 +226,6 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    4 rows in set (0.01 sec)
    ```
 
-<<<<<<< HEAD
-=======
 #### Usage notes
 
 The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your Amazon S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
@@ -275,7 +266,6 @@ WITH BROKER
 )；
 ```
 
->>>>>>> e3c793be9 ([Doc] update aws s3 parameter names in broker load docs (#16927))
 ### View a load job
 
 Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
