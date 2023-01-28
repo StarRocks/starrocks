@@ -46,6 +46,16 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
 
 private:
+    struct FillColumnArgs {
+        long num_rows;
+        const std::string& slot_name;
+        const TypeDescriptor& slot_type;
+
+        uint8_t* nulls;
+        Column* column;
+        bool must_nullable;
+    };
+
     static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
 
     Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
@@ -57,19 +67,23 @@ private:
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
     template <LogicalType type, typename CppType>
-    Status _append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
+    Status _append_primitive_data(const FillColumnArgs& args);
 
     template <LogicalType type, typename CppType>
-    Status _append_decimal_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column,
-                                SlotDescriptor* slot_desc);
+    Status _append_decimal_data(const FillColumnArgs& args);
 
     template <LogicalType type>
-    Status _append_string_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
+    Status _append_string_data(const FillColumnArgs& args);
 
-    Status _fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chunk);
+    Status _append_date_data(const FillColumnArgs& args);
+    Status _append_datetime_data(const FillColumnArgs& args);
+    Status _append_array_data(const FillColumnArgs& args);
+    Status _append_map_data(const FillColumnArgs& args);
+    Status _append_struct_data(const FillColumnArgs& args);
 
-    template <LogicalType type, typename CppType>
-    void _append_data(Column* column, CppType& value);
+    Status _fill_column(FillColumnArgs* args);
+
+    Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
 
     Status _release_off_heap_table(JNIEnv* _jni_env);
 
@@ -85,5 +99,17 @@ private:
 
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
+    Filter _chunk_filter;
+
+private:
+    long* _chunk_meta_ptr;
+    int _chunk_meta_index;
+
+    void reset_chunk_meta(long chunk_meta) {
+        _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
+        _chunk_meta_index = 0;
+    }
+    void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
+    long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 } // namespace starrocks

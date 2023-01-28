@@ -1,7 +1,6 @@
 package com.starrocks.hudi.reader;
 
 import com.starrocks.jni.connector.OffHeapTable;
-import com.starrocks.utils.Platform;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -65,10 +64,11 @@ a       b       c       d       e
         return params;
     }
 
-    void runScanOnParams(Map<String, String> params) throws IOException {
+    String runScanOnParams(Map<String, String> params) throws IOException {
         HudiSliceScanner scanner = new HudiSliceScanner(4096, params);
         System.out.println(scanner.toString());
         scanner.open();
+        StringBuilder sb = new StringBuilder();
         while (true) {
             scanner.getNextOffHeapChunk();
             OffHeapTable table = scanner.getOffHeapTable();
@@ -76,10 +76,12 @@ a       b       c       d       e
                 break;
             }
             table.show(10);
+            sb.append(table.dump(10));
             table.checkTableMeta(true);
             table.close();
         }
         scanner.close();
+        return sb.toString();
     }
 
     @Test
@@ -117,6 +119,7 @@ a       b       c       d       e
         params.put("nested_fields", "e.b");
         runScanOnParams(params);
     }
+
 
         /*
 

@@ -54,7 +54,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_test.cpp
         ./exec/csv_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
-        ./exec/hdfs_scanner_test.cpp
+        ./exec/hdfs_scanner_test.cpp        
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp

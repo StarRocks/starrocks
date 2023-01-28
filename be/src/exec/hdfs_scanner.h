@@ -219,6 +219,7 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -302,7 +303,6 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
-    std::set<std::int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks

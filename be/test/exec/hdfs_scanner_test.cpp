@@ -22,6 +22,7 @@
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_text.h"
+#include "exec/jni_scanner.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -56,7 +57,6 @@ protected:
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {
@@ -144,8 +144,8 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-    auto* tuple_desc = _row_desc->tuple_descriptors()[0];
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
 
@@ -1702,6 +1702,116 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 50);
     EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
+// =======================================================
+/*
+
+CREATE TABLE `test_hudi_mor2` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<array<int>>,
+  `d` map<string, array<int>>,
+  `e` struct<a:array<int>, b:map<string,int>, c:struct<a:array<int>, b:struct<a:int,b:string>>>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+insert into test_hudi_mor2 values('AA0', 10, 0, "hello", array(array(10,20,30), array(40,50,60,70) ), map('key1', array(1,10), 'key2', array(2, 20), 'key3', null), struct(array(10, 20), map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA1', 10, 0, "hello", null, null , struct(null, map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA2', 10, 0, null, array(array(30, 40), array(10,20,30)), null , struct(null, map('key1', 10), struct(array(10, 20), null)));
+
+spark-sql> select a,b,c,d,e from test_hudi_mor2;
+a       b       c       d       e
+0       hello   NULL    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+0       NULL    [[30,40],[10,20,30]]    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":null}}
+0       hello   [[10,20,30],[40,50,60,70]]      {"key1":[1,10],"key2":[2,20],"key3":null}       {"a":[10,20],"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
+    TypeDescriptor C(LogicalType::TYPE_ARRAY);
+    TypeDescriptor C1(LogicalType::TYPE_ARRAY);
+    C1.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    C.children.push_back(C1); // array<array<int>>
+
+    TypeDescriptor D(LogicalType::TYPE_MAP);
+    D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+    D.children.push_back(C1); // map<string, array<int>>
+
+    TypeDescriptor E(LogicalType::TYPE_STRUCT);
+    {
+        E.children.push_back(C1); // a: array<int>
+        E.field_names.emplace_back("a");
+
+        TypeDescriptor B0(LogicalType::TYPE_MAP);
+        B0.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        B0.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        E.children.push_back(B0);
+        E.field_names.emplace_back("b");
+
+        TypeDescriptor C0(LogicalType::TYPE_STRUCT);
+        {
+            C0.children.push_back(C1);
+            C0.field_names.emplace_back("a");
+
+            TypeDescriptor B1(LogicalType::TYPE_STRUCT);
+            B1.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+            B1.field_names.emplace_back("a");
+            B1.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+            B1.field_names.emplace_back("b");
+            C0.children.push_back(B1);
+            C0.field_names.emplace_back("b");
+        }
+
+        E.children.push_back(C0);
+        E.field_names.emplace_back("c");
+    }
+
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                {"b", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"c", C},
+                                {"d", D},
+                                {"e", E}, {""}};
+    std::string starrocks_home = getenv("STARROCKS_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams";
+    std::string parquet_file = basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths", "");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<array<int>>#map<string,array<int>>#"
+                   "struct<a:array<int>,b:map<string,int>,c:struct<a:array<int>,b:struct<a:int,b:string>>>");
+    params.emplace("instant_time", "20230110185815638");
+    params.emplace("data_file_length", "438311");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInemplaceFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 3);
+    EXPECT_EQ(scanner->raw_rows_read(), 3);
     scanner->close(_runtime_state);
 }
 
