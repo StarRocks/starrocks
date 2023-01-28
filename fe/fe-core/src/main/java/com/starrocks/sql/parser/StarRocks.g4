@@ -1001,6 +1001,7 @@ dataDesc
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
         format=fileFormat?
+        (formatProps)?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
         (SET colMappingList=classifier)?
@@ -1011,6 +1012,10 @@ dataDesc
         partitions=partitionNames?
         (SET colMappingList=classifier)?
         (WHERE where=expression)?
+    ;
+
+formatProps
+    : propertyList
     ;
 
 brokerDesc

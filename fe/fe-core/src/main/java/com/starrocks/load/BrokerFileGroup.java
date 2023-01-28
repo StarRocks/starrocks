@@ -102,6 +102,17 @@ public class BrokerFileGroup implements Writable {
     // load from table
     private long srcTableId = -1;
     private boolean isLoadFromTable = false;
+    
+    // for csv
+    private boolean trimspace = false;
+    private long skipHeader = 0;
+    private byte enclose = 0;
+    private byte escape = 0;
+
+    public static final String ESCAPE = "escape";
+    public static final String ENCLOSE = "enclose";
+    public static final String TRIMSPACE = "trimspace";
+    public static final String SKIPHEADER = "skipheader";
 
     // for unit test and edit log persistence
     private BrokerFileGroup() {
@@ -188,6 +199,22 @@ public class BrokerFileGroup implements Writable {
             }
         }
         isNegative = dataDescription.isNegative();
+
+        Map<String, String> formatProperties = dataDescription.getFormatProperties();
+        if (formatProperties != null) {
+            if (formatProperties.containsKey(ESCAPE)) {
+                escape = (byte) formatProperties.getOrDefault(ESCAPE, "0").charAt(0);
+            }
+            if (formatProperties.containsKey(ENCLOSE)) {
+                enclose = (byte) formatProperties.getOrDefault(ENCLOSE, "0").charAt(0);
+            }
+            if (formatProperties.containsKey(TRIMSPACE)) {
+                trimspace = Boolean.valueOf(formatProperties.getOrDefault(TRIMSPACE, "false"));
+            }
+            if (formatProperties.containsKey(SKIPHEADER)) {
+                skipHeader = Long.valueOf(formatProperties.getOrDefault(SKIPHEADER, "0"));
+            }
+        }
 
         // FilePath
         filePaths = dataDescription.getFilePaths();
@@ -300,6 +327,22 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isLoadFromTable() {
         return isLoadFromTable;
+    }
+
+    public long getSkipHeader() {
+        return skipHeader;
+    }
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    public byte getEscape() {
+        return escape;
+    }
+
+    public boolean isTrimspace() {
+        return trimspace;
     }
 
     @Override

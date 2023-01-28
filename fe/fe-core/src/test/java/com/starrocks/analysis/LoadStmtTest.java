@@ -101,6 +101,7 @@ public class LoadStmtTest {
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` COLUMNS TERMINATED BY \",\") FORMAT AS CSV (\"trimspace\"=\"true\", \"enclose\"=\"'\") WITH BROKER (\"username\"=\"sr\")");
     }
 
     @Test

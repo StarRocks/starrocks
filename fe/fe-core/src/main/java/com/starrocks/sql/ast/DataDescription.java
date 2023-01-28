@@ -104,6 +104,8 @@ public class DataDescription {
     private final String fileFormat;
     private final boolean isNegative;
 
+    private Map<String, String> formatProperties;
+
     // column names of source files
     private List<String> fileFieldNames;
     // column names in the path
@@ -140,7 +142,7 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList) {
         this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, null, isNegative,
-                columnMappingList, null);
+                columnMappingList, null, null);
     }
 
     public DataDescription(String tableName,
@@ -153,7 +155,8 @@ public class DataDescription {
                            List<String> columnsFromPath,
                            boolean isNegative,
                            List<Expr> columnMappingList,
-                           Expr whereExpr) {
+                           Expr whereExpr,
+                           Map<String, String> formatProperties) {
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
@@ -166,6 +169,7 @@ public class DataDescription {
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
         this.srcTableName = null;
+        this.formatProperties = formatProperties;
     }
 
     // data from table external_hive_table
@@ -203,6 +207,10 @@ public class DataDescription {
 
     public List<String> getFilePaths() {
         return filePaths;
+    }
+
+    public Map<String, String> getFormatProperties() {
+        return formatProperties;
     }
 
     public List<String> getFileFieldNames() {

@@ -2094,8 +2094,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
             colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
+        Map<String, String> formatProperties = getFormatProperties(context.formatProps());
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
-                colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
+                colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr, formatProperties);
     }
 
     private ColumnSeparator getColumnSeparator(StarRocksParser.StringContext context) {
@@ -5676,6 +5677,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return jobProperties;
+    }
+
+    private Map<String, String> getFormatProperties(
+            StarRocksParser.FormatPropsContext formatPropsContext) {
+        Map<String, String> formatProps = new HashMap<>();
+        if (formatPropsContext != null) {
+            List<Property> propertyList = visit(formatPropsContext.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                formatProps.put(property.getKey(), property.getValue());
+            }
+        }
+        return formatProps;
     }
 
     private Map<String, String> getDataSourceProperties(
