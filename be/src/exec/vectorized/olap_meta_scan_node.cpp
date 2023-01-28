@@ -12,6 +12,7 @@
 namespace starrocks::vectorized {
 
 OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+<<<<<<< HEAD:be/src/exec/vectorized/olap_meta_scan_node.cpp
         : ScanNode(pool, tnode, descs),
           _is_init(false),
           _tuple_id(tnode.olap_scan_node.tuple_id),
@@ -64,6 +65,11 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
     _is_init = true;
     return Status::OK();
 }
+=======
+        : MetaScanNode(pool, tnode, descs) {
+    _name = "olap_meta_scan";
+}
+>>>>>>> 6b9029e11 ([BugFix] Set name of MetaScanOperator (#16936)):be/src/exec/olap_meta_scan_node.cpp
 
 Status OlapMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {

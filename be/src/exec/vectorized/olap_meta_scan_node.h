@@ -21,8 +21,12 @@ public:
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
+<<<<<<< HEAD:be/src/exec/vectorized/olap_meta_scan_node.h
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+=======
+
+>>>>>>> 6b9029e11 ([BugFix] Set name of MetaScanOperator (#16936)):be/src/exec/meta_scan_node.h
     Status close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
