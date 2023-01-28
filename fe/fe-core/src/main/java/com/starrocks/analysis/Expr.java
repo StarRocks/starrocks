@@ -52,7 +52,7 @@ import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
-
+import com.starrocks.thrift.TFunction;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -176,6 +176,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // The function to call. This can either be a scalar or aggregate function.
     // Set in analyze().
     protected Function fn;
+
+    // Ignore nulls.
+    private boolean ignoreNulls = false;
 
     // Cached value of IsConstant(), set during analyze() and valid if isAnalyzed_ is true.
     private boolean isConstant_;
@@ -747,7 +750,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.setHas_nullable_child(hasNullableChild());
         msg.setIs_nullable(isNullable());
         if (fn != null) {
-            msg.setFn(fn.toThrift());
+            TFunction tfn = fn.toThrift();
+            tfn.setIgnore_nulls(getIgnoreNulls());
+            msg.setFn(tfn);
             if (fn.hasVarArgs()) {
                 msg.setVararg_start_idx(fn.getNumArgs() - 1);
             }
@@ -1171,7 +1176,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 // otherwise we may recurse infinitely.
                 Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
                 return pushNegationToOperands(root.getChild(0).negate());
-            } catch (NoSuchMethodException e) {
+            } catch (NoSuchMethodException|IllegalStateException e) {
                 // The 'negate' function is not implemented. Break the recursion.
                 return root;
             }
@@ -1329,6 +1334,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public void setFn(Function fn) {
         this.fn = fn;
     }
+
+    public void setIgnoreNulls(boolean ignoreNulls) { this.ignoreNulls = ignoreNulls; }
+
+    public boolean getIgnoreNulls() { return ignoreNulls; }
 
     // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction(Expr expression) {

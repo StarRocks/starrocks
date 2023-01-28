@@ -35,6 +35,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
@@ -678,12 +679,14 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
         }

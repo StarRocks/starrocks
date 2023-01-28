@@ -242,7 +242,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   attachment_physical_bytes};
-        _parent->_buffer->add_request(info);
+        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -269,7 +269,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};
-    _parent->_buffer->add_request(info);
+    RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
 }
@@ -637,12 +637,14 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }

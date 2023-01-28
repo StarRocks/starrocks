@@ -17,15 +17,18 @@ import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.common.DmlException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 
@@ -179,12 +182,24 @@ public class PartitionUtil {
         return Pair.create(partitionNames, partitionColumns);
     }
 
+    public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
+            throws UserException {
+        if (table.isLocalTable()) {
+            return ((OlapTable) table).getRangePartitionMap();
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+            return PartitionUtil.getPartitionRangeFromPartitionList(table, partitionColumn);
+        } else {
+            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+        }
+    }
+
     // Map partition values to partition ranges, eg
     // [NULL,1992-01-01,1992-01-02,1992-01-03]
     //               ||
     //               \/
     // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
-    public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
+    public static Map<String, Range<PartitionKey>> getPartitionRangeFromPartitionList(Table table,
+                                                                                      Column partitionColumn)
             throws AnalysisException {
         Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
         Pair<List<String>, List<Column>> partitionPair = getPartitionNamesAndColumns(table);

@@ -507,7 +507,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -630,6 +630,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int thrift_server_max_worker_threads = 4096;
+
+    /**
+     * If there is no thread to handle new request, the request will be pend to a queue,
+     * the pending queue size is thrift_server_queue_size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
 
     /**
      * Maximal wait seconds for straggler node in load
@@ -1795,7 +1802,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = true;
+    public static boolean enable_new_publish_mechanism = false;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
@@ -1869,4 +1876,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
 }

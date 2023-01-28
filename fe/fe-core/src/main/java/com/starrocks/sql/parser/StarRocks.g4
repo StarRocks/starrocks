@@ -1789,8 +1789,8 @@ windowFunction
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
 
 whenClause
@@ -1803,6 +1803,10 @@ over
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
+    ;
+
+ignoreNulls
+    : IGNORE NULLS
     ;
 
 windowFrame

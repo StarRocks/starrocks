@@ -955,25 +955,25 @@ static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t 
     const int keys_from = implicit_cast<int>(orc_map->offsets[from]);
     const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
 
-    if (type_desc.selected_fields[0]) {
+    if (type_desc.children[0].is_unknown_type()) {
+        keys->append_default(keys_size);
+    } else {
         const TypeDescriptor& key_type = type_desc.children[0];
         const FillColumnFunction& fn_fill_keys = find_fill_func(key_type.type, true);
         fn_fill_keys(orc_map->keys.get(), keys, keys_from, keys_size, key_type,
                      mapping->get_column_id_or_child_mapping(0).orc_mapping, ctx);
-    } else {
-        keys->append_default(keys_size);
     }
 
     ColumnPtr& values = col_map->values_column();
     const int values_from = implicit_cast<int>(orc_map->offsets[from]);
     const int values_size = implicit_cast<int>(orc_map->offsets[from + size] - values_from);
-    if (type_desc.selected_fields[1]) {
+    if (type_desc.children[1].is_unknown_type()) {
+        values->append_default(values_size);
+    } else {
         const TypeDescriptor& value_type = type_desc.children[1];
         const FillColumnFunction& fn_fill_values = find_fill_func(value_type.type, true);
         fn_fill_values(orc_map->elements.get(), values, values_from, values_size, value_type,
                        mapping->get_column_id_or_child_mapping(1).orc_mapping, ctx);
-    } else {
-        values->append_default(values_size);
     }
 }
 
@@ -1026,18 +1026,13 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
     Columns& field_columns = col_struct->fields_column();
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
-        if (type_desc.selected_fields[i]) {
-            const TypeDescriptor& field_type = type_desc.children[i];
-            size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
+        const TypeDescriptor& field_type = type_desc.children[i];
+        size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
 
-            orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
-            const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
-            fn_fill_elements(field_cvb, field_columns[i], from, size, field_type,
-                             mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
-        } else {
-            // Append default value for not selected subfield
-            field_columns[i]->append_default(size);
-        }
+        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
+        const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
+        fn_fill_elements(field_cvb, field_columns[i], from, size, field_type,
+                         mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
     }
 }
 
@@ -1402,45 +1397,53 @@ Status OrcChunkReader::_init_position_in_orc() {
 static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, const orc::Type* orc_type,
                                              const OrcMappingPtr& mapping, TypeDescriptor* result) {
     orc::TypeKind kind = orc_type->getKind();
+    switch (kind) {
+    case orc::LIST:
+        [[fallthrough]];
+    case orc::MAP:
+        [[fallthrough]];
+    case orc::STRUCT:
+        if (mapping == nullptr) {
+            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
+        }
+        break;
+    default:
+        break;
+    }
+
     if (kind == orc::LIST) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_ARRAY;
         DCHECK_EQ(0, result->children.size());
         result->children.emplace_back();
 
         TypeDescriptor& element_type = result->children.back();
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
                                                        mapping->get_column_id_or_child_mapping(0).orc_mapping,
                                                        &element_type));
     } else if (kind == orc::MAP) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_MAP;
-        // assign selected_fields information
-        result->selected_fields = origin_type.selected_fields;
         DCHECK_EQ(0, result->children.size());
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         TypeDescriptor& key_type = result->children.emplace_back();
-        RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
-                                                       mapping->get_column_id_or_child_mapping(0).orc_mapping,
-                                                       &key_type));
+        if (origin_type.children[0].is_unknown_type()) {
+            key_type.type = INVALID_TYPE;
+        } else {
+            RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
+                                                           mapping->get_column_id_or_child_mapping(0).orc_mapping,
+                                                           &key_type));
+        }
 
-        result->children.emplace_back();
-        TypeDescriptor& value_type = result->children.back();
-        RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(1), orc_type->getSubtype(1),
-                                                       mapping->get_column_id_or_child_mapping(1).orc_mapping,
-                                                       &value_type));
+        TypeDescriptor& value_type = result->children.emplace_back();
+        if (origin_type.children[1].is_unknown_type()) {
+            value_type.type = INVALID_TYPE;
+        } else {
+            RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(1), orc_type->getSubtype(1),
+                                                           mapping->get_column_id_or_child_mapping(1).orc_mapping,
+                                                           &value_type));
+        }
     } else if (kind == orc::STRUCT) {
-        DCHECK(mapping != nullptr);
         DCHECK_EQ(0, result->children.size());
 
         result->type = TYPE_STRUCT;
-        // assign selected_fields information
-        result->selected_fields = origin_type.selected_fields;
 
         size_t field_size = origin_type.children.size();
 
@@ -1449,9 +1452,6 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
             size_t column_id = mapping->get_column_id_or_child_mapping(index).orc_column_id;
-            if (mapping == nullptr) {
-                return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-            }
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(
                     origin_type.children.at(index), orc_type->getSubtypeByColumnId(column_id),
                     mapping->get_column_id_or_child_mapping(index).orc_mapping, &sub_field_type));

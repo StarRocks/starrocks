@@ -439,7 +439,6 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsNullable(expr.isNullable());
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(expr.getType());
-
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
@@ -552,8 +551,14 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                for (Long partitionId : node.getSelectedPartitionId()) {
+                List<Long> selectedNonEmptyPartitionIds = node.getSelectedPartitionId().stream().filter(p -> {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(p);
+                    return selectTabletIds != null && !selectTabletIds.isEmpty();
+                }).collect(Collectors.toList());
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
+                    Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -563,7 +568,8 @@ public class PlanFragmentBuilder {
                     }
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                    List<Tablet> tablets = selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+                    List<Tablet> tablets =
+                            selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
@@ -580,6 +586,9 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
+                }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
@@ -671,8 +680,8 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
-                if (slotDescriptor.getType().isComplexType()) {
-                    slotDescriptor.setUsedSubfieldPosGroup(entry.getKey().getUsedSubfieldPosGroup());
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }

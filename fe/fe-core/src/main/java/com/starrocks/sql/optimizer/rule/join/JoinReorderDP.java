@@ -78,7 +78,7 @@ public class JoinReorderDP extends JoinOrder {
 
                 joinExpr.expr.deriveLogicalPropertyItself();
                 calculateStatistics(joinExpr.expr);
-                computeCost(joinExpr, false);
+                computeCost(joinExpr, true);
                 results.add(joinExpr);
             }
             ExpressionInfo minCostPlan = resultComparator.min(results);

@@ -30,9 +30,9 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
 
-    Status _open_file_writer(int timeout_ms);
+    Status _open_file_writer();
 
     Status _gen_file_name(std::string* file_name);
 
@@ -51,10 +51,11 @@ Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_p
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(_exec_queue_id.get(), &options,
-                                                                         &SinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &ExportSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
+        _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
     }
 
@@ -69,22 +70,22 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     --_num_pending_chunks;
     if (_is_finished) {
         return;
     }
 
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 0) {
+            close(_state);
+        }
         return;
     }
 
     if (_file_builder == nullptr) {
-        int query_timeout = _state->query_options().query_timeout;
-        int timeout_ms = query_timeout > 3600 ? 3600000 : query_timeout * 1000;
-        if (Status status = _open_file_writer(timeout_ms); !status.ok()) {
-            close(_state);
+        if (Status status = _open_file_writer(); !status.ok()) {
+            LOG(WARNING) << "open file write failed, error: " << status.to_string();
             _fragment_ctx->cancel(status);
             return;
         }
@@ -92,17 +93,18 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 0);
         close(_state);
         return;
     }
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
-        close(_state);
+        LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
         return;
     }
 }
 
-Status ExportSinkIOBuffer::_open_file_writer(int timeout_ms) {
+Status ExportSinkIOBuffer::_open_file_writer() {
     std::unique_ptr<WritableFile> output_file;
     std::string file_name;
     RETURN_IF_ERROR(_gen_file_name(&file_name));
@@ -125,7 +127,7 @@ Status ExportSinkIOBuffer::_open_file_writer(int timeout_ms) {
                 return Status::InternalError("ExportSink broker_addresses empty");
             }
             const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
-            BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
+            BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties);
             ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));
         }
         break;

@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
 #include <condition_variable>
@@ -186,6 +187,9 @@ public:
     // Returns true if the pool reached the idle state, false otherwise.
     bool wait_for(const MonoDelta& delta);
 
+    // dynamic update max threads num
+    Status update_max_threads(int max_threads);
+
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
     //
@@ -255,7 +259,7 @@ private:
 
     const std::string _name;
     const int _min_threads;
-    const int _max_threads;
+    std::atomic<int> _max_threads;
     const int _max_queue_size;
     const MonoDelta _idle_timeout;
 

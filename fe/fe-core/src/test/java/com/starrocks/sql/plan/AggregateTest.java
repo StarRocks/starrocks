@@ -1718,4 +1718,12 @@ public class AggregateTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("ANALYTIC"));
         Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
     }
+
+    @Test
+    public void testGroupByLiteral() throws Exception {
+        String sql = "select -9223372036854775808 group by TRUE;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 3> : -9223372036854775808");
+    }
 }

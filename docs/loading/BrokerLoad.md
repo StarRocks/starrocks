@@ -110,7 +110,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `/input/` folder of your Amazon S3 bucket `bucket_s3`, and to the `/input/` folder of your Google CGS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
@@ -193,7 +193,7 @@ WITH BROKER
 
 > **NOTE**
 >
-> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
 ### Query data
 

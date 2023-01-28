@@ -21,7 +21,9 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -29,6 +31,10 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class SelectStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -140,5 +146,66 @@ public class SelectStmtTest {
         starRocksAssert.query(sql).explainQuery();
         sql = "select localtimestamp";
         starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testSelectFromTabletIds() throws Exception {
+        FeConstants.runningUnitTest = true;
+        ShowResultSet tablets = starRocksAssert.showTablet("db1", "partition_table");
+        List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
+        Assert.assertEquals(tabletIds.size(), 4);
+        String tabletCsv = String.join(",", tabletIds);
+        String sql = String.format("select count(1) from db1.partition_table tablet (%s)", tabletCsv);
+        String explain = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(explain.contains(tabletCsv));
+
+        String invalidTabletCsv = tabletIds.stream().map(id -> id + "0").collect(Collectors.joining(","));
+        String invalidSql = String.format("select count(1) from db1.partition_table tablet (%s)", invalidTabletCsv);
+        try {
+            starRocksAssert.query(invalidSql).explainQuery();
+        } catch (Throwable ex) {
+            Assert.assertTrue(ex.getMessage().contains("Invalid tablet"));
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testSelectWithLimit() {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from db1.partition_table tablet limit 2";
+        try {
+            starRocksAssert.query(sql).explainQuery();
+        } catch (Throwable ex) {
+            Assert.fail(ex.getMessage());
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testNegateEqualForNullInWhereClause() throws Exception {
+        String[] queryList = {
+                "select * from db1.tbl1 where not(k1 <=> NULL)",
+                "select * from db1.tbl1 where not(k1 <=> k2)",
+                "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
+        };
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+        for (String q : queryList) {
+            String s = starRocksAssert.query(q).explainQuery();
+            Assert.assertTrue(re.matcher(s).find());
+        }
+    }
+
+    @Test
+    public void testSimplifiedPredicateRuleApplyToNegateEqualForNull() throws Exception {
+        String[] queryList = {
+                "select not(k1 <=> NULL) from db1.tbl1",
+                "select not(NULL <=> k1) from db1.tbl1",
+                "select not(k1 <=> 'abc-def') from db1.tbl1",
+        };
+        Pattern re = Pattern.compile("NOT.*<=>.*");
+        for (String q : queryList) {
+            String s = starRocksAssert.query(q).explainQuery();
+            Assert.assertTrue(re.matcher(s).find());
+        }
     }
 }

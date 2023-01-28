@@ -1027,10 +1027,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
     SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
     c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-    c1.type.field_names.push_back("Cc1");
-    c1.type.selected_fields.reserve(1);
-    c1.type.selected_fields.clear();
-    c1.type.selected_fields.push_back(true);
+    c1.type.field_names.emplace_back("Cc1");
 
     SlotDesc slot_descs[] = {c0, c1, {""}};
 
