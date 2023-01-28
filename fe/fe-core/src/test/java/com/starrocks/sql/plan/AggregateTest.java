@@ -2021,6 +2021,23 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 2> : 2: t1b\n" +
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
 
+        // only the keys after original column will be pruned
+        sql = "select t1b+1,t1b,t1b+2,count(*) from test_all_type group by 1,2,3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 11: expr\n" +
+                "  |  <slot 12> : CAST(2: t1b AS INT) + 2\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 11: expr, 2: t1b\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+
         sql = "select t1b,t1c,t1b+1,t1c+1,count(*) from test_all_type group by 1,2,3,4";
         plan = getFragmentPlan(sql);
         // t1b+1, t1c+1 will be pruned
