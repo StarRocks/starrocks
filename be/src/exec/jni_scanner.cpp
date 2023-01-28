@@ -36,7 +36,6 @@ Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& mes
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _init_profile(scanner_params);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
-    COUNTER_UPDATE(_profile.scan_ranges, 1);
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to ensure the local capacity."));
@@ -48,21 +47,13 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams&
 
 Status JniScanner::do_open(RuntimeState* state) {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    SCOPED_TIMER(_profile.open_timer);
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to open the off-heap table scanner."));
     return Status::OK();
 }
 
-void JniScanner::do_update_counter(HdfsScanProfile* profile) {
-    _stats.raw_rows_read += _profile.rows_read_counter->value();
-    _stats.io_count += _profile.io_counter->value();
-    _stats.io_ns += _profile.open_timer->value() + _profile.io_timer->value() + _profile.fill_chunk_timer->value();
-
-    COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
-    COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
-    COUNTER_UPDATE(profile->io_counter, _stats.io_count);
-}
+void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
@@ -72,15 +63,7 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     _jni_env->DeleteLocalRef(_jni_scanner_cls);
 }
 
-void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {
-    auto _runtime_profile = scanner_params.profile->runtime_profile;
-    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "JniScannerRowsRead", TUnit::UNIT);
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "JniScannerIOCounter", TUnit::UNIT);
-    _profile.scan_ranges = ADD_COUNTER(_runtime_profile, "JniScanRanges", TUnit::UNIT);
-    _profile.open_timer = ADD_TIMER(_runtime_profile, "JniScannerOpenTime");
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "JniScannerIOTime");
-    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "JniScannerFillChunkTime");
-}
+void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {}
 
 Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
     // init jmethod
@@ -147,8 +130,9 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
 }
 
 Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
-    SCOPED_TIMER(_profile.io_timer);
-    COUNTER_UPDATE(_profile.io_counter, 1);
+    SCOPED_RAW_TIMER(&_stats.column_read_ns);
+    SCOPED_RAW_TIMER(&_stats.io_ns);
+    _stats.io_count += 1;
     *chunk_meta = _jni_env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
     RETURN_IF_ERROR(
             _check_jni_exception(_jni_env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
@@ -413,13 +397,13 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
 }
 
 Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
-    SCOPED_TIMER(_profile.fill_chunk_timer);
+    SCOPED_RAW_TIMER(&_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
     if (num_rows == 0) {
         return Status::EndOfFile("");
     }
-    COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
+    _stats.raw_rows_read += num_rows;
     auto slot_desc_list = _scanner_params.tuple_desc->slots();
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];

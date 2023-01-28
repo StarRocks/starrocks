@@ -261,8 +261,6 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->io_counter, _stats.io_count);
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
-    COUNTER_UPDATE(profile->delete_build_timer, _stats.delete_build_ns);
-    COUNTER_UPDATE(profile->delete_file_per_scan_counter, _stats.delete_file_per_scan);
 
     if (_scanner_params.use_block_cache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();

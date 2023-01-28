@@ -32,6 +32,7 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    void do_update_counter(HdfsScanProfile* profile) override;
 
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 

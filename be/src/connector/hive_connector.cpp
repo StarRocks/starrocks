@@ -241,9 +241,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-    _profile.delete_build_timer = ADD_TIMER(_runtime_profile, "DeleteBuildTimer");
-    _profile.delete_file_per_scan_counter = ADD_COUNTER(_runtime_profile, "DeleteFilesPerScan", TUnit::UNIT);
-
+    
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);

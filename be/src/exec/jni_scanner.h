@@ -23,15 +23,6 @@
 
 namespace starrocks {
 
-struct JniScannerProfile {
-    RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* io_counter = nullptr;
-    RuntimeProfile::Counter* scan_ranges = nullptr;
-    RuntimeProfile::Counter* open_timer = nullptr;
-    RuntimeProfile::Counter* io_timer = nullptr;
-    RuntimeProfile::Counter* fill_chunk_timer = nullptr;
-};
-
 class JniScanner : public HdfsScanner {
 public:
     JniScanner(std::string factory_class, std::map<std::string, std::string> params)
@@ -86,8 +77,6 @@ private:
     Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
 
     Status _release_off_heap_table(JNIEnv* _jni_env);
-
-    JniScannerProfile _profile;
 
     jclass _jni_scanner_cls;
     jobject _jni_scanner_obj;

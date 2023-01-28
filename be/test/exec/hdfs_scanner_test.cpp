@@ -1734,6 +1734,21 @@ a       b       c       d       e
 
 */
 TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
+    if (getenv("STARROCKS_SRC_HOME") == nullptr) {
+        // Right now it's very hard to construct jni ut, because we only build ut-binary but not java extensions.
+        // To make this test run, we have to define `STARROCKS_SRC_HOME` and `STARROCKS_HOME`(which has java-extensions)
+        // and we have to set following env vars
+        /*
+        STARROCKS_SRC_HOME=${STARROCKS_HOME} \
+        STARROCKS_HOME=${STARROCKS_HOME}/output/be \
+        HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/* \
+        CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH \
+        LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH \
+        */
+        GTEST_SKIP();
+    }
+
+
     TypeDescriptor C(LogicalType::TYPE_ARRAY);
     TypeDescriptor C1(LogicalType::TYPE_ARRAY);
     C1.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
@@ -1777,7 +1792,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
                                 {"c", C},
                                 {"d", D},
                                 {"e", E}, {""}};
-    std::string starrocks_home = getenv("STARROCKS_HOME");
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
     std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams";
     std::string parquet_file = basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet";
 
