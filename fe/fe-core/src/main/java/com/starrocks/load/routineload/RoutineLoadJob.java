@@ -206,23 +206,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private static final String PROPS_JSONPATHS = "jsonpaths";
     private static final String PROPS_JSONROOT = "json_root";
 
-
-    public boolean isTrimspace() {
-        return trimspace;
-    }
-
+    // for csv
     protected boolean trimspace = false;
-
-    public byte getEnclose() {
-        return enclose;
-    }
-
     protected byte enclose = 0;
-
-    public byte getEscape() {
-        return escape;
-    }
-
     protected byte escape = 0;
 
     protected int currentTaskConcurrentNum;
@@ -398,6 +384,18 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
+    }
+
+    public boolean isTrimspace() {
+        return trimspace;
+    }
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    public byte getEscape() {
+        return escape;
     }
 
     public String getName() {

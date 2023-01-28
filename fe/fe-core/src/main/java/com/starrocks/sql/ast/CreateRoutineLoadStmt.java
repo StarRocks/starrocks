@@ -104,7 +104,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String JSONROOT = "json_root";
 
     // csv properties
-    public static final String TRIMSPACE = "trimspace";
+    public static final String TRIMSPACE = "trims_pace";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
@@ -193,22 +193,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String jsonRoot = ""; // MUST be a jsonpath string
     private boolean stripOuterArray = false;
 
-    public boolean isTrimspace() {
-        return trimspace;
-    }
-
+    // for csv
     private boolean trimspace = false;
-
-    public byte getEnclose() {
-        return enclose;
-    }
-
     private byte enclose = 0;
-
-    public byte getEscape() {
-        return escape;
-    }
-
     private byte escape = 0;
 
     // kafka related properties
@@ -245,6 +232,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         this.jobProperties = jobProperties == null ? Maps.newHashMap() : jobProperties;
         this.typeName = typeName.toUpperCase();
         this.dataSourceProperties = dataSourceProperties;
+    }
+
+    public boolean isTrimspace() {
+        return trimspace;
+    }
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    public byte getEscape() {
+        return escape;
     }
 
     public LabelName getLabelName() {
