@@ -111,8 +111,8 @@ public class BrokerFileGroup implements Writable {
 
     public static final String ESCAPE = "escape";
     public static final String ENCLOSE = "enclose";
-    public static final String TRIMSPACE = "trimspace";
-    public static final String SKIPHEADER = "skipheader";
+    public static final String TRIMSPACE = "trim_space";
+    public static final String SKIPHEADER = "skip_header";
 
     // for unit test and edit log persistence
     private BrokerFileGroup() {

@@ -39,7 +39,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BrokerFileGroupTest {
     @Mocked
@@ -69,6 +71,26 @@ public class BrokerFileGroupTest {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    @Test
+    public void testCSVParams() throws UserException {
+        Map<String, String> formatProperties = new HashMap<String, String>();
+        formatProperties.put("skip_header", "3");
+        formatProperties.put("trim_space", "true");
+        formatProperties.put("escape", "|");
+        formatProperties.put("enclose", "'");
+        DataDescription desc = new DataDescription("csvTable", null, 
+                                null, null, null, 
+                                null, null, null,
+                                false, null, null, formatProperties);
+
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parse(db, desc);
+        Assert.assertEquals('\'', fileGroup.getEnclose());
+        Assert.assertEquals('|', fileGroup.getEscape());
+        Assert.assertEquals(3, fileGroup.getSkipHeader());
+        Assert.assertEquals(true, fileGroup.isTrimspace());
     }
 
     @Test

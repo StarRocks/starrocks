@@ -69,10 +69,10 @@ import java.util.Map.Entry;
 //          [FORMAT AS CSV] 
 //          [ 
 //              (
-//                  "trimspace"="xx",
+//                  "trim_space"="xx",
 //                  "enclose"="x",
 //                  "escape"="x",
-//                  "skipheader"="2"
+//                  "skip_header"="2"
 //              ) 
 //          ]
 //          [(col1, ...)]
