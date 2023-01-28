@@ -361,4 +361,12 @@ void CompactionManager::clear_tasks() {
     _data_dir_to_base_task_num_map.clear();
 }
 
+Status CompactionManager::update_max_threads(int max_threads) {
+    if (_compaction_pool != nullptr) {
+        return _compaction_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
+}
+
 } // namespace starrocks

@@ -1032,7 +1032,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
+            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
+                    && Config.enable_auto_tablet_distribution) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
                 distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
             } else {
@@ -1321,7 +1322,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
 
-            if (distributionInfo.getBucketNum() == 0) {
+            if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
                 int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
                 distributionInfo.setBucketNum(numBucket);
             }
@@ -2038,7 +2039,7 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else {
-            if (distributionInfo.getBucketNum() == 0) {
+            if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
                 int bucketNum = calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
@@ -3233,7 +3234,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
-        if (distributionInfo.getBucketNum() == 0) {
+        if (distributionInfo.getBucketNum() == 0 || Config.enable_auto_tablet_distribution) {
             int numBucket = calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
@@ -4409,9 +4410,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // check partitions
             for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
-                Partition partition = copiedTbl.getPartition(entry.getValue().getId());
+                Partition partition = olapTable.getPartition(entry.getValue().getId());
                 if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
-                    throw new DdlException("Partition [" + entry.getKey() + "] is changed");
+                    throw new DdlException("Partition [" + entry.getKey() + "] is changed during truncating table, " +
+                            "please retry");
                 }
             }
 
