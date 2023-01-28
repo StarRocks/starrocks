@@ -218,16 +218,16 @@ If the source data is stored in an Amazon S3 bucket, provide the following confi
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key ID that you can use to access the Amazon S3 bucket. |
-| fs.s3a.secret.key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
+| aws.s3.access.key | The Access Key ID that you can use to access the Amazon S3 bucket. |
+| aws.s3.secret.key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
+| aws.s3.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
 
 For more information, see AWS documentation [Managing access keys for IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html).
 
 > **NOTE**
 >
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access.key` and `aws.s3.secret.key` unspecified.
 
 #### Google GCS
 
