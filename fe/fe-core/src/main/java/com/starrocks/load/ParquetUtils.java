@@ -17,9 +17,9 @@ package com.starrocks.load;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Type;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TParquetColumn;
 import com.starrocks.thrift.TParquetColumnType;
-import com.starrocks.thrift.TParquetCompressionType;
 import com.starrocks.thrift.TParquetRepetitionType;
 import com.starrocks.thrift.TParquetSchema;
 
@@ -29,7 +29,7 @@ import java.util.Map;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class ParquetUtils {
-    public static final Map<String, TParquetCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
+    public static final Map<String, TCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
             Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
     public static final String PARQUET_COMPRESSION_TYPE = "compression_type";
     public static final String PARQUET_USE_DICT = "use_dictionary";
@@ -37,14 +37,14 @@ public class ParquetUtils {
     public static final long DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES = 128 * 1024 * 1024; // 128MB
 
     static {
-        PARQUET_COMPRESSION_TYPE_MAP.put("snappy", TParquetCompressionType.SNAPPY);
-        PARQUET_COMPRESSION_TYPE_MAP.put("gzip", TParquetCompressionType.GZIP);
-        PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TParquetCompressionType.BROTLI);
-        PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TParquetCompressionType.ZSTD);
-        PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TParquetCompressionType.LZ4);
-        PARQUET_COMPRESSION_TYPE_MAP.put("lzo", TParquetCompressionType.LZO);
-        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TParquetCompressionType.BZ2);
-        PARQUET_COMPRESSION_TYPE_MAP.put("default", TParquetCompressionType.UNCOMPRESSED);
+        PARQUET_COMPRESSION_TYPE_MAP.put("snappy", TCompressionType.SNAPPY);
+        PARQUET_COMPRESSION_TYPE_MAP.put("gzip", TCompressionType.GZIP);
+        PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
+        PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lzo", TCompressionType.LZO);
+        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
+        PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
     }
 
     public static TParquetSchema buildParquetSchema(List<Expr> outputExprs, List<String> columnNames) {

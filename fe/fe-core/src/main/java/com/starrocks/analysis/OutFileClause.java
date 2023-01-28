@@ -45,7 +45,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
-import com.starrocks.thrift.TParquetCompressionType;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
 import org.apache.logging.log4j.LogManager;
@@ -87,7 +87,7 @@ public class OutFileClause implements ParseNode {
     private TFileFormatType fileFormatType;
     private long maxFileSizeBytes = DEFAULT_MAX_FILE_SIZE_BYTES;
     private BrokerDesc brokerDesc = null;
-    private TParquetCompressionType compressionType = TParquetCompressionType.SNAPPY;
+    private TCompressionType compressionType = TCompressionType.SNAPPY;
     private long maxParquetRowGroupBytes = DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES;
     private boolean useDict = true;
 

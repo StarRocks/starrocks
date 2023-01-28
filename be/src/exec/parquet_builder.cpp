@@ -189,37 +189,37 @@ void ParquetBuildHelper::build_repetition_type(parquet::Repetition::type& parque
 }
 
 void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Builder& builder,
-                                                const TParquetCompressionType::type& compression_type) {
+                                                const TCompressionType::type& compression_type) {
     switch (compression_type) {
-    case TParquetCompressionType::SNAPPY: {
+    case TCompressionType::SNAPPY: {
         builder.compression(parquet::Compression::SNAPPY);
         break;
     }
-    case TParquetCompressionType::GZIP: {
+    case TCompressionType::GZIP: {
         builder.compression(parquet::Compression::GZIP);
         break;
     }
-    case TParquetCompressionType::BROTLI: {
+    case TCompressionType::BROTLI: {
         builder.compression(parquet::Compression::BROTLI);
         break;
     }
-    case TParquetCompressionType::ZSTD: {
+    case TCompressionType::ZSTD: {
         builder.compression(parquet::Compression::ZSTD);
         break;
     }
-    case TParquetCompressionType::LZ4: {
+    case TCompressionType::LZ4: {
         builder.compression(parquet::Compression::LZ4);
         break;
     }
-    case TParquetCompressionType::LZO: {
+    case TCompressionType::LZO: {
         builder.compression(parquet::Compression::LZO);
         break;
     }
-    case TParquetCompressionType::BZ2: {
+    case TCompressionType::BZIP2: {
         builder.compression(parquet::Compression::BZ2);
         break;
     }
-    case TParquetCompressionType::UNCOMPRESSED: {
+    case TCompressionType::DEFAULT_COMPRESSION: {
         builder.compression(parquet::Compression::UNCOMPRESSED);
         break;
     }

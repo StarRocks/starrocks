@@ -40,7 +40,7 @@ class ExprContext;
 class FileWriter;
 
 struct ParquetBuilderOptions {
-    TParquetCompressionType::type compression_type;
+    TCompressionType::type compression_type;
     bool use_dictionary;
     int64_t row_group_max_size;
     TParquetSchema parquet_schema;
@@ -73,7 +73,7 @@ public:
                                       const TParquetRepetitionType::type&);
 
     static void build_compression_type(parquet::WriterProperties::Builder& builder,
-                                       const TParquetCompressionType::type& compression_type);
+                                       const TCompressionType::type& compression_type);
 };
 
 class ParquetBuilder : public FileBuilder {

@@ -60,7 +60,7 @@ struct ResultFileOptions {
     bool use_broker;
     int64_t max_row_group_bytes{0};
     bool use_dictory{true};
-    TParquetCompressionType::type compression_type{TParquetCompressionType::SNAPPY};
+    TCompressionType::type compression_type{TCompressionType::SNAPPY};
     TParquetSchema parquet_schema;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {

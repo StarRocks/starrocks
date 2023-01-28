@@ -59,17 +59,6 @@ enum TResultSinkType {
     VARIABLE
 }
 
-enum TParquetCompressionType {
-    SNAPPY,
-    GZIP,
-    BROTLI,
-    ZSTD,
-    LZ4,
-    LZO,
-    BZ2,
-    UNCOMPRESSED,
-}
-
 enum TParquetColumnType {
     BOOLEAN,
     INT32,
@@ -100,7 +89,7 @@ struct TParquetSchema {
 
 struct TParquetOptions {
     1: optional i64 parquet_max_group_bytes
-    2: optional TParquetCompressionType compression_type
+    2: optional Types.TCompressionType compression_type
     3: optional bool use_dictory
     4: optional TParquetSchema parquet_schema
 }
