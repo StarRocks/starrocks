@@ -99,7 +99,7 @@ protected:
 protected:
     int64_t _next_rowset_uid;
     std::unique_ptr<TabletSchema> _tablet_schema;
-    VectorizedSchema _schema;
+    Schema _schema;
     std::shared_ptr<FileSystem> _fs;
     std::string _binlog_file_dir = "binlog_manager_test";
 };
