@@ -21,27 +21,27 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 // Show warehouse statement.
-public class ShowWarehouseStmt extends ShowStmt {
+public class ShowWarehousesStmt extends ShowStmt {
     private static final String WH_COL = "Warehouse";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
-                    .addColumn(new Column("state", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("size", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("min_cluster", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("max_cluster", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("cluster_count", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("total_pending", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("total_running", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("State", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Size", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Mincluster", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("MaxCluster", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("TotalPending", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("TotalRunning", ScalarType.createVarchar(20)))
                     .build();
     private final String pattern;
     private Expr where;
 
-    public ShowWarehouseStmt(String pattern) {
+    public ShowWarehousesStmt(String pattern) {
         this.pattern = pattern;
     }
 
-    public ShowWarehouseStmt(String pattern, Expr where) {
+    public ShowWarehousesStmt(String pattern, Expr where) {
         this.pattern = pattern;
         this.where = where;
     }
@@ -59,5 +59,5 @@ public class ShowWarehouseStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowWarehousesStatement(this, context);
     }
-
 }
+

@@ -25,7 +25,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
-import com.starrocks.sql.ast.ShowWarehouseStmt;
+import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
@@ -58,12 +58,12 @@ public class ShowWarehousesStmtTest {
     public void testShowWarehousesParserAndAnalyzer() {
         String sql_1 = "SHOW WAREHOUSES";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof ShowWarehouseStmt);
+        Assert.assertTrue(stmt instanceof ShowWarehousesStmt);
     }
 
     @Test
     public void testShowWarehousesNormal() throws AnalysisException, DdlException {
-        ShowWarehouseStmt stmt = new ShowWarehouseStmt(null, null);
+        ShowWarehousesStmt stmt = new ShowWarehousesStmt(null, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();

@@ -1352,9 +1352,10 @@ public class GlobalStateMgr {
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
-            checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+            checksum = warehouseMgr.loadWarehouses(dis, checksum);
+            remoteChecksum = dis.readLong();
             // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
@@ -1667,9 +1668,10 @@ public class GlobalStateMgr {
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
-            checksum = warehouseMgr.saveWarehouses(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+            checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
         }

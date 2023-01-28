@@ -26,7 +26,7 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
-import com.starrocks.sql.ast.ShowClusterStmt;
+import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -78,9 +78,9 @@ public class ShowClusterStmtTest {
                 UtFrameUtils.parseStmtWithNewParser("alter warehouse testWh add cluster", ctx);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().alterWarehouse(addClusterStmt);
 
-        ShowClusterStmt stmt = new ShowClusterStmt("testWh");
+        ShowClustersStmt stmt = new ShowClustersStmt("testWh");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("testWh", stmt.getWhName());
+        Assert.assertEquals("testWh", stmt.getWarehouseName());
         Assert.assertEquals(3, stmt.getMetaData().getColumnCount());
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -93,7 +93,7 @@ public class ShowClusterStmtTest {
 
     @Test(expected = SemanticException.class)
     public void testNoWh() throws Exception {
-        ShowClusterStmt stmt = new ShowClusterStmt("");
+        ShowClustersStmt stmt = new ShowClustersStmt("");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");
     }

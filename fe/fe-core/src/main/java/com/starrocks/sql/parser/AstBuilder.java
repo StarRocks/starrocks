@@ -286,7 +286,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
-import com.starrocks.sql.ast.ShowClusterStmt;
+import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -334,7 +334,7 @@ import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWarehouseStmt;
+import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -1406,13 +1406,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowWarehouseStmt(pattern, where);
+        return new ShowWarehousesStmt(pattern, where);
     }
 
     @Override
-    public ParseNode visitShowClusterStatement(StarRocksParser.ShowClusterStatementContext context) {
+    public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
         String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new ShowClusterStmt(whName);
+        return new ShowClustersStmt(whName);
     }
 
     @Override

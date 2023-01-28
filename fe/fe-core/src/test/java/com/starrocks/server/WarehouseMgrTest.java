@@ -96,7 +96,6 @@ public class WarehouseMgrTest {
         warehouseMgr.replayDropWarehouse("warehouse_1");
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
 
-
         Map<String, Warehouse> tempMp = new HashMap<>();
         tempMp.put("warehouse_1", new Warehouse());
         Deencapsulation.setField(warehouseMgr, "fullNameToWh", tempMp);

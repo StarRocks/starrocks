@@ -19,8 +19,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 // show clusters of a warehouse
-public class ShowClusterStmt extends ShowStmt {
-    private String whName;
+public class ShowClustersStmt extends ShowStmt {
+    private String warehouseName;
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("ClusterId", ScalarType.createVarchar(20)))
@@ -29,12 +29,12 @@ public class ShowClusterStmt extends ShowStmt {
                     .build();
 
 
-    public ShowClusterStmt(String whName) {
-        this.whName = whName;
+    public ShowClustersStmt(String warehouseName) {
+        this.warehouseName = warehouseName;
     }
 
-    public String getWhName() {
-        return whName;
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     @Override

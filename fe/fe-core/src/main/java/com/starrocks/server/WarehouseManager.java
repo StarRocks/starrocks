@@ -18,14 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.DbsProcDir;
-import com.starrocks.common.proc.ExternalDbsProcDir;
-import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.AlterWhPropertyOplog;
@@ -66,11 +62,11 @@ public class WarehouseManager implements Writable {
             .add("Warehouse")
             .add("State")
             .add("Size")
-            .add("min_cluster")
-            .add("max_cluster")
-            .add("cluster_count")
-            .add("total_pending")
-            .add("total_running")
+            .add("MinCluster")
+            .add("MaxCluster")
+            .add("ClusterCount")
+            .add("TotalPending")
+            .add("TotalRunning")
             .build();
 
     public WarehouseManager() {
@@ -305,19 +301,7 @@ public class WarehouseManager implements Writable {
         Text.writeString(out, json);
     }
 
-    public class WarehouseProcNode implements ProcDirInterface {
-        @Override
-        public boolean register(String name, ProcNodeInterface node) {
-            return false;
-        }
-
-        @Override
-        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
-            if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return new DbsProcDir(GlobalStateMgr.getCurrentState());
-            }
-            return new ExternalDbsProcDir(catalogName);
-        }
+    public class WarehouseProcNode implements ProcNodeInterface {
 
         @Override
         public ProcResult fetchResult() {

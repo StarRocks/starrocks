@@ -37,7 +37,7 @@ statement
     | dropWarehouseStatement
     | showWarehousesStatement
     | alterWarehouseStatement
-    | showClusterStatement
+    | showClustersStatement
     | suspendWarehouseStatement
     | resumeWarehouseStatement
 
@@ -633,7 +633,7 @@ alterWarehouseStatement
     | ALTER WAREHOUSE identifier SET propertyList
     ;
 
-showClusterStatement
+showClustersStatement
     : SHOW CLUSTERS FROM WAREHOUSE identifier
     ;
 
