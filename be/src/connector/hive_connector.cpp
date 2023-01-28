@@ -275,7 +275,7 @@ static void build_nested_fields(const TypeDescriptor& type, const std::string& p
     for (int i = 0; i < type.children.size(); i++) {
         const auto& t = type.children[i];
         if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("$%d", i));
+        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
         if (t.is_complex_type()) {
             build_nested_fields(t, p, sb);
         } else {
