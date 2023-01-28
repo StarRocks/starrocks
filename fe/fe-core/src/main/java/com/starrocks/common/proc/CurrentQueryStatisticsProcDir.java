@@ -55,10 +55,10 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("QueryId").add("ConnectionId").add("Database").add("User")
-            .add("ScanBytes").add("ProcessRows").add("CPUCostSeconds")
+            .add("ScanBytes").add("ProcessRows").add("CPUCostSeconds").add("MemoryUsageBytes")
             .add("ExecTime").build();
 
-    private static final int EXEC_TIME_INDEX = 7;
+    private static final int EXEC_TIME_INDEX = 8;
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -99,11 +99,12 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(item.getConnId());
             values.add(item.getDb());
             values.add(item.getUser());
-            values.add(QueryStatisticsFormatter.getScanBytes(
+            values.add(QueryStatisticsFormatter.getBytes(
                     statistics.getScanBytes()));
             values.add(QueryStatisticsFormatter.getRowsReturned(
                     statistics.getScanRows()));
             values.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.getCpuCostNs()));
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getMemUsageBytes()));
             values.add(item.getQueryExecTime());
             sortedRowData.add(values);
         }
