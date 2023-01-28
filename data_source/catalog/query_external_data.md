@@ -1,6 +1,6 @@
 # 查询外部数据
 
-本文介绍如何通过 external catalog 查询外部数据。
+本文介绍如何通过 external catalog 查询外部数据。External catalog 方便您轻松访问并查询存储在各类外部源的数据，无需创建外部表。
 
 ## 前提条件
 
@@ -44,7 +44,7 @@
 
 ## 示例
 
-创建一个名为 `hive1` 的 Hive catalog 。如需通过 `hive1` 查询 Apache Hive™ 集群中 `hive_db.hive_table` 的数据，操作如下：
+创建一个名为 `hive1` 的 Hive catalog。如需通过 `hive1` 查询 Apache Hive™ 集群中 `hive_db.hive_table` 的数据，操作如下：
 
 ```SQL
 USE hive1.hive_db;

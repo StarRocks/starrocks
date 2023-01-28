@@ -77,7 +77,7 @@ PROPERTIES ("key"="value", ...);
 
 StarRocks 不缓存 Iceberg 元数据，因此不需要维护元数据更新。每次查询默认请求最新的 Iceberg 数据。
 
-## 下一步
+## 使用 Catalog 查询 Iceberg 数据
 
 在创建完 Iceberg catalog 并做完相关的配置后即可查询 Iceberg 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 

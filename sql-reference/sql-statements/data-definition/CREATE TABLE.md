@@ -10,7 +10,7 @@
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition2, ...]])
-[ENGINE = [olap|mysql|elasticsearch|hive|iceberg|hudi]]
+[ENGINE = [olap|mysql|elasticsearch|hive|iceberg|hudi|jdbc]]
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
@@ -132,7 +132,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### **ENGINE 类型**
 
-默认为 `olap`。可选 `mysql`，`elasticsearch`，`hive`，`jdbc`(2.3 及以后)，`iceberg`，`hudi`（2.2 及以后）。
+默认为 `olap`，表示创建的是 StarRocks 内部表。
+
+可选值：`mysql`，`elasticsearch`，`hive`，`jdbc`(2.3 及以后)，`iceberg`，`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -416,7 +418,7 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 * **建表时，必须指定分桶键**。
 * 作为分桶键的列，该列的值不支持更新。
 * 分桶键指定后不支持修改。
-* 自 2.5.0 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](/table_design/Data_distribution.md#确定分桶数量)。
+* 自 2.5.0 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### **PROPERTIES**
 
@@ -688,7 +690,7 @@ PROPERTIES(
 ### 创建一个 MySQL 外表
 
 ``` sql
-CREATE TABLE example_db.table_mysql
+CREATE EXTERNAL TABLE example_db.table_mysql
 (
     k1 DATE,
     k2 INT,
@@ -830,7 +832,7 @@ PROPERTIES(
 ### 创建一个 Hive 外部表
 
 ``` SQL
-CREATE TABLE example_db.table_hive
+CREATE EXTERNAL TABLE example_db.table_hive
 (
     k1 TINYINT,
     k2 VARCHAR(50),

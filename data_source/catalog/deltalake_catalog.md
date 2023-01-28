@@ -62,7 +62,7 @@ PROPERTIES ("key"="value", ...);
 | aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
 | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。例如，服务在美国东部（俄亥俄州），那么 endpoint 为 `glue.us-east-2.amazonaws.com` 。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
-## **下一步**
+## **使用 Catalog 查询 Delta Lake 数据**
 
 创建完 Delta Lake catalog 并做完相关的配置后即可查询 Delta Lake 数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 
