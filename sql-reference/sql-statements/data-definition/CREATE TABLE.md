@@ -501,7 +501,7 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
-#### 【公测中】设置数据压缩算法
+#### 设置数据压缩算法
 
 您可以在建表时通过增加属性 `compression` 为该表指定数据压缩算法。
 
@@ -516,7 +516,7 @@ PROPERTIES (
 
 关于如何选择合适的数据压缩算法，请参阅[数据压缩](../../../table_design/data_compression.md)。
 
-#### 【公测中】设置数据导入安全等级
+#### 设置数据导入安全等级
 
 如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `write_quorum` 参数来指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。
 
