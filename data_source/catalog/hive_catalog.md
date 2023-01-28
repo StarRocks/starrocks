@@ -221,6 +221,8 @@ PROPERTIES ("key"="value", ...);
 >
 > 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
+## 使用 Catalog 查询 Hive 数据
+
 创建完 Hive catalog 后即可查询 Hive 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 
 ## 元数据同步

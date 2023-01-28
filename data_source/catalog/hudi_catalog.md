@@ -78,7 +78,7 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
 
 有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
 
-## 下一步
+## 使用 Catalog 查询 Hudi 数据
 
 在创建完 Hudi catalog 并做完相关的配置后即可查询 Hudi 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 
