@@ -50,7 +50,7 @@ arrow::Status ParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& d
 
 arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
     if (_is_closed) {
-        return arrow::Status::OK();
+        return arrow::Status::IOError("The output stream is closed but there are still inputs");
     }
 
     const char* ch = reinterpret_cast<const char*>(data);
@@ -90,7 +90,7 @@ ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
                                const std::vector<ExprContext*>& output_expr_ctxs,
                                const ParquetBuilderOptions& options)
         : _writable_file(std::move(writable_file)), _output_expr_ctxs(output_expr_ctxs),
-           _row_group_max_size(options.row_group_max_size), _is_async(false) {
+           _row_group_max_size(options.row_group_max_size) {
     init(options);
 }
 
@@ -317,16 +317,7 @@ size_t ParquetBuilder::_get_rg_written_bytes() {
 
 void ParquetBuilder::_check_size() {
     if (ParquetBuilder::_get_rg_written_bytes() > _row_group_max_size) {
-        if (_is_async) {
-            bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([&]() {
-                _rg_writer_close();
-            });
-            if (!ret) {
-                _rg_writer_closing.store(false);
-            }
-        } else {
-            _rg_writer_close();
-        }
+        _rg_writer_close();
     }
 }
 

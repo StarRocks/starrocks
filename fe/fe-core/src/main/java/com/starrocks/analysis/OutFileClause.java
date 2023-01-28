@@ -46,6 +46,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TParquetCompressionType;
+import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -170,7 +171,6 @@ public class OutFileClause implements ParseNode {
             if (PARQUET_COMPRESSION_TYPE_MAP.containsKey(type)) {
                 compressionType = PARQUET_COMPRESSION_TYPE_MAP.get(type);
             } else {
-                LOG.warn("compression type is invalid");
                 throw new AnalysisException("compression type is invalid, type: " + type);
             }
         }
@@ -259,10 +259,12 @@ public class OutFileClause implements ParseNode {
         }
 
         if (isParquetFormat()) {
-            sinkOptions.setCompression_type(compressionType);
-            sinkOptions.setParquet_max_group_bytes(maxParquetRowGroupBytes);
-            sinkOptions.setUse_dictory(useDict);
-            sinkOptions.setParquet_schema(buildParquetSchema(outputExprs, columnNames));
+            TParquetOptions parquetOptions = new TParquetOptions();
+            parquetOptions.setCompression_type(compressionType);
+            parquetOptions.setParquet_max_group_bytes(maxParquetRowGroupBytes);
+            parquetOptions.setUse_dictory(useDict);
+            parquetOptions.setParquet_schema(buildParquetSchema(outputExprs, columnNames));
+            sinkOptions.setParquet_options(parquetOptions);
         }
 
         sinkOptions.setMax_file_size_bytes(maxFileSizeBytes);

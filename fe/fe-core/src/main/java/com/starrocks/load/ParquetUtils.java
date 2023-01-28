@@ -29,7 +29,8 @@ import java.util.Map;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class ParquetUtils {
-    public static final Map<String, TParquetCompressionType> PARQUET_COMPRESSION_TYPE_MAP = Maps.newHashMap();
+    public static final Map<String, TParquetCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
+            Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
     public static final String PARQUET_COMPRESSION_TYPE = "compression_type";
     public static final String PARQUET_USE_DICT = "use_dictionary";
     public static final String PARQUET_MAX_ROW_GROUP_SIZE = "max_row_group_bytes";

@@ -98,6 +98,13 @@ struct TParquetSchema {
     1: required list<TParquetColumn> columns;
 }
 
+struct TParquetOptions {
+    1: optional i64 parquet_max_group_bytes
+    2: optional TParquetCompressionType compression_type
+    3: optional bool use_dictory
+    4: optional TParquetSchema parquet_schema
+}
+
 struct TResultFileSinkOptions {
     1: required string file_path
     2: required PlanNodes.TFileFormatType file_format
@@ -113,10 +120,7 @@ struct TResultFileSinkOptions {
     9: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
     10: optional PlanNodes.THdfsProperties hdfs_properties
-    11: optional i64 parquet_max_group_bytes
-    12: optional TParquetCompressionType compression_type
-    13: optional bool use_dictory
-    14: optional TParquetSchema parquet_schema
+    11: optional TParquetOptions parquet_options
 }
 
 struct TMemoryScratchSink {

@@ -58,9 +58,9 @@ struct ResultFileOptions {
     int write_buffer_size_kb;
     THdfsProperties hdfs_properties;
     bool use_broker;
-    int64_t max_row_group_bytes;
-    bool use_dictory;
-    TParquetCompressionType::type compression_type;
+    int64_t max_row_group_bytes{0};
+    bool use_dictory{true};
+    TParquetCompressionType::type compression_type{TParquetCompressionType::SNAPPY};
     TParquetSchema parquet_schema;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
@@ -85,17 +85,17 @@ struct ResultFileOptions {
         if (t_opt.__isset.broker_properties) {
             broker_properties = t_opt.broker_properties;
         }
-        if (t_opt.__isset.parquet_max_group_bytes) {
-            max_row_group_bytes = t_opt.parquet_max_group_bytes;
+        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_max_group_bytes) {
+            max_row_group_bytes = t_opt.parquet_options.parquet_max_group_bytes;
         }
-        if (t_opt.__isset.use_dictory) {
-            use_dictory = t_opt.use_dictory;
+        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.use_dictory) {
+            use_dictory = t_opt.parquet_options.use_dictory;
         }
-        if (t_opt.__isset.compression_type) {
-            compression_type = t_opt.compression_type;
+        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.compression_type) {
+            compression_type = t_opt.parquet_options.compression_type;
         }
-        if (t_opt.__isset.parquet_schema) {
-            parquet_schema = t_opt.parquet_schema;
+        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_schema) {
+            parquet_schema = t_opt.parquet_options.parquet_schema;
         }
     }
     ~ResultFileOptions() = default;

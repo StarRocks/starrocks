@@ -109,7 +109,6 @@ private:
     std::vector<int64_t> _buffered_values_estimate;
     int64_t _row_group_max_size;
     int64_t _cur_written_rows{0};
-    bool _is_async;
     std::atomic<bool> _rg_writer_closing = false;
     std::atomic<bool> _closed = false;
     int64_t _total_row_group_writen_bytes{0};
