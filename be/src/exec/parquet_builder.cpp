@@ -20,12 +20,11 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 
-#include "common/logging.h"
-#include "exprs/expr.h"
-#include "exprs/column_ref.h"
-
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/logging.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -87,10 +86,10 @@ std::size_t ParquetOutputStream::get_written_len() const {
 }
 
 ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
-                               const std::vector<ExprContext*>& output_expr_ctxs,
-                               const ParquetBuilderOptions& options)
-        : _writable_file(std::move(writable_file)), _output_expr_ctxs(output_expr_ctxs),
-           _row_group_max_size(options.row_group_max_size) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, const ParquetBuilderOptions& options)
+        : _writable_file(std::move(writable_file)),
+          _output_expr_ctxs(output_expr_ctxs),
+          _row_group_max_size(options.row_group_max_size) {
     init(options);
 }
 
@@ -122,9 +121,8 @@ Status ParquetBuilder::_init_schema(const TParquetSchema& schema) {
         ::parquet::Type::type parquet_data_type;
         ParquetBuildHelper::build_file_data_type(parquet_data_type, column.type);
         ParquetBuildHelper::build_repetition_type(parquet_repetition_type, column.repetition_type);
-        ::parquet::schema::NodePtr nodePtr = ::parquet::schema::PrimitiveNode::Make(column.name,
-                                                                                    parquet_repetition_type,
-                                                                                    parquet_data_type);
+        ::parquet::schema::NodePtr nodePtr =
+                ::parquet::schema::PrimitiveNode::Make(column.name, parquet_repetition_type, parquet_data_type);
         fields.push_back(nodePtr);
     }
 
@@ -136,99 +134,97 @@ Status ParquetBuilder::_init_schema(const TParquetSchema& schema) {
 void ParquetBuildHelper::build_file_data_type(parquet::Type::type& parquet_data_type,
                                               const TParquetColumnType::type& column_data_type) {
     switch (column_data_type) {
-        case TParquetColumnType::BOOLEAN: {
-            parquet_data_type = parquet::Type::BOOLEAN;
-            break;
-        }
-        case TParquetColumnType::INT32: {
-            parquet_data_type = parquet::Type::INT32;
-            break;
-        }
-        case TParquetColumnType::INT64: {
-            parquet_data_type = parquet::Type::INT64;
-            break;
-        }
-        case TParquetColumnType::INT96: {
-            parquet_data_type = parquet::Type::INT96;
-            break;
-        }
-        case TParquetColumnType::FLOAT: {
-            parquet_data_type = parquet::Type::FLOAT;
-            break;
-        }
-        case TParquetColumnType::DOUBLE: {
-            parquet_data_type = parquet::Type::DOUBLE;
-            break;
-        }
-        case TParquetColumnType::BYTE_ARRAY: {
-            parquet_data_type = parquet::Type::BYTE_ARRAY;
-            break;
-        }
+    case TParquetColumnType::BOOLEAN: {
+        parquet_data_type = parquet::Type::BOOLEAN;
+        break;
+    }
+    case TParquetColumnType::INT32: {
+        parquet_data_type = parquet::Type::INT32;
+        break;
+    }
+    case TParquetColumnType::INT64: {
+        parquet_data_type = parquet::Type::INT64;
+        break;
+    }
+    case TParquetColumnType::INT96: {
+        parquet_data_type = parquet::Type::INT96;
+        break;
+    }
+    case TParquetColumnType::FLOAT: {
+        parquet_data_type = parquet::Type::FLOAT;
+        break;
+    }
+    case TParquetColumnType::DOUBLE: {
+        parquet_data_type = parquet::Type::DOUBLE;
+        break;
+    }
+    case TParquetColumnType::BYTE_ARRAY: {
+        parquet_data_type = parquet::Type::BYTE_ARRAY;
+        break;
+    }
 
-        default:
-            parquet_data_type = parquet::Type::UNDEFINED;
+    default:
+        parquet_data_type = parquet::Type::UNDEFINED;
     }
 }
 
-void ParquetBuildHelper::build_repetition_type(
-        parquet::Repetition::type& parquet_repetition_type,
-        const TParquetRepetitionType::type& column_repetition_type) {
+void ParquetBuildHelper::build_repetition_type(parquet::Repetition::type& parquet_repetition_type,
+                                               const TParquetRepetitionType::type& column_repetition_type) {
     switch (column_repetition_type) {
-        case TParquetRepetitionType::REQUIRED: {
-            parquet_repetition_type = parquet::Repetition::REQUIRED;
-            break;
-        }
-        case TParquetRepetitionType::REPEATED: {
-            parquet_repetition_type = parquet::Repetition::REPEATED;
-            break;
-        }
-        case TParquetRepetitionType::OPTIONAL: {
-            parquet_repetition_type = parquet::Repetition::OPTIONAL;
-            break;
-        }
-        default:
-            parquet_repetition_type = parquet::Repetition::UNDEFINED;
+    case TParquetRepetitionType::REQUIRED: {
+        parquet_repetition_type = parquet::Repetition::REQUIRED;
+        break;
+    }
+    case TParquetRepetitionType::REPEATED: {
+        parquet_repetition_type = parquet::Repetition::REPEATED;
+        break;
+    }
+    case TParquetRepetitionType::OPTIONAL: {
+        parquet_repetition_type = parquet::Repetition::OPTIONAL;
+        break;
+    }
+    default:
+        parquet_repetition_type = parquet::Repetition::UNDEFINED;
     }
 }
 
-void ParquetBuildHelper::build_compression_type(
-        parquet::WriterProperties::Builder& builder,
-        const TParquetCompressionType::type& compression_type) {
+void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Builder& builder,
+                                                const TParquetCompressionType::type& compression_type) {
     switch (compression_type) {
-        case TParquetCompressionType::SNAPPY: {
-            builder.compression(parquet::Compression::SNAPPY);
-            break;
-        }
-        case TParquetCompressionType::GZIP: {
-            builder.compression(parquet::Compression::GZIP);
-            break;
-        }
-        case TParquetCompressionType::BROTLI: {
-            builder.compression(parquet::Compression::BROTLI);
-            break;
-        }
-        case TParquetCompressionType::ZSTD: {
-            builder.compression(parquet::Compression::ZSTD);
-            break;
-        }
-        case TParquetCompressionType::LZ4: {
-            builder.compression(parquet::Compression::LZ4);
-            break;
-        }
-        case TParquetCompressionType::LZO: {
-            builder.compression(parquet::Compression::LZO);
-            break;
-        }
-        case TParquetCompressionType::BZ2: {
-            builder.compression(parquet::Compression::BZ2);
-            break;
-        }
-        case TParquetCompressionType::UNCOMPRESSED: {
-            builder.compression(parquet::Compression::UNCOMPRESSED);
-            break;
-        }
-        default:
-            builder.compression(parquet::Compression::UNCOMPRESSED);
+    case TParquetCompressionType::SNAPPY: {
+        builder.compression(parquet::Compression::SNAPPY);
+        break;
+    }
+    case TParquetCompressionType::GZIP: {
+        builder.compression(parquet::Compression::GZIP);
+        break;
+    }
+    case TParquetCompressionType::BROTLI: {
+        builder.compression(parquet::Compression::BROTLI);
+        break;
+    }
+    case TParquetCompressionType::ZSTD: {
+        builder.compression(parquet::Compression::ZSTD);
+        break;
+    }
+    case TParquetCompressionType::LZ4: {
+        builder.compression(parquet::Compression::LZ4);
+        break;
+    }
+    case TParquetCompressionType::LZO: {
+        builder.compression(parquet::Compression::LZO);
+        break;
+    }
+    case TParquetCompressionType::BZ2: {
+        builder.compression(parquet::Compression::BZ2);
+        break;
+    }
+    case TParquetCompressionType::UNCOMPRESSED: {
+        builder.compression(parquet::Compression::UNCOMPRESSED);
+        break;
+    }
+    default:
+        builder.compression(parquet::Compression::UNCOMPRESSED);
     }
 }
 
@@ -239,12 +235,13 @@ void ParquetBuilder::_generate_rg_writer() {
     }
 }
 
-#define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                     \
-    ParquetBuilder::_generate_rg_writer();                                                                    \
-    parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(i));                       \
-    col_writer->WriteBatch(num_rows, nullable ? def_level.data() : nullptr, nullptr,                          \
-        reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data())); \
-    _buffered_values_estimate[i] = col_writer->EstimatedBufferedValueBytes();                                 \
+#define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                         \
+    ParquetBuilder::_generate_rg_writer();                                                                        \
+    parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(i));                           \
+    col_writer->WriteBatch(                                                                                       \
+            num_rows, nullable ? def_level.data() : nullptr, nullptr,                                             \
+            reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data())); \
+    _buffered_values_estimate[i] = col_writer->EstimatedBufferedValueBytes();
 
 Status ParquetBuilder::add_chunk(Chunk* chunk) {
     if (!chunk->has_rows()) {
@@ -256,8 +253,8 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
         auto& col = chunk->get_column_by_index(i);
         bool nullable = col->is_nullable();
         auto null_column = nullable && down_cast<NullableColumn*>(col.get())->has_null()
-                           ? down_cast<NullableColumn*>(col.get())->null_column()
-                           : nullptr;
+                                   ? down_cast<NullableColumn*>(col.get())->null_column()
+                                   : nullptr;
         const auto data_column = ColumnHelper::get_data_column(col.get());
 
         std::vector<int16_t> def_level(num_rows);
@@ -271,29 +268,29 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
 
         const auto type = _output_expr_ctxs[i]->root()->type().type;
         switch (type) {
-            case TYPE_BOOLEAN: {
-                DISPATCH_PARQUET_NUMERIC_WRITER(BoolWriter, BooleanColumn, bool)
-                break;
-            }
-            case TYPE_INT: {
-                DISPATCH_PARQUET_NUMERIC_WRITER(Int32Writer, Int32Column, int32_t)
-                break;
-            }
-            case TYPE_BIGINT: {
-                DISPATCH_PARQUET_NUMERIC_WRITER(Int64Writer, Int64Column, int64_t)
-                break;
-            }
-            case TYPE_FLOAT: {
-                DISPATCH_PARQUET_NUMERIC_WRITER(FloatWriter, FloatColumn, float)
-                break;
-            }
-            case TYPE_DOUBLE: {
-                DISPATCH_PARQUET_NUMERIC_WRITER(DoubleWriter, DoubleColumn, double)
-                break;
-            }
-            default: {
-                return Status::InvalidArgument("Unsupported type");
-            }
+        case TYPE_BOOLEAN: {
+            DISPATCH_PARQUET_NUMERIC_WRITER(BoolWriter, BooleanColumn, bool)
+            break;
+        }
+        case TYPE_INT: {
+            DISPATCH_PARQUET_NUMERIC_WRITER(Int32Writer, Int32Column, int32_t)
+            break;
+        }
+        case TYPE_BIGINT: {
+            DISPATCH_PARQUET_NUMERIC_WRITER(Int64Writer, Int64Column, int64_t)
+            break;
+        }
+        case TYPE_FLOAT: {
+            DISPATCH_PARQUET_NUMERIC_WRITER(FloatWriter, FloatColumn, float)
+            break;
+        }
+        case TYPE_DOUBLE: {
+            DISPATCH_PARQUET_NUMERIC_WRITER(DoubleWriter, DoubleColumn, double)
+            break;
+        }
+        default: {
+            return Status::InvalidArgument("Unsupported type");
+        }
         }
     }
 
@@ -358,4 +355,4 @@ Status ParquetBuilder::finish() {
     return Status::OK();
 }
 
-}
+} // namespace starrocks

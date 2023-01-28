@@ -38,8 +38,8 @@
 
 #include "column/chunk.h"
 #include "exec/local_file_writer.h"
-#include "exec/plain_text_builder.h"
 #include "exec/parquet_builder.h"
+#include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"

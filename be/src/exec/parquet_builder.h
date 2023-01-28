@@ -22,17 +22,17 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <cstdint>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
 #include "common/status.h"
 #include "exec/file_builder.h"
+#include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/parquet_types.h"
-#include "gen_cpp/DataSinks_types.h"
 
 namespace starrocks {
 
@@ -67,10 +67,10 @@ private:
 class ParquetBuildHelper {
 public:
     static void build_file_data_type(parquet::Type::type& parquet_data_type,
-                                const TParquetColumnType::type& column_data_type);
+                                     const TParquetColumnType::type& column_data_type);
 
     static void build_repetition_type(parquet::Repetition::type& parquet_repetition_type,
-                                      const TParquetRepetitionType::type&) ;
+                                      const TParquetRepetitionType::type&);
 
     static void build_compression_type(parquet::WriterProperties::Builder& builder,
                                        const TParquetCompressionType::type& compression_type);
