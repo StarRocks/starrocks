@@ -1876,4 +1876,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
 }

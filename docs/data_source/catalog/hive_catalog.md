@@ -131,7 +131,7 @@ The properties of the Hive catalog. This parameter is required. You can configur
     >
     > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
-- [Preview] If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+- If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
 
     | **Property**                           | **Required** | **Description**                                              |
     | -------------------------------------- | ------------ | ------------------------------------------------------------ |

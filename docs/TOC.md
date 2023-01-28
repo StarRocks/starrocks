@@ -8,7 +8,9 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
-  + [Deploy StarRocks](./quick_start/Deploy.md)
+  + Deploy
+    + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
+    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
 + Table Design
@@ -113,9 +115,9 @@
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
-      + [ADMIN CANCEL REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
+      + [ADMIN CANCEL REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
-      + [ADMIN REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
+      + [ADMIN REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
       + [ADMIN SET CONFIG](./sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md)
       + [ADMIN SET REPLICA STATUS](./sql-reference/sql-statements/Administration/ADMIN%20SET%20REPLICA%20STATUS.md)
       + [ADMIN SHOW CONFIG](./sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)
@@ -204,7 +206,7 @@
       + [RESUME ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
       + [ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)
       + [SELECT](./sql-reference/sql-statements/data-manipulation/SELECT.md)
-      + [SHOW ALTER](./sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md)
+      + [SHOW ALTER TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md)
       + [SHOW ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md)
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)

@@ -1015,7 +1015,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage((sizeof(Key) + 8) * N);
     auto nbucket = MutableIndex::estimate_nbucket(sizeof(Key), N, nshard, npage_hint);
 
-    ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, nbucket).ok());
+    ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, nbucket, true).ok());
     writer->finish();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
