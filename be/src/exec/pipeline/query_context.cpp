@@ -2,8 +2,10 @@
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
+#include <vector>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
@@ -154,11 +156,12 @@ Status QueryContextManager::init() {
         return Status::InternalError("Fail to create clean_thread of QueryContextManager");
     }
 }
-void QueryContextManager::_clean_slot_unlocked(size_t i) {
+void QueryContextManager::_clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del) {
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
         if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
+            del.emplace_back(std::move(sc_it->second));
             sc_it = sc_map.erase(sc_it);
         } else {
             ++sc_it;
@@ -168,8 +171,9 @@ void QueryContextManager::_clean_slot_unlocked(size_t i) {
 void QueryContextManager::_clean_query_contexts() {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _mutexes[i];
+        std::vector<QueryContextPtr> del_list;
         std::unique_lock write_lock(mutex);
-        _clean_slot_unlocked(i);
+        _clean_slot_unlocked(i, del_list);
     }
 }
 
@@ -279,8 +283,13 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
+    // retain the query_ctx reference to avoid call destructors while holding a lock
+    // we should define them before hold the write lock
+    QueryContextPtr query_ctx;
+    std::vector<QueryContextPtr> del_list;
+
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-    _clean_slot_unlocked(i);
+    _clean_slot_unlocked(i, del_list);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
@@ -289,6 +298,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
+        query_ctx = std::move(it->second);
         context_map.erase(it);
         return true;
     } else if (it->second->has_no_active_instances()) {
