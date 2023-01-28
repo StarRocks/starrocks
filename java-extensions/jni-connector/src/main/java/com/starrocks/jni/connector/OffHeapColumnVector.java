@@ -137,6 +137,7 @@ public class OffHeapColumnVector {
 
     private void reserveInternal(int newCapacity) {
         int oldCapacity = (nulls == 0L) ? 0 : capacity;
+<<<<<<< HEAD
         if (type == OffHeapColumnType.BOOLEAN || type == OffHeapColumnType.BYTE) {
             this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
         } else if (type == OffHeapColumnType.SHORT) {
@@ -148,6 +149,37 @@ public class OffHeapColumnVector {
         } else if (isArray(type)) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
+=======
+        long oldOffsetSize = (nulls == 0) ? 0 : (capacity + 1) * 4L;
+        long newOffsetSize = (newCapacity + 1) * 4L;
+        int typeSize = type.getPrimitiveTypeValueSize();
+        if (typeSize != -1) {
+            this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
+        } else if (type.isByteStorageType()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+            int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                    ColumnType.TypeValue.BYTE));
+        } else if (type.isArray()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
+        } else if (type.isMap()) {
+            this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
+            this.childColumns = new OffHeapColumnVector[2];
+            this.childColumns[0] = new OffHeapColumnVector(newCapacity, type.childTypes.get(0));
+            this.childColumns[1] = new OffHeapColumnVector(newCapacity, type.childTypes.get(1));
+        } else if (type.isStruct()) {
+            this.childColumns = new OffHeapColumnVector[type.childTypes.size()];
+            for (int i = 0; i < this.childColumns.length; i++) {
+                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+            }
+            for (OffHeapColumnVector c : childColumns) {
+                c.reserveInternal(newCapacity);
+            }
+>>>>>>> 5f02df696 ([Feature] Support INT64 based timestamp for JNI connector (#16920))
         } else {
             throw new RuntimeException("Unhandled type: " + type);
         }
@@ -347,4 +379,252 @@ public class OffHeapColumnVector {
     private int getArrayOffset(int rowId) {
         return Platform.getInt(null, offsetData + 4L * rowId);
     }
+<<<<<<< HEAD
+=======
+
+    private int getArraySize(int rowId) {
+        return getArrayOffset(rowId + 1) - getArrayOffset(rowId);
+    }
+
+    private int appendArray(List<ColumnValue> values) {
+        int size = values.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue v : values) {
+            childColumns[0].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
+    private int appendMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        int size = keys.size();
+        int offset = childColumns[0].elementsAppended;
+        for (ColumnValue k : keys) {
+            childColumns[0].appendValue(k);
+        }
+        for (ColumnValue v : values) {
+            childColumns[1].appendValue(v);
+        }
+        reserve(elementsAppended + 1);
+        putOffset(elementsAppended, offset, size);
+        return elementsAppended++;
+    }
+
+    private int appendStruct(List<ColumnValue> values) {
+        for (int i = 0; i < childColumns.length; i++) {
+            childColumns[i].appendValue(values.get(i));
+        }
+        return elementsAppended++;
+    }
+
+    public void updateMeta(OffHeapColumnVector meta) {
+        if (type.isByteStorageType()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            meta.appendLong(arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+        } else if (type.isMap()) {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(arrayOffsetNativeAddress());
+            childColumns[0].updateMeta(meta);
+            childColumns[1].updateMeta(meta);
+        } else if (type.isStruct()) {
+            meta.appendLong(nullsNativeAddress());
+            for (OffHeapColumnVector c : childColumns) {
+                c.updateMeta(meta);
+            }
+        } else {
+            meta.appendLong(nullsNativeAddress());
+            meta.appendLong(valuesNativeAddress());
+        }
+    }
+
+    public void appendValue(ColumnValue o) {
+        // TODO(yanz): FIXME.
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        if (o == null) {
+            appendNull();
+            // NOTE(yan): for struct need to fill
+            if (type.isStruct()) {
+                List<ColumnValue> values = new ArrayList<>();
+                for (int i = 0; i < type.childTypes.size(); i++) {
+                    values.add(null);
+                }
+                appendStruct(values);
+            }
+            return;
+        }
+
+        switch (typeValue) {
+            case BOOLEAN:
+                appendBoolean(o.getBoolean());
+                break;
+            case SHORT:
+                appendShort(o.getShort());
+                break;
+            case INT:
+                appendInt(o.getInt());
+                break;
+            case FLOAT:
+                appendFloat(o.getFloat());
+                break;
+            case LONG:
+                appendLong(o.getLong());
+                break;
+            case DOUBLE:
+                appendDouble(o.getDouble());
+                break;
+            case BINARY:
+                appendBinary(o.getBytes());
+                break;
+            case STRING:
+            case DATE:
+            case DECIMAL:
+                appendString(o.getString());
+                break;
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+                appendString(o.getTimestamp(typeValue));
+                break;
+            case ARRAY: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackArray(values);
+                appendArray(values);
+                break;
+            }
+            case MAP: {
+                List<ColumnValue> keys = new ArrayList<>();
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackMap(keys, values);
+                appendMap(keys, values);
+                break;
+            }
+            case STRUCT: {
+                List<ColumnValue> values = new ArrayList<>();
+                o.unpackStruct(type.getStructFieldIndex(), values);
+                appendStruct(values);
+                break;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        return;
+    }
+
+    // for test only.
+    public void dump(StringBuilder sb, int i) {
+        if (isNullAt(i)) {
+            sb.append("NULL");
+            return;
+        }
+
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case BOOLEAN:
+                sb.append(getBoolean(i));
+                break;
+            case SHORT:
+                sb.append(getShort(i));
+                break;
+            case INT:
+                sb.append(getInt(i));
+                break;
+            case FLOAT:
+                sb.append(getFloat(i));
+                break;
+            case LONG:
+                sb.append(getLong(i));
+                break;
+            case DOUBLE:
+                sb.append(getDouble(i));
+                break;
+            case BINARY:
+                sb.append("<binary>");
+                break;
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+            case DECIMAL:
+                sb.append(getUTF8String(i));
+                break;
+            case ARRAY: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(',');
+                    }
+                    childColumns[0].dump(sb, rowId);
+                }
+                sb.append("]");
+                break;
+            }
+            case MAP: {
+                int begin = getArrayOffset(i);
+                int end = getArrayOffset(i + 1);
+                sb.append("[");
+                for (int rowId = begin; rowId < end; rowId++) {
+                    if (rowId != begin) {
+                        sb.append(",");
+                    }
+                    sb.append("{");
+                    childColumns[0].dump(sb, rowId);
+                    sb.append(":");
+                    childColumns[1].dump(sb, rowId);
+                    sb.append("}");
+                }
+                sb.append("]");
+                break;
+            }
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                sb.append("{");
+                for (int c = 0; c < names.size(); c++) {
+                    if (c != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(names.get(c)).append(":");
+                    childColumns[c].dump(sb, i);
+                }
+                sb.append("}");
+                break;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+        return;
+    }
+
+    // for test only.
+    public void checkMeta(OffHeapTable.MetaChecker checker) {
+        String context = type.name;
+        String contextOffset = context + "#offset";
+        checker.check(context + "#null", nulls);
+        if (type.isByteStorageType()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            checker.check(context + "#data", arrayDataNativeAddress());
+        } else if (type.isArray()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+        } else if (type.isMap()) {
+            checker.check(contextOffset, arrayOffsetNativeAddress());
+            childColumns[0].checkMeta(checker);
+            childColumns[1].checkMeta(checker);
+        } else if (type.isStruct()) {
+            for (OffHeapColumnVector c : childColumns) {
+                c.checkMeta(checker);
+            }
+        } else {
+            checker.check(context, data);
+        }
+    }
+>>>>>>> 5f02df696 ([Feature] Support INT64 based timestamp for JNI connector (#16920))
 }

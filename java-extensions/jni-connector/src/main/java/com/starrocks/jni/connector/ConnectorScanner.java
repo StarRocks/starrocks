@@ -80,7 +80,7 @@ public abstract class ConnectorScanner {
         offHeapTable.appendData(index, value);
     }
 
-    public int getTableSize() {
+    protected int getTableSize() {
         return tableSize;
     }
 
