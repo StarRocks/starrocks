@@ -140,7 +140,7 @@ Status Tablet::_init_once_action() {
 
     if (keys_type() == DUP_KEYS) {
         std::shared_ptr<DupKeyRowsetFetcher> row_fetcher = std::make_shared<DupKeyRowsetFetcher>(*this);
-        _binlog_manager = std::make_shared<BinlogManager>(schema_hash_path(), config::binlog_file_max_size,
+        _binlog_manager = std::make_unique<BinlogManager>(schema_hash_path(), config::binlog_file_max_size,
                                                           config::binlog_page_max_size,
                                                           tablet_schema().compression_type(), row_fetcher);
     }

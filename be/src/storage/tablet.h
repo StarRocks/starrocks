@@ -369,7 +369,7 @@ private:
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
 
-    std::shared_ptr<BinlogManager> _binlog_manager;
+    std::unique_ptr<BinlogManager> _binlog_manager;
 };
 
 inline bool Tablet::init_succeeded() {
