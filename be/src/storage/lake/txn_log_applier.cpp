@@ -94,6 +94,7 @@ private:
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
         DCHECK_EQ(1, _base_version);
+        DCHECK_EQ(0, _metadata->rowsets_size());
         for (const auto& rowset : op_schema_change.rowsets()) {
             DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
@@ -243,15 +244,14 @@ private:
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
+        DCHECK_EQ(0, _metadata->rowsets_size());
         for (const auto& rowset : op_schema_change.rowsets()) {
+            DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
-            new_rowset->set_id(_metadata->next_rowset_id());
-            _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, new_rowset->segments_size()));
+            _metadata->set_next_rowset_id(new_rowset->id() + std::max(1, new_rowset->segments_size()));
         }
-        if (op_schema_change.has_delvec_meta()) {
-            _metadata->mutable_delvec_meta()->CopyFrom(op_schema_change.delvec_meta());
-        }
+        DCHECK(!op_schema_change.has_delvec_meta());
         return Status::OK();
     }
 

@@ -92,6 +92,7 @@ protected:
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;
     std::unique_ptr<MemPool> _mem_pool;
+    int64_t _next_rowset_id = 0;
 };
 
 class DirectSchemaChange final : public ConvertedSchemaChange {
@@ -195,10 +196,11 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f));
     }
-    new_rowset_metadata->set_id(rowset->id());
+    new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
+    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
     return Status::OK();
 }
 
@@ -271,11 +273,12 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f));
     }
-    new_rowset_metadata->set_id(rowset->id());
+    new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
+    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
     return Status::OK();
 }
 
@@ -377,8 +380,8 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     // copy delete vector files if necessary
     if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
         for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
-            auto src = base_tablet->del_location(tablet_delvec_filename(base_tablet->id(), delvec.page().version()));
-            auto dst = new_tablet->del_location(tablet_delvec_filename(new_tablet->id(), delvec.page().version()));
+            auto src = base_tablet->delvec_location(delvec.page().version());
+            auto dst = new_tablet->delvec_location(delvec.page().version());
             RETURN_IF_ERROR(fs::copy_file(src, dst));
         }
         op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());
