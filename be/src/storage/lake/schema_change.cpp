@@ -92,7 +92,7 @@ protected:
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;
     std::unique_ptr<MemPool> _mem_pool;
-    int64_t _next_rowset_id = 0;
+    int64_t _next_rowset_id = 1; // Same as the value used in `lake::TabletManager::create_tablet()`
 };
 
 class DirectSchemaChange final : public ConvertedSchemaChange {
