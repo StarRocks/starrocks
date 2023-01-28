@@ -132,7 +132,7 @@ public class OffHeapColumnVector {
         int typeSize = type.getPrimitiveTypeValueSize();
         if (typeSize != -1) {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
-        } else if (type.isString()) {
+        } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];
@@ -385,7 +385,7 @@ public class OffHeapColumnVector {
     }
 
     public void updateMeta(OffHeapColumnVector meta) {
-        if (type.isString()) {
+        if (type.isByteStorageType()) {
             meta.appendLong(nullsNativeAddress());
             meta.appendLong(arrayOffsetNativeAddress());
             meta.appendLong(arrayDataNativeAddress());
@@ -449,9 +449,13 @@ public class OffHeapColumnVector {
                 break;
             case STRING:
             case DATE:
-            case DATETIME:
             case DECIMAL:
                 appendString(o.getString());
+                break;
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+                appendString(o.getTimestamp(typeValue));
                 break;
             case ARRAY: {
                 List<ColumnValue> values = new ArrayList<>();
@@ -511,6 +515,8 @@ public class OffHeapColumnVector {
             case STRING:
             case DATE:
             case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
             case DECIMAL:
                 sb.append(getUTF8String(i));
                 break;
@@ -568,7 +574,7 @@ public class OffHeapColumnVector {
         String context = type.name;
         String contextOffset = context + "#offset";
         checker.check(context + "#null", nulls);
-        if (type.isString()) {
+        if (type.isByteStorageType()) {
             checker.check(contextOffset, arrayOffsetNativeAddress());
             checker.check(context + "#data", arrayDataNativeAddress());
         } else if (type.isArray()) {
