@@ -73,7 +73,9 @@ public class WarehouseManager implements Writable {
     }
 
     public Warehouse getWarehouse(String warehouseName) {
-        return fullNameToWh.get(warehouseName);
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return fullNameToWh.get(warehouseName);
+        }
     }
 
     public boolean warehouseExists(String warehouseName) {
@@ -114,7 +116,7 @@ public class WarehouseManager implements Writable {
 
     public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
         String warehouseName = stmt.getFullWhName();
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
@@ -126,7 +128,7 @@ public class WarehouseManager implements Writable {
     }
 
     public void replaySuspendWarehouse(String warehouseName) throws DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
@@ -137,7 +139,7 @@ public class WarehouseManager implements Writable {
 
     public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
         String warehouseName = stmt.getFullWhName();
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
             Warehouse warehouse = fullNameToWh.get(warehouseName);
@@ -148,7 +150,7 @@ public class WarehouseManager implements Writable {
     }
 
     public void replayResumeWarehouse(String warehouseName, Map<Long, Cluster> clusters) throws DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
@@ -276,7 +278,7 @@ public class WarehouseManager implements Writable {
             String s = Text.readString(dis);
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
-                if (data.fullNameToWh != null && data.idToWh != null) {
+                if (data.fullNameToWh != null) {
                     for (Warehouse warehouse : data.fullNameToWh.values()) {
                         replayCreateWarehouse(warehouse);
                     }

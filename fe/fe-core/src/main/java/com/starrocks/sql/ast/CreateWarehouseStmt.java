@@ -57,6 +57,9 @@ public class CreateWarehouseStmt extends DdlStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE WAREHOUSE '");
         sb.append(warehouseName).append("' ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
         sb.append("WITH PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
     }

@@ -26,7 +26,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class Cluster  implements Writable {
+public class Cluster implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")

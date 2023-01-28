@@ -29,9 +29,6 @@ public class ResumeWarehouseLog implements Writable {
     @SerializedName(value = "name")
     private String name;
 
-    @SerializedName(value = "id")
-    private long id;
-
     @SerializedName(value = "clusters")
     private Map<Long, Cluster> clusters;
 

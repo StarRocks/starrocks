@@ -28,7 +28,7 @@ public class DropWarehouseStmt extends DdlStmt {
         return warehouseName;
     }
 
-    public boolean isSetIfNotExists() {
+    public boolean isSetIfExists() {
         return ifExists;
     }
 
@@ -42,6 +42,9 @@ public class DropWarehouseStmt extends DdlStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP WAREHOUSE ");
         sb.append("\'" + warehouseName + "\'");
+        if (ifExists) {
+            sb.append("IF EXISTS");
+        }
         return sb.toString();
     }
 

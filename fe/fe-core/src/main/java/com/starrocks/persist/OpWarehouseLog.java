@@ -28,9 +28,6 @@ public class OpWarehouseLog implements Writable {
     @SerializedName(value = "name")
     private String name;
 
-    @SerializedName(value = "id")
-    private long id;
-
     String getWhName() {
         return name;
     }

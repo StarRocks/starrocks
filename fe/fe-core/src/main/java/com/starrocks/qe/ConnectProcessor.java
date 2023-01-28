@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
@@ -106,13 +105,11 @@ public class ConnectProcessor {
             String[] parts = identifier.trim().split("\\s+");
             if (parts.length == 2) {
                 if (parts[0].equalsIgnoreCase("catalog")) {
-                    Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
-                            "You might want to use \"USE 'CATALOG <catalog_name>'\"");
                     ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
                 } else if (parts[0].equalsIgnoreCase("warehouse")) {
-                    Preconditions.checkState(parts[0].equalsIgnoreCase("warehouse"),
-                            "You might want to use \"USE 'WAREHOUSE <warehouse_name>'\"");
                     ctx.getGlobalStateMgr().changeWarehouse(ctx, parts[1]);
+                } else {
+                    ctx.getState().setError("not supported command");
                 }
             } else {
                 ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);

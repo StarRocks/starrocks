@@ -88,7 +88,6 @@ public class Warehouse implements Writable {
 
     private final ClusterProcNode procNode = new ClusterProcNode();
 
-
     private void readLock() {
         this.rwLock.readLock().lock();
     }
