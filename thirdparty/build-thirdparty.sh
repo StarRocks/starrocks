@@ -1035,6 +1035,7 @@ build_serdes() {
                 --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
                 --enable-static \
                 --disable-shared
+
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib/libserdes.so*
