@@ -111,20 +111,14 @@ public:
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     virtual Status done(RuntimeState* state) = 0;
+
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
 
-    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
-    virtual SortedRuns get_sorted_runs() = 0;
-
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
-
-    Status finish(RuntimeState* state);
-
-    bool sink_complete();
 
     virtual int64_t mem_usage() const = 0;
 
@@ -145,8 +139,6 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
-
-    std::atomic<bool> _is_sink_complete = false;
 };
 
 namespace detail {

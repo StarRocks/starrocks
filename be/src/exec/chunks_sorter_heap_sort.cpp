@@ -111,10 +111,6 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     return Status::OK();
 }
 
-SortedRuns ChunksSorterHeapSort::get_sorted_runs() {
-    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
-}
-
 size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
