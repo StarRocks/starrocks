@@ -69,9 +69,4 @@ public class ChildFirstClassLoader extends URLClassLoader {
             return parent.getResource(name);
         }
     }
-
-    @Override
-    public void addURL(URL url) {
-        super.addURL(url);
-    }
 }

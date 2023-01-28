@@ -33,6 +33,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.avro.LogicalType;
+import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -280,7 +282,25 @@ public class HiveMetastoreApiConverter {
 
             TypeInfo fieldInfo = getTypeInfoFromTypeString(field.get().getType());
             columnNamesBuilder.append(field.get().getName());
-            columnTypesBuilder.append(fieldInfo.getTypeName());
+
+            String type = fieldInfo.getTypeName();
+            if (type.equals("timestamp")) {
+                Schema fieldSchema = hudiField.schema();
+                List<Schema> nonNullMembers = fieldSchema.getTypes().stream()
+                        .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
+                        .collect(Collectors.toList());
+                LogicalType logicalType = nonNullMembers.get(0).getLogicalType();
+                // INT64 based timestamp mark
+                if (logicalType instanceof LogicalTypes.TimestampMicros) {
+                    columnTypesBuilder.append("TimestampMicros");
+                } else if (logicalType instanceof LogicalTypes.TimestampMillis) {
+                    columnTypesBuilder.append("TimestampMillis");
+                } else {
+                    columnTypesBuilder.append(type);
+                }
+            } else {
+                columnTypesBuilder.append(type);
+            }
             isFirst = false;
         }
         hudiProperties.put(HUDI_TABLE_COLUMN_NAMES, columnNamesBuilder.toString());
