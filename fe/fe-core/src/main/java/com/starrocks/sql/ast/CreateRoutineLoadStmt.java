@@ -104,7 +104,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String JSONROOT = "json_root";
 
     // csv properties
-    public static final String TRIMSPACE = "trims_pace";
+    public static final String TRIMSPACE = "trim_space";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
