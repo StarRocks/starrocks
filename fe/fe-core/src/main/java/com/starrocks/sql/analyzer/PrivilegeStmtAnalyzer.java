@@ -119,7 +119,7 @@ public class PrivilegeStmtAnalyzer {
                 throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
             }
             analyseUser(stmt.getUserIdent(), session, true);
-            analyseRoleName(stmt.getGranteeRole(), session, true, "Can not granted/revoke role to user");
+            stmt.getGranteeRole().forEach(role -> analyseRoleName(role, session, true, "Can not granted/revoke role to user"));
             return null;
         }
 

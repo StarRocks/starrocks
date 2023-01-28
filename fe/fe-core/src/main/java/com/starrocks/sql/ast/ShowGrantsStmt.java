@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 /*
  *  SHOW ALL GRANTS;
@@ -44,20 +44,48 @@ public class ShowGrantsStmt extends ShowStmt {
         META_DATA = builder.build();
     }
 
+    private static final ShowResultSetMetaData META_DATA_V2;
+
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+
+        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Catalog", ScalarType.createVarchar(400)));
+        builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
+
+        META_DATA_V2 = builder.build();
+    }
+
     private final boolean isAll;
     private UserIdentity userIdent;
+    private String role;
 
-    public ShowGrantsStmt(UserIdentity userIdent, boolean isAll) {
+    public ShowGrantsStmt() {
+        this.isAll = true;
+    }
+
+    public ShowGrantsStmt(UserIdentity userIdent) {
+        this.isAll = false;
         this.userIdent = userIdent;
-        this.isAll = isAll;
+        this.role = null;
+    }
+
+    public ShowGrantsStmt(String role) {
+        this.isAll = false;
+        this.userIdent = null;
+        this.role = role;
+    }
+
+    public boolean isAll() {
+        return isAll;
     }
 
     public UserIdentity getUserIdent() {
         return userIdent;
     }
 
-    public boolean isAll() {
-        return isAll;
+    public String getRole() {
+        return role;
     }
 
     public void setUserIdent(UserIdentity userIdent) {
@@ -66,12 +94,15 @@ public class ShowGrantsStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            return META_DATA_V2;
+        } else {
+            return META_DATA;
+        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowGrantsStatement(this, context);
     }
-
 }

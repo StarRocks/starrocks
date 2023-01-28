@@ -205,7 +205,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
                 throws PrivilegeException, AnalysisException {
-            stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+            stmt.setPrivilegeType(privilegeManager.getPrivilegeType(stmt.getPrivType()));
             String[] name = stmt.getFunctionName().split("\\.");
             FunctionName functionName;
             if (stmt.getTypeId() == PrivilegeType.GLOBAL_FUNCTION.getId()) {
@@ -275,14 +275,14 @@ public class PrivilegeStmtAnalyzerV2 {
                     List<PEntryObject> objectList = new ArrayList<>();
                     if (stmt.getUserPrivilegeObjectList() != null) {
                         // objects are user
-                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        stmt.setPrivilegeType(privilegeManager.getPrivilegeType(stmt.getPrivType()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
                             objectList.add(privilegeManager.analyzeUserObject(stmt.getPrivType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
-                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        stmt.setPrivilegeType(privilegeManager.getPrivilegeType(stmt.getPrivType()));
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                             objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
                         }
@@ -300,14 +300,14 @@ public class PrivilegeStmtAnalyzerV2 {
                         // TABLES -> TABLE
                         stmt.setPrivType(privilegeManager.analyzeTypeInPlural(stmt.getPrivType()));
                         // TABLE -> 0/1
-                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        stmt.setPrivilegeType(privilegeManager.getPrivilegeType(stmt.getPrivType()));
                         objectList.add(privilegeManager.analyzeObject(
                                 stmt.getPrivType(), stmt.getAllTypeList(), stmt.getRestrictType(),
                                 stmt.getRestrictName()));
                     }
                     stmt.setObjectList(objectList);
                 } else {
-                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                    stmt.setPrivilegeType(privilegeManager.getPrivilegeType(stmt.getPrivType()));
                     stmt.setObjectList(null);
                 }
                 privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
@@ -340,10 +340,12 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             if (stmt.getUserIdent() != null) {
                 analyseUser(stmt.getUserIdent(), true);
-                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to user", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to user", true));
             } else {
-                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to role", true);
                 validRoleName(stmt.getRole(), "Can not granted/revoke role to role", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to user", true));
             }
             return null;
         }

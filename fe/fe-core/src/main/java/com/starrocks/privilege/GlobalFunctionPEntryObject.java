@@ -23,11 +23,15 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 
 public class GlobalFunctionPEntryObject implements PEntryObject {
+    public static final String ALL_GLOBAL_FUNCTION_SIGS = "AGFS"; // AS represent all global functions
+    public static final String FUNC_NOT_FOUND = "funcNotFound";
+
     @SerializedName(value = "f")
     protected String functionSig;
-    protected static final String ALL_GLOBAL_FUNCTION_SIGS = "AGFS"; // AS represent all global functions
 
-    public static final String FUNC_NOT_FOUND = "funcNotFound";
+    public String getFunctionSig() {
+        return functionSig;
+    }
 
     public static GlobalFunctionPEntryObject generate(GlobalStateMgr mgr, List<String> tokens)
             throws PrivilegeException {

@@ -28,14 +28,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
-    private static final Map<String, Short> TYPE_STRING_TO_ID = new HashMap<>();
+    private static final Map<String, PrivilegeType> TYPE_STRING_TO_ID = new HashMap<>();
     private static final Map<Short, Map<String, Action>> TYPE_TO_ACTION_MAP = new HashMap<>();
     private static final Map<String, String> PLURAL_TO_TYPE = new HashMap<>();
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
         for (PrivilegeType type : PrivilegeType.values()) {
-            TYPE_STRING_TO_ID.put(type.toString(), (short) type.getId());
+            TYPE_STRING_TO_ID.put(type.toString(), type);
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
             PLURAL_TO_TYPE.put(type.getPlural(), type.toString());
         }
@@ -57,12 +57,19 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public short getTypeIdByName(String typeStr) throws PrivilegeException {
-        Short ret = TYPE_STRING_TO_ID.getOrDefault(typeStr, (short) -1);
-        if (ret == -1) {
+    public PrivilegeType getPrivilegeType(String typeStr) throws PrivilegeException {
+
+        PrivilegeType privilegeType = TYPE_STRING_TO_ID.get(typeStr);
+        if (privilegeType == null) {
             throw new PrivilegeException("cannot find type " + typeStr + " in " + TYPE_STRING_TO_ID.keySet());
+        } else {
+            return privilegeType;
         }
-        return ret;
+    }
+
+    @Override
+    public PrivilegeType getPrivilegeType(short typeId) {
+        return PrivilegeType.values()[typeId - 1];
     }
 
     @Override

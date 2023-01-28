@@ -1145,11 +1145,6 @@ helpStatement
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
-
-identifierOrStringList
-    : identifierOrString (',' identifierOrString)*
-    ;
-
 // [deprecated] grant select on *
 // [deprecated] grant select on *.*
 // grant select on db1.tbl1,db2.tbl2
@@ -1253,13 +1248,13 @@ revokePrivilegeStatement
     ;
 
 grantRoleStatement
-    : GRANT identifierOrString TO user                          #grantRoleToUser
-    | GRANT identifierOrString TO ROLE identifierOrString       #grantRoleToRole
+    : GRANT identifierOrStringList TO user                                                              #grantRoleToUser
+    | GRANT identifierOrStringList TO ROLE identifierOrString                                           #grantRoleToRole
     ;
 
 revokeRoleStatement
-    : REVOKE identifierOrString FROM user                       #revokeRoleFromUser
-    | REVOKE identifierOrString FROM ROLE identifierOrString    #revokeRoleFromRole
+    : REVOKE identifierOrStringList FROM user                                                           #revokeRoleFromUser
+    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
     ;
 
 executeAsStatement
@@ -1292,7 +1287,9 @@ showRolesStatement
     ;
 
 showGrantsStatement
-    : SHOW ALL? GRANTS (FOR user)?
+    : SHOW ALL? GRANTS
+    | SHOW GRANTS FOR user
+    | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
 dropRoleStatement
@@ -2119,6 +2116,10 @@ identifierList
 identifierOrString
     : identifier
     | string
+    ;
+
+identifierOrStringList
+    : identifierOrString (',' identifierOrString)*
     ;
 
 user

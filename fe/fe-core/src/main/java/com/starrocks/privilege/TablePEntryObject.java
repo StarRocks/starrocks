@@ -25,13 +25,21 @@ import java.util.List;
 import java.util.Objects;
 
 public class TablePEntryObject implements PEntryObject {
+    public static final long ALL_DATABASE_ID = -2; // -2 represent all databases
+    public static final long ALL_TABLES_ID = -3; // -3 represent all tables
+
     @SerializedName(value = "d")
     protected long databaseId;
     @SerializedName(value = "t")
     protected long tableId;
 
-    protected static final long ALL_DATABASE_ID = -2; // -2 represent all databases
-    protected static final long ALL_TABLES_ID = -3; // -3 represent all tables
+    public long getDatabaseId() {
+        return databaseId;
+    }
+
+    public long getTableId() {
+        return tableId;
+    }
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
@@ -81,7 +89,7 @@ public class TablePEntryObject implements PEntryObject {
 
     /**
      * if the current table matches other table, including fuzzy matching.
-     *
+     * <p>
      * this(db1.tbl1), other(db1.tbl1) -> true
      * this(db1.tbl1), other(db1.ALL) -> true
      * this(db1.ALL), other(db1.tbl1) -> false

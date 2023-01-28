@@ -202,7 +202,7 @@ public class PrivilegeManager {
                 // GRANT SELECT ON ALL TABLES IN information_schema
                 List<PEntryObject> object = Arrays.asList(new TablePEntryObject(
                         SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-                short tableTypeId = provider.getTypeIdByName(PrivilegeType.TABLE.name());
+                short tableTypeId = (short) provider.getPrivilegeType(PrivilegeType.TABLE.name()).getId();
                 ActionSet selectAction =
                         analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.name()));
                 rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
@@ -442,9 +442,9 @@ public class PrivilegeManager {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
             if (stmt.getUserIdent() != null) {
-                grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdent());
+                grantRoleToUser(stmt.getGranteeRole().get(0), stmt.getUserIdent());
             } else {
-                grantRoleToRole(stmt.getGranteeRole(), stmt.getRole());
+                grantRoleToRole(stmt.getGranteeRole().get(0), stmt.getRole());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to grant role: " + e.getMessage(), e);
@@ -544,9 +544,9 @@ public class PrivilegeManager {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
             if (stmt.getUserIdent() != null) {
-                revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdent());
+                revokeRoleFromUser(stmt.getGranteeRole().get(0), stmt.getUserIdent());
             } else {
-                revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRole());
+                revokeRoleFromRole(stmt.getGranteeRole().get(0), stmt.getRole());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to revoke role: " + e.getMessage(), e);
@@ -1226,7 +1226,7 @@ public class PrivilegeManager {
         }
     }
 
-    protected UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+    public UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
             throws PrivilegeException {
         UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
         if (userCollection == null) {
@@ -1236,12 +1236,16 @@ public class PrivilegeManager {
         return userCollection;
     }
 
+    public Map<UserIdentity, UserPrivilegeCollection> getUserToPrivilegeCollection() {
+        return userToPrivilegeCollection;
+    }
+
     // return null if not exists
     protected UserPrivilegeCollection getUserPrivilegeCollectionUnlockedAllowNull(UserIdentity userIdentity) {
         return userToPrivilegeCollection.get(userIdentity);
     }
 
-    private RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
+    public RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
             throws PrivilegeException {
         RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
         if (collection == null) {
@@ -1276,7 +1280,15 @@ public class PrivilegeManager {
     }
 
     public short analyzeType(String typeName) throws PrivilegeException {
-        return provider.getTypeIdByName(typeName);
+        return (short) provider.getPrivilegeType(typeName).getId();
+    }
+
+    public PrivilegeType getPrivilegeType(short typeId) throws PrivilegeException {
+        return provider.getPrivilegeType(typeId);
+    }
+
+    public PrivilegeType getPrivilegeType(String typeName) throws PrivilegeException {
+        return provider.getPrivilegeType(typeName);
     }
 
     public void createRole(CreateRoleStmt stmt) throws DdlException {

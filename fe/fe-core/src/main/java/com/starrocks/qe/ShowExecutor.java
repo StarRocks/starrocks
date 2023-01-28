@@ -109,16 +109,27 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.Action;
+import com.starrocks.privilege.CatalogPEntryObject;
+import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -191,6 +202,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -325,7 +337,7 @@ public class ShowExecutor {
             handleShowComputeNodes();
         } else if (stmt instanceof ShowAuthenticationStmt) {
             handleShowAuthentication();
-        }  else if (stmt instanceof ShowCreateExternalCatalogStmt) {
+        } else if (stmt instanceof ShowCreateExternalCatalogStmt) {
             handleShowCreateExternalCatalog();
         } else {
             handleEmtpy();
@@ -845,7 +857,7 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType())  {
+        switch (column.getType().getPrimitiveType()) {
             case TINYINT:
                 sb.append("tinyint(4)");
                 break;
@@ -881,7 +893,7 @@ public class ShowExecutor {
                 sb.append("binary(1048576)");
         }
         sb.append(" DEFAULT NULL");
-        return  sb.toString();
+        return sb.toString();
     }
 
     private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
@@ -1684,9 +1696,154 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
-        // TODO(yiming): handle show grants in new RBAC privilege framework
-        List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            PrivilegeManager privilegeManager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+            try {
+                if (showStmt.getRole() != null) {
+                    List<List<String>> infos = new ArrayList<>();
+
+                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(showStmt.getRole());
+                    RolePrivilegeCollection rolePrivilegeCollection =
+                            privilegeManager.getRolePrivilegeCollectionUnlocked(roleId, true);
+
+                    List<String> parentRoleNameList = new ArrayList<>();
+                    for (Long parentRoleId : rolePrivilegeCollection.getParentRoleIds()) {
+                        RolePrivilegeCollection parentRolePriv =
+                                privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
+                        parentRoleNameList.add(parentRolePriv.getName());
+
+                        List<String> info = Lists.newArrayList(showStmt.getRole(), null,
+                                AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, showStmt.getRole())));
+                        infos.add(info);
+                    }
+
+                    Map<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                            rolePrivilegeCollection.getTypeToPrivilegeEntryList();
+                    for (Map.Entry<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+                            : typeToPrivilegeEntryList.entrySet()) {
+                        for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+                            List<String> info = new ArrayList<>();
+                            String roleName = showStmt.getRole();
+                            info.add(roleName);
+
+                            PrivilegeType privilegeType = privilegeManager.getPrivilegeType(typeToPrivilegeEntry.getKey());
+                            if (privilegeType.equals(PrivilegeType.CATALOG)) {
+                                CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
+                                if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
+                                    info.add(null);
+                                } else {
+                                    List<Catalog> catalogs = new ArrayList<>(
+                                            GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
+                                    Optional<Catalog> catalogOptional = catalogs.stream().filter(
+                                            catalog -> catalog.getId() == catalogPEntryObject.getId()
+                                    ).findFirst();
+                                    if (!catalogOptional.isPresent()) {
+                                        throw new SemanticException("can't find catalog");
+                                    }
+                                    Catalog catalog = catalogOptional.get();
+                                    info.add(catalog.getName());
+                                }
+                            } else {
+                                info.add("default");
+                            }
+
+                            GrantPrivilegeStmt grantPrivilegeStmt =
+                                    new GrantPrivilegeStmt(new ArrayList<>(), privilegeType.name(), roleName);
+                            grantPrivilegeStmt.setPrivilegeType(privilegeType);
+                            grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
+                            grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
+                            info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
+
+                            infos.add(info);
+                        }
+                    }
+                    resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+                } else {
+                    Map<UserIdentity, UserPrivilegeCollection> userPrivilegeCollectionList;
+                    if (showStmt.isAll()) {
+                        userPrivilegeCollectionList = privilegeManager.getUserToPrivilegeCollection();
+                    } else {
+                        userPrivilegeCollectionList = new HashMap<>();
+                        UserIdentity userIdentity = showStmt.getUserIdent();
+                        if (userIdentity == null) {
+                            userIdentity = connectContext.getUserIdentity();
+                        }
+                        UserPrivilegeCollection userPrivilegeCollection =
+                                privilegeManager.getUserPrivilegeCollectionUnlocked(userIdentity);
+                        userPrivilegeCollectionList.put(userIdentity, userPrivilegeCollection);
+                    }
+
+                    List<List<String>> infos = new ArrayList<>();
+                    for (Map.Entry<UserIdentity, UserPrivilegeCollection> userPrivilegeCollectionEntry
+                            : userPrivilegeCollectionList.entrySet()) {
+                        UserIdentity userIdentity = userPrivilegeCollectionEntry.getKey();
+                        UserPrivilegeCollection userPrivilegeCollection = userPrivilegeCollectionEntry.getValue();
+
+                        Set<Long> allRoles = userPrivilegeCollection.getAllRoles();
+                        infos.add(Lists.newArrayList(userIdentity.toString(), null, AstToSQLBuilder.toSQL(
+                                new GrantRoleStmt(allRoles.stream().map(roleId -> {
+                                    try {
+                                        return privilegeManager
+                                                .getRolePrivilegeCollectionUnlocked(roleId, true).getName();
+                                    } catch (PrivilegeException e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                }).collect(Collectors.toList()), userIdentity))));
+
+                        Map<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                                userPrivilegeCollection.getTypeToPrivilegeEntryList();
+                        for (Map.Entry<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+                                : typeToPrivilegeEntryList.entrySet()) {
+                            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+                                List<String> info = new ArrayList<>();
+                                info.add(userIdentity.toString());
+
+                                PrivilegeType privilegeType = privilegeManager.getPrivilegeType(typeToPrivilegeEntry.getKey());
+                                if (privilegeType.equals(PrivilegeType.CATALOG)) {
+                                    CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
+                                    List<Catalog> catalogs = new ArrayList<>(
+                                            GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
+                                    Optional<Catalog> catalogOptional = catalogs.stream().filter(
+                                            catalog -> catalog.getId() == catalogPEntryObject.getId()
+                                    ).findFirst();
+                                    Catalog catalog = catalogOptional.get();
+                                    info.add(catalog.getName());
+
+                                    List<String> privList = new ArrayList<>();
+                                    for (Map.Entry<String, Action> actionEntry
+                                            : PrivilegeType.CATALOG.getActionMap().entrySet()) {
+                                        if (privilegeEntry.getActionSet().contains(actionEntry.getValue())) {
+                                            privList.add(actionEntry.getValue().getName());
+                                        }
+                                    }
+                                    GrantPrivilegeStmt grantPrivilegeStmt =
+                                            new GrantPrivilegeStmt(privList, PrivilegeType.CATALOG.name(), userIdentity);
+                                    info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
+                                } else {
+                                    info.add("default");
+                                }
+
+                                GrantPrivilegeStmt grantPrivilegeStmt =
+                                        new GrantPrivilegeStmt(new ArrayList<>(), privilegeType.name(), userIdentity);
+                                grantPrivilegeStmt.setPrivilegeType(privilegeType);
+                                grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
+                                grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
+                                info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
+
+                                infos.add(info);
+                            }
+                        }
+                    }
+
+                    resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+                }
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else {
+            List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
+            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+        }
     }
 
     private void handleShowRoles() {
@@ -1975,7 +2132,7 @@ public class ShowExecutor {
     private void handleShowCreateExternalCatalog() {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog =  connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);

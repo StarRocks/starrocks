@@ -27,6 +27,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
+
 public class GrantRevokeRoleStmtTest {
 
     @Mocked
@@ -114,7 +116,8 @@ public class GrantRevokeRoleStmtTest {
                 result = true;
             }
         };
-        GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        GrantRoleStmt stmt = new GrantRoleStmt(Collections.singletonList("test_role"),
+                new UserIdentity("test_user", "localhost"));
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
@@ -134,7 +137,8 @@ public class GrantRevokeRoleStmtTest {
                 result = false;
             }
         };
-        GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        GrantRoleStmt stmt = new GrantRoleStmt(Collections.singletonList("test_role"),
+                new UserIdentity("test_user", "localhost"));
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
