@@ -3471,10 +3471,10 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.size() >= config::tablet_max_versions || versions.size() >= num_rowset_full_clone * 20) {
             string msg = strings::Substitute(
                     "get_rowsets_for_snapshot: too many rowsets for incremental clone "
-                    "#rowset:$0 #rowset_for_full_clone:$1 $2",
+                    "#rowset:$0 #rowset_for_full_clone:$1 switch to full clone $2",
                     versions.size(), num_rowset_full_clone, _debug_version_info(false));
             LOG(INFO) << msg;
-            return Status::NotFound(msg);
+            return Status::OK();
         }
         rowsetids.reserve(versions.size());
         // compare two lists to find matching versions and record rowsetid
