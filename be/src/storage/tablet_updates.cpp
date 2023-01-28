@@ -2669,8 +2669,122 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
         auto& pks = *upserts[i];
         index.get(pks, (*rss_rowids)[i]);
     }
+<<<<<<< HEAD
     // index may be used for later commits, keep in cache
     manager->index_cache().release(index_entry);
+=======
+    return Status::OK();
+}
+
+Status TabletUpdates::get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges) {
+    // usually, version ranges will have no hole or 1 hole(3 elements in ranges array)
+    missing_version_ranges.reserve(3);
+    std::lock_guard rl(_lock);
+    if (_edit_version_infos.empty()) {
+        return Status::InternalError("get_missing_version_ranges:empty edit_version_info");
+    }
+    int64_t last = _edit_version_infos.back()->version.major();
+    for (auto& itr : _pending_commits) {
+        int64_t cur = itr.first;
+        if (last + 1 < cur) {
+            missing_version_ranges.push_back(last + 1);
+            missing_version_ranges.push_back(cur - 1);
+        }
+        last = cur;
+    }
+    missing_version_ranges.push_back(last + 1);
+    return Status::OK();
+}
+
+Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
+                                                           std::vector<RowsetSharedPtr>& rowsets) {
+    // TODO: also find rowsets in pending_rowsets
+    vector<int64_t> versions;
+    vector<uint32_t> rowsetids;
+    {
+        std::lock_guard lg(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = strings::Substitute("tablet deleted when get_rowsets_for_incremental_snapshot tablet:$0",
+                                             _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        int64_t vmax = _edit_version_infos.back()->version.major();
+        for (size_t i = 0; i + 1 < missing_version_ranges.size(); i += 2) {
+            for (size_t v = missing_version_ranges[i]; v <= missing_version_ranges[i + 1]; v++) {
+                if (v <= vmax) {
+                    versions.push_back(v);
+                } else {
+                    break;
+                }
+            }
+        }
+        int64_t vcur = missing_version_ranges.back();
+        while (vcur <= vmax) {
+            versions.push_back(vcur++);
+        }
+        if (versions.empty()) {
+            string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
+                                             _debug_version_info(false), missing_version_ranges.back());
+            LOG(INFO) << msg;
+            return Status::NotFound(msg);
+        }
+        size_t num_rowset_full_clone = _edit_version_infos.back()->rowsets.size();
+        // TODO: make better estimates about incremental / full clone costs
+        // currently only consider number of rowsets, should also consider number of actual files and data size to
+        // reflect the actual cost
+        if (versions.size() >= config::tablet_max_versions || versions.size() >= num_rowset_full_clone * 20) {
+            string msg = strings::Substitute(
+                    "get_rowsets_for_snapshot: too many rowsets for incremental clone "
+                    "#rowset:$0 #rowset_for_full_clone:$1 switch to full clone $2",
+                    versions.size(), num_rowset_full_clone, _debug_version_info(false));
+            LOG(INFO) << msg;
+            return Status::OK();
+        }
+        rowsetids.reserve(versions.size());
+        // compare two lists to find matching versions and record rowsetid
+        size_t versions_index = 0;
+        size_t edit_versions_index = 0;
+        while (versions_index < versions.size() && edit_versions_index < _edit_version_infos.size()) {
+            auto& edit_version_info = _edit_version_infos[edit_versions_index];
+            if (edit_version_info->deltas.empty()) {
+                edit_versions_index++;
+                continue;
+            }
+            auto edit_version = edit_version_info->version.major();
+            if (edit_version == versions[versions_index]) {
+                DCHECK_EQ(1, edit_version_info->deltas.size());
+                rowsetids.emplace_back(edit_version_info->deltas[0]);
+                versions_index++;
+                edit_versions_index++;
+            } else if (edit_version > versions[versions_index]) {
+                // some version is missing, maybe already GCed, switch to full_snapshot
+                LOG(WARNING) << strings::Substitute("get_rowsets_for_incremental_snapshot: version $0 not found $1",
+                                                    versions[versions_index], _debug_version_info(false));
+                return Status::OK();
+            } else {
+                edit_versions_index++;
+            }
+        }
+    }
+    // get rowset from rowsetid
+    {
+        std::lock_guard lg2(_rowsets_lock);
+        for (auto rid : rowsetids) {
+            auto itr = _rowsets.find(rid);
+            if (itr != _rowsets.end()) {
+                rowsets.push_back(itr->second);
+            } else {
+                LOG(ERROR) << strings::Substitute(
+                        "get_rowsets_for_incremental_snapshot: rowset not found tablet:$0 rowsetid:$1",
+                        _tablet.tablet_id(), rid);
+            }
+        }
+    }
+    LOG(INFO) << strings::Substitute("get_rowsets_for_incremental_snapshot $0 missing_ranges:$1 return:$2",
+                                     _debug_version_info(true), JoinInts(missing_version_ranges, ","),
+                                     JoinInts(versions, ","));
+>>>>>>> b35abfeb8 ([BugFix] Fix error in incremental clone introduced by #15935 (#16930))
     return Status::OK();
 }
 
