@@ -741,7 +741,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @Override
     protected boolean cancelImpl(String errMsg) {
-        if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED_REWRITING || jobState == JobState.FINISHED) {
+        if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
+            return false;
+        }
+
+        // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
+        if (jobState == JobState.FINISHED_REWRITING && tableExists()) {
             return false;
         }
 
@@ -803,6 +808,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             info.add(progress);
             info.add(timeoutMs / 1000);
             infos.add(info);
+        }
+    }
+
+    private boolean tableExists() {
+        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+            return db != null && db.getTable(tableId) != null;
         }
     }
 

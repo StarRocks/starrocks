@@ -694,6 +694,11 @@ public class LakeTableSchemaChangeJobTest {
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // Drop the table, now it's ok to cancel the job
+        db.dropTable(table.getName());
+        schemaChangeJob.cancel("table does not exist anymore");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
