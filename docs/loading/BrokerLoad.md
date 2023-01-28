@@ -157,16 +157,23 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
+<<<<<<< HEAD
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
+=======
+    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+);
+>>>>>>> e3c793be9 ([Doc] update aws s3 parameter names in broker load docs (#16927))
 ```
 
 > **NOTE**
 >
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access.key` and `aws.s3.secret.key` unspecified.
 
 #### Load data from Google GCS
 
@@ -226,6 +233,49 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    4 rows in set (0.01 sec)
    ```
 
+<<<<<<< HEAD
+=======
+#### Usage notes
+
+The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your Amazon S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+
+To load `file1.csv` into `table1`, execute the following statement:
+
+```SQL
+LOAD LABEL test_db.label_7
+(
+    DATA INFILE("s3a://bucket_s3/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
+
+To load all data files from the `input` folder into `table1`, execute the following statement:
+
+```SQL
+LOAD LABEL test_db.label_8
+(
+    DATA INFILE("s3a://bucket_s3/input/*")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+)
+WITH BROKER 
+(
+    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+)；
+```
+
+>>>>>>> e3c793be9 ([Doc] update aws s3 parameter names in broker load docs (#16927))
 ### View a load job
 
 Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
