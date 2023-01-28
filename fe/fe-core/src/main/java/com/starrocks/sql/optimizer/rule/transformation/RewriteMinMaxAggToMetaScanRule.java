@@ -103,7 +103,11 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         // 6. all arguments to agg functions are primitive columns
         // 7. no expr in arguments to agg functions
         // 8. all agg columns have zonemap index and are not null
+        // 9. no deletion happens
         if (table.getKeysType() != KeysType.DUP_KEYS) {
+            return false;
+        }
+        if (table.hasDelete()) {
             return false;
         }
         // no limit
