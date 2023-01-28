@@ -41,10 +41,10 @@ public class DropWarehouseStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP WAREHOUSE ");
-        sb.append("\'" + warehouseName + "\'");
         if (ifExists) {
-            sb.append("IF EXISTS");
+            sb.append("IF EXISTS ");
         }
+        sb.append("\'" + warehouseName + "\'");
         return sb.toString();
     }
 

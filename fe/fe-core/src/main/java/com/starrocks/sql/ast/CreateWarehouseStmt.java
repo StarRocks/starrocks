@@ -56,10 +56,10 @@ public class CreateWarehouseStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE WAREHOUSE '");
-        sb.append(warehouseName).append("' ");
         if (ifNotExists) {
             sb.append("IF NOT EXISTS ");
         }
+        sb.append(warehouseName).append("' ");
         sb.append("WITH PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
     }
