@@ -21,6 +21,10 @@ import java.util.Map;
 
 public class ColumnType {
 
+    public static final String FIELD_PREFIX = "$";
+    public static final String FIELD_0_NAME = FIELD_PREFIX + "0";
+    public static final String FIELD_1_NAME = FIELD_PREFIX + "1";
+
     public enum TypeValue {
         BYTE,
         BOOLEAN,
@@ -43,7 +47,7 @@ public class ColumnType {
     String name;
     List<String> childNames;
     List<ColumnType> childTypes;
-    List<Integer> structFieldIndex;
+    List<Integer> fieldIndex;
 
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
@@ -119,7 +123,10 @@ public class ColumnType {
         int idx = 0;
         while (scanner.peek() != '>') {
             scanner.next(); // '<', or ','
-            ColumnType x = new ColumnType(this.name + '#' + idx, TypeValue.BYTE);
+            String name = FIELD_PREFIX + idx;
+            childNames.add(name);
+            String fieldName = this.name + '.' + name;
+            ColumnType x = new ColumnType(fieldName, TypeValue.BYTE);
             idx += 1;
             x.parse(scanner);
             childTypeValues.add(x);
@@ -133,7 +140,7 @@ public class ColumnType {
             int p = scanner.indexOf(':');
             String name = scanner.substr(p);
             childNames.add(name);
-            String fieldName = this.name + ':' + name;
+            String fieldName = this.name + '.' + name;
             scanner.moveTo(p + 1);
             ColumnType x = new ColumnType(fieldName, TypeValue.BYTE);
             x.parse(scanner);
@@ -153,6 +160,7 @@ public class ColumnType {
             case "array": {
                 // array<TYPE>
                 typeValue = TypeValue.ARRAY;
+                childNames = new ArrayList<>();
                 childTypes = new ArrayList<>();
                 parseArray(childTypes, scanner);
             }
@@ -160,6 +168,7 @@ public class ColumnType {
             case "map": {
                 // map<TYPE1,TYPE2>
                 typeValue = TypeValue.MAP;
+                childNames = new ArrayList<>();
                 childTypes = new ArrayList<>();
                 parseArray(childTypes, scanner);
             }
@@ -218,19 +227,27 @@ public class ColumnType {
         return typeValue == TypeValue.STRUCT;
     }
 
+    public boolean isMapKeySelected() {
+        return childNames.indexOf(FIELD_0_NAME) != -1;
+    }
+
+    public boolean isMapValueSelected() {
+        return childNames.indexOf(FIELD_1_NAME) != -1;
+    }
+
     public int computeColumnSize() {
         switch (typeValue) {
-            case ARRAY: {
-                // [ null | offset | data ]
-                return 2 + childTypes.get(0).computeColumnSize();
-            }
-            case MAP: {
-                // [ null | offset | key | value ]
-                return 2 + childTypes.get(0).computeColumnSize() + childTypes.get(1).computeColumnSize();
-            }
+            case ARRAY:
+            case MAP:
             case STRUCT: {
-                // [null | c0 | c1 .. ]
-                int res = 1;
+                // array & map
+                // [ null | offset | ... ]
+                // struct
+                // [ null | ... ]
+                int res = 2;
+                if (typeValue == TypeValue.STRUCT) {
+                    res = 1;
+                }
                 for (ColumnType t : childTypes) {
                     res += t.computeColumnSize();
                 }
@@ -262,11 +279,21 @@ public class ColumnType {
         return childTypes;
     }
 
-    public List<Integer> getStructFieldIndex() {
-        return structFieldIndex;
+    public List<Integer> getFieldIndex() {
+        return fieldIndex;
     }
 
-    public void pruneOnStructSelectedFields(StructSelectedFields ssf) {
+    public void pruneOnField(SelectedFields ssf, String name) {
+        if (isStruct() || isMap() || isArray()) {
+            SelectedFields ssf2 = ssf.findChildren(name);
+            // If no spec at all, then select all fields
+            if (ssf2 != null) {
+                pruneOnSelectedFields(ssf2);
+            }
+        }
+    }
+
+    public void pruneOnSelectedFields(SelectedFields ssf) {
         // make index and prune on this struct.
         Map<String, Integer> index = new HashMap<>();
         for (int i = 0; i < childNames.size(); i++) {
@@ -276,10 +303,10 @@ public class ColumnType {
         List<String> fields = ssf.getFields();
         List<String> names = new ArrayList<>();
         List<ColumnType> types = new ArrayList<>();
-        structFieldIndex = new ArrayList<>();
+        fieldIndex = new ArrayList<>();
         for (String f : fields) {
             Integer i = index.get(f);
-            structFieldIndex.add(i);
+            fieldIndex.add(i);
             types.add(childTypes.get(i));
             names.add(f);
         }
@@ -289,10 +316,22 @@ public class ColumnType {
         // prune on sub structs.
         for (int i = 0; i < childTypes.size(); i++) {
             ColumnType type = childTypes.get(i);
-            if (type.isStruct()) {
-                StructSelectedFields ssf2 = ssf.findChildren(childNames.get(i));
-                type.pruneOnStructSelectedFields(ssf2);
+            String name = childNames.get(i);
+            type.pruneOnField(ssf, name);
+        }
+    }
+
+    public void buildNestedFieldsSpec(String top, StringBuilder sb) {
+        if (isStruct()) {
+            for (int i = 0; i < childNames.size(); i++) {
+                String name = childNames.get(i);
+                ColumnType type = childTypes.get(i);
+                String s = top + "." + name;
+                type.buildNestedFieldsSpec(s, sb);
             }
+        } else {
+            sb.append(top);
+            sb.append(',');
         }
     }
 }
