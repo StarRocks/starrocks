@@ -60,7 +60,7 @@ inline bool is_s3_uri(std::string_view uri) {
 }
 
 inline bool is_hdfs_uri(std::string_view uri) {
-    return starts_with(uri, "hdfs://") || starts_with(uri, "viewfs://");
+    return starts_with(uri, "hdfs://") || starts_with(uri, "viewfs://") || starts_with(uri, "jfs://");
 }
 
 inline bool is_posix_uri(std::string_view uri) {
