@@ -47,7 +47,7 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 | **Port** **name**  | **Default** **port** **number** | **Description**                                              |
 | ---------------------- | ----------------------------------- | ------------------------------------------------------------ |
 | be_port                | 9060                                | The port that is used by the BE to communicate with an FE.   |
-| webserver_port         | 8040                                | The port that is used by the BE to communicate with an HTTP protocol. |
+| be_http_port           | 8040                                | The port that is used by the BE to communicate with an HTTP protocol. |
 | heartbeat_service_port | 9050                                | The port that is used by the BE to receive heartbeats from an FE. |
 | brpc                   | 8060                                | The port that is used for communication between the BEs in a cluster. |
 
@@ -58,7 +58,7 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 |Configuration|Description|Default|
 |---|---|---|
 |thrift_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
-|webserver_port|HTTP Server port of the Compute Node.|8040|
+|be_http_port|HTTP Server port of the Compute Node.|8040|
 |heartbeat_service_port|Thrift server port of the Compute Node. The port is used to receive requests from FE.|9050|
 |brpc_port|RPC port between BE and the Compute Node.|8060|
 

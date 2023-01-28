@@ -17,6 +17,7 @@
 #include <immintrin.h>
 
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 class AvxNumericColumn {
@@ -69,7 +70,7 @@ public:
         }
     }
 
-    void progma_filter(const std::vector<int32_t>& data, const Column::Filter& filter, size_t result_size_hint,
+    void progma_filter(const std::vector<int32_t>& data, const Filter& filter, size_t result_size_hint,
                        std::vector<int32_t>& result) {
         if (result_size_hint != 0) {
             result.reserve(result_size_hint > 0 ? result_size_hint : data.size());
@@ -83,7 +84,7 @@ public:
         }
     }
 
-    void filter(const std::vector<int32_t>& data, const Column::Filter& filter, size_t result_size_hint,
+    void filter(const std::vector<int32_t>& data, const Filter& filter, size_t result_size_hint,
                 std::vector<int32_t>& result) {
         if (result_size_hint != 0) {
             result.reserve(result_size_hint > 0 ? result_size_hint : data.size());

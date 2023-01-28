@@ -14,6 +14,7 @@
 
 #include "column/object_column.h"
 
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -197,7 +198,7 @@ uint32_t ObjectColumn<T>::serialize_size(size_t idx) const {
 }
 
 template <typename T>
-size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t ObjectColumn<T>::filter_range(const Filter& filter, size_t from, size_t to) {
     size_t old_sz = size();
     size_t new_sz = from;
     for (auto i = from; i < to; ++i) {

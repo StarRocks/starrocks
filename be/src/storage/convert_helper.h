@@ -25,10 +25,10 @@
 
 namespace starrocks {
 class TabletSchema;
-class VectorizedSchema;
+class Schema;
 class TabletColumn;
 class TypeInfo;
-class VectorizedSchema;
+class Schema;
 
 // Used for schema change
 class TypeConverter {
@@ -85,7 +85,7 @@ public:
 
     Status init(const TabletSchema& in_schema, const TabletSchema& out_schema);
 
-    Status init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema);
+    Status init(const Schema& in_schema, const Schema& out_schema);
 
     void convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const;
 
@@ -98,14 +98,14 @@ class ChunkConverter {
 public:
     ChunkConverter() = default;
 
-    Status init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema);
+    Status init(const Schema& in_schema, const Schema& out_schema);
 
     std::unique_ptr<Chunk> copy_convert(const Chunk& from) const;
 
     std::unique_ptr<Chunk> move_convert(Chunk* from) const;
 
 private:
-    std::shared_ptr<VectorizedSchema> _out_schema;
+    std::shared_ptr<Schema> _out_schema;
     std::vector<const FieldConverter*> _converters;
 };
 

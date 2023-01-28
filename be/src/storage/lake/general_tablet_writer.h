@@ -42,7 +42,7 @@ public:
 
     Status write(const starrocks::Chunk& data) override;
 
-    Status flush_del_file(const Column& deletes) {
+    Status flush_del_file(const Column& deletes) override {
         return Status::NotSupported("GeneralTabletWriter flush_del_file not support");
     }
 
@@ -58,7 +58,7 @@ public:
 
     int64_t num_rows() const override { return _num_rows; }
 
-    RowsetTxnMetaPB* rowset_txn_meta() { return nullptr; }
+    RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 private:
     Status reset_segment_writer();

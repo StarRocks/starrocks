@@ -71,7 +71,7 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const Table
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    VectorizedSchema pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
+    Schema pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
     std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";

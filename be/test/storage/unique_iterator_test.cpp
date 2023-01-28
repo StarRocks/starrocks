@@ -21,7 +21,7 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/config.h"
 #include "storage/chunk_helper.h"
 
@@ -54,10 +54,10 @@ protected:
 
         void close() override {}
 
-        static VectorizedSchema new_schema() {
-            VectorizedFieldPtr f = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
+        static Schema new_schema() {
+            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
             f->set_is_key(true);
-            return VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
+            return Schema(std::vector<FieldPtr>{f});
         }
 
     private:

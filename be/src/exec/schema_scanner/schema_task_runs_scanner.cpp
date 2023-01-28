@@ -14,8 +14,10 @@
 
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 
+#include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/datetime_value.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "util/timezone_utils.h"
 
@@ -41,9 +43,7 @@ SchemaTaskRunsScanner::SchemaTaskRunsScanner()
 SchemaTaskRunsScanner::~SchemaTaskRunsScanner() = default;
 
 Status SchemaTaskRunsScanner::start(RuntimeState* state) {
-    if (!_is_init) {
-        return Status::InternalError("used before initialized.");
-    }
+    RETURN_IF_ERROR(SchemaScanner::start(state));
     TGetTasksParams task_params;
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
@@ -93,7 +93,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -113,7 +113,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(complete_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(complete_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -163,7 +163,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(expire_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(expire_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {

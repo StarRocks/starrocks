@@ -91,15 +91,14 @@ public:
                                     const std::vector<const ColumnPredicate*>& predicates);
 
 private:
-    StatusOr<ChunkIteratorPtr> _base_scan(VectorizedSchema& value_schema,
-                                          const std::vector<const ColumnPredicate*>& predicates);
+    StatusOr<ChunkIteratorPtr> _base_scan(Schema& value_schema, const std::vector<const ColumnPredicate*>& predicates);
     void _build_get_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
                                ObjectPool& obj_pool);
-    Status _build_value_schema(const std::vector<std::string>& value_columns, VectorizedSchema* schema);
+    Status _build_value_schema(const std::vector<std::string>& value_columns, Schema* schema);
 
     TableReaderParams _params;
     std::vector<TabletSharedPtr> _local_tablets;
-    VectorizedSchema _tablet_schema;
+    Schema _tablet_schema;
 };
 
 } // namespace starrocks

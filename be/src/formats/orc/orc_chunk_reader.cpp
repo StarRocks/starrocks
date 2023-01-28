@@ -26,6 +26,7 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
@@ -299,26 +300,32 @@ Status OrcChunkReader::_init_position_in_orc() {
 static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, const orc::Type* orc_type,
                                              const OrcMappingPtr& mapping, TypeDescriptor* result) {
     orc::TypeKind kind = orc_type->getKind();
+    switch (kind) {
+    case orc::LIST:
+        [[fallthrough]];
+    case orc::MAP:
+        [[fallthrough]];
+    case orc::STRUCT:
+        if (mapping == nullptr) {
+            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
+        }
+        break;
+    default:
+        break;
+    }
+
     if (kind == orc::LIST) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_ARRAY;
         DCHECK_EQ(0, result->children.size());
         result->children.emplace_back();
 
         TypeDescriptor& element_type = result->children.back();
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
                                                        mapping->get_column_id_or_child_mapping(0).orc_mapping,
                                                        &element_type));
     } else if (kind == orc::MAP) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_MAP;
         DCHECK_EQ(0, result->children.size());
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         TypeDescriptor& key_type = result->children.emplace_back();
         if (origin_type.children[0].is_unknown_type()) {
             key_type.type = TYPE_UNKNOWN;
@@ -337,7 +344,6 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
                                                            &value_type));
         }
     } else if (kind == orc::STRUCT) {
-        DCHECK(mapping != nullptr);
         DCHECK_EQ(0, result->children.size());
 
         result->type = TYPE_STRUCT;
@@ -349,9 +355,6 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
             size_t column_id = mapping->get_column_id_or_child_mapping(index).orc_column_id;
-            if (mapping == nullptr) {
-                return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-            }
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(
                     origin_type.children.at(index), orc_type->getSubtypeByColumnId(column_id),
                     mapping->get_column_id_or_child_mapping(index).orc_mapping, &sub_field_type));
@@ -524,7 +527,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
     if (_broker_load_mode) {
         // always allocate load filter. it's much easier to use in fill chunk function.
         if (_broker_load_filter == nullptr) {
-            _broker_load_filter = std::make_shared<Column::Filter>(_read_chunk_size);
+            _broker_load_filter = std::make_shared<Filter>(_read_chunk_size);
         }
         _broker_load_filter->assign(_batch->numElements, 1);
     }

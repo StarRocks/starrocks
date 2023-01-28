@@ -45,7 +45,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
     for (size_t i = 0; i < _column_size; i++) {
-        const VectorizedFieldPtr& field = _schema.field(i);
+        const FieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, field));
@@ -54,7 +54,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
     auto cid = field->id();
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
     auto iter = _predicates.find(cid);

@@ -27,6 +27,7 @@
 
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
@@ -45,17 +46,17 @@ public:
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
     // Used in ExecNode::eval_conjuncts
-    static Column::Filter& merge_nullable_filter(Column* column);
+    static Filter& merge_nullable_filter(Column* column);
 
     // merge column with filter, and save result to filer.
     // `all_zero` means, after merging, if there is only zero value in filter.
-    static void merge_two_filters(const ColumnPtr& column, Column::Filter* __restrict filter, bool* all_zero = nullptr);
-    static void merge_filters(const Columns& columns, Column::Filter* __restrict filter);
-    static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
+    static void merge_two_filters(const ColumnPtr& column, Filter* __restrict filter, bool* all_zero = nullptr);
+    static void merge_filters(const Columns& columns, Filter* __restrict filter);
+    static void merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
 
     // Like merge_filters but use OR operator to merge them
-    static void or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected);
+    static void or_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected);
     static void or_two_filters(size_t count, uint8_t* __restrict filter, const uint8_t* __restrict selected);
     static size_t count_nulls(const ColumnPtr& col);
 
@@ -332,7 +333,7 @@ public:
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     template <typename T, bool avx512f>
-    static size_t t_filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    static size_t t_filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
 
@@ -447,7 +448,7 @@ public:
     }
 
     template <typename T>
-    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         if (base::CPU::instance()->has_avx512f()) {
             return t_filter_range<T, true>(filter, data, from, to);
         } else {
@@ -456,7 +457,7 @@ public:
     }
 
     template <typename T>
-    static size_t filter(const Column::Filter& filter, T* data) {
+    static size_t filter(const Filter& filter, T* data) {
         return filter_range(filter, data, 0, filter.size());
     }
 
