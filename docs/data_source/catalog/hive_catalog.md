@@ -178,6 +178,8 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
     | ---------------------------------- | ------------ | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
 
+## Use the Hive catalog to query Hive data
+
 After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## Update policies for cached metadata
