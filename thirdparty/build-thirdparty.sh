@@ -1039,7 +1039,6 @@ build_serdes() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib/libserdes.so*
-    rm ${TP_INSTALL_DIR}/lib/libserdes++.so*
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
 }
