@@ -1748,7 +1748,6 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
         GTEST_SKIP();
     }
 
-
     TypeDescriptor C(LogicalType::TYPE_ARRAY);
     TypeDescriptor C1(LogicalType::TYPE_ARRAY);
     C1.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
@@ -1791,7 +1790,8 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
                                 {"b", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {"c", C},
                                 {"d", D},
-                                {"e", E}, {""}};
+                                {"e", E},
+                                {""}};
     std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
     std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams";
     std::string parquet_file = basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet";

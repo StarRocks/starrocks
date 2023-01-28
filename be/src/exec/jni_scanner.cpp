@@ -262,7 +262,7 @@ Status JniScanner::_append_array_data(const FillColumnArgs& args) {
 
     int total_length = offset_ptr[args.num_rows];
     Column* elements = array_column->elements_column().get();
-    std::string name = args.slot_name + ".0";
+    std::string name = args.slot_name + ".$0";
     FillColumnArgs sub_args = {.num_rows = total_length,
                                .slot_name = name,
                                .slot_type = args.slot_type.children[0],
@@ -286,26 +286,34 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     int total_length = offset_ptr[args.num_rows];
     {
         Column* keys = map_column->keys_column().get();
-        std::string name = args.slot_name + ".0";
-        FillColumnArgs sub_args = {.num_rows = total_length,
-                                   .slot_name = name,
-                                   .slot_type = args.slot_type.children[0],
-                                   .nulls = nullptr,
-                                   .column = keys,
-                                   .must_nullable = false};
-        RETURN_IF_ERROR(_fill_column(&sub_args));
+        if (!args.slot_type.children[0].is_unknown_type()) {
+            std::string name = args.slot_name + ".$0";
+            FillColumnArgs sub_args = {.num_rows = total_length,
+                                       .slot_name = name,
+                                       .slot_type = args.slot_type.children[0],
+                                       .nulls = nullptr,
+                                       .column = keys,
+                                       .must_nullable = false};
+            RETURN_IF_ERROR(_fill_column(&sub_args));
+        } else {
+            keys->append_default(total_length);
+        }
     }
 
     {
         Column* values = map_column->values_column().get();
-        std::string name = args.slot_name + ".1";
-        FillColumnArgs sub_args = {.num_rows = total_length,
-                                   .slot_name = name,
-                                   .slot_type = args.slot_type.children[1],
-                                   .nulls = nullptr,
-                                   .column = values,
-                                   .must_nullable = true};
-        RETURN_IF_ERROR(_fill_column(&sub_args));
+        if (!args.slot_type.children[1].is_unknown_type()) {
+            std::string name = args.slot_name + ".$1";
+            FillColumnArgs sub_args = {.num_rows = total_length,
+                                       .slot_name = name,
+                                       .slot_type = args.slot_type.children[1],
+                                       .nulls = nullptr,
+                                       .column = values,
+                                       .must_nullable = true};
+            RETURN_IF_ERROR(_fill_column(&sub_args));
+        } else {
+            values->append_default(total_length);
+        }
     }
     return Status::OK();
 }

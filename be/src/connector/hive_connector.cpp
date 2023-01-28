@@ -241,7 +241,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-    
+
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
@@ -272,11 +272,11 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 }
 
 static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
-    DCHECK(type.is_struct_type());
     for (int i = 0; i < type.children.size(); i++) {
         const auto& t = type.children[i];
-        std::string p = parent + "." + type.field_names[i];
-        if (t.is_struct_type()) {
+        if (t.is_unknown_type()) continue;
+        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("$%d", i));
+        if (t.is_complex_type()) {
             build_nested_fields(t, p, sb);
         } else {
             sb->append(p);
@@ -301,7 +301,7 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     std::string nested_fields;
     for (auto slot : _tuple_desc->slots()) {
         const TypeDescriptor& type = slot->type();
-        if (type.is_struct_type()) {
+        if (type.is_complex_type()) {
             build_nested_fields(type, slot->col_name(), &nested_fields);
         }
     }
