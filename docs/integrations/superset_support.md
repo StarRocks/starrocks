@@ -58,7 +58,7 @@ df = pd.read_sql(sql, conn)
 
 ### Superset Example
 
-In superset, use `Other` database, and set url is:
+In superset, use `Other` database, and set url as:
 
 ```sh
 starrocks://root:@x.x.x.x:9030/superset_db?charset=utf8
