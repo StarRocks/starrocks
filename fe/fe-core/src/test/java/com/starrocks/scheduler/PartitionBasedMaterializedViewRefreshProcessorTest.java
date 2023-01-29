@@ -127,25 +127,25 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view test.mv1\n" +
+                .withMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
-                .withNewMaterializedView("create materialized view test.mv2\n" +
+                .withMaterializedView("create materialized view test.mv2\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl4.k1, tbl4.k2 from tbl4;")
-                .withNewMaterializedView("create materialized view test.mv_inactive\n" +
+                .withMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
-                .withNewMaterializedView("create materialized view test.mv_without_partition\n" +
+                .withMaterializedView("create materialized view test.mv_without_partition\n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
@@ -166,12 +166,12 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+                .withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
                         "partition by k1\n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
