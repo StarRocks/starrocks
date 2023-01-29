@@ -6,7 +6,172 @@ This topic describes FE, BE, Broker, and system parameters. It also provides sug
 
 ### FE static parameters
 
+<<<<<<< HEAD
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE to make the new parameter settings take effect.
+=======
+- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid after you restart your FE.
+
+- Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
+
+Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md). `TRUE` indicates a dynamic parameter.
+
+Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
+
+### View FE configuration items
+
+After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on your MySQL client to check the parameter configurations. If you want to query the configuration of a specific parameter, run the following command:
+
+```SQL
+ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+ ```
+
+ For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md).
+
+> **NOTE**
+>
+> You must have administrator's privilege to run cluster administration-related commands.
+
+### Configure FE dynamic parameters
+
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("key" = "value");
+```
+
+#### Logging
+
+| Parameter      | Unit | Default | Description                                                  |
+| -------------- | ---- | ------- | ------------------------------------------------------------ |
+| qe_slow_log_ms | ms   | 5000    | The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in `fe.audit.log`. |
+
+#### Metadata and cluster management
+
+| Parameter                        | Unit | Default | Description                                                  |
+| -------------------------------- | ---- | ------- | ------------------------------------------------------------ |
+| catalog_try_lock_timeout_ms      | ms   | 5000    | The timeout duration to obtain the global lock.              |
+| edit_log_roll_num                | -    | 50000   | The maximum number of metadata log entries that can be written before a log file is created for these log entries. <br>This parameter is used to control the size of log files. The new log file is written to the BDBJE database. |
+| ignore_unknown_log_id            | -    | FALSE   | Whether to ignore an unknown log ID. When an FE is rolled back, the BEs of the earlier version may be unable to recognize some log IDs.<br>If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits. |
+| ignore_meta_check                | -    | FALSE   | Whether non-leader FEs ignore the metadata gap from the leader FE. If the value is TRUE, non-leader FEs ignore the metadata gap from the leader FE and continues providing data reading services.<br>This parameter ensures continuous data reading services even when you stop the leader FE for a long period of time.<br>If the value is FALSE, non-leader FEs do not ignore the metadata gap from the leader FE and stop providing data reading services. |
+|meta_delay_toleration_second      | s    | 300     | The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds.<br> If this duration is exceeded, the non-leader FE stops providing services. |
+| drop_backend_after_decommission  | -    | TRUE    | Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned.<br>`FALSE` indicates that the BE is not deleted after it is decommissioned. |
+| enable_collect_query_detail_info | -    | FALSE   | Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query.<br>If this parameter is set to `FALSE`, the system does not collect the profile of the query. |
+
+#### Query engine
+
+| Parameter                                | Unit | Default      | Description                                                  |
+| ---------------------------------------- | ---- | ------------ | ------------------------------------------------------------ |
+| max_allowed_in_element_num_of_delete     | -    | 10000        | The maximum number of elements allowed for the IN predicate in a DELETE statement. |
+| enable_materialized_view                 | -    | TRUE         | Whether to enable the creation of materialized views.        |
+| enable_decimal_v3                        | -    | TRUE         | Whether to support the DECIMAL V3 data type.                 |
+| enable_sql_blacklist                     | -    | FALSE        | Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed. |
+| dynamic_partition_check_interval_seconds | s    | 600          | The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data. |
+| dynamic_partition_enable                 | -    | TRUE         | Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data. |
+| max_partitions_in_one_batch              | -    | 4096         | The maximum number of partitions that can be created when you bulk create partitions. |
+| max_query_retry_time                     | -    | 2            | The maximum number of query retries on an FE.                |
+| max_create_table_timeout_second          | s    | 600          | The maximum timeout duration for creating a table, in seconds. |
+| max_running_rollup_job_num_per_table     | -    | 1            | The maximum number of rollup jobs can run in parallel for a table. |
+| max_planner_scalar_rewrite_num           | -    | 100000       | The maximum number of times that the optimizer can rewrite a scalar operator. |
+| enable_statistic_collect                 | -    | TRUE         | Whether to collect statistics for the CBO. This feature is enabled by default. |
+| enable_collect_full_statistic            | -    | TRUE         | Whether to enable automatic full statistics collection. This feature is enabled by default. |
+| statistic_auto_collect_ratio             | -    | 0.8          | The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
+| statistic_max_full_collect_data_size     | GB   | 100          | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
+| statistic_sample_collect_rows            | -    | 200000       | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| histogram_buckets_size                   | -    | 64           | The default bucket number for a histogram.                   |
+| histogram_mcv_size                       | -    | 100          | The number of most common values (MCV) for a histogram.      |
+| histogram_sample_ratio                   | -    | 0.1          | The sampling ratio for a histogram.                          |
+| histogram_max_sample_row_count           | -    | 10000000     | The maximum number of rows to collect for a histogram.       |
+| statistics_manager_sleep_time_sec        | s    | 60           | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:<ul><li>Create tables for storing statistics. </li><li>Delete statistics that have been deleted.</li><li>Delete expired statistics.</li></ul>|
+| statistic_update_interval_sec            | s    | 24 \* 60 \* 60 | The interval at which the cache of statistical information is updated. Unit: seconds. |
+| statistic_analyze_status_keep_second     | s    | 259200       | The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds. |
+|statistic_collect_concurrency             | -    |  3  | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. <br>If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.|
+| enable_local_replica_selection           | -    | FALSE        | Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE. |
+| max_distribution_pruner_recursion_depth  | -    | 100          | The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption. |
+|enable_udf                                |  -   |    FALSE     | Whether to enable UDF .                            |
+
+#### Loading and unloading
+
+| Parameter                               | Unit | Default                                         | Description                                                  |
+| --------------------------------------- | ---- | ----------------------------------------------- | ------------------------------------------------------------ |
+| load_straggler_wait_second              | s    | 300                                             | The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds. |
+| desired_max_waiting_jobs                | -    | 100                                             | The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. |
+| max_load_timeout_second                 | s    | 259200                                          | The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds. |
+| min_load_timeout_second                 | s    | 1                                               | The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds. |
+| max_running_txn_num_per_db              | -    | 100                                             | The maximum number of load jobs that can run in parallel for each database in a StarRocks cluster. The default value is 100. If this value is exceeded, incoming load jobs will not be executed. If the incoming load job is a synchronous load job, it will be rejected. If it is an asynchronous load job, it will be put into the waiting queue. We do not recommend you increase this value because this will increase system load. |
+| load_parallel_instance_num              | -    | 1                                               | The maximum number of concurrent loading instances for each load job on a BE. |
+| disable_load_job                        | -    | FALSE                                           | Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. |
+| history_job_keep_max_second             | s    | 604800                                          | The maximum duration a historical job can be retained, such as schema change jobs, in seconds. |
+| label_keep_max_num                      | -    | 1000                                            | The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted. |
+| label_keep_max_second                   | s    | 259200                                          | The maximum duration the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state can be retained in the StarRocks system. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. Unit: seconds. A value too large consumes a lot of memory. |
+| max_routine_load_job_num                | -    | 100                                             | The maximum number of Routine Load jobs in a StarRocks cluster. |
+| max_routine_load_task_concurrent_num    | -    | 5                                               | The maximum number of concurrent tasks for each Routine Load job. |
+| max_routine_load_task_num_per_be        | -    | 5                                               | The maximum number of concurrent Routine Load tasks that can run for each BE. The value must be less than or equal to the BE configuration item `routine_load_thread_pool_size`. |
+| max_routine_load_batch_size             | Byte | 4294967296                                      | The maximum amount of data that can be loaded by a Routine Load task, in bytes. |
+| routine_load_task_consume_second        | s    | 15                                              | The maximum duration each Routine Load task can consume data, in seconds. |
+| routine_load_task_timeout_second        | s    | 60                                              | The timeout duration for each Routine Load task, in seconds. |
+| max_tolerable_backend_down_num          | -    | 0                                               | The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered. |
+| period_of_auto_resume_min               | Min  | 5                                               | The interval at which Routine Load jobs are automatically recovered, in minutes. |
+| spark_load_default_timeout_second       | s    | 86400                                           | The timeout duration for each Spark Load job, in seconds.    |
+| spark_home_default_dir                  | -    | StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x" | The root directory of a Spark client.                        |
+| stream_load_default_timeout_second      | s    | 600                                             | The default timeout duration for each Stream Load job, in seconds. |
+| max_stream_load_timeout_second          | s    | 259200                                          | The maximum allowed timeout duration for a Stream Load job, in seconds. |
+| insert_load_default_timeout_second      | s    | 3600                                            | The timeout duration for the INSERT INTO statement that is used to load data, in seconds. |
+| broker_load_default_timeout_second      | s    | 14400                                           | The timeout duration for a Broker Load job, in seconds.      |
+| min_bytes_per_broker_scanner            | Byte | 67108864                                        | The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes. |
+| max_broker_concurrency                  | -    | 100                                             | The maximum number of concurrent instances for a Broker Load task. |
+| export_max_bytes_per_be_per_task        | Byte | 268435456                                       | The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes. |
+| export_running_job_num_limit            | -    | 5                                               | The maximum number of data exporting tasks that can run in parallel. |
+| export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
+| empty_load_as_error                     | -    | TRUE                                            | Whether to return an error message "all partitions have no load data" if no data is loaded. Values:<br> - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". <br> - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error. |
+
+#### Storage
+
+| Parameter                                     | Unit | Default                | Description                                                  |
+| --------------------------------------------- | ---- | ---------------------- | ------------------------------------------------------------ |
+| enable_strict_storage_medium_check            | -    | FALSE                  | Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create table. |
+| capacity_used_percent_high_water              | -    | 0.75                   | The upper limit of disk usage on a BE. If this value is exceeded, table creation or clone jobs will not be sent to this BE, until the disk usage returns to normal. |
+| storage_high_watermark_usage_percent          | %    | 85                     | The upper limit of storage space usage for BE's storage directory.  If this value is exceeded, data can no longer be stored in this storage path. |
+| storage_min_left_capacity_bytes               | Byte | 2 \* 1024 \* 1024 \* 1024 | The minimum remaining storage space allowed in the BE storage directory, in Bytes. If this value is exceeded, data can no longer be stored in this storage path. |
+| catalog_trash_expire_second                   | s    | 86400                  | The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds. |
+| alter_table_timeout_second                    | s    | 86400                  | The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds. |
+| recover_with_empty_tablet                     | -    | FALSE                  | Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones and the query fails. |
+| tablet_create_timeout_second                  | s    | 1                      | The timeout duration for creating a tablet, in seconds.       |
+| tablet_delete_timeout_second                  | s    | 2                      | The timeout duration for deleting a tablet, in seconds.      |
+| check_consistency_default_timeout_second      | s    | 600                    | The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet. |
+| tablet_sched_slot_num_per_path                | -    | 2                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. |
+| tablet_sched_max_scheduling_tablets           | -    | 2000                   | The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped. |
+| tablet_sched_disable_balance                  | -    | FALSE                  | Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`. |
+| tablet_sched_disable_colocate_balance         | -    | FALSE                  | Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`. |
+| tablet_sched_max_balancing_tablets            | -    | 100                    | The maximum number of tablets that can be balanced at the same time. If this value is exceeded, tablet re-balancing will be skipped. The alias is `max_balancing_tablets`. |
+| tablet_sched_balance_load_disk_safe_threshold | -    | 0.5                    | The threshold for determining whether the BE disk usage is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `disk_and_tablet`. If the disk usage of all BEs is lower than 50%, disk usage is considered balanced. For the `disk_and_tablet` policy, if the difference between the highest and lowest BE disk usage is greater than 10%, disk usage is considered unbalanced and tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`. |
+| tablet_sched_balance_load_score_threshold     | -    | 0.1                    | The threshold for determining whether the BE load is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `be_load_score`. A BE whose load is 10% lower than the average load is in low load state, and a BE whose load is 10% higher than the average load is in high load state. The alias is `balance_load_score_threshold`. |
+| tablet_sched_repair_delay_factor_second       | s    | 60                     | The interval at which replicas are repaired, in seconds. The alias is `tablet_repair_delay_factor_second`. |
+| tablet_sched_min_clone_task_timeout_sec       | s    | 3 \* 60                | The minimum timeout duration for cloning a tablet, in seconds. |
+| tablet_sched_max_clone_task_timeout_sec       | s    | 2 \* 60 \* 60          | The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`. |
+
+#### Other FE dynamic parameters
+
+| Parameter                                | Unit | Default     | Description                                                  |
+| ---------------------------------------- | ---- | ----------- | ------------------------------------------------------------ |
+| plugin_enable                            | -    | TRUE        | Whether plugins can be installed on FEs. Plugins can be installed or uninstalled only on the Leader FE. |
+| max_small_file_number                    | -    | 100         | The maximum number of small files that can be stored on an FE directory. |
+| max_small_file_size_bytes                | Byte | 1024 * 1024 | The maximum size of a small file, in bytes.                  |
+| agent_task_resend_wait_time_ms           | ms   | 5000        | The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks. Unit: ms. |
+| backup_job_default_timeout_ms            | ms   | 86400*1000  | The timeout duration of a backup job, in ms. If this value is exceeded, the backup job fails. |
+| report_queue_size                        | -    | 100         | The maximum number of jobs that can wait in a report queue. <br>The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur. |
+| enable_experimental_mv                   | -    | FALSE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled.|
+| authentication_ldap_simple_bind_base_dn  | -  | Empty string | The base DN, which is the point from which the LDAP server starts to search for users' authentication information.|
+| authentication_ldap_simple_bind_root_dn  |  -  | Empty string | The administrator DN used to search for users' authentication information.|
+| authentication_ldap_simple_bind_root_pwd |  -  | Empty string | The password of the administrator used to search for users' authentication information.|
+| authentication_ldap_simple_server_host   |  -  | Empty string |  The host on which the LDAP server runs.                               |
+| authentication_ldap_simple_server_port   |  -  | 389     | The port of the LDAP server.                                       |
+| authentication_ldap_simple_user_search_attr|  -  | uid     | The name of the attribute that identifies users in LDAP objects.|
+
+### Configure FE static parameters
+
+This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
+>>>>>>> d1da76352 ([Doc] Fix issues in Config and RG (#16983))
 
 #### Logging
 
