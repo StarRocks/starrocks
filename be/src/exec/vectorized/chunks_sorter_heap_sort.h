@@ -221,7 +221,7 @@ public:
     ~ChunksSorterHeapSort() = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
     int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
@@ -231,7 +231,6 @@ public:
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     void setup_runtime(RuntimeProfile* profile) override;
