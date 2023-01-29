@@ -111,7 +111,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
     // optional
-    public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema_registry.url";
+    public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
 
     // pulsar type properties
     public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
