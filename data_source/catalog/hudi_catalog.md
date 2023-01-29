@@ -1,8 +1,8 @@
 # Hudi catalog
 
-本文介绍如何创建 Hudi catalog，以及需要做哪些相应的配置。
+本文介绍如何创建 Hudi Catalog，以及需要做哪些相应的配置。
 
-Hudi catalog 是一个外部数据目录 (external catalog)。StarRocks 2.4 及以上版本支持通过该目录直接查询 Apache Hudi 集群中的数据，无需数据导入或创建外部表。
+Hudi Catalog 是一个外部数据目录 (External Catalog)。StarRocks 2.4 及以上版本支持通过该目录直接查询 Apache Hudi 集群中的数据，无需数据导入或创建外部表。
 
 ## 使用说明
 
@@ -95,7 +95,7 @@ Hudi catalog 使用异步更新策略来更新所有缓存的 Hudi 元数据。�
 
 有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
 
-## 下一步
+## 使用 Catalog 查询 Hudi 数据
 
 在创建完 Hudi catalog 并做完相关的配置后即可查询 Hudi 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 
