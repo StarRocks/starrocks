@@ -136,7 +136,7 @@ WITH (
     "cpu_core_limit" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT",
-    "type" = "normal" -- 资源组的类型，取值为 normal 或 short_query。
+    "type" = "str" -- 资源组的类型，取值为 normal 或 short_query。
 );
 ```
 
@@ -153,7 +153,6 @@ TO
 WITH (
     'cpu_core_limit' = '10',
     'mem_limit' = '20%',
-    'type' = 'normal',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
     'big_query_mem_limit' = '1073741824'
