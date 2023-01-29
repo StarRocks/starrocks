@@ -61,7 +61,7 @@ If you use AWS Glue for your Delta Lake, configure the following properties for 
 | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the IAM user.                       |
 | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For example, if your service is in the US East (Ohio) region, the endpoint is `glue.us-east-2.amazonaws.com`. For more information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
-## What to do next
+## Use catalog to query Delta Lake data
 
 After you complete all the preceding operations, you can use the Delta Lake catalog to query data from Delta Lake. For more information, see [Query external data](../catalog/query_external_data.md).
 
