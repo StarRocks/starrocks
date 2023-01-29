@@ -107,7 +107,7 @@ Status FileResultWriter::_create_file_writer() {
     case TFileFormatType::FORMAT_PARQUET:
         _file_builder = std::make_unique<ParquetBuilder>(
                 std::move(writable_file), _output_expr_ctxs,
-                ParquetBuilderOptions{_file_opts->compression_type, _file_opts->use_dictory,
+                ParquetBuilderOptions{_file_opts->compression_type, _file_opts->use_dict,
                                       _file_opts->max_row_group_bytes, _file_opts->file_column_names});
         break;
     default:

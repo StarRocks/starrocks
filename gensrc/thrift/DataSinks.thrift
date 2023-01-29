@@ -60,6 +60,7 @@ enum TResultSinkType {
 }
 
 struct TParquetOptions {
+    // parquet row group max size in bytes
     1: optional i64 parquet_max_group_bytes
     2: optional Types.TCompressionType compression_type
     3: optional bool use_dict
