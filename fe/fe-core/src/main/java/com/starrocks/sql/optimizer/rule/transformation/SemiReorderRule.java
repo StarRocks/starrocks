@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -96,8 +98,18 @@ public class SemiReorderRule extends TransformationRule {
                 .build();
 
         ColumnRefSet leftChildInputColumns = new ColumnRefSet();
+        Map<ColumnRefOperator, ScalarOperator> leftChildInputColumnRefMap = Maps.newHashMap();
         leftChildInputColumns.union(input.inputAt(0).inputAt(0).getOutputColumns());
         leftChildInputColumns.union(input.inputAt(1).getOutputColumns());
+        Operator leftLeftOp = input.inputAt(0).inputAt(0).getOp();
+        Operator rightOp = input.inputAt(1).getOp();
+
+        if (leftLeftOp.getProjection() != null && leftLeftOp.getProjection().getColumnRefMap() != null) {
+            leftChildInputColumnRefMap.putAll(leftLeftOp.getProjection().getColumnRefMap());
+        }
+        if (rightOp.getProjection() != null && rightOp.getProjection().getColumnRefMap() != null) {
+            leftChildInputColumnRefMap.putAll(rightOp.getProjection().getColumnRefMap());
+        }
 
         ColumnRefSet newSemiOutputColumns = new ColumnRefSet();
         for (int id : leftChildInputColumns.getColumnIds()) {
@@ -145,7 +157,16 @@ public class SemiReorderRule extends TransformationRule {
                     leftChildInputColumns.getStream().map(context.getColumnRefFactory()::getColumnRef)
                             .collect(Collectors.toList())
             );
-            projectMap.put(smallestColumnRef, smallestColumnRef);
+
+            // Create a new auto_fill_col instead of referencing already-existing an auto_fill_col
+            if (leftChildInputColumnRefMap.containsKey(smallestColumnRef) &&
+                    leftChildInputColumnRefMap.get(smallestColumnRef).isColumnRef()) {
+                projectMap.put(smallestColumnRef, smallestColumnRef);
+            } else {
+                ColumnRefOperator constCol = context.getColumnRefFactory()
+                        .create("auto_fill_col", Type.TINYINT, false);
+                projectMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
+            }
         } else {
             projectMap = newSemiOutputColumns.getStream()
                     .filter(c -> newTopJoin.getRequiredChildInputColumns().contains(c))
