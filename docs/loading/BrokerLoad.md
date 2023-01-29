@@ -159,8 +159,8 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 );
 ```
@@ -168,7 +168,7 @@ WITH BROKER
 > **NOTE**
 >
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access.key` and `aws.s3.secret.key` unspecified.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
 
 #### Load data from Google GCS
 
@@ -246,8 +246,8 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
@@ -264,8 +264,8 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
