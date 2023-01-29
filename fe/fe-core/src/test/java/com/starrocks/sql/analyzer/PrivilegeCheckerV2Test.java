@@ -2057,7 +2057,7 @@ public class PrivilegeCheckerV2Test {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
-        starRocksAssert.withMaterializedStatementView(createSql);
+        starRocksAssert.withMaterializedView(createSql);
         verifyGrantRevoke(
                 "alter materialized view db1.mv1 rename mv2;",
                 "grant alter on materialized_view db1.mv1 to test",
@@ -2081,7 +2081,7 @@ public class PrivilegeCheckerV2Test {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
-        starRocksAssert.withMaterializedStatementView(createSql);
+        starRocksAssert.withMaterializedView(createSql);
         verifyGrantRevoke(
                 "REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized_view db1.mv2 to test",
@@ -2109,7 +2109,7 @@ public class PrivilegeCheckerV2Test {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
-        starRocksAssert.withMaterializedStatementView(createSql);
+        starRocksAssert.withMaterializedView(createSql);
         String showBackupSql = "SHOW MATERIALIZED VIEW FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
@@ -2145,7 +2145,7 @@ public class PrivilegeCheckerV2Test {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
-        starRocksAssert.withMaterializedStatementView(createSql);
+        starRocksAssert.withMaterializedView(createSql);
 
         DropMaterializedViewStmt statement = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop materialized view db1.mv4", starRocksAssert.getCtx());

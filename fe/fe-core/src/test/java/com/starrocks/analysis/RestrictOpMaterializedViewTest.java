@@ -78,7 +78,7 @@ public class RestrictOpMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
-        starRocksAssert.withNewMaterializedView(createMvStmtStr);
+        starRocksAssert.withMaterializedView(createMvStmtStr);
 
     }
 

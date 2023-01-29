@@ -73,11 +73,11 @@ public class RefreshMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_refresh\n" +
+                .withMaterializedView("create materialized view mv_to_refresh\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
-                .withNewMaterializedView("create materialized view mv2_to_refresh\n" +
+                .withMaterializedView("create materialized view mv2_to_refresh\n" +
                         "PARTITION BY k1\n"+
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
