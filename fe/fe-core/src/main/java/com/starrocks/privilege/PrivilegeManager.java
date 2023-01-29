@@ -1710,6 +1710,10 @@ public class PrivilegeManager {
                     Long roleId = (Long) reader.readJson(Long.class);
                     RolePrivilegeCollection collection =
                             (RolePrivilegeCollection) reader.readJson(RolePrivilegeCollection.class);
+
+                    // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
+                    // The reason why need to replay from the image here
+                    // is because the associated information of the role-id is stored in the image.
                     if (IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                         RolePrivilegeCollection builtInRolePrivilegeCollection =
                                 ret.roleIdToPrivilegeCollection.get(roleId);
