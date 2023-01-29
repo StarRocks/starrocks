@@ -25,4 +25,35 @@ public abstract class LogicalOperator extends Operator {
     }
 
     public abstract ColumnRefSet getOutputColumns(ExpressionContext expressionContext);
+<<<<<<< HEAD
+=======
+
+    public ColumnRefOperator getSmallestColumn(ColumnRefSet requiredCandidates,
+                                               ColumnRefFactory columnRefFactory,
+                                               OptExpression opt) {
+        ColumnRefSet outputCandidates = getOutputColumns(new ExpressionContext(opt));
+        if (requiredCandidates != null) {
+            outputCandidates.intersect(requiredCandidates);
+        }
+        return Utils.findSmallestColumnRef(outputCandidates.getStream().
+                map(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+    }
+
+    // lineage means the merge of operator's column ref map, which is used to track
+    // what does the ColumnRefOperator come from.
+    public Map<ColumnRefOperator, ScalarOperator> getLineage(
+            ColumnRefFactory refFactory, ExpressionContext expressionContext) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        if (projection != null) {
+            columnRefMap.putAll(projection.getColumnRefMap());
+        } else {
+            ColumnRefSet refSet = getOutputColumns(expressionContext);
+            for (int columnId : refSet.getColumnIds()) {
+                ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
+                columnRefMap.put(columnRef, columnRef);
+            }
+        }
+        return columnRefMap;
+    }
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
 }
