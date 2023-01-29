@@ -408,7 +408,10 @@ public class ShowExecutor {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                        if (!PrivilegeManager.checkTableAction(connectContext, db.getFullName(),
+                        Table baseTable = baseTableInfo.getTable();
+                        // TODO: external table should check table action after PrivilegeManager support it.
+                        if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
+                                checkTableAction(connectContext, baseTableInfo.getDbName(),
                                 baseTableInfo.getTableName(),
                                 PrivilegeType.TableAction.SELECT)) {
                             baseTableHasPrivilege.set(false);
