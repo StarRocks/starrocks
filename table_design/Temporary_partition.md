@@ -128,7 +128,7 @@ WHERE ...;
 您可以通过以下命令将一个表的正式分区替换为临时分区。
 
 ```sql
-ALTER TABLE table_name REPLACE (partition_name) PARTITION WITH TEMPORARY PARTITION (temporary_partition_name1, ...)
+ALTER TABLE table_name REPLACE PARTITION (partition_name) WITH TEMPORARY PARTITION (temporary_partition_name1, ...)
 PROPERTIES ("key" = "value");
 ```
 
@@ -141,11 +141,11 @@ PROPERTIES ("key" = "value");
 示例：
 
 ```sql
-ALTER TABLE tbl1 REPLACE (p1) PARTITION WITH TEMPORARY PARTITION (tp1);
+ALTER TABLE tbl1 REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
 
-ALTER TABLE tbl1 REPLACE (p1, p2) PARTITION WITH TEMPORARY PARTITION (tp1, tp2, tp3);
+ALTER TABLE tbl1 REPLACE PARTITION (p1, p2) WITH TEMPORARY PARTITION (tp1, tp2, tp3);
 
-ALTER TABLE tbl1 REPLACE (p1, p2) PARTITION WITH TEMPORARY PARTITION (tp1, tp2)
+ALTER TABLE tbl1 REPLACE PARTITION (p1, p2) WITH TEMPORARY PARTITION (tp1, tp2)
 PROPERTIES (
     "strict_range" = "false",
     "use_temp_partition_name" = "true"
@@ -217,7 +217,7 @@ PROPERTIES (
     示例 1：
 
     ```sql
-    ALTER TABLE tbl1 REPLACE (p1) PARTITION WITH TEMPORARY PARTITION (tp1);
+    ALTER TABLE tbl1 REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp1);
     ```
 
     当 `use_temp_partition_name` 为 `false` 时，分区在替换后名称依然为 p1，但是相关的数据和属性都替换为 tp1 的数据和属性。
@@ -227,7 +227,7 @@ PROPERTIES (
     示例 2：
 
     ```sql
-    ALTER TABLE tbl1 REPLACE (p1, p2) PARTITION WITH TEMPORARY PARTITION (tp1);
+    ALTER TABLE tbl1 REPLACE PARTITION (p1, p2) WITH TEMPORARY PARTITION (tp1);
     ```
 
     `use_temp_partition_name` 默认为 `false`，但因为待替换分区的个数和替换分区的个数不同，则该参数无效。替换后，分区名称为 tp1，p1 和 p2 不再存在。
