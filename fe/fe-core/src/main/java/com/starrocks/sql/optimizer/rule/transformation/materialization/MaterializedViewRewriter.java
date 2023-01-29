@@ -489,8 +489,8 @@ public class MaterializedViewRewriter {
 
     private MatchMode getMatchMode(OptExpression query, List<Table> queryTables,
                                    OptExpression mvExpression, List<Table> mvTables) {
-        boolean isQueryAllEqualJoin = MvUtils.isAllEqualInnerOrCrossJoin(query);
-        boolean isMvAllEqualJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+        boolean isQueryAllEqualJoin = MvUtils.isAllEqualInnerJoin(query);
+        boolean isMvAllEqualJoin = MvUtils.isAllEqualInnerJoin(mvExpression);
         MatchMode matchMode = MatchMode.NOT_MATCH;
         if (isQueryAllEqualJoin && isMvAllEqualJoin) {
             // process table match

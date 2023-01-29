@@ -320,36 +320,24 @@ public class MvUtils {
         }
     }
 
-    public static boolean isAllEqualInnerOrCrossJoin(OptExpression root) {
+    public static boolean isAllEqualInnerJoin(OptExpression root) {
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalOperator)) {
             return false;
         }
-
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            if (!isEqualInnerOrCrossJoin(joinOperator)) {
+            boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
+            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
                 return false;
             }
         }
         for (OptExpression child : root.getInputs()) {
-            if (!isAllEqualInnerOrCrossJoin(child)) {
+            if (!isAllEqualInnerJoin(child)) {
                 return false;
             }
         }
         return true;
-    }
-
-    private static boolean isEqualInnerOrCrossJoin(LogicalJoinOperator joinOperator) {
-        if (joinOperator.getJoinType() == JoinOperator.CROSS_JOIN && joinOperator.getOnPredicate() == null) {
-            return true;
-        }
-
-        if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN &&
-                isColumnEqualPredicate(joinOperator.getOnPredicate())) {
-            return true;
-        }
-        return false;
     }
 
     public static boolean isColumnEqualPredicate(ScalarOperator predicate) {

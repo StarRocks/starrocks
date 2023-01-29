@@ -65,7 +65,7 @@ public class DescribeStmtTest {
                         "SELECT store_id, SUM(sale_amt)\n" +
                         "FROM sales_records\n" +
                         "GROUP BY store_id;")
-                .withMaterializedStatementView("CREATE MATERIALIZED VIEW store_amt_async\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW store_amt_async\n" +
                         "DISTRIBUTED BY HASH(`store_id`) BUCKETS 10 \n" +
                         "REFRESH ASYNC\n" +
                         " AS\n" +

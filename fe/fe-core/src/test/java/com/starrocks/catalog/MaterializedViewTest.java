@@ -420,12 +420,12 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_rename\n" +
+                .withMaterializedView("create materialized view mv_to_rename\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;")
-                .withNewMaterializedView("create materialized view mv_to_rename2\n" +
+                .withMaterializedView("create materialized view mv_to_rename2\n" +
                         "PARTITION BY date_trunc('month', k1)\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
@@ -481,7 +481,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_drop group by k2;");
@@ -515,7 +515,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
@@ -549,7 +549,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                .withMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
@@ -583,7 +583,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_with_hint\n" +
+                .withMaterializedView("create materialized view mv_with_hint\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
@@ -651,7 +651,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH manual\n" +
@@ -695,7 +695,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
