@@ -244,32 +244,22 @@ public class StarRocksAssert {
         return this;
     }
 
-    // Add materialized view to the schema (use cup)
+    // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        } else {
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        }
         checkAlterJob();
         return this;
     }
-
-    // Add materialized view to the schema (use antlr)
-    public StarRocksAssert withMaterializedStatementView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStmt =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
-        checkAlterJob();
-        return this;
-    }
-
-    // why create this ? because query statement before property in old mv grammar
-    public StarRocksAssert withNewMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStatement =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
-        return this;
-    }
-
+    
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
