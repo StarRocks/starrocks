@@ -57,7 +57,13 @@ public:
         MemTracker* cur_tracker = mem_tracker();
         if (_cache_size != 0 && cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);
+            cur_tracker->offset_allocation(_allocated_cache_size - _cache_size);
             _cache_size = 0;
+            _allocated_cache_size = 0;
+        }
+        if (_allocated_cache_size != 0 && cur_tracker != nullptr) {
+            cur_tracker->offset_allocation(_allocated_cache_size);
+            _allocated_cache_size = 0;
         }
     }
 
@@ -104,24 +110,31 @@ public:
     void mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _allocated_cache_size += size;
         _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             cur_tracker->consume(_cache_size);
+            cur_tracker->offset_allocation(_allocated_cache_size - _cache_size);
             _cache_size = 0;
+            _allocated_cache_size = 0;
         }
     }
 
     bool try_mem_consume(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
+        _allocated_cache_size += size;
         _total_consumed_bytes += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
             if (LIKELY(limit_tracker == nullptr)) {
+                cur_tracker->offset_allocation(_allocated_cache_size - _cache_size);
                 _cache_size = 0;
+                _allocated_cache_size = 0;
                 return true;
             } else {
                 _cache_size -= size;
+                _allocated_cache_size -= size;
                 _try_consume_mem_size = size;
                 tls_exceed_mem_tracker = limit_tracker;
                 return false;
@@ -177,8 +190,10 @@ public:
 
 private:
     const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
-
-    int64_t _cache_size = 0;           // Allocated but not committed memory bytes
+    // Allocated or delocated but not committed memory bytes, can be negative
+    int64_t _cache_size = 0;
+    // Allocated but not committed memory bytes, always positive
+    int64_t _allocated_cache_size = 0;
     int64_t _total_consumed_bytes = 0; // Totally consumed memory bytes
     int64_t _try_consume_mem_size = 0; // Last time tried to consumed bytes
     // Store in TLS for diagnose coredump easier

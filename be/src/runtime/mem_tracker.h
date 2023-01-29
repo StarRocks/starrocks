@@ -105,8 +105,8 @@ public:
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
-    MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label = std::string(),
-               MemTracker* parent = nullptr);
+    explicit MemTracker(RuntimeProfile* profile, const std::string& counter_name_prefix = std::string(),
+                        int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr);
 
     ~MemTracker();
 
@@ -119,7 +119,17 @@ public:
     }
 
     // used for single mem_tracker
-    void set(int64_t bytes) { _consumption->set(bytes); }
+    void set(int64_t bytes) {
+        _consumption->set(bytes);
+        _allocation->set(bytes);
+    }
+
+    void offset_allocation(int64_t offset_bytes) {
+        if (offset_bytes <= 0) return;
+        for (auto* tracker : _all_trackers) {
+            tracker->_allocation->update(offset_bytes);
+        }
+    }
 
     void consume(int64_t bytes) {
         if (bytes <= 0) {
@@ -128,6 +138,7 @@ public:
         }
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(bytes);
+            tracker->_allocation->update(bytes);
         }
     }
 
@@ -166,7 +177,7 @@ public:
     /// Increases consumption of this tracker and its ancestors by 'bytes' only if
     /// they can all consume 'bytes'. If this brings any of them over, none of them
     /// are updated.
-    /// Returns true if the try succeeded.
+    /// Returns nullptr if the try succeeded, otherwise return the tracker that failed.
     WARN_UNUSED_RESULT
     MemTracker* try_consume(int64_t bytes) {
         if (UNLIKELY(bytes <= 0)) return nullptr;
@@ -177,13 +188,16 @@ public:
             const int64_t limit = tracker->limit();
             if (limit < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
+                tracker->_allocation->update(bytes);
             } else {
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                    tracker->_allocation->update(bytes);
                     continue;
                 } else {
                     // Failed for this mem tracker. Roll back the ones that succeeded.
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
                         _all_trackers[j]->_consumption->add(-bytes);
+                        _all_trackers[j]->_allocation->update(-bytes);
                     }
                     return tracker;
                 }
@@ -262,6 +276,7 @@ public:
     int64_t consumption() const { return _consumption->current_value(); }
 
     int64_t peak_consumption() const { return _consumption->value(); }
+    int64_t allocation() const { return _allocation->value(); }
 
     MemTracker* parent() const { return _parent; }
 
@@ -269,12 +284,14 @@ public:
 
     std::string err_msg(const std::string& msg) const;
 
-    static const std::string COUNTER_NAME;
+    static const std::string PEAK_MEMORY_USAGE;
+    static const std::string ALLOCATED_MEMORY_USAGE;
 
     std::string debug_string() {
         std::stringstream msg;
         msg << "limit: " << _limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
+            << "allocation: " << _allocation->value() << "; "
             << "label: " << _label << "; "
             << "all tracker size: " << _all_trackers.size() << "; "
             << "limit trackers size: " << _limit_trackers.size() << "; "
@@ -311,7 +328,13 @@ private:
     RuntimeProfile::HighWaterMarkCounter* _consumption;
 
     /// holds _consumption counter if not tied to a profile
-    RuntimeProfile::HighWaterMarkCounter _local_counter;
+    RuntimeProfile::HighWaterMarkCounter _local_consumption_counter;
+
+    /// in bytes; not owned. Only record allocation but ignore deallocation
+    RuntimeProfile::Counter* _allocation;
+
+    /// holds _cumulative_consumption counter if not tied to a profile
+    RuntimeProfile::Counter _local_allocation_counter;
 
     std::vector<MemTracker*> _all_trackers;   // this tracker plus all of its ancestors
     std::vector<MemTracker*> _limit_trackers; // _all_trackers with valid limits

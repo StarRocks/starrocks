@@ -134,6 +134,8 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
+    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     virtual std::string get_name() const {
@@ -233,11 +235,6 @@ protected:
     std::shared_ptr<RuntimeProfile> _common_metrics;
     std::shared_ptr<RuntimeProfile> _unique_metrics;
 
-    // All the memory usage will be automatically added to the instance level MemTracker by memory allocate hook
-    // But for some special operators, we hope to see the memory usage of some special data structures,
-    // such as hash table of aggregate operators.
-    // So the following indenpendent MemTracker is introduced to record these memory usage
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
@@ -269,6 +266,10 @@ protected:
 private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
+
+    // All the memory usage will be automatically added to this MemTracker by memory allocate hook
+    // Do not use this MemTracker manually
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
 class OperatorFactory {
