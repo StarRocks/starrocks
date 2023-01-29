@@ -131,8 +131,8 @@ EXPORT TABLE testTbl
 TO "s3a://s3-package/export/"
 WITH BROKER
 (
-"aws.s3.access.key" = "xxx",
-"aws.s3.secret.key" = "yyy",
+"aws.s3.access_key" = "xxx",
+"aws.s3.secret_key" = "yyy",
 "aws.s3.endpoint" = "s3-ap-northeast-1.amazonaws.com"
 );
 ```

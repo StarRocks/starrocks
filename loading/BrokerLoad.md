@@ -161,8 +161,8 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 );
 ```
@@ -170,7 +170,7 @@ WITH BROKER
 > **说明**
 >
 > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access.key` 和 `aws.s3.secret.key` 配置，留空即可。
+> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
 
 #### 从 Google GCS 导入
 
@@ -327,8 +327,8 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
@@ -345,8 +345,8 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "aws.s3.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
     "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )；
 ```
