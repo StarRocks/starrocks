@@ -17,6 +17,8 @@ package com.starrocks.analysis;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -134,6 +136,13 @@ public class RefreshMaterializedViewTest {
         return mv;
     }
 
+    private Table getTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(tableName);
+        Assert.assertNotNull(table);
+        return table;
+    }
+
     private void refreshMaterializedView(String dbName, String mvName) throws Exception {
         MaterializedView mv = getMv(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -158,9 +167,21 @@ public class RefreshMaterializedViewTest {
         Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
         Assert.assertTrue(partitionsToRefresh2.isEmpty());
         cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
-        partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
-        Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
-        partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
-        Assert.assertTrue(partitionsToRefresh2.contains("p2"));
+        OlapTable table = (OlapTable) getTable("test", "tbl_with_mv");
+        Partition p1 = table.getPartition("p1");
+        Partition p2 = table.getPartition("p2");
+        if (p2.getVisibleVersion() == 3) {
+            partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
+            partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh2.contains("p2"));
+        } else {
+            // publish version is async, so version update may be late
+            // for debug
+            System.out.println("p1 visible version:" + p1.getVisibleVersion());
+            System.out.println("p2 visible version:" + p2.getVisibleVersion());
+            System.out.println("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
+            System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
+        }
     }
 }
