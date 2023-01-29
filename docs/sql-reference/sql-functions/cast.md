@@ -4,7 +4,7 @@
 
 Converts an input into the specified type. For example, `cast (input as BIGINT)` converts the input into a BIGINT value.
 
-From v2.4, StarRocks supports conversion to the ARRAY type.
+From v2.4.0, StarRocks supports conversion to the ARRAY type.
 
 ## Syntax
 
