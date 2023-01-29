@@ -76,6 +76,10 @@ public abstract class ConnectorScanner {
         }
     }
 
+    protected  OffHeapColumnVector.OffHeapColumnType getType(int index) {
+        return this.types[index];
+    }
+
     protected void scanData(int index, Object value) {
         offHeapTable.appendData(index, value);
     }
