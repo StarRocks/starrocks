@@ -2,25 +2,25 @@
 
 ## Description
 
-Remove the space that appears continuously from the beginning and ending of the parameter str
+Removes consecutive spaces from the beginning and end of the `str` argument.
 
 ## Syntax
 
 ```Haskell
-trim(expr);
+VARCHAR trim(VARCHAR str)
 ```
 
 ## Parameters
 
-`expr`: the string to trim. The supported data type is VARCHAR.
+`str`: required, the string to trim, which must evaluate to a VARCHAR value.
 
 ## Return value
 
-Returns a value of the VARCHAR type.
+Returns a VARCHAR value.
 
 ## Examples
 
-Remove the five spaces.
+Remove the five spaces from the beginning and end of the string.
 
 ```Plain Text
 MySQL > SELECT trim("   ab c  ");
@@ -31,3 +31,8 @@ MySQL > SELECT trim("   ab c  ");
 +-------------------+
 1 row in set (0.00 sec)
 ```
+
+## References
+
+- [ltrim](ltrim.md)
+- [rtrim](rtrim.md)

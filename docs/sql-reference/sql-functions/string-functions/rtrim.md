@@ -2,25 +2,25 @@
 
 ## Description
 
-Removes the trailing spaces from the end of the `str` argument.
+Removes the trailing spaces from the end (right) of the `str` argument.
 
 ## Syntax
 
 ```Haskell
-rtrim(str);
+VARCHAR rtrim(VARCHAR str);
 ```
 
 ## Parameters
 
-`str`: the string to trim. The supported data type is VARCHAR.
+`str`: required, the string to trim, which must evaluate to a VARCHAR value.
 
 ## Return value
 
-Returns a value of the VARCHAR type.
+Returns a VARCHAR value.
 
 ## Examples
 
-Remove the three spaces following `d`.
+Remove the three trailing spaces from the string.
 
 ```Plain Text
 mysql> SELECT rtrim('   ab d   ');
@@ -31,3 +31,8 @@ mysql> SELECT rtrim('   ab d   ');
 +---------------------+
 1 row in set (0.00 sec)
 ```
+
+## References
+
+- [trim](trim.md)
+- [ltrim](ltrim.md)

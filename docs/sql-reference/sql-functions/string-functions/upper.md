@@ -12,7 +12,7 @@ upper(str)
 
 ## Parameters
 
-- `str`：The string that needs to be converted. If `str` is not a string, implicit cast will be performed first.
+- `str`: the string to convert. If `str` is not a string type, it will try implicit cast first.
 
 ## Return value
 
