@@ -44,7 +44,7 @@ When you connect to the cluster, StarRocks may return the following error:
 The reason may be that the BE node was started before the FE node is ready. To solve this problem, re-run the docker compose up command, or manually add the BE node to the cluster using the following command:
 
 ```sql
-ADD BACKEDN "<be_ip>:9050";
+ADD BACKEND "<be_ip>:9050";
 ```
 
 Replace `<be_ip>` with the actual IP address of the BE node.
