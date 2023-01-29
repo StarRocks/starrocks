@@ -59,7 +59,7 @@ struct ResultFileOptions {
     THdfsProperties hdfs_properties;
     bool use_broker;
     int64_t max_row_group_bytes{0};
-    bool use_dictory{true};
+    bool use_dict{true};
     TCompressionType::type compression_type{TCompressionType::SNAPPY};
     std::vector<std::string> file_column_names;
 
@@ -91,8 +91,8 @@ struct ResultFileOptions {
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_max_group_bytes) {
             max_row_group_bytes = t_opt.parquet_options.parquet_max_group_bytes;
         }
-        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.use_dictory) {
-            use_dictory = t_opt.parquet_options.use_dictory;
+        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.use_dict) {
+            use_dict = t_opt.parquet_options.use_dict;
         }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.compression_type) {
             compression_type = t_opt.parquet_options.compression_type;

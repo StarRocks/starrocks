@@ -266,7 +266,7 @@ public class OutFileClause implements ParseNode {
             TParquetOptions parquetOptions = new TParquetOptions();
             parquetOptions.setCompression_type(compressionType);
             parquetOptions.setParquet_max_group_bytes(maxParquetRowGroupBytes);
-            parquetOptions.setUse_dictory(useDict);
+            parquetOptions.setUse_dict(useDict);
             sinkOptions.setParquet_options(parquetOptions);
             sinkOptions.setFile_column_names(columnOutputNames);
         }
