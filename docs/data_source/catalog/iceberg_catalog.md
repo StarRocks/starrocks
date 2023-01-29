@@ -77,7 +77,7 @@ If you use AWS Glue for your Iceberg cluster, configure the following properties
 
 StarRocks does not cache Iceberg metadata. When you query Iceberg data, Iceberg directly returns the latest data by default.
 
-## What to do next
+## Use catalog to query Iceberg data
 
 After you complete all the preceding operations, you can use the Iceberg catalog to query Iceberg data. For more information, see [Query external data](../catalog/query_external_data.md).
 

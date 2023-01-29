@@ -2,7 +2,7 @@
 
 ## Description
 
-This function returns true when a string ends with a specified suffix. Otherwise, it returns false. When the argument is NULL, the result is NULL.
+Returns `true` if a string ends with a specified suffix. Otherwise, it returns `false`. If the argument is NULL, the result is NULL.
 
 ## Syntax
 

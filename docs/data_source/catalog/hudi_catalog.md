@@ -100,7 +100,7 @@ If you want to query the latest Hudi data but the time interval for updating cac
 
 For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
-## What to do next
+## Use catalog to query Hudi data
 
 After you complete all the preceding operations, you can use the Hudi catalog to query Hudi data. For more information, see [Query external data](../catalog/query_external_data.md).
 
