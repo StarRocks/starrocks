@@ -132,7 +132,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         // add filter columns in groupBys
         LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
-        filter.getRequiredChildInputColumns().getStream().mapToObj(factory::getColumnRef)
+        filter.getRequiredChildInputColumns().getStream().map(factory::getColumnRef)
                 .forEach(v -> context.groupBys.put(v, v));
         return processChild(optExpression, context);
     }
@@ -173,7 +173,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             if (aggInput instanceof CaseWhenOperator) {
                 CaseWhenOperator caseWhen = (CaseWhenOperator) aggInput;
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
-                    condition.getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                    condition.getUsedColumns().getStream().map(factory::getColumnRef)
                             .forEach(v -> context.groupBys.put(v, v));
                 }
 
@@ -200,7 +200,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                     return visit(optExpression, context);
                 }
 
-                aggInput.getChild(0).getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                aggInput.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
                         .forEach(v -> context.groupBys.put(v, v));
                 aggInput.setChild(0, ConstantOperator.createBoolean(false));
             }
@@ -300,7 +300,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             } else if (childOutput.isIntersect(groupByUseColumns)) {
                 // e.g. group by abs(a + b), we can derive group by a
                 Map<ColumnRefOperator, ScalarOperator> rewriteMap = groupByUseColumns.getStream()
-                        .filter(c -> !childOutput.contains(c)).mapToObj(factory::getColumnRef)
+                        .filter(c -> !childOutput.contains(c)).map(factory::getColumnRef)
                         .collect(Collectors.toMap(k -> k, k -> ConstantOperator.createNull(k.getType())));
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
                 childContext.groupBys.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
@@ -308,13 +308,13 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         }
 
         if (join.getOnPredicate() != null) {
-            join.getOnPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+            join.getOnPredicate().getUsedColumns().getStream().map(factory::getColumnRef)
                     .filter(childOutput::contains)
                     .forEach(c -> childContext.groupBys.put(c, c));
         }
 
         if (join.getPredicate() != null) {
-            join.getPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+            join.getPredicate().getUsedColumns().getStream().map(factory::getColumnRef)
                     .filter(childOutput::contains)
                     .forEach(v -> childContext.groupBys.put(v, v));
         }
@@ -479,7 +479,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-        groupBys.getStream().mapToObj(factory::getColumnRef)
+        groupBys.getStream().map(factory::getColumnRef)
                 .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
                 .forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
 
@@ -492,7 +492,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         String aggStr = context.aggregations.values().stream().map(CallOperator::toString)
                 .collect(Collectors.joining(", "));
-        String groupStr = groupBys.getStream().mapToObj(String::valueOf).collect(Collectors.joining(", "));
+        String groupStr = groupBys.getStream().map(String::valueOf).collect(Collectors.joining(", "));
 
         LOG.debug("Push down aggregation[" + aggStr + "]" +
                 " group by[" + groupStr + "]," +

@@ -86,7 +86,7 @@ class IMTCreator {
         // Duplicate/Primary Key
         Map<Integer, String> columnNames = plan.getOutputColumns().stream().collect(
                 Collectors.toMap(ColumnRefOperator::getId, ColumnRefOperator::getName));
-        Set<String> keyColumns = key.columns.getStream().mapToObj(columnNames::get).collect(Collectors.toSet());
+        Set<String> keyColumns = key.columns.getStream().map(columnNames::get).collect(Collectors.toSet());
         for (Column col : columns) {
             col.setIsKey(keyColumns.contains(col.getName()));
         }

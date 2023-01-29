@@ -210,7 +210,7 @@ public class SplitAggregateRule extends TransformationRule {
                 singleDistinctFunctionPos++;
                 if (kv.getValue().isDistinct()) {
                     distinctColumns = kv.getValue().getUsedColumns().getStream().
-                            mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+                            map(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
                     break;
                 }
             }

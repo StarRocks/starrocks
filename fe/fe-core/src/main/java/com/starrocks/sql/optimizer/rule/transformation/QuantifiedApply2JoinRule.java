@@ -100,7 +100,7 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
 
         joinExpression.getInputs().addAll(input.getInputs());
 
-        Map<ColumnRefOperator, ScalarOperator> outputColumns = input.getOutputColumns().getStream().mapToObj(
+        Map<ColumnRefOperator, ScalarOperator> outputColumns = input.getOutputColumns().getStream().map(
                 id -> context.getColumnRefFactory().getColumnRef(id)
         ).collect(Collectors.toMap(Function.identity(), Function.identity()));
         return Lists.newArrayList(

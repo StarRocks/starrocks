@@ -109,7 +109,7 @@ public class ReorderJoinRule extends Rule {
                 innerJoinRoot.getInputs().forEach(opt -> outputColumns.union(opt.getOutputColumns()));
 
                 projectMap.putAll(outputColumns.getStream()
-                        .mapToObj(context.getColumnRefFactory()::getColumnRef)
+                        .map(context.getColumnRefFactory()::getColumnRef)
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
             } else {
                 outputColumns.union(oldRoot.getProjection().getOutputColumns());
@@ -253,7 +253,7 @@ public class ReorderJoinRule extends Rule {
                 joinOperator = new LogicalJoinOperator.Builder()
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
-                                .mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
+                                .map(optimizerContext.getColumnRefFactory()::getColumnRef)
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();

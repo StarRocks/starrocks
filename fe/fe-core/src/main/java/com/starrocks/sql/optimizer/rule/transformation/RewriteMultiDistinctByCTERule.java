@@ -420,7 +420,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         if (consumeOutputMap.isEmpty()) {
             List<ColumnRefOperator> outputColumns =
                     produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
+                            map(factory::getColumnRef).collect(Collectors.toList());
             ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());
