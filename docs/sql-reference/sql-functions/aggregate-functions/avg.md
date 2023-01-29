@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the average value of selected fields.
+Returns the average value of the selected fields.
 
 Optional field DISTINCT parameters can be used to return the weighted average.
 
