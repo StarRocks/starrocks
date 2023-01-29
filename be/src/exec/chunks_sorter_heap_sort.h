@@ -247,7 +247,6 @@ public:
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     void setup_runtime(RuntimeProfile* profile) override;

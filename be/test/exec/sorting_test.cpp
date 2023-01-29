@@ -16,11 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <random>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
@@ -98,8 +100,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
             right_columns.push_back(col);
         }
     }
-    ChunkPtr left_chunk = std::make_shared<Chunk>(left_columns, map);
-    ChunkPtr right_chunk = std::make_shared<Chunk>(right_columns, map);
+    auto left_chunk = std::make_unique<Chunk>(left_columns, map);
+    auto right_chunk = std::make_unique<Chunk>(right_columns, map);
     Permutation perm;
     SortDescs sort_desc(std::vector<int>(num_columns, 1), std::vector<int>(num_columns, -1));
 
@@ -118,10 +120,12 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
     SortedRuns output_run;
-    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output_run));
+    std::vector<ChunkUniquePtr> chunks;
+    chunks.emplace_back(std::move(left_chunk));
+    chunks.emplace_back(std::move(right_chunk));
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, chunks, &output_run));
     output = output_run.assemble();
     ASSERT_EQ(expected_size, output->num_rows());
-    ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
 
     std::vector<std::vector<int>> output_data;
     for (int i = 0; i < output->num_rows(); i++) {
@@ -257,7 +261,7 @@ TEST(SortingTest, sorted_runs) {
 
 TEST(SortingTest, merge_sorted_chunks) {
     auto runtime_state = create_runtime_state();
-    std::vector<ChunkPtr> input_chunks;
+    std::vector<ChunkUniquePtr> input_chunks;
     Chunk::SlotHashMap slot_map{{0, 0}};
 
     std::vector<std::vector<int>> input_runs = {{-2074, -1691, -1400, -969, -767, -725},
@@ -269,8 +273,8 @@ TEST(SortingTest, merge_sorted_chunks) {
         for (int x : input_numbers) {
             column->append_datum(Datum((int32_t)x));
         }
-        ChunkPtr chunk = std::make_shared<Chunk>(Columns{column}, slot_map);
-        input_chunks.push_back(chunk);
+        auto chunk = std::make_unique<Chunk>(Columns{column}, slot_map);
+        input_chunks.emplace_back(std::move(chunk));
     }
 
     std::vector<std::unique_ptr<ColumnRef>> exprs;
