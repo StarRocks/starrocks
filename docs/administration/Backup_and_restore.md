@@ -48,6 +48,10 @@ ON (sr_member);
 
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md).
 
+> **CAUTION**
+>
+> StarRocks does not support specifying data compression algorithm for data backup.
+
 ## Restore or migrate data
 
 You can restore the data snapshot backed up in the remote storage system to the current or other StarRocks clusters to complete data restoration or migration.
