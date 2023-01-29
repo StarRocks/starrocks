@@ -90,10 +90,10 @@ ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
         : _writable_file(std::move(writable_file)),
           _output_expr_ctxs(output_expr_ctxs),
           _row_group_max_size(options.row_group_max_size) {
-    init(options);
+    _init(options);
 }
 
-Status ParquetBuilder::init(const ParquetBuilderOptions& options) {
+Status ParquetBuilder::_init(const ParquetBuilderOptions& options) {
     _init_properties(options);
     Status st = _init_schema(options.parquet_schema);
     if (!st.ok()) {
@@ -257,8 +257,7 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
                                    : nullptr;
         const auto data_column = ColumnHelper::get_data_column(col.get());
 
-        std::vector<int16_t> def_level(num_rows);
-        std::fill(def_level.begin(), def_level.end(), 1);
+        std::vector<int16_t> def_level(num_rows, 1);
         if (null_column != nullptr) {
             auto nulls = null_column->get_data();
             for (size_t j = 0; j < num_rows; j++) {

@@ -89,9 +89,8 @@ public:
 
     Status finish() override;
 
-    Status init(const ParquetBuilderOptions& options);
-
 private:
+    Status _init(const ParquetBuilderOptions& options);
     void _init_properties(const ParquetBuilderOptions& options);
     Status _init_schema(const TParquetSchema&);
     void _generate_rg_writer();
