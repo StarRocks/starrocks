@@ -170,22 +170,21 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_WH_MOD_PROP: {
                     AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
                     break;
                 }
                 case OperationType.OP_SUSPEND_WH: {
                     OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    // long whId = log.getId();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replaySuspendWarehouse(warehouseName);
                     break;
                 }
                 case OperationType.OP_RESUME_WH: {
                     ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
@@ -193,7 +192,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DROP_WH: {
                     OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    String warehouseName = log.getWhName();
+                    String warehouseName = log.getWarehouseName();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayDropWarehouse(warehouseName);
                     break;

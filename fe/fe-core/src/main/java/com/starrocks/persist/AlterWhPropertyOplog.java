@@ -27,18 +27,18 @@ import java.util.Map;
 
 public class AlterWhPropertyOplog implements Writable {
     @SerializedName(value = "whName")
-    private String whName;
+    private String warehouseName;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties = new HashMap<>();
 
     public AlterWhPropertyOplog(String whName, Map<String, String> properties) {
-        this.whName = whName;
+        this.warehouseName = whName;
         this.properties = properties;
     }
 
-    public String getWhName() {
-        return whName;
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     public Map<String, String> getProperties() {

@@ -32,7 +32,7 @@ public class ResumeWarehouseLog implements Writable {
     @SerializedName(value = "clusters")
     private Map<Long, Cluster> clusters;
 
-    String getWhName() {
+    String getWarehouseName() {
         return name;
     }
 
