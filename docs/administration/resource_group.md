@@ -60,7 +60,7 @@ On the basis of the above resource consumption restrictions, you can further res
 
 > Note: When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query` or `normal`.
+- `type`:
 
 - The default value is `normal`. You do not need specify `normal` in the parameter `type`.
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
