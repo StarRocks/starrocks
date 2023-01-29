@@ -114,8 +114,8 @@ WITH BROKER
     EXPORT TABLE testTbl TO "s3a://s3-package/export/"
     WITH BROKER
     (
-    "fs.s3a.access.key" = "xxx",
-    "fs.s3a.secret.key" = "yyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "aws.s3.access_key" = "xxx",
+    "aws.s3.secret_key" = "yyy",
+    "aws.s3.endpoint" = "s3-ap-northeast-1.amazonaws.com"
     );
     ```
