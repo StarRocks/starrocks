@@ -168,11 +168,13 @@ struct TBrokerRangeDesc {
 }
 
 enum TObjectStoreType {
+  HDFS,
   S3,
   KS3,
   OSS,
   COS,
   OBS,
+  UNIVERSAL_FS
 }
 
 struct THdfsProperty {
