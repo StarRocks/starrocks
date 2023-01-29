@@ -831,6 +831,21 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back() == nullptr) {
+                std::vector<Version> base_tablet_versions;
+                base_tablet->list_versions(&base_tablet_versions);
+                std::stringstream ss;
+                ss << " rs_version_map: ";
+                for (auto& ver : base_tablet_versions) {
+                    ss << ver << ",";
+                }
+                ss << " versions_to_be_changed: ";
+                for (auto& ver : versions_to_be_changed) {
+                    ss << ver << ",";
+                }
+                LOG(WARNING) << "fail to get rowset by version: " << version << ". " << ss.str();
+                return Status::InternalError("fail to get rowset by version");
+            }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
                     std::make_unique<TabletReader>(base_tablet, version, base_schema);
