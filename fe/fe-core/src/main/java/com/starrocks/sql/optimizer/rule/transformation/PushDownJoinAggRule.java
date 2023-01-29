@@ -166,7 +166,7 @@ public class PushDownJoinAggRule extends TransformationRule {
             newJoinBuilder.setProjection(null);
         } else {
             newJoinBuilder.setProjection(
-                    new Projection(newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef)
+                    new Projection(newJoinPruneOutPutColumns.getStream().map(factory::getColumnRef)
                             .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()));
         }
 

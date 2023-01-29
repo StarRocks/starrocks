@@ -1,31 +1,55 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
 
 package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import org.roaringbitmap.RoaringBitmap;
 
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
 import java.util.stream.IntStream;
+=======
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
 
 // BitSet used to accelerate column processing
 public class ColumnRefSet implements Cloneable {
-    public BitSet bitSet;
+    public RoaringBitmap bitSet;
 
     public ColumnRefSet() {
-        bitSet = new BitSet();
+        bitSet = new RoaringBitmap();
     }
 
     public ColumnRefSet(int id) {
-        bitSet = new BitSet();
-        bitSet.set(id);
+        bitSet = new RoaringBitmap();
+        bitSet.add(id);
     }
 
     public ColumnRefSet(Collection<ColumnRefOperator> refs) {
-        bitSet = new BitSet();
+        bitSet = new RoaringBitmap();
         for (ColumnRefOperator ref : refs) {
-            bitSet.set(ref.getId());
+            bitSet.add(ref.getId());
         }
     }
 
@@ -36,22 +60,23 @@ public class ColumnRefSet implements Cloneable {
     }
 
     public int[] getColumnIds() {
-        return bitSet.stream().toArray();
+        return bitSet.toArray();
     }
 
-    public IntStream getStream() {
-        return bitSet.stream();
+    public Stream<Integer> getStream() {
+        Spliterator<Integer> spliterator = Spliterators.spliteratorUnknownSize(bitSet.iterator(), Spliterator.ORDERED);
+        return StreamSupport.stream(spliterator, false);
     }
 
     public int getFirstId() {
-        return bitSet.stream().findFirst().getAsInt();
+        return bitSet.first();
     }
 
     @Override
     public ColumnRefSet clone() {
         try {
             ColumnRefSet result = (ColumnRefSet) super.clone();
-            result.bitSet = (BitSet) bitSet.clone();
+            result.bitSet = bitSet.clone();
             return result;
         } catch (CloneNotSupportedException e) {
             throw new InternalError(e);
@@ -72,13 +97,20 @@ public class ColumnRefSet implements Cloneable {
         return bitSet.equals(rhs.bitSet);
     }
 
+<<<<<<< HEAD
+=======
+    public int size() {
+        return bitSet.getCardinality();
+    }
+
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
     // The meaning is same with SQL Union Operation
     public void union(int id) {
-        bitSet.set(id);
+        bitSet.add(id);
     }
 
     public void union(ColumnRefOperator ref) {
-        bitSet.set(ref.getId());
+        bitSet.add(ref.getId());
     }
 
     public void union(Collection<ColumnRefOperator> refs) {
@@ -116,11 +148,16 @@ public class ColumnRefSet implements Cloneable {
     }
 
     public boolean isIntersect(ColumnRefSet other) {
-        return bitSet.intersects(other.bitSet);
+        for (int id : other.bitSet) {
+            if (this.bitSet.contains(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public int cardinality() {
-        return bitSet.cardinality();
+        return bitSet.getCardinality();
     }
 
     public boolean isEmpty() {
@@ -143,25 +180,32 @@ public class ColumnRefSet implements Cloneable {
     }
 
     public boolean contains(ColumnRefOperator ref) {
-        return bitSet.get(ref.getId());
+        return bitSet.contains(ref.getId());
     }
 
     public boolean contains(int id) {
-        return bitSet.get(id);
+        return bitSet.contains(id);
     }
 
     public boolean containsAll(ColumnRefSet rhs) {
-        return rhs.bitSet.stream().allMatch(bit -> bitSet.get(bit));
+        return this.bitSet.contains(rhs.bitSet);
     }
 
     public boolean containsAny(ColumnRefSet rhs) {
-        return rhs.bitSet.stream().anyMatch(bit -> bitSet.get(bit));
+        return isIntersect(rhs);
     }
 
     public boolean containsAll(List<Integer> rhs) {
-        return rhs.stream().allMatch(bit -> bitSet.get(bit));
+        return rhs.stream().allMatch(id -> bitSet.contains(id));
     }
 
+<<<<<<< HEAD
+=======
+    public List<ColumnRefOperator> getColumnRefOperators(ColumnRefFactory columnRefFactory) {
+        return getStream().map(columnRefFactory::getColumnRef).collect(Collectors.toList());
+    }
+
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
     @Override
     public String toString() {
         return bitSet.toString();
