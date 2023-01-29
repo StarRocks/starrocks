@@ -72,7 +72,6 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.dataFileLenth = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
         this.inputFormat = params.get("input_format");
-        ;
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
