@@ -73,7 +73,7 @@ Explanation of some important config:
 
 | **Config** | **Example** | **Description** |
 | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-| be_metric_url | http://localhost:8040/metrics | The URL where StarRocks BE metrics. |
+| be_metric_url | `http://localhost:8040/metrics` | The URL where StarRocks BE metrics. |
 | metrics | - starrocks_be_* | Indicators to be monitored, supporting wildcards `*` |
 
 ### Restart Datadog Agent
