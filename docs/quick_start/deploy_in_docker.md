@@ -1,4 +1,4 @@
-## Introdcution
+# Deploy StarRocks in Docker
 
 This document is used to deploy the simplest StarRocks cluster, which contains one FE and one BE.
 
@@ -29,7 +29,7 @@ Then you can check the containers status.
 
 Connect to StarRocks cluster
 
-```
+```sh
 mysql -h 127.0.0.1 -P9030 -u root
 ```
 
