@@ -165,7 +165,7 @@ GROUP BY store_id;
 
 It can be observed that the query takes about 0.02 seconds, and no materialized view is used to accelerate the query because the output of `rollup` section in the query profile is `sales_records`, which is the base table.
 
-### Create a materialized view
+### Create a single-table materialized view
 
 You can create a materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
 
@@ -178,7 +178,7 @@ FROM sales_records
 GROUP BY store_id;
 ```
 
-### Query with the materialized view
+### Query with the single-table materialized view
 
 The materialized view you created contains the complete set of pre-computed results in accordance with the query statement. Subsequent queries will use the data within it. You can run the same query to test the query time as you did in the preparation.
 
@@ -258,7 +258,7 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 
 As you can see, now the output of `rollup` section in the query profile is `store_amt`, which is the materialized view you have built. That means this query has hit the materialized view.
 
-### Check the building status of a materialized view
+### Check the building status of a single-table materialized view
 
 Creating a materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) command.
 
@@ -323,7 +323,7 @@ Under the following circumstances, you need to drop a materialized view:
 
 #### Drop an unfinished materialized view
 
-You can drop a materialized view that is being created by canceling the in-progress creation task. First, you need to get the job ID `JobID` of the materialized view creation task by [checking the building status of the materialized view](#check-the-building-status-of-a-materialized-view). After getting the job ID, you need to cancel the creation task with the CANCEL ALTER command.
+You can drop a materialized view that is being created by canceling the in-progress creation task. First, you need to get the job ID `JobID` of the materialized view creation task by [checking the building status of the materialized view](#check-the-building-status-of-a-single-table-materialized-view). After getting the job ID, you need to cancel the creation task with the CANCEL ALTER command.
 
 ```Plain
 CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
@@ -499,7 +499,7 @@ FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
 
-### Create a materialized view
+### Create an Async Refresh multi-table materialized view
 
 You can create a materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
 
@@ -522,7 +522,7 @@ In StarRocks v2.5, multi-table async refresh materialized views support multiple
 
 | **Property**                      | **Default** | **Description**                                                     |
 | --------------------------------- | ----------- | ------------------------------------------------------------------- |
-| partition_ttl_number          | -1         | The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_enable`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. |
+| partition_ttl_number          | -1         | The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. |
 | partition_refresh_number      | -1         | In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fails to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. |
 | excluded_trigger_tables       | An empty string   | If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. |
 | auto_refresh_partitions_limit | -1         | The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. When the value is `-1`, all partitions will be flushed. |
