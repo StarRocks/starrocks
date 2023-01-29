@@ -557,7 +557,7 @@ PROPERTIES(
 ### Create a MySQL external table
 
 ```SQL
-CREATE TABLE example_db.table_mysql
+CREATE EXTERNAL TABLE example_db.table_mysql
 (
     k1 DATE,
     k2 INT,
@@ -703,8 +703,10 @@ PROPERTIES(
 
 ### Create a Hive external table
 
+Before you create a Hive external table, you must create a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#hive-external-table).
+
 ```SQL
-CREATE TABLE example_db.table_hive
+CREATE EXTERNAL TABLE example_db.table_hive
 (
     k1 TINYINT,
     k2 VARCHAR(50),
