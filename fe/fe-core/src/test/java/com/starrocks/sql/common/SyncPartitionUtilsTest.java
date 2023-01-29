@@ -587,7 +587,7 @@ public class SyncPartitionUtilsTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv1\n" +
+                .withMaterializedView("create materialized view mv1\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +

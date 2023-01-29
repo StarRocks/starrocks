@@ -62,7 +62,7 @@ public class InformationSchemaDataSourceTest {
                                  "AS SELECT k1, k2 " +
                                  "FROM db1.tbl1 ";
         
-        starRocksAssert.withMaterializedStatementView(createMvStmtStr);
+        starRocksAssert.withMaterializedView(createMvStmtStr);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();

@@ -118,7 +118,7 @@ public class AnalyzeAlterTableStatementTest {
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
         Config.enable_experimental_mv = true;
-        AnalyzeTestUtil.getStarRocksAssert().withNewMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
+        AnalyzeTestUtil.getStarRocksAssert().withMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
                 "PARTITION BY k1 \n" +
                 "distributed by hash(k2) \n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) \n" +

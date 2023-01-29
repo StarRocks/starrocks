@@ -1362,7 +1362,7 @@ public class MvRewriteOptimizationTest {
         createAndRefreshMv("test", "nested_mv_1", "CREATE MATERIALIZED VIEW nested_mv_2 " +
                 "PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "REFRESH MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from nested_mv_1 group by k1;");
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW nested_mv_3 DISTRIBUTED BY HASH(k1)\n" +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW nested_mv_3 DISTRIBUTED BY HASH(k1)\n" +
                 "REFRESH MANUAL AS SELECT k1, count_k2, sum_k3 from nested_mv_2 where k1 >1;");
         cluster.runSql("test", "insert into t1 values (4,1,1);");
         refreshMaterializedView("test", "nested_mv_1");
@@ -1670,7 +1670,7 @@ public class MvRewriteOptimizationTest {
     }
 
     private void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
-        starRocksAssert.withNewMaterializedView(sql);
+        starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(dbName, mvName);
     }
 
