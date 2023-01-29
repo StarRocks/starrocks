@@ -32,6 +32,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
 
 private:
+    bool _is_jfs_file() const;
+
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
@@ -91,7 +93,16 @@ Status HdfsRandomAccessFile::size(uint64_t* size) const {
     return Status::OK();
 }
 
+bool HdfsRandomAccessFile::_is_jfs_file() const {
+    static const char* kFileSysPrefixJuicefs = "jfs://";
+    return strncmp(_file_name.c_str(), kFileSysPrefixJuicefs, strlen(kFileSysPrefixJuicefs)) == 0;
+}
+
 StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
+    // `GetReadStatistics` is not supported in juicefs hadoop sdk, and will cause the be crash
+    if (_is_jfs_file()) {
+        return nullptr;
+    }
     auto statistics = std::make_unique<NumericStatistics>();
     NumericStatistics* stats = statistics.get();
     auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
