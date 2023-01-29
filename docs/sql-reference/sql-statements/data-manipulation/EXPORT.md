@@ -116,6 +116,6 @@ WITH BROKER
     (
     "aws.s3.access_key" = "xxx",
     "aws.s3.secret_key" = "yyy",
-    "aws.s3.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
     );
     ```
