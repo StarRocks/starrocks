@@ -50,9 +50,6 @@ public class Group {
     private boolean isExplored;
 
     private Statistics statistics;
-    // confidence statistics record the statistics when group expression has the lowest cost,
-    // confidence statistics is the statistics in group with the highest confidence for each physical property
-    private final Map<PhysicalPropertySet, Statistics> confidenceStatistics;
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyOutputPropertyGroupExpressions;
@@ -66,20 +63,11 @@ public class Group {
         physicalExpressions = Lists.newArrayList();
         lowestCostExpressions = Maps.newHashMap();
         satisfyOutputPropertyGroupExpressions = Maps.newHashMap();
-        confidenceStatistics = Maps.newHashMap();
         isExplored = false;
     }
 
     public int getId() {
         return id;
-    }
-
-    public boolean hasConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
-        return confidenceStatistics.containsKey(physicalPropertySet);
-    }
-
-    public Statistics getConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
-        return confidenceStatistics.get(physicalPropertySet);
     }
 
     public boolean isExplored() {
@@ -130,11 +118,9 @@ public class Group {
         if (lowestCostExpressions.containsKey(physicalPropertySet)) {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
-                confidenceStatistics.put(physicalPropertySet, statistics);
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
-            confidenceStatistics.put(physicalPropertySet, statistics);
         }
     }
 
@@ -145,12 +131,10 @@ public class Group {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
                 statistics = newStatistics;
-                confidenceStatistics.put(physicalPropertySet, newStatistics);
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
             statistics = newStatistics;
-            confidenceStatistics.put(physicalPropertySet, newStatistics);
         }
     }
 
@@ -269,8 +253,7 @@ public class Group {
             // change the enforcer itself group and child group to dst group if enforcer's group is other.
             updateEnforcerGroup(bestGroupExpression, other);
             setBestExpressionWithStatistics(bestGroupExpression, entry.getValue().first, entry.getKey(),
-                    other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
-                            other.statistics);
+                    other.statistics);
         }
         // If statistics is null, use other statistics
         if (statistics == null) {

@@ -129,17 +129,17 @@ public class InsertPlanner {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
-        try {
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-            LOG.info("property" + requiredPropertySet.toString());
+            LOG.debug("property" + requiredPropertySet);
             OptExpression optimizedPlan;
 
-            try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Optimizer")) {
+            try (PlannerProfile.ScopedTimer ignore2 = PlannerProfile.getScopedTimer("Optimizer")) {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
@@ -152,7 +152,7 @@ public class InsertPlanner {
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
             ExecPlan execPlan;
-            try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("PlanBuilder")) {
+            try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
                 execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);

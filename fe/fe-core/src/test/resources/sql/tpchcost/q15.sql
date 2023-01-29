@@ -51,7 +51,7 @@ column statistics:
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-* sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+* sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F00)
 
@@ -69,7 +69,7 @@ OutPut Exchange Id: 24
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 22:Project
 |  output columns:
@@ -84,7 +84,7 @@ OutPut Exchange Id: 24
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.072527529100353] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 21:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -99,7 +99,7 @@ OutPut Exchange Id: 24
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.072527529100353] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----20:EXCHANGE
 |       distribution type: SHUFFLE
@@ -133,7 +133,7 @@ OutPut Exchange Id: 20
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -144,8 +144,8 @@ OutPut Exchange Id: 20
 |  cardinality: 1
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
-|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----17:EXCHANGE
 |       distribution type: BROADCAST
@@ -160,7 +160,7 @@ OutPut Exchange Id: 20
 |  - filter_id = 0, probe_expr = (27: sum)
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 4:EXCHANGE
 distribution type: SHUFFLE
@@ -177,19 +177,19 @@ OutPut Exchange Id: 17
 |  predicates: 47: max IS NOT NULL
 |  cardinality: 1
 |  column statistics:
-|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 15:ASSERT NUMBER OF ROWS
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
-|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 14:AGGREGATE (merge finalize)
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 13:EXCHANGE
 distribution type: GATHER
@@ -205,14 +205,14 @@ OutPut Exchange Id: 13
 |  aggregate: max[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
-|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|  * max-->[810.9, 112561.22791531752, 0.0, 8.0, 1.0] ESTIMATE
 |
 11:Project
 |  output columns:
 |  46 <-> [46: sum, DOUBLE, true]
 |  cardinality: 1000000
 |  column statistics:
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
 |  aggregate: sum[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -220,7 +220,7 @@ OutPut Exchange Id: 13
 |  cardinality: 1000000
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 932377.0] ESTIMATE
+|  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 9:EXCHANGE
 distribution type: SHUFFLE
