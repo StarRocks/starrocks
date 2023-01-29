@@ -901,19 +901,24 @@ public class PrivilegeCheckerV2Test {
                 "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
 
         // check CTAS: CREATE_TABLE on db and SELECT on source table
-        String submitTaskSql = "submit task as create table db1.ctas_t1 as select k1,k2 from db1.tbl1;";
+        List<String> submitTaskSqls = Arrays.asList(
+                "submit task as create table db1.ctas_t1 as select k1,k2 from db1.tbl1;",
+                "submit task as create table ctas_t11 as select k1,k2 from tbl1;" // test unqualified name
+        );
         ctx.setDatabase("db1");
-        verifyMultiGrantRevoke(
-                submitTaskSql,
-                Arrays.asList(
-                        "grant create_table on database db1 to test",
-                        "grant select on table db1.tbl1 to test"
-                ),
-                Arrays.asList(
-                        "revoke create_table on database db1 from test",
-                        "revoke select on table db1.tbl1 from test"
-                ),
-                "Access denied for user 'test' to database 'db1'");
+        for (String submitTaskSql : submitTaskSqls) {
+            verifyMultiGrantRevoke(
+                    submitTaskSql,
+                    Arrays.asList(
+                            "grant create_table on database db1 to test",
+                            "grant select on table db1.tbl1 to test"
+                    ),
+                    Arrays.asList(
+                            "revoke create_table on database db1 from test",
+                            "revoke select on table db1.tbl1 from test"
+                    ),
+                    "Access denied for user 'test' to database 'db1'");
+        }
 
         // check drop non-existed table
         statement = UtFrameUtils.parseStmtWithNewParser(
