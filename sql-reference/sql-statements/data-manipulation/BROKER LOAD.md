@@ -68,6 +68,10 @@ INTO TABLE <table_name>
   - `hdfs_host`：HDFS 集群中 NameNode 所在主机的 IP 地址。
   - `hdfs_port`：HDFS 集群中 NameNode 所在主机的 FS 端口。默认端口号为 `9000`。
 
+  >**注意**
+  >
+  > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+
 - `INTO TABLE`
 
   用于指定目标 StarRocks 表的名称。
@@ -218,16 +222,15 @@ INTO TABLE <table_name>
 
 | **参数名称**      | **参数说明**                                            |
 | ----------------- | ------------------------------------------------------- |
-| aws.s3.access.key | 访问 Amazon S3 存储空间的 Access Key ID。      |
-| aws.s3.secret.key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
+| aws.s3.access_key | 访问 Amazon S3 存储空间的 Access Key ID。      |
+| aws.s3.secret_key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
 | aws.s3.endpoint   | 访问 Amazon S3 存储空间的连接地址。                             |
 
 请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
 
 > **说明**
 >
-> - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access.key` 和 `aws.s3.secret.key` 配置，留空即可。
+> 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
 
 #### Google GCS
 
