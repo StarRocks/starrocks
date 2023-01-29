@@ -96,7 +96,6 @@ Status FileResultWriter::_create_fs() {
 Status FileResultWriter::_create_file_writer() {
     std::string file_name = _get_next_file_name();
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(opts, file_name));
 
     switch (_file_opts->file_format) {
