@@ -99,6 +99,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         Configuration conf = new Configuration();
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
+        jobConf.setBoolean("dfs.client.use.legacy.blockreader", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
         return jobConf;
     }
