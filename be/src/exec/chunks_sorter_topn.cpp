@@ -139,13 +139,9 @@ Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
     chunk->reset(_merged_segment.chunk->clone_empty(count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
-    (*chunk)->downgrade();
+    RETURN_IF_ERROR((*chunk)->downgrade());
     _next_output_row += count;
     return Status::OK();
-}
-
-SortedRuns ChunksSorterTopn::get_sorted_runs() {
-    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
 }
 
 size_t ChunksSorterTopn::get_output_rows() const {
