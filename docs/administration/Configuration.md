@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters by running the following command:
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");

@@ -95,7 +95,7 @@ The available metrics are:
 |starrocks_fe_query_resource_group_latency|second|average|the query latency percentile for each resource group|
 |starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|
 |starrocks_be_resource_group_cpu_limit_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu quota ratio|
-|starrocks_be_resource_group_cpu_use_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu usage ratio|
+|starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
 |starrocks_be_resource_group_mem_limit_bytes|Byte|Instantaneous|Instantaneous value of resource group memory quota|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|Instantaneous|Instantaneous value of resource group memory usage|
 
