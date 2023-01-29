@@ -192,7 +192,7 @@ public class OutFileClause implements ParseNode {
             if (!isParquetFormat()) {
                 throw new AnalysisException(PARQUET_MAX_ROW_GROUP_SIZE + " is only for PARQUET format");
             }
-            maxParquetRowGroupBytes = Integer.getInteger(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
+            maxParquetRowGroupBytes = Long.getLong(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
