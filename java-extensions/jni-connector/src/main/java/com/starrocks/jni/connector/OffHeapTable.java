@@ -72,7 +72,7 @@ public class OffHeapTable {
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
             vectors[i] = new OffHeapColumnVector(capacity, types[i]);
-            if (OffHeapColumnVector.isArray(types[i])) {
+            if (vectors[i].isByteStorageType()) {
                 metaSize += 3;
             } else {
                 metaSize += 2;
@@ -82,6 +82,7 @@ public class OffHeapTable {
         this.meta = new OffHeapColumnVector(metaSize, OffHeapColumnVector.OffHeapColumnType.LONG);
         this.numRows = 0;
     }
+
 
     public void appendData(int fieldId, Object o) {
         OffHeapColumnVector column = vectors[fieldId];
@@ -115,8 +116,10 @@ public class OffHeapTable {
                 break;
             case STRING:
             case DATE:
-            case DATETIME:
             case DECIMAL:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
                 column.appendString(o.toString());
                 break;
             default:
@@ -140,7 +143,7 @@ public class OffHeapTable {
         for (int i = 0; i < types.length; i++) {
             OffHeapColumnVector.OffHeapColumnType type = types[i];
             OffHeapColumnVector column = vectors[i];
-            if (OffHeapColumnVector.isArray(type)) {
+            if (column.isByteStorageType()) {
                 meta.appendLong(column.nullsNativeAddress());
                 meta.appendLong(column.arrayOffsetNativeAddress());
                 meta.appendLong(column.arrayDataNativeAddress());
@@ -191,6 +194,8 @@ public class OffHeapTable {
                     case STRING:
                     case DATE:
                     case DATETIME:
+                    case DATETIME_MICROS:
+                    case DATETIME_MILLIS:
                     case DECIMAL:
                         sb.append(column.getUTF8String(i)).append(", ");
                         break;

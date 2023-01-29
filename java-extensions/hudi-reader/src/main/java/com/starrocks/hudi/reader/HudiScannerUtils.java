@@ -1,4 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
 
 package com.starrocks.hudi.reader;
 
-import com.starrocks.jni.connector.ColumnType;
+import com.starrocks.jni.connector.OffHeapColumnVector;
+import org.apache.hadoop.io.LongWritable;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -29,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class HudiScannerUtils {
     private static final DateTimeFormatter DATETIME_FORMATTER;
     public static final Map<String, String> MARK_TYPE_VALUE_MAPPING = new HashMap<>();
-    public static Map<ColumnType.TypeValue, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
+    public static Map<OffHeapColumnVector.OffHeapColumnType, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
 
     static {
         DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
@@ -40,8 +41,8 @@ public class HudiScannerUtils {
         MARK_TYPE_VALUE_MAPPING.put("TimestampMicros", "timestamp");
         MARK_TYPE_VALUE_MAPPING.put("TimestampMillis", "timestamp");
 
-        TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MICROS, TimeUnit.MICROSECONDS);
-        TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MILLIS, TimeUnit.MILLISECONDS);
+        TIMESTAMP_UNIT_MAPPING.put(OffHeapColumnVector.OffHeapColumnType.DATETIME_MICROS, TimeUnit.MICROSECONDS);
+        TIMESTAMP_UNIT_MAPPING.put(OffHeapColumnVector.OffHeapColumnType.DATETIME_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private static final long MILLI = 1000;
@@ -82,8 +83,16 @@ public class HudiScannerUtils {
         return dateTime.format(DATETIME_FORMATTER);
     }
 
-    public static boolean isInt64Timestamp(ColumnType.TypeValue type) {
-        return (type == ColumnType.TypeValue.DATETIME_MICROS
-                || type == ColumnType.TypeValue.DATETIME_MILLIS);
+    public static boolean isInt64Timestamp(OffHeapColumnVector.OffHeapColumnType type) {
+        return (type == OffHeapColumnVector.OffHeapColumnType.DATETIME_MICROS
+                || type == OffHeapColumnVector.OffHeapColumnType.DATETIME_MILLIS);
+    }
+
+    public static String getTimestamp(Object fieldData, OffHeapColumnVector.OffHeapColumnType type) {
+        // INT64 timestamp type
+        long datetime = ((LongWritable) fieldData).get();
+        TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+        LocalDateTime localDateTime = getTimestamp(datetime, timeUnit, true);
+        return formatDateTime(localDateTime);
     }
 }

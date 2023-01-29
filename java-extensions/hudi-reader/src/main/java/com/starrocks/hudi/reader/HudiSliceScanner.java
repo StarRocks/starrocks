@@ -184,6 +184,9 @@ public class HudiSliceScanner extends ConnectorScanner {
                     } else {
                         Object fieldValue =
                                 ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
+                        if (HudiScannerUtils.isInt64Timestamp(getType(i))) {
+                            fieldValue = HudiScannerUtils.getTimestamp(fieldValue, getType(i));
+                        }
                         scanData(i, fieldValue);
                     }
                 }
