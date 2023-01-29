@@ -93,7 +93,7 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
                 .build(), input.getInputs());
 
         if (!leftProjectMaps.isEmpty()) {
-            leftProjectMaps.putAll(leftOutputColumns.getStream().boxed()
+            leftProjectMaps.putAll(leftOutputColumns.getStream()
                     .map(columnRefId -> context.getColumnRefFactory().getColumnRef(columnRefId))
                     .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
@@ -103,7 +103,7 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
         }
 
         if (!rightProjectMaps.isEmpty()) {
-            rightProjectMaps.putAll(rightOutputColumns.getStream().boxed()
+            rightProjectMaps.putAll(rightOutputColumns.getStream()
                     .map(columnRefId -> context.getColumnRefFactory().getColumnRef(columnRefId))
                     .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
