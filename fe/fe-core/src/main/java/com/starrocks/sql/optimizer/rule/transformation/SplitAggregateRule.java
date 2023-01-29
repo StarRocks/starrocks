@@ -171,9 +171,24 @@ public class SplitAggregateRule extends TransformationRule {
             return implementTwoStageAgg(input, operator);
         }
 
+<<<<<<< HEAD
         // now the distinctAggCallOperator must contain at least one multiple column agg
         // we need ensure all the distinctAggCall contains same columns
         checkDistinctAgg(distinctAggCallOperator);
+=======
+        if (distinctCount == 1 || (distinctCount > 1 && hasMultiDistinctCallWithMultiColumns)) {
+            // Get distinct columns and position in all aggregate functions
+            List<ColumnRefOperator> distinctColumns = Lists.newArrayList();
+            int singleDistinctFunctionPos = -1;
+            for (Map.Entry<ColumnRefOperator, CallOperator> kv : operator.getAggregations().entrySet()) {
+                singleDistinctFunctionPos++;
+                if (kv.getValue().isDistinct()) {
+                    distinctColumns = kv.getValue().getUsedColumns().getStream().
+                            map(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+                    break;
+                }
+            }
+>>>>>>> 749ee7900 ([Enhancement] Replace BitSet with RoaringBitMap to lower memory usage (#16499))
 
         // Get distinct columns and position in all aggregate functions
         List<ColumnRefOperator> distinctColumns = Lists.newArrayList();
