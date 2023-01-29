@@ -38,6 +38,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -80,17 +81,41 @@ public class BrokerFileGroupTest {
         formatProperties.put("trim_space", "true");
         formatProperties.put("escape", "|");
         formatProperties.put("enclose", "'");
-        DataDescription desc = new DataDescription("csvTable", null, 
-                                null, null, null, 
+        List<String> filePaths = new ArrayList<>();
+        filePaths.add("/a/b/c/file");
+        DataDescription desc = new DataDescription("olapTable", null, 
+                                filePaths, null, null, 
                                 null, null, null,
                                 false, null, null, formatProperties);
+        desc.analyze("testDb");
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
-        fileGroup.parse(db, desc);
+        fileGroup.parseFormatProperties(desc);
         Assert.assertEquals('\'', fileGroup.getEnclose());
         Assert.assertEquals('|', fileGroup.getEscape());
         Assert.assertEquals(3, fileGroup.getSkipHeader());
         Assert.assertEquals(true, fileGroup.isTrimspace());
+    }
+
+    @Test
+    public void testCSVParamsWithSpecialCharacter() throws UserException {
+        Map<String, String> formatProperties = new HashMap<String, String>();
+        formatProperties.put("escape", "\\");
+        formatProperties.put("enclose", "\t");
+        List<String> filePaths = new ArrayList<>();
+        filePaths.add("/a/b/c/file");
+        DataDescription desc = new DataDescription("olapTable", null, 
+                                filePaths, null, null, 
+                                null, null, null,
+                                false, null, null, formatProperties);
+        desc.analyze("testDb");
+
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parseFormatProperties(desc);
+        Assert.assertEquals('\\', fileGroup.getEscape());
+        Assert.assertEquals('\t', fileGroup.getEnclose());
+        Assert.assertEquals(92, fileGroup.getEscape());
+        Assert.assertEquals(9, fileGroup.getEnclose());
     }
 
     @Test

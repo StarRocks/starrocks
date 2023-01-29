@@ -136,6 +136,24 @@ public class BrokerFileGroup implements Writable {
         this.whereExpr = dataDescription.getWhereExpr();
     }
 
+    public void parseFormatProperties(DataDescription dataDescription) {
+        Map<String, String> formatProperties = dataDescription.getFormatProperties();
+        if (formatProperties != null) {
+            if (formatProperties.containsKey(ESCAPE)) {
+                escape = (byte) formatProperties.getOrDefault(ESCAPE, "0").charAt(0);
+            }
+            if (formatProperties.containsKey(ENCLOSE)) {
+                enclose = (byte) formatProperties.getOrDefault(ENCLOSE, "0").charAt(0);
+            }
+            if (formatProperties.containsKey(TRIMSPACE)) {
+                trimspace = Boolean.valueOf(formatProperties.getOrDefault(TRIMSPACE, "false"));
+            }
+            if (formatProperties.containsKey(SKIPHEADER)) {
+                skipHeader = Long.valueOf(formatProperties.getOrDefault(SKIPHEADER, "0"));
+            }
+        }
+    }
+
     // NOTE: DBLock will be held
     // This will parse the input DataDescription to list for BrokerFileInfo
     public void parse(Database db, DataDescription dataDescription) throws DdlException {
@@ -200,21 +218,7 @@ public class BrokerFileGroup implements Writable {
         }
         isNegative = dataDescription.isNegative();
 
-        Map<String, String> formatProperties = dataDescription.getFormatProperties();
-        if (formatProperties != null) {
-            if (formatProperties.containsKey(ESCAPE)) {
-                escape = (byte) formatProperties.getOrDefault(ESCAPE, "0").charAt(0);
-            }
-            if (formatProperties.containsKey(ENCLOSE)) {
-                enclose = (byte) formatProperties.getOrDefault(ENCLOSE, "0").charAt(0);
-            }
-            if (formatProperties.containsKey(TRIMSPACE)) {
-                trimspace = Boolean.valueOf(formatProperties.getOrDefault(TRIMSPACE, "false"));
-            }
-            if (formatProperties.containsKey(SKIPHEADER)) {
-                skipHeader = Long.valueOf(formatProperties.getOrDefault(SKIPHEADER, "0"));
-            }
-        }
+        parseFormatProperties(dataDescription);
 
         // FilePath
         filePaths = dataDescription.getFilePaths();

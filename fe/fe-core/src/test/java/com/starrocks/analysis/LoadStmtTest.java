@@ -1,4 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
+fe/fe-core/src/test/java/com/starrocks/analysis/LoadStmtTest.java// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ public class LoadStmtTest {
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
-        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` COLUMNS TERMINATED BY \",\") FORMAT AS CSV (\"trim_space\"=\"true\", \"skip_header\"=\"2\", \"enclose\"=\"'\") WITH BROKER (\"username\"=\"sr\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (\"trim_space\"=\"true\", \"skip_header\"=\"2\", \"enclose\"=\"'\")) WITH BROKER (\"username\"=\"sr\")");
     }
 
     @Test
