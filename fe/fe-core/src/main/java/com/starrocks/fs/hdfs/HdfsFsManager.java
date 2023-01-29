@@ -90,6 +90,7 @@ class ConfigurationWrap extends Configuration {
             String key = enums.nextElement();
             String value = props.getProperty(key);
             switch (tObjectStoreType) {
+                case UNIVERSAL_FS:
                 case S3:
                     switch (key) {
                         case HdfsFsManager.FS_S3A_ACCESS_KEY:
@@ -355,7 +356,10 @@ public class HdfsFsManager {
         } else if (scheme.equals(OBS_SCHEME)) {
             brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
         } else {
-            throw new UserException("invalid path. scheme is not supported");
+            // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
+            // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
+            // SDK is compatible with nearly all file/object storage system
+            brokerFileSystem = getUniversalFileSystem(path, loadProperties, tProperties);
         }
         return brokerFileSystem;
     }
@@ -741,6 +745,88 @@ public class HdfsFsManager {
             } else {
                 if (tProperties != null) {
                     convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties, TObjectStoreType.OBS);
+                }
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            LOG.error("errors while connect to " + path, e);
+            throw new UserException(e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    /**
+     * visible for test
+     * <p>
+     * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
+     *
+     * @param path
+     * @param properties
+     * @return
+     * @throws URISyntaxException
+     * @throws Exception
+     */
+    public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
+            throws UserException {
+
+        String disableCacheHDFS = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheHDFSLowerCase = disableCacheHDFS.toLowerCase();
+        if (!(disableCacheHDFSLowerCase.equals("true") || disableCacheHDFSLowerCase.equals("false"))) {
+            LOG.warn("invalid disable cache: " + disableCacheHDFS);
+            throw new UserException("invalid disable cache: " + disableCacheHDFS);
+        }
+        String disableCacheS3 = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheS3LowerCase = disableCacheS3.toLowerCase();
+        if (!(disableCacheS3LowerCase.equals("true") || disableCacheS3LowerCase.equals("false"))) {
+            LOG.warn("invalid disable cache: " + disableCacheS3);
+            throw new UserException("invalid disable cache: " + disableCacheS3);
+        }
+
+        // skip xxx:// first
+        int bucketEndIndex = path.indexOf("://", 0);
+
+        // find the end of bucket, for example for xxx://abc/def, we will take xxx://abc as host
+        if (bucketEndIndex != -1) {
+            bucketEndIndex = path.indexOf("/", bucketEndIndex + 3);
+        }
+        String host = path;
+        if (bucketEndIndex != -1) {
+            host = path.substring(0, bucketEndIndex);
+        }
+
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, "");
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
+
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+
+            if (fileSystem.getDFSFileSystem() == null) {
+                LOG.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new ConfigurationWrap();
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheHDFS);
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheS3);
+                FileSystem genericFileSystem = FileSystem.get(new Path(path).toUri(), conf);
+                fileSystem.setFileSystem(genericFileSystem);
+                fileSystem.setConfiguration(conf);
+                if (tProperties != null) {
+                    convertObjectStoreConfToProperties(path, conf, tProperties, TObjectStoreType.UNIVERSAL_FS);
+                }
+            } else {
+                if (tProperties != null) {
+                    convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties,
+                            TObjectStoreType.UNIVERSAL_FS);
                 }
             }
             return fileSystem;
