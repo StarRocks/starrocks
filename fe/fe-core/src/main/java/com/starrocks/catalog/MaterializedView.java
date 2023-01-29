@@ -306,6 +306,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public void setTimeUnit(String timeUnit) {
             this.timeUnit = timeUnit;
         }
+
+        @Override
+        public String toString() {
+            return "AsyncRefreshContext{" +
+                    "baseTableVisibleVersionMap=" + baseTableVisibleVersionMap +
+                    ", defineStartTime=" + defineStartTime +
+                    ", startTime=" + startTime +
+                    ", step=" + step +
+                    ", timeUnit='" + timeUnit + '\'' +
+                    '}';
+        }
     }
 
     public static class MvRefreshScheme {
