@@ -23,17 +23,13 @@
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
-#include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
-#include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
-#include "fs/fs.h"
-#include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -67,16 +63,24 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
         if (*iter_slot == nullptr) {
             iter_slot = _src_slot_descriptors.erase(iter_slot);
         } else {
-            _slot_id_to_desc[(*iter_slot)->id()] = *iter_slot;
-            ++iter_slot;
+            iter_slot++;
         }
+    }
+
+    for (size_t pos = 0; pos < _src_slot_descriptors.size(); pos++) {
+        _slot_id_to_slot_description_pos[_src_slot_descriptors[pos]->id()] = pos;
     }
 }
 
-Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
+// Used for broker load & UT init
+Status OrcChunkReader::TEST_init_with_input_stream(std::unique_ptr<orc::InputStream> input_stream) {
     try {
-        auto reader = orc::createReader(std::move(input_stream), _reader_options);
-        return init(std::move(reader));
+        auto reader = orc::createReader(std::move(input_stream), orc::ReaderOptions{});
+        std::unique_ptr<OrcMapping> root_mapping = nullptr;
+        ASSIGN_OR_RETURN(root_mapping,
+                         OrcMappingFactory::build_mapping(_src_slot_descriptors, reader->getType(), _case_sensitive,
+                                                          _use_orc_column_names, _hive_column_names));
+        return init(std::move(reader), std::move(root_mapping));
     } catch (std::exception& e) {
         auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
                                      _current_file_name);
@@ -191,7 +195,7 @@ const std::vector<bool>& OrcChunkReader::TEST_get_lazyload_column_id_list() {
     return _row_reader->getLazyLoadColumns();
 }
 
-Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
+Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader, std::unique_ptr<OrcMapping> root_mapping) {
     _reader = std::move(reader);
     // ORC writes empty schema (struct<>) to ORC files containing zero rows.
     // Hive 0.12
@@ -212,11 +216,6 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         builder->literal(orc::TruthValue::YES_NO_NULL);
         _row_reader_options.searchArgument(builder->build());
     }
-    // Build root_mapping, including all columns in orc.
-    std::unique_ptr<OrcMapping> root_mapping = nullptr;
-    ASSIGN_OR_RETURN(root_mapping,
-                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive,
-                                                      _use_orc_column_names, _hive_column_names));
     DCHECK(root_mapping != nullptr);
     RETURN_IF_ERROR(_init_include_columns(root_mapping));
     RETURN_IF_ERROR(_init_src_types(root_mapping));
@@ -492,7 +491,7 @@ OrcChunkReader::~OrcChunkReader() {
     _reader.reset(nullptr);
     _row_reader.reset(nullptr);
     _src_types.clear();
-    _slot_id_to_desc.clear();
+    _slot_id_to_slot_description_pos.clear();
     _slot_id_to_position.clear();
     _cast_exprs.clear();
     _fill_functions.clear();
@@ -768,11 +767,11 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         auto* ref = down_cast<ColumnRef*>(c);
         SlotId slot_id = ref->slot_id();
         // slot can not be found.
-        auto iter = _slot_id_to_desc.find(slot_id);
-        if (iter == _slot_id_to_desc.end()) {
+        auto iter = _slot_id_to_slot_description_pos.find(slot_id);
+        if (iter == _slot_id_to_slot_description_pos.end()) {
             return false;
         }
-        SlotDescriptor* slot_desc = iter->second;
+        SlotDescriptor* slot_desc = _src_slot_descriptors[iter->second];
         // It's unsafe to do eval on char type because of padding problems.
         if (slot_desc->type().type == TYPE_CHAR) {
             return false;
@@ -858,7 +857,8 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     }
 }
 
-Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
+Status OrcChunkReader::_add_conjunct(const std::unique_ptr<OrcMapping>& root_mapping, const Expr* conjunct,
+                                     std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
@@ -872,7 +872,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
         }
         for (Expr* c : conjunct->children()) {
-            _add_conjunct(c, builder);
+            _add_conjunct(root_mapping, c, builder);
         }
         builder->end();
         return Status::OK();
@@ -900,7 +900,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
     SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
+    size_t column_id =
+            root_mapping->get_column_id_or_child_mapping(_slot_id_to_slot_description_pos[slot_id]).orc_column_id;
     orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
@@ -909,37 +910,37 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
 
         switch (op_type) {
         case TExprOpcode::EQ:
-            builder->equals(name, pred_type, literal);
+            builder->equals(column_id, pred_type, literal);
             break;
 
         case TExprOpcode::NE:
             builder->startNot();
-            builder->equals(name, pred_type, literal);
+            builder->equals(column_id, pred_type, literal);
             builder->end();
             break;
 
         case TExprOpcode::LT:
-            builder->lessThan(name, pred_type, literal);
+            builder->lessThan(column_id, pred_type, literal);
             break;
 
         case TExprOpcode::LE:
-            builder->lessThanEquals(name, pred_type, literal);
+            builder->lessThanEquals(column_id, pred_type, literal);
             break;
 
         case TExprOpcode::GT:
             builder->startNot();
-            builder->lessThanEquals(name, pred_type, literal);
+            builder->lessThanEquals(column_id, pred_type, literal);
             builder->end();
             break;
 
         case TExprOpcode::GE:
             builder->startNot();
-            builder->lessThan(name, pred_type, literal);
+            builder->lessThan(column_id, pred_type, literal);
             builder->end();
             break;
 
         case TExprOpcode::EQ_FOR_NULL:
-            builder->nullSafeEquals(name, pred_type, literal);
+            builder->nullSafeEquals(column_id, pred_type, literal);
             break;
 
         default:
@@ -959,7 +960,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             ASSIGN_OR_RETURN(orc::Literal literal, translate_to_orc_literal(lit, pred_type));
             literals.emplace_back(literal);
         }
-        builder->in(name, pred_type, literals);
+        builder->in(column_id, pred_type, literals);
         if (neg) {
             builder->end();
         }
@@ -967,7 +968,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     }
 
     if (node_type == TExprNodeType::IS_NULL_PRED) {
-        builder->isNull(name, pred_type);
+        builder->isNull(column_id, pred_type);
         return Status::OK();
     }
 
@@ -975,13 +976,13 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     return Status::OK();
 }
 
-#define ADD_RF_TO_BUILDER                                            \
-    {                                                                \
-        builder->lessThanEquals(slot->col_name(), pred_type, upper); \
-        builder->startNot();                                         \
-        builder->lessThan(slot->col_name(), pred_type, lower);       \
-        builder->end();                                              \
-        return true;                                                 \
+#define ADD_RF_TO_BUILDER                                     \
+    {                                                         \
+        builder->lessThanEquals(column_id, pred_type, upper); \
+        builder->startNot();                                  \
+        builder->lessThan(column_id, pred_type, lower);       \
+        builder->end();                                       \
+        return true;                                          \
     }
 
 #define ADD_RF_BOOLEAN_TYPE(type)                                      \
@@ -1051,7 +1052,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         ADD_RF_TO_BUILDER                                                                                     \
     }
 
-bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
+bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const size_t column_id,
+                                         const JoinRuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     LogicalType ptype = slot->type().type;
     auto type_it = _supported_primitive_types.find(ptype);
@@ -1079,11 +1081,8 @@ bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinR
     return false;
 }
 
-Status OrcChunkReader::set_conjuncts(const std::vector<Expr*>& conjuncts) {
-    return set_conjuncts_and_runtime_filters(conjuncts, nullptr);
-}
-
-Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::unique_ptr<OrcMapping>& root_mapping,
+                                                         const std::vector<Expr*>& conjuncts,
                                                          const RuntimeFilterProbeCollector* rf_collector) {
     std::unique_ptr<orc::SearchArgumentBuilder> builder = orc::SearchArgumentFactory::newBuilder();
     int ok = 0;
@@ -1095,7 +1094,7 @@ Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*
             continue;
         }
         ok += 1;
-        RETURN_IF_ERROR(_add_conjunct(expr, builder));
+        RETURN_IF_ERROR(_add_conjunct(root_mapping, expr, builder));
     }
 
     if (rf_collector != nullptr) {
@@ -1104,10 +1103,11 @@ Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
-            auto it2 = _slot_id_to_desc.find(probe_slot_id);
-            if (it2 == _slot_id_to_desc.end()) continue;
-            SlotDescriptor* slot_desc = it2->second;
-            if (_add_runtime_filter(slot_desc, filter, builder)) {
+            auto it2 = _slot_id_to_slot_description_pos.find(probe_slot_id);
+            if (it2 == _slot_id_to_slot_description_pos.end()) continue;
+            const SlotDescriptor* slot_desc = _src_slot_descriptors[it2->second];
+            size_t column_id = root_mapping->get_column_id_or_child_mapping(it2->second).orc_column_id;
+            if (_add_runtime_filter(slot_desc, column_id, filter, builder)) {
                 ok += 1;
             }
         }
@@ -1196,10 +1196,10 @@ Status OrcChunkReader::set_timezone(const std::string& tz) {
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
 void OrcChunkReader::report_error_message(const std::string& error_msg) {
-    if (_state == nullptr) return;
+    if (_runtime_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    _state->append_error_msg_to_file("", error_msg);
+    _runtime_state->append_error_msg_to_file("", error_msg);
 }
 
 int OrcChunkReader::get_column_id_by_name(const std::string& name) const {

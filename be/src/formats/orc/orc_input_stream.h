@@ -19,6 +19,7 @@
 
 #include "column/column_helper.h"
 #include "common/object_pool.h"
+#include "exec/file_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -27,6 +28,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/buffered_stream.h"
+
 namespace starrocks {
 
 class ORCHdfsFileStream : public orc::InputStream {
@@ -76,5 +78,19 @@ private:
     uint64_t _cache_offset;
     SharedBufferedInputStream _buffer_stream;
     bool _buffer_stream_enabled = false;
+};
+
+class ORCFileStream : public ORCHdfsFileStream {
+public:
+    ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
+            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
+
+    ~ORCFileStream() override { _file.reset(); }
+
+    void read(void* buf, uint64_t length, uint64_t offset) override;
+
+private:
+    std::shared_ptr<RandomAccessFile> _file;
+    ScannerCounter* _counter;
 };
 } // namespace starrocks

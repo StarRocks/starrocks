@@ -224,6 +224,8 @@ public:
      */
     virtual SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
                                       const std::initializer_list<Literal>& literals) = 0;
+    virtual SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
+                                      const std::vector<Literal>& literals) = 0;
 
     /**
      * Add an is null leaf to the current item on the stack.

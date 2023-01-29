@@ -16,8 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_chunk_reader_factory.h"
 #include "formats/orc/orc_input_stream.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -54,11 +54,10 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
         return Status::InternalError(s);
     }
 
-    auto orc_reader = std::make_unique<OrcChunkReader>(4096, slot_descriptors);
-    orc_reader->disable_broker_load_mode();
-    orc_reader->set_current_file_name(delete_file_path);
-    RETURN_IF_ERROR(orc_reader->set_timezone(timezone));
-    RETURN_IF_ERROR(orc_reader->init(std::move(reader)));
+    HdfsOrcReaderFactory orc_reader_factory{
+            slot_descriptors, nullptr, std::move(reader), true, nullptr, false, timezone, delete_file_path, 4096};
+    std::unique_ptr<OrcChunkReader> orc_reader = nullptr;
+    ASSIGN_OR_RETURN(orc_reader, orc_reader_factory.create());
 
     orc::RowReader::ReadPosition position;
     Status s;

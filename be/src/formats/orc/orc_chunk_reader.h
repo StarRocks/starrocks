@@ -59,8 +59,7 @@ public:
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
-    Status init(std::unique_ptr<orc::InputStream> input_stream);
-    Status init(std::unique_ptr<orc::Reader> reader);
+    Status init(std::unique_ptr<orc::Reader> reader, std::unique_ptr<OrcMapping> root_mapping);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
     // create sample chunk
     ChunkPtr create_chunk();
@@ -70,10 +69,9 @@ public:
     StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
     ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
-    void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
-    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+    Status set_conjuncts_and_runtime_filters(const std::unique_ptr<OrcMapping>& root_mapping,
+                                             const std::vector<Expr*>& conjuncts,
                                              const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
@@ -90,12 +88,8 @@ public:
     void set_broker_load_mode(bool strict_mode) {
         _broker_load_mode = true;
         _strict_mode = strict_mode;
-        set_use_orc_column_names(true);
     }
-    void disable_broker_load_mode() {
-        _broker_load_mode = false;
-        set_use_orc_column_names(false);
-    }
+    void disable_broker_load_mode() { _broker_load_mode = false; }
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
@@ -118,8 +112,9 @@ public:
         return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
     }
 
-    void set_runtime_state(RuntimeState* state) { _state = state; }
-    RuntimeState* runtime_state() { return _state; }
+    void set_runtime_state(RuntimeState* state) { _runtime_state = state; }
+    RuntimeState* runtime_state() { return _runtime_state; }
+    size_t read_chunk_size() { return _read_chunk_size; };
     void set_current_slot(SlotDescriptor* slot) { _current_slot = slot; }
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
@@ -143,17 +138,17 @@ private:
                                    const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    Status _add_conjunct(const std::unique_ptr<OrcMapping>& root_mapping, const Expr* conjunct,
+                         std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    bool _add_runtime_filter(const SlotDescriptor* slot, const size_t column_id, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     std::unique_ptr<orc::ColumnVectorBatch> _batch;
     std::unique_ptr<orc::Reader> _reader;
     std::unique_ptr<orc::RowReader> _row_reader;
-    orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
-    std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+    std::unordered_map<SlotId, size_t> _slot_id_to_slot_description_pos;
 
     // Access ORC columns by name. By default,
     // columns in ORC files are accessed by their ordinal position in the Hive table definition.
@@ -188,6 +183,7 @@ private:
     const std::vector<bool>& TEST_get_selected_column_id_list();
     // Only used for UT, used after init reader
     const std::vector<bool>& TEST_get_lazyload_column_id_list();
+    Status TEST_init_with_input_stream(std::unique_ptr<orc::InputStream> input_stream);
 
     // fields related to broker load.
     bool _broker_load_mode;
@@ -197,7 +193,7 @@ private:
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
     std::unordered_map<std::string, int> _name_to_column_id;
-    RuntimeState* _state = nullptr;
+    RuntimeState* _runtime_state = nullptr;
     SlotDescriptor* _current_slot = nullptr;
     std::string _current_file_name;
     int _error_message_counter;

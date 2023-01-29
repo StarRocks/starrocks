@@ -18,6 +18,7 @@
 
 #include "column/array_column.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_chunk_reader_factory.h"
 #include "formats/orc/orc_input_stream.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
@@ -27,23 +28,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-
-class ORCFileStream : public ORCHdfsFileStream {
-public:
-    ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
-            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
-
-    ~ORCFileStream() override { _file.reset(); }
-
-    void read(void* buf, uint64_t length, uint64_t offset) override {
-        SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        ORCHdfsFileStream::read(buf, length, offset);
-    }
-
-private:
-    std::shared_ptr<RandomAccessFile> _file;
-    ScannerCounter* _counter;
-};
 
 ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
                        const TBrokerScanRange& scan_range, starrocks::ScannerCounter* counter)
@@ -81,12 +65,7 @@ Status ORCScanner::open() {
     for (int i = 0; i < num_columns_from_orc; ++i) {
         _orc_slot_descriptors[i] = _src_slot_descriptors[i];
     }
-    _orc_reader = std::make_unique<OrcChunkReader>(_state->chunk_size(), _orc_slot_descriptors);
-    _orc_reader->set_broker_load_mode(_strict_mode);
-    _orc_reader->set_timezone(_state->timezone());
-    _orc_reader->drop_nanoseconds_in_datetime();
-    _orc_reader->set_runtime_state(_state);
-    _orc_reader->set_case_sensitive(true);
+
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
@@ -196,15 +175,30 @@ Status ORCScanner::_open_next_orc_reader() {
         }
         const std::string& file_name = file->filename();
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
-        auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
-        _next_range++;
-        _orc_reader->set_read_chunk_size(_max_chunk_size);
-        _orc_reader->set_current_file_name(file_name);
-        st = _orc_reader->init(std::move(inStream));
+        auto input_stream = std::make_unique<ORCFileStream>(file, file_size, _counter);
+        std::unique_ptr<orc::Reader> orc_reader = nullptr;
+        try {
+            orc_reader = orc::createReader(std::move(input_stream), orc::ReaderOptions{});
+        } catch (std::exception& e) {
+            auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(), file_name);
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
+        }
+
+        BrokerLoadOrcReaderFactory orc_reader_factory{
+                _orc_slot_descriptors, _state,   std::move(orc_reader), _strict_mode, _max_chunk_size,
+                _state->timezone(),    file_name};
+        auto status = orc_reader_factory.create();
+        st = status.status();
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;
+        } else if (!st.ok()) {
+            return st;
         }
+        _orc_reader = std::move(status.value());
+
+        _next_range++;
         return st;
     }
 }

@@ -127,4 +127,9 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     }
 }
 
+void ORCFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
+    ORCHdfsFileStream::read(buf, length, offset);
+}
+
 } // namespace starrocks

@@ -84,6 +84,7 @@ public:
                   const std::initializer_list<Literal>& literalList);
 
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const std::vector<Literal>& literalList);
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, const std::vector<Literal>& literalList);
 
     /**
      * Get the operator for the leaf.
