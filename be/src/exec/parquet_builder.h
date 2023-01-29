@@ -43,7 +43,7 @@ struct ParquetBuilderOptions {
     TCompressionType::type compression_type;
     bool use_dictionary;
     int64_t row_group_max_size;
-    TParquetSchema parquet_schema;
+    std::vector<std::string> file_column_names;
 };
 
 class ParquetOutputStream : public arrow::io::OutputStream {
@@ -66,11 +66,10 @@ private:
 
 class ParquetBuildHelper {
 public:
-    static void build_file_data_type(parquet::Type::type& parquet_data_type,
-                                     const TParquetColumnType::type& column_data_type);
+    static void build_file_data_type(parquet::Type::type& parquet_data_type, const LogicalType& column_data_type);
 
-    static void build_repetition_type(parquet::Repetition::type& parquet_repetition_type,
-                                      const TParquetRepetitionType::type&);
+    static void build_parquet_repetition_type(parquet::Repetition::type& parquet_repetition_type,
+                                              const bool is_nullable);
 
     static void build_compression_type(parquet::WriterProperties::Builder& builder,
                                        const TCompressionType::type& compression_type);
@@ -92,7 +91,7 @@ public:
 private:
     Status _init(const ParquetBuilderOptions& options);
     void _init_properties(const ParquetBuilderOptions& options);
-    Status _init_schema(const TParquetSchema&);
+    Status _init_schema(const std::vector<std::string>& file_column_names);
     void _generate_rg_writer();
     void _rg_writer_close();
     size_t _get_rg_written_bytes();

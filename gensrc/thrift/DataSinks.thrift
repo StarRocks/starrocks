@@ -59,39 +59,10 @@ enum TResultSinkType {
     VARIABLE
 }
 
-enum TParquetColumnType {
-    BOOLEAN,
-    INT32,
-    INT64,
-    INT96,
-    BYTE_ARRAY,
-    FLOAT,
-    DOUBLE,
-    FIXED_LEN_BYTE_ARRAY,
-}
-
-enum TParquetRepetitionType {
-    REQUIRED,
-    OPTIONAL,
-    REPEATED,
-}
-
-struct TParquetColumn {
-    1: required string name;
-    2: optional TParquetColumnType type;
-    3: optional TParquetRepetitionType repetition_type
-    4: optional i64 id;
-}
-
-struct TParquetSchema {
-    1: required list<TParquetColumn> columns;
-}
-
 struct TParquetOptions {
     1: optional i64 parquet_max_group_bytes
     2: optional Types.TCompressionType compression_type
     3: optional bool use_dictory
-    4: optional TParquetSchema parquet_schema
 }
 
 struct TResultFileSinkOptions {
@@ -110,6 +81,7 @@ struct TResultFileSinkOptions {
     // properties from hdfs-site.xml, core-site.xml and load_properties
     10: optional PlanNodes.THdfsProperties hdfs_properties
     11: optional TParquetOptions parquet_options
+    12: optional list<string> file_column_names
 }
 
 struct TMemoryScratchSink {

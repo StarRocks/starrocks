@@ -48,23 +48,25 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.load.ParquetUtils.DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES;
-import static com.starrocks.load.ParquetUtils.PARQUET_COMPRESSION_TYPE;
-import static com.starrocks.load.ParquetUtils.PARQUET_COMPRESSION_TYPE_MAP;
-import static com.starrocks.load.ParquetUtils.PARQUET_MAX_ROW_GROUP_SIZE;
-import static com.starrocks.load.ParquetUtils.PARQUET_USE_DICT;
-import static com.starrocks.load.ParquetUtils.buildParquetSchema;
-
 // For syntax select * from tbl INTO OUTFILE xxxx
 public class OutFileClause implements ParseNode {
-    private static final Logger LOG = LogManager.getLogger(OutFileClause.class);
+    public static final Map<String, TCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
+            Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+
+    static {
+        PARQUET_COMPRESSION_TYPE_MAP.put("snappy", TCompressionType.SNAPPY);
+        PARQUET_COMPRESSION_TYPE_MAP.put("gzip", TCompressionType.GZIP);
+        PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
+        PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lzo", TCompressionType.LZO);
+        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
+        PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
+    }
 
     // Old properties still use this prefix, new properties will not.
     private static final String OLD_BROKER_PROP_PREFIX = "broker.";
@@ -72,10 +74,14 @@ public class OutFileClause implements ParseNode {
     private static final String PROP_COLUMN_SEPARATOR = "column_separator";
     private static final String PROP_LINE_DELIMITER = "line_delimiter";
     private static final String PROP_MAX_FILE_SIZE = "max_file_size";
+    public static final String PARQUET_COMPRESSION_TYPE = "compression_type";
+    public static final String PARQUET_USE_DICT = "use_dictionary";
+    public static final String PARQUET_MAX_ROW_GROUP_SIZE = "max_row_group_bytes";
 
     private static final long DEFAULT_MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024L; // 1GB
     private static final long MIN_FILE_SIZE_BYTES = 5 * 1024 * 1024L; // 5MB
     private static final long MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024L; // 2GB
+    public static final long DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES = 128 * 1024 * 1024; // 128MB
 
     private String filePath;
     private String format;
@@ -251,20 +257,18 @@ public class OutFileClause implements ParseNode {
         return sb.toString();
     }
 
-    public TResultFileSinkOptions toSinkOptions(List<String> columnNames, List<Expr> outputExprs) {
+    public TResultFileSinkOptions toSinkOptions(List<String> columnOutputNames) {
         TResultFileSinkOptions sinkOptions = new TResultFileSinkOptions(filePath, fileFormatType);
         if (isCsvFormat()) {
             sinkOptions.setColumn_separator(columnSeparator);
             sinkOptions.setRow_delimiter(rowDelimiter);
-        }
-
-        if (isParquetFormat()) {
+        } else if (isParquetFormat()) {
             TParquetOptions parquetOptions = new TParquetOptions();
             parquetOptions.setCompression_type(compressionType);
             parquetOptions.setParquet_max_group_bytes(maxParquetRowGroupBytes);
             parquetOptions.setUse_dictory(useDict);
-            parquetOptions.setParquet_schema(buildParquetSchema(outputExprs, columnNames));
             sinkOptions.setParquet_options(parquetOptions);
+            sinkOptions.setFile_column_names(columnOutputNames);
         }
 
         sinkOptions.setMax_file_size_bytes(maxFileSizeBytes);

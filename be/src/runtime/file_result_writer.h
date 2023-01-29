@@ -61,7 +61,7 @@ struct ResultFileOptions {
     int64_t max_row_group_bytes{0};
     bool use_dictory{true};
     TCompressionType::type compression_type{TCompressionType::SNAPPY};
-    TParquetSchema parquet_schema;
+    std::vector<std::string> file_column_names;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -85,6 +85,9 @@ struct ResultFileOptions {
         if (t_opt.__isset.broker_properties) {
             broker_properties = t_opt.broker_properties;
         }
+        if (t_opt.__isset.file_column_names) {
+            file_column_names = t_opt.file_column_names;
+        }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_max_group_bytes) {
             max_row_group_bytes = t_opt.parquet_options.parquet_max_group_bytes;
         }
@@ -94,10 +97,8 @@ struct ResultFileOptions {
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.compression_type) {
             compression_type = t_opt.parquet_options.compression_type;
         }
-        if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_schema) {
-            parquet_schema = t_opt.parquet_options.parquet_schema;
-        }
     }
+
     ~ResultFileOptions() = default;
 };
 

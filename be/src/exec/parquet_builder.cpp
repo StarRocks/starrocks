@@ -95,7 +95,7 @@ ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
 
 Status ParquetBuilder::_init(const ParquetBuilderOptions& options) {
     _init_properties(options);
-    Status st = _init_schema(options.parquet_schema);
+    Status st = _init_schema(options.file_column_names);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to init parquet schema: " << st;
     }
@@ -114,15 +114,16 @@ void ParquetBuilder::_init_properties(const ParquetBuilderOptions& options) {
     _properties = builder.build();
 }
 
-Status ParquetBuilder::_init_schema(const TParquetSchema& schema) {
+Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_names) {
     ::parquet::schema::NodeVector fields;
-    for (const auto& column : schema.columns) {
+    for (int i = 0; i < _output_expr_ctxs.size(); i++) {
         ::parquet::Repetition::type parquet_repetition_type;
         ::parquet::Type::type parquet_data_type;
-        ParquetBuildHelper::build_file_data_type(parquet_data_type, column.type);
-        ParquetBuildHelper::build_repetition_type(parquet_repetition_type, column.repetition_type);
-        ::parquet::schema::NodePtr nodePtr =
-                ::parquet::schema::PrimitiveNode::Make(column.name, parquet_repetition_type, parquet_data_type);
+        auto column_expr = _output_expr_ctxs[i]->root();
+        ParquetBuildHelper::build_file_data_type(parquet_data_type, column_expr->type().type);
+        ParquetBuildHelper::build_parquet_repetition_type(parquet_repetition_type, column_expr->is_nullable());
+        ::parquet::schema::NodePtr nodePtr = ::parquet::schema::PrimitiveNode::Make(
+                file_column_names[i], parquet_repetition_type, parquet_data_type);
         fields.push_back(nodePtr);
     }
 
@@ -132,60 +133,53 @@ Status ParquetBuilder::_init_schema(const TParquetSchema& schema) {
 }
 
 void ParquetBuildHelper::build_file_data_type(parquet::Type::type& parquet_data_type,
-                                              const TParquetColumnType::type& column_data_type) {
+                                              const LogicalType& column_data_type) {
     switch (column_data_type) {
-    case TParquetColumnType::BOOLEAN: {
+    case TYPE_BOOLEAN: {
         parquet_data_type = parquet::Type::BOOLEAN;
         break;
     }
-    case TParquetColumnType::INT32: {
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT: {
         parquet_data_type = parquet::Type::INT32;
         break;
     }
-    case TParquetColumnType::INT64: {
+    case TYPE_BIGINT:
+    case TYPE_DATE:
+    case TYPE_DATETIME: {
         parquet_data_type = parquet::Type::INT64;
         break;
     }
-    case TParquetColumnType::INT96: {
+    case TYPE_LARGEINT: {
         parquet_data_type = parquet::Type::INT96;
         break;
     }
-    case TParquetColumnType::FLOAT: {
+    case TYPE_FLOAT: {
         parquet_data_type = parquet::Type::FLOAT;
         break;
     }
-    case TParquetColumnType::DOUBLE: {
+    case TYPE_DOUBLE: {
         parquet_data_type = parquet::Type::DOUBLE;
         break;
     }
-    case TParquetColumnType::BYTE_ARRAY: {
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_DECIMAL:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMALV2: {
         parquet_data_type = parquet::Type::BYTE_ARRAY;
         break;
     }
-
     default:
         parquet_data_type = parquet::Type::UNDEFINED;
     }
 }
 
-void ParquetBuildHelper::build_repetition_type(parquet::Repetition::type& parquet_repetition_type,
-                                               const TParquetRepetitionType::type& column_repetition_type) {
-    switch (column_repetition_type) {
-    case TParquetRepetitionType::REQUIRED: {
-        parquet_repetition_type = parquet::Repetition::REQUIRED;
-        break;
-    }
-    case TParquetRepetitionType::REPEATED: {
-        parquet_repetition_type = parquet::Repetition::REPEATED;
-        break;
-    }
-    case TParquetRepetitionType::OPTIONAL: {
-        parquet_repetition_type = parquet::Repetition::OPTIONAL;
-        break;
-    }
-    default:
-        parquet_repetition_type = parquet::Repetition::UNDEFINED;
-    }
+void ParquetBuildHelper::build_parquet_repetition_type(parquet::Repetition::type& parquet_repetition_type,
+                                                       const bool is_nullable) {
+    parquet_repetition_type = is_nullable ? parquet::Repetition::OPTIONAL : parquet::Repetition::REQUIRED;
 }
 
 void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Builder& builder,

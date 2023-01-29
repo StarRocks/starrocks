@@ -114,10 +114,9 @@ public class ResultSink extends DataSink {
         return brokerName;
     }
 
-    public void setOutfileInfo(QueryStatement queryStmt, List<Expr> outputExprs) {
+    public void setOutfileInfo(OutFileClause outFileClause, List<String> columnOutputNames) {
         sinkType = TResultSinkType.FILE;
-        OutFileClause outFileClause = queryStmt.getOutFileClause();
-        fileSinkOptions = outFileClause.toSinkOptions(queryStmt.getQueryRelation().getColumnOutputNames(), outputExprs);
+        fileSinkOptions = outFileClause.toSinkOptions(columnOutputNames);
         brokerName = outFileClause.getBrokerDesc() == null ? null : outFileClause.getBrokerDesc().getName();
     }
 
