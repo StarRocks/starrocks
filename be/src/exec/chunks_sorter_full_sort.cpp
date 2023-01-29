@@ -67,11 +67,11 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         _sort_permutation.resize(0);
         RETURN_IF_ERROR(
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, &_sort_permutation));
-        ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
+        auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
         materialize_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
-        _sorted_chunks.push_back(sorted_chunk);
+        _sorted_chunks.emplace_back(std::move(sorted_chunk));
         _total_rows += _unsorted_chunk->num_rows();
         _unsorted_chunk.reset();
     }
@@ -111,10 +111,6 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     }
     *eos = false;
     return Status::OK();
-}
-
-SortedRuns ChunksSorterFullSort::get_sorted_runs() {
-    return _merged_runs;
 }
 
 size_t ChunksSorterFullSort::get_output_rows() const {
