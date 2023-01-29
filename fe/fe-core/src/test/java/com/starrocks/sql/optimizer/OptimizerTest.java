@@ -197,9 +197,9 @@ public class OptimizerTest {
     public void testPreprocessMvNonPartitionMv() throws Exception {
         Config.enable_experimental_mv = true;
         cluster.runSql("test", "insert into t0 values(10, 20, 30)");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
                 "as select v1, sum(total) as total from mv_1 group by v1");
         refreshMaterializedView("test", "mv_1");
         refreshMaterializedView("test", "mv_2");
@@ -239,11 +239,11 @@ public class OptimizerTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_3\n" +
+                .withMaterializedView("create materialized view mv_3\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
-                .withNewMaterializedView("create materialized view mv_4\n" +
+                .withMaterializedView("create materialized view mv_4\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
@@ -299,7 +299,7 @@ public class OptimizerTest {
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
 
-        starRocksAssert.withNewMaterializedView("create materialized view mv_5\n" +
+        starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
                 "PARTITION BY date_trunc(\"month\", k1)\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
