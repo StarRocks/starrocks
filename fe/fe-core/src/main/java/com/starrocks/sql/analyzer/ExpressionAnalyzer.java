@@ -316,7 +316,8 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                // For empty array, any item type works out, here we pick Boolean
+                node.setType(Type.ARRAY_BOOLEAN);
             }
             return null;
         }
