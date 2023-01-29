@@ -1,6 +1,6 @@
 # 文件外部表
 
-本文介绍如何通过文件外部表 (file external table) 直接查询外部存储系统（例如 HDFS）上的 Parquet 和 ORC 格式的数据文件。仅 StarRocks 2.5 及以上版本支持该功能。
+本文介绍如何通过文件外部表 (File External Table) 直接查询外部存储系统（例如 HDFS）上的 Parquet 和 ORC 格式的数据文件。仅 StarRocks 2.5 及以上版本支持该功能。
 
 ## 前提条件
 

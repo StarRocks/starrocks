@@ -1,8 +1,8 @@
 # Hive catalog
 
-本文介绍如何创建 Hive catalog，以及需要做哪些相应的配置。
+本文介绍如何创建 Hive Catalog，以及需要做哪些相应的配置。
 
-Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及以上版本支持通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。
+Hive Catalog 是一个外部数据目录 (External Catalog)。StarRocks 2.3 及以上版本支持通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。
 
 ## 使用说明
 

@@ -1,8 +1,8 @@
 # Default catalog
 
-本文介绍什么是 default catalog，以及如何使用 default catalog 查询 StarRocks 内部数据。
+本文介绍什么是 Default Catalog，以及如何使用 Default Catalog 查询 StarRocks 内部数据。
 
-StarRocks 2.3 及以上版本提供了 internal catalog（内部数据目录），用于管理 StarRocks 的[内部数据](../catalog/catalog_overview.md#基本概念)。每个 StarRocks 集群都有且只有一个 internal catalog，名为 `default_catalog`。StarRocks 暂不支持修改 internal catalog 的名称，也不支持创建新的 internal catalog。
+StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录），用于管理 StarRocks 的[内部数据](../catalog/catalog_overview.md#基本概念)。每个 StarRocks 集群都有且只有一个 Internal Catalog，名为 `default_catalog`。StarRocks 暂不支持修改 Internal Catalog 的名称，也不支持创建新的 Internal Catalog。
 
 ## 查询内部数据
 

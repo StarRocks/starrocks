@@ -1,8 +1,8 @@
 # Delta Lake catalog
 
-本文介绍如何创建 Delta Lake catalog，以及需要做哪些相应的配置。
+本文介绍如何创建 Delta Lake Catalog，以及需要做哪些相应的配置。
 
-Delta Lake catalog 是一个外部数据目录 (external catalog)。从 StarRocks 2.5 版本开始，您可以通过该目录直接查询 Delta Lake 中的数据，无需数据导入或创建外部表。
+Delta Lake Catalog 是一个外部数据目录 (External Catalog)。从 StarRocks 2.5 版本开始，您可以通过该目录直接查询 Delta Lake 中的数据，无需数据导入或创建外部表。
 
 ## **使用说明**
 
