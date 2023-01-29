@@ -302,7 +302,7 @@ public class Warehouse implements Writable {
         writeLock();
         try {
             if (clusters.size() > minCluster) {
-                Long clusterId = clusters.keySet().stream().findFirst().get();
+                Long clusterId = clusters.keySet().stream().findFirst().orElse(-1L);
                 Cluster cluster = clusters.get(clusterId);
                 GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(cluster.getWorkerGroupId());
                 clusters.remove(clusterId);
