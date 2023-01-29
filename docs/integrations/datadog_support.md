@@ -54,7 +54,7 @@ Uninstall
 
 ### Configuration
 
-#### Configuration FE
+#### FE Configuration
 
 For FE, copy [conf.yaml.example](https://github.com/StarRocks/starrocks/blob/main/contrib/datadog-connector/starrocks_fe/datadog_checks/starrocks_fe/data/conf.yaml.example) to `/etc/datadog-agent/conf.d/starrocks_fe.d/conf.yaml`.
 
@@ -65,7 +65,7 @@ Explanation of some important config:
 | fe_metric_url | `http://localhost:8030/metrics` | The URL where StarRocks FE metrics. |
 | metrics | - starrocks_fe_* | Indicators to be monitored, supporting wildcards `*` |
 
-#### Configuration BE
+#### BE Configuration
 
 For BE, copy [conf.yaml.example](https://github.com/StarRocks/starrocks/blob/main/contrib/datadog-connector/starrocks_be/datadog_checks/starrocks_be/data/conf.yaml.example) to `/etc/datadog-agent/conf.d/starrocks_be.d/conf.yaml`.
 
