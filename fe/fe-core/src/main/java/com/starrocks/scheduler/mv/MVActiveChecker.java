@@ -7,6 +7,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -32,6 +33,10 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     private void runImpl() {
+        if (FeConstants.runningUnitTest) {
+            setStop();
+        }
+
         List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                 listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
