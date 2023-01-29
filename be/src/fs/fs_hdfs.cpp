@@ -36,6 +36,8 @@ public:
     Status seek(int64_t offset) override;
 
 private:
+    bool _is_jfs_file() const;
+
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
@@ -91,7 +93,24 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
     return _file_size;
 }
 
+<<<<<<< HEAD
+=======
+void HdfsInputStream::set_size(int64_t value) {
+    _file_size = value;
+}
+
+bool HdfsInputStream::_is_jfs_file() const {
+    static const char* kFileSysPrefixJuicefs = "jfs://";
+    return strncmp(_file_name.c_str(), kFileSysPrefixJuicefs, strlen(kFileSysPrefixJuicefs)) == 0;
+}
+
+>>>>>>> 04bca13a9 ([BugFix] Avoid calling `GetReadStatistics` function when accessing juicefs (#16931))
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
+    // `GetReadStatistics` is not supported in juicefs hadoop sdk, and will cause the be crash
+    if (_is_jfs_file()) {
+        return nullptr;
+    }
+
     auto statistics = std::make_unique<io::NumericStatistics>();
     io::NumericStatistics* stats = statistics.get();
     auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
