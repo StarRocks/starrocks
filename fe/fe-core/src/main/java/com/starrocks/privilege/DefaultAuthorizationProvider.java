@@ -29,6 +29,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_VERSION = 1;
 
     private static final Map<String, Short> TYPE_STRING_TO_ID = new HashMap<>();
+    private static final Map<Short, String> TYPE_ID_TO_STRING = new HashMap<>();
     private static final Map<Short, Map<String, Action>> TYPE_TO_ACTION_MAP = new HashMap<>();
     private static final Map<String, String> PLURAL_TO_TYPE = new HashMap<>();
     public static final String UNEXPECTED_TYPE = "unexpected type ";
@@ -36,6 +37,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     static {
         for (PrivilegeType type : PrivilegeType.values()) {
             TYPE_STRING_TO_ID.put(type.toString(), (short) type.getId());
+            TYPE_ID_TO_STRING.put((short) type.getId(), type.toString());
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
             PLURAL_TO_TYPE.put(type.getPlural(), type.toString());
         }
@@ -69,7 +71,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public Collection<Action> getAllActions(short typeId) throws PrivilegeException {
         Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(typeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + typeId + " in " + TYPE_TO_ACTION_MAP.keySet());
+            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(typeId) +
+                    " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         return actionMap.values();
     }
@@ -78,11 +81,13 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public Action getAction(short typeId, String actionName) throws PrivilegeException {
         Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(typeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + typeId + " in " + TYPE_TO_ACTION_MAP.keySet());
+            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(typeId) +
+                    " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         Action action = actionMap.get(actionName);
         if (action == null) {
-            throw new PrivilegeException("cannot find action " + actionName + " in " + actionMap.keySet());
+            throw new PrivilegeException("cannot find action " + actionName + " in " + actionMap.keySet() +
+                    " on object type " + TYPE_ID_TO_STRING.get(typeId).toUpperCase());
         }
         return action;
     }

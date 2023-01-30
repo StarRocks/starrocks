@@ -2210,7 +2210,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testDropFunc() throws Exception {
-
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
@@ -2231,6 +2230,15 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test",
                 "revoke drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test",
                 "Access denied; you need (at least one of) the DROP FUNCTION privilege(s) for this operation");
+
+        // add test for drop non-existed function
+        ctxToTestUser();
+        try {
+            UtFrameUtils.parseStmtWithNewParser("drop function db1.non_existed_fn(int,int)",
+                    starRocksAssert.getCtx());
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown function"));
+        }
     }
 
     @Test
@@ -2282,7 +2290,7 @@ public class PrivilegeCheckerV2Test {
         }
         ctxToRoot();
         grantOrRevoke("grant create_materialized_view on db1 to test");
-        expectError = "Access denied; you need (at least one of) the TABLE/VIEW/MV privilege(s) for this operation";
+        expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
         try {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
