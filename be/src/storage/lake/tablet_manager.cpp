@@ -26,7 +26,6 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gutil/strings/join.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
@@ -38,22 +37,19 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
-static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
 static void* gc_checker(void* arg);
-static Status apply_pk_txn_log(const TxnLog& log, const TabletMetadata& metadata, Tablet* tablet,
-                               MetaFileBuilder* builder, int64_t base_version);
-static StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version,
-                                int64_t new_version, const int64_t* txns, int txns_size);
+static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                                int txns_size);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -96,6 +92,10 @@ std::string TabletManager::segment_location(int64_t tablet_id, std::string_view 
 
 std::string TabletManager::del_location(int64_t tablet_id, std::string_view del_name) const {
     return _location_provider->del_location(tablet_id, del_name);
+}
+
+std::string TabletManager::delvec_location(int64_t tablet_id, int64_t version) const {
+    return _location_provider->tablet_delvec_location(tablet_id, version);
 }
 
 std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
@@ -225,9 +225,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    MetaFileBuilder builder(tablet_metadata_pb, _update_mgr);
-    RETURN_IF_ERROR(builder.finalize(_location_provider));
-    return Status::OK();
+    return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -265,9 +263,13 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
-    // write to meta file
-    MetaFileBuilder builder(metadata, _update_mgr);
-    RETURN_IF_ERROR(builder.finalize(_location_provider));
+    // write metadata file
+    auto filepath = _location_provider->tablet_metadata_location(metadata->id(), metadata->version());
+    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto writer_file = fs::new_writable_file(options, filepath);
+    if (!writer_file.ok()) return writer_file.status();
+    RETURN_IF_ERROR((*writer_file)->append(metadata->SerializeAsString()));
+    RETURN_IF_ERROR((*writer_file)->close());
 
     // put into metacache
     auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
@@ -460,181 +462,11 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id) {
 StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
                                                 const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(_location_provider, &tablet, base_version, new_version, txns, txns_size);
+    return publish(&tablet, base_version, new_version, txns, txns_size);
 }
 
-static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
-    if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
-        auto rowset = metadata->add_rowsets();
-        rowset->CopyFrom(op_write.rowset());
-        rowset->set_id(metadata->next_rowset_id());
-        if (op_write.rowset().num_rows() > 0) {
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
-        } else {
-            // delete
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
-        }
-    }
-    return Status::OK();
-}
-
-static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                                 MetaFileBuilder* builder, int64_t base_version) {
-    if (op_write.has_rowset() &&
-        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate() || op_write.dels_size() > 0)) {
-        // handle primary key table publish
-        auto st = tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply_pk_write_log: " << tablet->id() << " st: " << st;
-            builder->handle_failure();
-            return st;
-        }
-    }
-    return Status::OK();
-}
-
-static Status apply_pk_compaction_log(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
-                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
-    if (op_compaction.input_rowsets().empty()) {
-        DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
-        return Status::OK();
-    }
-
-    auto st = tablet->update_mgr()->publish_primary_compaction(op_compaction, metadata, tablet, builder, base_version);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to apply_pk_compaction_log: " << tablet->id() << " st: " << st;
-        builder->handle_failure();
-    }
-    return st;
-}
-
-static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata) {
-    // It's ok to have a compaction log without input rowset and output rowset.
-    if (op_compaction.input_rowsets().empty()) {
-        DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
-        return Status::OK();
-    }
-
-    struct Finder {
-        int64_t id;
-        bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
-    };
-
-    auto input_id = op_compaction.input_rowsets(0);
-    auto first_input_pos = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
-    if (UNLIKELY(first_input_pos == metadata->rowsets().end())) {
-        return Status::InternalError(fmt::format("input rowset {} not found", input_id));
-    }
-
-    // Safety check:
-    // 1. All input rowsets must exist in |metadata->rowsets()|
-    // 2. Position of the input rowsets must be adjacent.
-    auto pre_input_pos = first_input_pos;
-    for (int i = 1, sz = op_compaction.input_rowsets_size(); i < sz; i++) {
-        input_id = op_compaction.input_rowsets(i);
-        auto it = std::find_if(pre_input_pos + 1, metadata->rowsets().end(), Finder{input_id});
-        if (it == metadata->rowsets().end()) {
-            return Status::InternalError(fmt::format("input rowset {} not exist", input_id));
-        } else if (it != pre_input_pos + 1) {
-            return Status::InternalError(fmt::format("input rowset position not adjacent"));
-        } else {
-            pre_input_pos = it;
-        }
-    }
-
-    auto first_idx = static_cast<uint32_t>(first_input_pos - metadata->rowsets().begin());
-    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
-        // Replace the first input rowset with output rowset
-        auto output_rowset = metadata->mutable_rowsets(first_idx);
-        output_rowset->CopyFrom(op_compaction.output_rowset());
-        output_rowset->set_id(metadata->next_rowset_id());
-        metadata->set_next_rowset_id(metadata->next_rowset_id() + output_rowset->segments_size());
-        ++first_input_pos;
-    }
-    // Erase input rowsets from metadata
-    auto end_input_pos = pre_input_pos + 1;
-    metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
-
-    // Set new cumulative point
-    uint32_t new_cumulative_point = 0;
-    if (first_idx >= metadata->cumulative_point()) {
-        // cumulative compaction
-        new_cumulative_point = first_idx;
-    } else {
-        // base compaction
-        new_cumulative_point = metadata->cumulative_point() - op_compaction.input_rowsets_size();
-    }
-    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
-        ++new_cumulative_point;
-    }
-    if (new_cumulative_point > metadata->rowsets_size()) {
-        return Status::InternalError(fmt::format("new cumulative point: {} exceeds rowset size: {}",
-                                                 new_cumulative_point, metadata->rowsets_size()));
-    }
-    metadata->set_cumulative_point(new_cumulative_point);
-
-    // Debug new tablet metadata
-    std::vector<uint32_t> rowset_ids;
-    std::vector<uint32_t> delete_rowset_ids;
-    for (const auto& rowset : metadata->rowsets()) {
-        rowset_ids.emplace_back(rowset.id());
-        if (rowset.has_delete_predicate()) {
-            delete_rowset_ids.emplace_back(rowset.id());
-        }
-    }
-    LOG(INFO) << "compaction finish. tablet: " << metadata->id() << ", version: " << metadata->version()
-              << ", cumulative point: " << metadata->cumulative_point() << ", rowsets: [" << JoinInts(rowset_ids, ",")
-              << "]"
-              << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
-    return Status::OK();
-}
-
-static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
-    for (const auto& rowset : op_schema_change.rowsets()) {
-        if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
-            auto new_rowset = metadata->add_rowsets();
-            new_rowset->CopyFrom(rowset);
-            new_rowset->set_id(metadata->next_rowset_id());
-            if (new_rowset->num_rows() > 0) {
-                metadata->set_next_rowset_id(metadata->next_rowset_id() + new_rowset->segments_size());
-            } else {
-                // delete
-                metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
-    if (log.has_op_write()) {
-        RETURN_IF_ERROR(apply_write_log(log.op_write(), metadata));
-    }
-
-    if (log.has_op_compaction()) {
-        RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), metadata));
-    }
-
-    if (log.has_op_schema_change()) {
-        RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change(), metadata));
-    }
-    return Status::OK();
-}
-
-Status apply_pk_txn_log(const TxnLog& log, const TabletMetadata& metadata, Tablet* tablet, MetaFileBuilder* builder,
-                        int64_t base_version) {
-    if (log.has_op_write()) {
-        RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), metadata, tablet, builder, base_version));
-    }
-
-    if (log.has_op_compaction()) {
-        RETURN_IF_ERROR(apply_pk_compaction_log(log.op_compaction(), metadata, tablet, builder, base_version));
-    }
-    return Status::OK();
-}
-
-StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version, int64_t new_version,
-                         const int64_t* txns, int txns_size) {
+StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                         int txns_size) {
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
@@ -651,14 +483,11 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
         return res.status();
     }
 
-    const TabletMetadataPtr& base_metadata = res.value();
+    auto base_metadata = std::move(res).value();
+    auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
 
-    // make a copy of metadata
-    auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
-    new_metadata->set_version(new_version);
-
-    // Meta file builder
-    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata, tablet->update_mgr());
+    RETURN_IF_ERROR(log_applier->init());
 
     // Apply txn logs
     int64_t alter_version = -1;
@@ -685,14 +514,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
             alter_version = txn_log->op_schema_change().alter_version();
         }
 
-        Status st = Status::OK();
-        // TODO(yixin) : move apply txn log logic(both pk, dup, uniq table) to MetaBuilder
-        if (is_primary_key(new_metadata.get())) {
-            st = apply_pk_txn_log(*txn_log, *new_metadata, tablet, builder.get(), base_version);
-        } else {
-            st = apply_txn_log(*txn_log, new_metadata.get());
-        }
-
+        auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
             return st;
@@ -720,7 +542,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
                 return txn_vlog.status();
             }
 
-            auto st = apply_txn_log(**txn_vlog, new_metadata.get());
+            auto st = log_applier->apply(**txn_vlog);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to apply " << tablet->txn_vlog_location(v) << ": " << st;
                 return st;
@@ -729,12 +551,7 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
     }
 
     // Save new metadata
-    auto st = builder->finalize(location_provider);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to builder finalize: " << new_metadata->id() << " st: " << st;
-        builder->handle_failure();
-        return st;
-    }
+    RETURN_IF_ERROR(log_applier->finish());
 
     // Delete txn logs
     for (int i = 0; i < txns_size; i++) {
