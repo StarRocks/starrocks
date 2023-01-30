@@ -435,6 +435,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             int64_t cpu_cost = query_ctx->cpu_cost();
             int64_t scan_rows = query_ctx->cur_scan_rows_num();
             int64_t scan_bytes = query_ctx->get_scan_bytes();
+            int64_t mem_usage_bytes = query_ctx->current_mem_usage_bytes();
             auto query_statistics = response->add_query_statistics();
             auto query_id = query_statistics->mutable_query_id();
             query_id->set_hi(p_query_id.hi());
@@ -442,6 +443,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_cpu_cost_ns(cpu_cost);
             query_statistics->set_scan_rows(scan_rows);
             query_statistics->set_scan_bytes(scan_bytes);
+            query_statistics->set_mem_usage_bytes(mem_usage_bytes);
         }
     }
 }
