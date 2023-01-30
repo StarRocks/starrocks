@@ -412,7 +412,6 @@ BE static parameters are as follows.
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
-| row_nums_check | TRUE | N/A | The boolean value to control if to check the row counts before and after the compaction. The value true indicates to enable the row count check. The value false indicates disable the row count check. |
 | file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
 | min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
 | index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
@@ -430,7 +429,6 @@ BE static parameters are as follows.
 | fragment_pool_thread_num_min | 64 | N/A | The minimum number of threads used for query. |
 | fragment_pool_thread_num_max | 4096 | N/A | The maximum number of threads used for query. |
 | fragment_pool_queue_size | 2048 | N/A | The upper limit of query number that can be processed on each BE node. |
-| enable_partitioned_aggregation | TRUE | N/A | The boolean value to control if to enable the Partition Aggregation. The value true indicates to enable the Partition Aggregation. The value false indicates to disable the Partition Aggregation. |
 | enable_token_check | TRUE | N/A | The boolean value to control if to enable the token check. The value true indicates to enable the token check. The value false indicates to disable the token check. |
 | enable_prefetch | TRUE | N/A | The boolean value to control if to enable the pre-fetch of the query. The value true indicates to enable the pre-fetch. The value false indicates to disable the pre-fetch. |
 | load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
@@ -495,15 +493,12 @@ BE static parameters are as follows.
 | enable_metric_calculator | 0 | N/A | |
 | enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
 | enable_orc_late_materialization | 1 | N/A | |
-| enable_quadratic_probing | 0 | N/A | |
 | enable_schema_change_v2 | 1 | N/A | |
 | enable_segment_overflow_read_chunk | 1 | N/A | |
 | enable_system_metrics | 1 | N/A | |
 | es_http_timeout_ms | 5000 | N/A | |
 | es_index_max_result_window | 10000 | N/A | |
 | es_scroll_keepalive | 5m | N/A | |
-| etl_thread_pool_queue_size | 256 | N/A | |
-| etl_thread_pool_size | 8 | N/A | |
 | experimental_s3_max_single_part_size | 16777216 | N/A | |
 | experimental_s3_min_upload_part_size | 16777216 | N/A | |
 | ignore_broken_disk | 0 | N/A | |
@@ -550,8 +545,6 @@ BE static parameters are as follows.
 | mmap_buffers | 0 | N/A | |
 | null_encoding | 0 | N/A | |
 | num_cores | 0 | N/A | |
-| num_disks | 0 | N/A | |
-| num_threads_per_disk | 0 | N/A | |
 | object_storage_access_key_id |  | N/A | |
 | object_storage_endpoint |  | N/A | |
 | object_storage_endpoint_path_style_access | 0 | N/A | |
@@ -590,7 +583,6 @@ BE static parameters are as follows.
 | query_cache_capacity | 536870912 | N/A | |
 | query_debug_trace_dir |  | N/A | |
 | query_scratch_dirs |  | N/A | |
-| read_size | 8388608 | N/A | |
 | release_snapshot_worker_count | 5 | N/A | |
 | repair_compaction_interval_seconds | 600 | N/A | |
 | rewrite_partial_segment | 1 | N/A | |
