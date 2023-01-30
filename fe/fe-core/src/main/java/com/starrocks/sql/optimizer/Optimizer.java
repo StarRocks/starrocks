@@ -199,7 +199,13 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
-        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt()));
+        OptimizerTraceInfo traceInfo;
+        if (connectContext.getExecutor() == null) {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
+        } else {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
+        }
+        context.setTraceInfo(traceInfo);
 
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()

@@ -33,7 +33,7 @@ public class OptimizerTraceInfo {
     public OptimizerTraceInfo(UUID queryId, StatementBase stmt) {
         this.queryId = queryId;
         this.stopwatch = Stopwatch.createStarted();
-        if (stmt != null & stmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE_OPTIMIZER) {
+        if (stmt != null && stmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE_OPTIMIZER) {
             verboseOptimizer = true;
         }
 
