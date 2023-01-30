@@ -25,7 +25,8 @@ public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                    AggregatorPtr aggregator)
             : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, driver_sequence),
-              _aggregator(std::move(aggregator)) {
+              _aggregator(std::move(aggregator)),
+              _auto_state(AggrAutoState::INIT_PREAGG) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
     }
@@ -53,6 +54,8 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size);
 
+    Status _push_chunk_by_selective_preaggregation(ChunkPtr chunk, const size_t chunk_size, bool need_build);
+
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -61,6 +64,8 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
+    AggrAutoState _auto_state;
+    AggrAutoContext _auto_context;
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
