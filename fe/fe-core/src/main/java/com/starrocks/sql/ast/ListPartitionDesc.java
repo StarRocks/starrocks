@@ -74,7 +74,6 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
-        // TODO: test be nullable compare
         for (ColumnDef columnDef : columnDefList) {
             if (columnDef.isAllowNull()) {
                 throw new AnalysisException("The list partition column does not support allow null currently, column:["

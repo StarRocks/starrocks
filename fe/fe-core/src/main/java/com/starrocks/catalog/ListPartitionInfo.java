@@ -107,7 +107,7 @@ public class ListPartitionInfo extends PartitionInfo {
     public List<Long> getPartitionIds(boolean isTemp) {
         List<Long> partitionIds = Lists.newArrayList();
         idToIsTempPartition.forEach((k, v) -> {
-            if (v == isTemp) {
+            if (v.equals(isTemp)) {
                 partitionIds.add(k);
             }
         });
@@ -372,10 +372,9 @@ public class ListPartitionInfo extends PartitionInfo {
         idToIsTempPartition.remove(partitionId);
     }
 
+    @Override
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         super.moveRangeFromTempToFormal(tempPartitionId);
-        if (idToIsTempPartition.containsKey(tempPartitionId)) {
-            idToIsTempPartition.put(tempPartitionId, false);
-        }
+        idToIsTempPartition.computeIfPresent(tempPartitionId, (k,v) -> false);
     }
 }

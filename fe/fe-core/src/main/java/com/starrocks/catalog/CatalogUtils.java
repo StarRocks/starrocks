@@ -159,8 +159,8 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkPartitionValuesExistForReplaceListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
-                                                                        boolean isTemp)
+    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
+                                                                    boolean isTemp)
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
