@@ -265,7 +265,7 @@ As you can see, now the output of `rollup` section in the query profile is `stor
 
 ### Check the building status of a materialized view
 
-Creating a materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) command.
+Creating a single-table materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command.
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
