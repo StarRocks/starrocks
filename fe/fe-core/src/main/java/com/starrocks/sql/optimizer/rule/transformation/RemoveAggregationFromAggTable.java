@@ -28,9 +28,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -124,8 +124,8 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 return false;
             }
         }
-        List<String> groupKeyColumns = aggregationOperator.getGroupingKeys().stream()
-                .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toList());
+        Set<String> groupKeyColumns = aggregationOperator.getGroupingKeys().stream()
+                .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toSet());
         return groupKeyColumns.containsAll(keyColumnNames)
                 && groupKeyColumns.containsAll(partitionColumnNames)
                 && groupKeyColumns.containsAll(distributionColumnNames);
@@ -172,7 +172,7 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             newProjectMap = projectMap;
         }
 
-        LogicalProjectOperator projectOperator = new LogicalProjectOperator(newProjectMap);
-        return Lists.newArrayList(OptExpression.create(projectOperator, newChildOpt));
+        newChildOpt.getOp().setProjection(new Projection(newProjectMap));
+        return Lists.newArrayList(newChildOpt);
     }
 }
