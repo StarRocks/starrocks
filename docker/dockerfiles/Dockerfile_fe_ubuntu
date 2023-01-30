@@ -1,3 +1,5 @@
+## the dockerfile for buildx used. starrocks have compiled. the output directory rename to amd64 or arm64.
+
 FROM ubuntu:22.04 as base_amd64
 RUN useradd --create-home --no-log-init --shell /bin/bash -u 1000 -g 1000 starrocks
 ONBUILD COPY --chown=starrocks:starrocks /amd64/fe /opt/starrocks/fe/
