@@ -136,6 +136,31 @@ enum AggrMode {
     AM_STREAMING_POST_CACHE
 };
 
+enum AggrAutoState { INIT_PREAGG = 0, ADJUST, PASS_THROUGH, FORCE_PREAGG, PREAGG, SELECTIVE_PREAGG };
+
+struct AggrAutoContext {
+    static constexpr size_t ContinuousUpperLimit = 10000;
+    static constexpr int ForcePreaggLimit = 3;
+    static constexpr int PreaggLimit = 100;
+    static constexpr int AdjustLimit = 100;
+    static constexpr double LowReduction = 0.2;
+    static constexpr double HighReduction = 0.9;
+    static constexpr size_t MaxHtSize = 64 * 1024 * 1024; // 64 MB
+    static constexpr int StableLimit = 5;
+    std::string get_auto_state_string(const AggrAutoState& state);
+    size_t get_continuous_limit();
+    void update_continuous_limit();
+    bool is_high_reduction(const size_t agg_count, const size_t chunk_size);
+    bool is_low_reduction(const size_t agg_count, const size_t chunk_size);
+    size_t init_preagg_count = 0;
+    size_t adjust_count = 0;
+    size_t pass_through_count = 0;
+    size_t force_preagg_count = 0;
+    size_t preagg_count = 0;
+    size_t selective_preagg_count = 0;
+    size_t continuous_limit = 100;
+};
+
 struct StreamingHtMinReductionEntry {
     int min_ht_mem;
     double streaming_ht_min_reduction;
