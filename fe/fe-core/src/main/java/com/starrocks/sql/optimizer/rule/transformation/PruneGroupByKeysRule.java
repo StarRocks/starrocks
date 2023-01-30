@@ -23,13 +23,10 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -58,21 +55,6 @@ public class PruneGroupByKeysRule extends TransformationRule {
             return false;
         }
         return true;
-    }
-
-    private boolean hasFilter(final OptExpression input) {
-        // child of project operator
-        Operator childOperator = input.getInputs().get(0).getInputs().get(0).getOp();
-        if (childOperator instanceof LogicalFilterOperator) {
-            return true;
-        }
-        if (childOperator instanceof LogicalScanOperator) {
-            LogicalScanOperator scanOperator = (LogicalScanOperator) childOperator;
-            if (scanOperator.getPredicate() != null) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override
@@ -136,14 +118,14 @@ public class PruneGroupByKeysRule extends TransformationRule {
             newPostAggProjections.put(groupingKey, groupingExpr);
         }
 
-        if (newGroupingKeys.isEmpty() && hasFilter(input)) {
-            // if all group by keys are pruned, there must be a constant key.
+        if (newGroupingKeys.isEmpty() && !aggregations.isEmpty()) {
+            // if all group by keys are pruned, there must be all constant key.
             Preconditions.checkState(firstConstantGroupingKey != null);
-            // if all group by keys are constant and the query contains filter, in order to ensure the correct result,
+            // if all group by keys are constant and the query has aggregations, in order to ensure the correct result,
             // we can't prune all group by keys.
-            // for example, suppose all data will be filtered by `a > 0`,
-            // `select 'a','b',count(*) from table where a > 0 group by 'a','b'` will return an empty set,
-            // but `select 'a','b',count(*) from table where a > 0` will return one row.
+            // for example, suppose table is empty,
+            // `select 'a','b',count(*) from table group by 'a','b'` will return an empty set,
+            // but `select 'a','b',count(*) from table` will return one row.
             // In this case, we should reserve at least one key,
             // here we choose the first constant key
             newGroupingKeys.add(firstConstantGroupingKey.first);
@@ -190,18 +172,11 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 .setGroupingKeys(newGroupingKeys)
                 .setPartitionByColumns(newPartitionColumns).build();
 
-        OptExpression result;
-        if (newProjections.isEmpty()) {
-            // for queries like `select 1,count(*) from table group by 1;`,
-            // we don't need the original project operator under agg operator
-            result = OptExpression.create(newPostAggProjectOperator,
-                    OptExpression.create(newAggOperator, input.getInputs().get(0).getInputs()));
-        } else {
-            LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjections);
-            result = OptExpression.create(newPostAggProjectOperator,
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjections);
+
+        OptExpression result = OptExpression.create(newPostAggProjectOperator,
                     OptExpression.create(newAggOperator,
                             OptExpression.create(newProjectOperator, input.getInputs().get(0).getInputs())));
-        }
 
         return Lists.newArrayList(result);
     }

@@ -118,10 +118,7 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByNull() throws Exception {
         String sql = "select count(*) from test_all_type group by null";
         String plan = getFragmentPlan(sql);
-        // null will be pruned from grouping keys by PruneGroupByKeysRule
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by:");
+        assertContains(plan, "<slot 11> : NULL");
     }
 
     @Test
@@ -1552,39 +1549,28 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         String sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
-        // constant will be pruned from grouping keys by PruneGroupByKeysRule,
-        // and four phase aggregate will be rewrote to three phase aggregaete
-        assertContains(plan, "  6:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(19: count)\n" +
-                "  |  group by:");
+                "  |  group by: 18: expr");
 
         sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
-        // constant will be pruned from grouping keys by PruneGroupByKeysRule,
-        // and four phase aggregate will be rewrote to three phase aggregaete
-        assertContains(plan, " 6:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
-                "  |  group by:");
+                "  |  group by: 18: expr");
 
         sql = "select count(distinct L_PARTKEY + 1) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        // constant will be pruned from grouping keys by PruneGroupByKeysRule,
-        // and four phase aggregate will be rewrote to three phase aggregaete
-        assertContains(plan, " 7:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
-                "  |  group by:");
+                "  |  group by: 18: expr");
 
         sql = "select count(distinct L_SUPPKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        // constant will be pruned from grouping keys by PruneGroupByKeysRule,
-        // and four phase aggregate will be rewrote to three phase aggregaete
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
-                "  |  output: count(3: L_SUPPKEY), count(20: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  3:AGGREGATE (merge serialize)\n" +
-                "  |  output: count(20: count)\n" +
-                "  |  group by: 3: L_SUPPKEY");
+        assertContains(plan, "  5:Project\n" +
+                "  |  <slot 3> : 3: L_SUPPKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  <slot 20> : 20: count");
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1596,40 +1582,47 @@ public class AggregateTest extends PlanTestBase {
 
         String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(19: count)\n" +
-                "  |  group by: \n");
-        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
-                "  |  group by: \n" +
+                "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY");
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
 
         sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(20: count)\n" +
-                "  |  group by: \n");
-        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
-                "  |  group by: \n" +
+                "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY");
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
 
         sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(19: count), count(20: count)\n" +
-                "  |  group by: \n");
-        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(1: L_ORDERKEY), count(20: count)\n" +
-                "  |  group by: \n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY), sum(21: count)\n" +
+                "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(21: count)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: L_PARTKEY)\n" +
-                "  |  group by: 1: L_ORDERKEY\n");
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
 
         FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
@@ -2090,7 +2083,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v4\n" +
                 "  |  <slot 5> : CAST(2: v5 AS LARGEINT)\n" +
                 "  |  <slot 6> : 1: v4 + 2: v5 + 3: v6");
-        // if all group by keys are constant and the query contains filter,
+        // if all group by keys are constant and the query has aggregations
         // we should reserve one key to ensure the correct result
         sql = "select 'a',count(t1b) from test_all_type where t1c>10 group by 'c'";
         plan = getFragmentPlan(sql);
