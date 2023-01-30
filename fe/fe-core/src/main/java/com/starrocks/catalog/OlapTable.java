@@ -69,6 +69,7 @@ import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -757,13 +758,22 @@ public class OlapTable extends Table {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return partitionColumnNames;
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
         }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName());
-        }
-        return partitionColumnNames;
+        throw new SemanticException("unknown partition info:" + partitionInfo.getClass().getName());
     }
 
     public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
@@ -825,24 +835,32 @@ public class OlapTable extends Table {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
 
-            Preconditions.checkState(partitionInfo.getType() == PartitionType.RANGE);
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-
-            if (!isForceDrop) {
-                // recycle partition
-                GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
-                        rangePartitionInfo.getRange(partition.getId()),
-                        rangePartitionInfo.getDataProperty(partition.getId()),
-                        rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()),
-                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                        isLakeTable());
-            } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    // recycle range partition
+                    GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
+                            rangePartitionInfo.getRange(partition.getId()),
+                            rangePartitionInfo.getDataProperty(partition.getId()),
+                            rangePartitionInfo.getReplicationNum(partition.getId()),
+                            rangePartitionInfo.getIsInMemory(partition.getId()),
+                            rangePartitionInfo.getStorageCacheInfo(partition.getId()),
+                            isLakeTable());
+                } else if (!reserveTablets) {
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
+                // drop partition info
+                rangePartitionInfo.dropPartition(partition.getId());
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    // TODO: recycle list partition
+                } else if (!reserveTablets) {
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
+                // drop partition info
+                listPartitionInfo.dropPartition(partition.getId());
             }
-
-            // drop partition info
-            rangePartitionInfo.dropPartition(partition.getId());
         }
     }
 

@@ -740,6 +740,7 @@ rollupRenameClause
 
 addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+    | ADD TEMPORARY? (singleItemListPartitionDesc | multiItemListPartitionDesc) distributionDesc? properties?
     ;
 
 dropPartitionClause

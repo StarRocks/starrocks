@@ -1533,7 +1533,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.getType() != PartitionType.RANGE) {
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
 
