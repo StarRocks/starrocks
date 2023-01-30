@@ -293,6 +293,7 @@ size_t ParquetBuilder::_get_rg_written_bytes() {
     return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + estimated_bytes;
 }
 
+// TODO(stephen): we should use the average of each row bytes to calculate the remaining writable size.
 void ParquetBuilder::_check_size() {
     if (ParquetBuilder::_get_rg_written_bytes() > _row_group_max_size) {
         _flush_row_group();
