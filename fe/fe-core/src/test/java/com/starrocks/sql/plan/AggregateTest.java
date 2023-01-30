@@ -1549,12 +1549,14 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         String sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
+        // check four phase aggregate
         assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(19: count)\n" +
                 "  |  group by: 18: expr");
 
         sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
+        // check four phase aggregate
         assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
