@@ -729,7 +729,7 @@ std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
             throw std::runtime_error("append user data to brpc iobuf error.");
         }
         chunk->clear_data();
-        chunks_data_ref->chunks_data_ref.push_back(std::move(shared_data));
+        chunks_data_ref->data_buffer.push_back(std::move(shared_data));
 
         // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
