@@ -409,7 +409,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多。|
 |max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。|
 |min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。|
-|row_nums_check|TRUE|Compaction 完成之后，前后 Rowset 行数对比。|
 |file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
 |min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
@@ -427,7 +426,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |fragment_pool_thread_num_min|64|最小查询线程数，默认启动 64 个线程。|
 |fragment_pool_thread_num_max|4096|最大查询线程数。|
 |fragment_pool_queue_size|2048|单节点上能够处理的查询请求上限。|
-|enable_partitioned_aggregation|TRUE|使用 PartitionAggregation。|
 |enable_token_check|TRUE|Token 开启检验。|
 |enable_prefetch|TRUE|查询提前预取。|
 |load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB。|
