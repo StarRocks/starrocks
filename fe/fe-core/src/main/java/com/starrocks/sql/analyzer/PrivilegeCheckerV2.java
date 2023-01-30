@@ -175,6 +175,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.UseWarehouseStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeManager;
@@ -792,6 +793,12 @@ public class PrivilegeCheckerV2 {
 
         public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
             // we don't check privilege for `show resource groups` statement
+            return null;
+        }
+
+        // --------------------------------- Warehouse Statement ------------------------------------------
+        @Override
+        public Void visitUseWarehouseStatement(UseWarehouseStmt statement, ConnectContext context) {
             return null;
         }
 

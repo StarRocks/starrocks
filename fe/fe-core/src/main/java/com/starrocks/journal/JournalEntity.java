@@ -70,6 +70,8 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AlterWhClusterOplog;
+import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -96,6 +98,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -106,6 +109,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -134,6 +138,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,6 +196,33 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_WH: {
+                data = Warehouse.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_SUSPEND_WH:
+            case OperationType.OP_DROP_WH: {
+                data = OpWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESUME_WH: {
+                data = ResumeWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
+            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                data = AlterWhClusterOplog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_MOD_PROP: {
+                data = AlterWhPropertyOplog.read(in);
                 isRead = true;
                 break;
             }

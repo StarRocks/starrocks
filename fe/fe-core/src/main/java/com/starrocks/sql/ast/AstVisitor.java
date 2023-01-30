@@ -73,6 +73,40 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Warehouse Statement ----------------------------------------------------
+
+    public R visitCreateWarehouseStatement(CreateWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R  visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUseWarehouseStatement(UseWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
