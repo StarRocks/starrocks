@@ -336,18 +336,18 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         ChunkRow row;
         row.columns = &partition_columns;
         row.index = 0;
-        bool is_by_value_partition = _t_param.partitions[0].__isset.in_keys;
+        bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
                 row.index = i;
-                auto it = is_by_value_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
+                auto it = is_list_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
                 if (UNLIKELY(it == _partitions_map.end())) {
                     (*partitions)[i] = nullptr;
                     (*selection)[i] = 0;
                     if (invalid_row_index != nullptr) {
                         *invalid_row_index = i;
                     }
-                } else if (LIKELY(is_by_value_partition || _part_contains(it->second, &row))) {
+                } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
                     (*partitions)[i] = it->second;
                     (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
                 } else {
