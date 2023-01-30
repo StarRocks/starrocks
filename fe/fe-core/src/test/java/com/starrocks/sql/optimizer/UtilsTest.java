@@ -311,7 +311,7 @@ public class UtilsTest {
 
         //      outer join (left child semi join node = 1, right child semi join node = 3) => result is 3
         //      /         \
-        //  semi join      semi join (left child semi join node = 1, right child semi join node =2)
+        //  semi join      semi join (left child semi join node = 1, right child semi join node = 1)
         //                   /    \            => result is 1 + 1 + 1 = 3
         //           outer join   semi join
         //             /      \
