@@ -131,6 +131,10 @@ public class FeNameFormat {
         checkCommonName("catalog", catalogName);
     }
 
+    public static void checkWarehouseName(String warehouseName) throws AnalysisException {
+        checkCommonName("warehouse", warehouseName);
+    }
+
     public static void checkCommonName(String type, String name) {
         if (Strings.isNullOrEmpty(name) || !name.matches(COMMON_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);

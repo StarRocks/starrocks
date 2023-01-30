@@ -63,6 +63,7 @@ import java.nio.channels.SocketChannel;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
+    private static ByteBuffer initWarehousePacket;
     private static ByteBuffer changeUserPacket;
     private static ByteBuffer resetConnectionPacket;
     private static ByteBuffer pingPacket;
@@ -85,6 +86,14 @@ public class ConnectProcessorTest extends DDLTestBase {
             serializer.writeInt1(2);
             serializer.writeEofString("testDb1");
             initDbPacket = serializer.toByteBuffer();
+        }
+
+        // Init Warehouse packet
+        {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(2);
+            serializer.writeEofString("'warehouse aaa'");
+            initWarehousePacket = serializer.toByteBuffer();
         }
 
         // Change user packet
@@ -155,6 +164,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void setUp() throws Exception {
         super.setUp();
         initDbPacket.clear();
+        initWarehousePacket.clear();
         pingPacket.clear();
         quitPacket.clear();
         queryPacket.clear();
@@ -329,6 +339,17 @@ public class ConnectProcessorTest extends DDLTestBase {
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
         Assert.assertFalse(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+    }
+
+    @Test
+    public void testInitWarehouse() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(initWarehousePacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+        Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
     }
 
     @Test

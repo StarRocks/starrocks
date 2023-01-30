@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
@@ -77,6 +78,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarehousesStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -186,6 +188,25 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
             node.getTbl().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitShowClusterStatement(ShowClustersStmt node, ConnectContext context) {
+            String warehouseName;
+            if (node.getWarehouseName() != null) {
+                warehouseName = node.getWarehouseName();
+            } else {
+                warehouseName = context.getCurrentWarehouse();
+            }
+            if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, warehouseName);
+            }
             return null;
         }
 
