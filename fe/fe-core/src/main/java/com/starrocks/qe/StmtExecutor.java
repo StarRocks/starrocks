@@ -170,7 +170,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
-import static com.starrocks.sql.ast.StatementBase.ExplainLevel.VERBOSE_OPTIMIZER;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
@@ -1113,7 +1112,7 @@ public class StmtExecutor {
         if (execPlan == null) {
             explainString += "NOT AVAILABLE";
         } else {
-            if (parsedStmt.getExplainLevel() == OPTIMIZER || parsedStmt.getExplainLevel() == VERBOSE_OPTIMIZER) {
+            if (parsedStmt.getExplainLevel() == OPTIMIZER) {
                 explainString += PlannerProfile.printPlannerTimeCost(context.getPlannerProfile());
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
