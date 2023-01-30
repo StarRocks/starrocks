@@ -26,6 +26,7 @@ public class ColumnType {
     public static final String FIELD_1_NAME = FIELD_PREFIX + "1";
 
     public enum TypeValue {
+        UNKNOWN,
         BYTE,
         BOOLEAN,
         SHORT,
@@ -227,6 +228,10 @@ public class ColumnType {
         return typeValue == TypeValue.ARRAY;
     }
 
+    public boolean isUnknown() {
+        return typeValue == TypeValue.UNKNOWN;
+    }
+
     public boolean isMap() {
         return typeValue == TypeValue.MAP;
     }
@@ -245,6 +250,9 @@ public class ColumnType {
 
     public int computeColumnSize() {
         switch (typeValue) {
+            case UNKNOWN:
+                // [0] (indicate this unknown column)
+                return 1;
             case ARRAY:
             case MAP:
             case STRUCT: {
@@ -318,8 +326,14 @@ public class ColumnType {
         fieldIndex = new ArrayList<>();
         for (String f : fields) {
             Integer i = index.get(f);
-            fieldIndex.add(i);
-            types.add(childTypes.get(i));
+            if (i == null) {
+                // field name mismatch.
+                fieldIndex.add(null);
+                types.add(new ColumnType(name + '.' + f, TypeValue.UNKNOWN));
+            } else {
+                fieldIndex.add(i);
+                types.add(childTypes.get(i));
+            }
             names.add(f);
         }
         childNames = names;

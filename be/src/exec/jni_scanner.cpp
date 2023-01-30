@@ -323,10 +323,8 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
 
     auto* struct_column = down_cast<StructColumn*>(args.column);
     const TypeDescriptor& type = args.slot_type;
-    int j = 0;
     for (int i = 0; i < type.children.size(); i++) {
-        Column* column = struct_column->fields_column()[j].get();
-        j += 1;
+        Column* column = struct_column->fields_column()[i].get();
         std::string name = args.slot_name + "." + type.field_names[i];
         FillColumnArgs sub_args = {.num_rows = args.num_rows,
                                    .slot_name = name,
@@ -345,14 +343,21 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         return Status::DataQualityError(fmt::format("NOT NULL column[{}] is not supported.", args.slot_name));
     }
 
+    void* ptr = next_chunk_meta_as_ptr();
+    if (ptr == nullptr) {
+        // struct field mismatch.
+        args.column->append_default(args.num_rows);
+        return Status::OK();
+    }
+
     if (args.column->is_nullable()) {
         // if column is nullable, we parse `null_column`,
         // and update `args.nulls` and set `data_column` to `args.column`
-        bool* null_column_ptr = static_cast<bool*>(next_chunk_meta_as_ptr());
+        bool* null_column_ptr = static_cast<bool*>(ptr);
         auto* nullable_column = down_cast<NullableColumn*>(args.column);
-        nullable_column->resize_uninitialized(args.num_rows);
 
         NullData& null_data = nullable_column->null_column_data();
+        null_data.resize(args.num_rows);
         memcpy(null_data.data(), null_column_ptr, args.num_rows);
         nullable_column->update_has_null();
 
@@ -362,7 +367,6 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else {
         // otherwise we skil this chunk meta, because in Java side
         // we assume every column starswith `null_column`.
-        next_chunk_meta_as_ptr();
     }
 
     LogicalType column_type = args.slot_type.type;

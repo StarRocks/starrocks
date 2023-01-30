@@ -130,7 +130,9 @@ public class OffHeapColumnVector {
         long oldOffsetSize = (nulls == 0) ? 0 : (capacity + 1) * 4L;
         long newOffsetSize = (newCapacity + 1) * 4L;
         int typeSize = type.getPrimitiveTypeValueSize();
-        if (typeSize != -1) {
+        if (type.isUnknown()) {
+            // don't do anything.
+        } else if (typeSize != -1) {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
         } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
@@ -389,7 +391,9 @@ public class OffHeapColumnVector {
     }
 
     public void updateMeta(OffHeapColumnVector meta) {
-        if (type.isByteStorageType()) {
+        if (type.isUnknown()) {
+            meta.appendLong(0);
+        } else if (type.isByteStorageType()) {
             meta.appendLong(nullsNativeAddress());
             meta.appendLong(arrayOffsetNativeAddress());
             meta.appendLong(arrayDataNativeAddress());
@@ -597,8 +601,12 @@ public class OffHeapColumnVector {
     // for test only.
     public void checkMeta(OffHeapTable.MetaChecker checker) {
         String context = type.name;
-        String contextOffset = context + "#offset";
+        if (type.isUnknown()) {
+            checker.check(context + "#unknown", 0);
+            return;
+        }
         checker.check(context + "#null", nulls);
+        String contextOffset = context + "#offset";
         if (type.isByteStorageType()) {
             checker.check(contextOffset, arrayOffsetNativeAddress());
             checker.check(context + "#data", arrayDataNativeAddress());
@@ -610,7 +618,7 @@ public class OffHeapColumnVector {
                 c.checkMeta(checker);
             }
         } else {
-            checker.check(context, data);
+            checker.check(context + "#data", data);
         }
     }
 }

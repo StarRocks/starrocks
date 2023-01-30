@@ -122,7 +122,7 @@ a       b       c       d       e
     }
 
     @Test
-    public void c1DoScanTestOnMapType() throws IOException {
+    public void c1DoScanTestOnMapTypeAll() throws IOException {
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "d");
         params.put("nested_fields", "d.$0,d.$1");
@@ -130,7 +130,21 @@ a       b       c       d       e
     }
 
     @Test
-    public void c1DoScanTestOnStructType() throws IOException {
+    public void c1DoScanTestOnMapTypeAll2() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "d");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void c1DoScanTestOnStructTypeAll() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "e");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void c1DoScanTestOnStructTypeAll2() throws IOException {
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.a,e.b");
@@ -142,6 +156,14 @@ a       b       c       d       e
         Map<String, String> params = createScanTestParams();
         params.put("required_fields", "e");
         params.put("nested_fields", "e.b");
+        runScanOnParams(params);
+    }
+
+    @Test
+    public void c1DoScanTestOnPruningStructTypeNoField() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.B,e.a");
         runScanOnParams(params);
     }
 
@@ -210,10 +232,18 @@ a       b       c       d       e
     }
 
     @Test
+    public void c2DoScanTestOnStructTypeOrder() throws IOException {
+        Map<String, String> params = case2CreateScanTestParams();
+        params.put("required_fields", "e");
+        params.put("nested_fields", "e.a,e.b");
+        runScanOnParams(params);
+    }
+
+    @Test
     public void c2DoScanTestOnStructType2() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
-        params.put("nested_fields", "e.c.a,e.b,e.b.$1,e.a.$0");
+        params.put("nested_fields", "e.c.a,e.b.$1,e.a.$0");
         runScanOnParams(params);
     }
 
@@ -221,7 +251,7 @@ a       b       c       d       e
     public void c2DoScanTestOnStructType3() throws IOException {
         Map<String, String> params = case2CreateScanTestParams();
         params.put("required_fields", "e");
-        params.put("nested_fields", "e.c.b.a");
+        params.put("nested_fields", "e.c.b.b,e.c.b.a");
         runScanOnParams(params);
     }
 

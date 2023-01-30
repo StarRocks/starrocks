@@ -57,6 +57,7 @@ protected:
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::string _debug_row_output;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {
@@ -306,6 +307,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 
 #define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
     do {                                                                               \
+        _debug_row_output = "";                                                        \
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
         for (;;) {                                                                     \
             chunk->reset();                                                            \
@@ -319,6 +321,8 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             }                                                                          \
             chunk->check_or_die();                                                     \
             if (chunk->num_rows() > 0) {                                               \
+                _debug_row_output += chunk->debug_row(0);                              \
+                _debug_row_output += '\n';                                             \
                 std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
             }                                                                          \
@@ -1822,7 +1826,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
                    "struct<a:array<int>,b:map<string,int>,c:struct<a:array<int>,b:struct<a:int,b:string>>>");
     params.emplace("instant_time", "20230110185815638");
     params.emplace("data_file_length", "438311");
-    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInemplaceFormat");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
     params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
     params.emplace("required_fields", "a,b,c,d,e");
 
@@ -1836,6 +1840,8 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     READ_SCANNER_ROWS(scanner, 3);
     EXPECT_EQ(scanner->raw_rows_read(), 3);
     scanner->close(_runtime_state);
+
+    EXPECT_EQ(_debug_row_output, "[0, 'hello', NULL, NULL, {a:NULL,b:{'key1':10},c:{a:[10,20],b:{a:10,b:'world'}}}]\n");
 }
 
 /*
@@ -1863,34 +1869,11 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
         GTEST_SKIP();
     }
 
-    // c: array<int>
-    TypeDescriptor C(LogicalType::TYPE_ARRAY);
-    C.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
-
-    // d: map<string, int>
-    TypeDescriptor D(LogicalType::TYPE_MAP);
-    D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
-    D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
-
-    TypeDescriptor E(LogicalType::TYPE_STRUCT);
-    E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
-    E.field_names.emplace_back("a");
-    E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
-    E.field_names.emplace_back("b");
-
-    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-                                {"b", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {"c", C},
-                                {"d", D},
-                                {"e", E},
-                                {""}};
     std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
     std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams2";
     std::string parquet_file = basePath + "/64798197-be6a-4eca-9898-0c2ed75b9d65-0_0-54-41_20230105142938081.parquet";
 
     auto* range = _create_scan_range(parquet_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
 
     // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
     std::map<std::string, std::string> params;
@@ -1907,20 +1890,160 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
                    "string>");
     params.emplace("instant_time", "20230105143305070");
     params.emplace("data_file_length", "436081");
-    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInemplaceFormat");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
     params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
     params.emplace("required_fields", "a,b,c,d,e");
 
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
-    JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
 
-    Status status = scanner->init(_runtime_state, *param);
-    EXPECT_TRUE(status.ok());
-    status = scanner->open(_runtime_state);
-    EXPECT_TRUE(status.ok());
-    READ_SCANNER_ROWS(scanner, 1);
-    EXPECT_EQ(scanner->raw_rows_read(), 1);
-    scanner->close(_runtime_state);
+    // select a,b,c,d,e
+    {
+        // c: array<int>
+        TypeDescriptor C(LogicalType::TYPE_ARRAY);
+        C.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+
+        // d: map<string, int>
+        TypeDescriptor D(LogicalType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+
+        SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                    {"b", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                    {"c", C},
+                                    {"d", D},
+                                    {"e", E},
+                                    {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[1, 'hello', [10,20,30], {'key1':1,'key2':2}, {a:10,b:'world'}]\n");
+    }
+
+    // select e but as <b:string, a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.b,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{b:'world',a:10}]\n");
+    }
+
+    // select e but as <B:string, a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("B");
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.B,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{B:NULL,a:10}]\n");
+    }
+
+    // select e but as <a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{a:10}]\n");
+    }
+
+    // select d but only key
+    {
+        // d: map<string, int>
+        TypeDescriptor D(LogicalType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_UNKNOWN));
+
+        SlotDesc parquet_descs[] = {{"d", D}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "d";
+        params["nested_fields"] = "d.$0";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{'key1':NULL,'key2':NULL}]\n");
+    }
 }
 
 } // namespace starrocks
