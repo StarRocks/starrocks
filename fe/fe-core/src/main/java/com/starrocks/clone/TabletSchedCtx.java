@@ -1085,7 +1085,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * eg:
      *    A tablet has been scheduled for 5 times and all were failed. its priority will be downgraded. And if it is
      *    scheduled for 5 times and all are failed again, it will be downgraded again, until to the LOW.
-     *    And than, because of LOW, this tablet can not be scheduled for a long time, and it will be upgraded
+     *    And then, because of LOW, this tablet can not be scheduled for a long time, and it will be upgraded
      *    to NORMAL, if still not being scheduled, it will be upgraded up to VERY_HIGH.
      *
      * return true if dynamic priority changed
