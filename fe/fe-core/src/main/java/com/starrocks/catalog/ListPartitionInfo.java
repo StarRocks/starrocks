@@ -375,6 +375,6 @@ public class ListPartitionInfo extends PartitionInfo {
     @Override
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         super.moveRangeFromTempToFormal(tempPartitionId);
-        idToIsTempPartition.computeIfPresent(tempPartitionId, (k,v) -> false);
+        idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
     }
 }

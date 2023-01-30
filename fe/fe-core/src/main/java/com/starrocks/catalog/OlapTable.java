@@ -832,10 +832,9 @@ public class OlapTable extends Table {
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
         if (partition != null) {
-            idToPartition.remove(partition.getId());
-            nameToPartition.remove(partitionName);
-
             if (partitionInfo.getType() == PartitionType.RANGE) {
+                idToPartition.remove(partition.getId());
+                nameToPartition.remove(partitionName);
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 if (!isForceDrop) {
                     // recycle range partition
@@ -854,8 +853,11 @@ public class OlapTable extends Table {
             } else if (partitionInfo.getType() == PartitionType.LIST) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 if (!isForceDrop) {
-                    // TODO: recycle list partition
+                    throw new SemanticException("List partition does not support recycle bin, " +
+                            "you can use force drop to drop it.");
                 } else if (!reserveTablets) {
+                    idToPartition.remove(partition.getId());
+                    nameToPartition.remove(partitionName);
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
                 // drop partition info
