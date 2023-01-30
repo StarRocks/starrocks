@@ -220,6 +220,7 @@ set(EXEC_FILES
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp)
 
+<<<<<<< HEAD
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
@@ -227,6 +228,8 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set_source_files_properties(vectorized/json_parser.cpp PROPERTIES COMPILE_FLAGS "-mno-avx -mno-avx2")
 endif()
 
+=======
+>>>>>>> 509e1cfd3 ([Enhancement] remove noavx flags for simdjson (#16896))
 add_library(Exec STATIC
     ${EXEC_FILES}
 )
