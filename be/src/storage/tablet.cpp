@@ -518,13 +518,17 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         std::vector<Version> missed_versions;
         calc_missed_versions_unlocked(spec_version.second, &missed_versions);
         if (missed_versions.empty()) {
-            auto msg = fmt::format("version already been compacted. tablet_id: {}, version: {}",
-                                   _tablet_meta->tablet_id(), spec_version.second);
+            auto msg = fmt::format(
+                    "capture_consistent_versions error: version already been compacted. tablet_id: {}, version: {} "
+                    "tablet_max_version:{}",
+                    _tablet_meta->tablet_id(), spec_version.second, max_continuous_version());
             LOG(WARNING) << msg;
             return Status::VersionAlreadyMerged(msg);
         } else {
-            auto msg = fmt::format("version not found. tablet_id: {}, version: {}", _tablet_meta->tablet_id(),
-                                   spec_version.second);
+            auto msg = fmt::format(
+                    "capture_consistent_versions error: version not found. tablet_id: {}, version: {} "
+                    "tablet_max_version:{}",
+                    _tablet_meta->tablet_id(), spec_version.second, max_continuous_version());
             RATE_LIMIT_BY_TAG(tablet_id(), LOG(WARNING) << msg, 1000);
             RATE_LIMIT_BY_TAG(tablet_id(), _print_missed_versions(missed_versions), 1000);
             return Status::NotFound(msg);
