@@ -31,6 +31,9 @@ public enum PrivilegeType {
     GLOBAL_FUNCTION(11, GlobalFunctionAction.actionMap(), "GLOBAL_FUNCTIONS");
 
     private final int id;
+    /**
+     * Action name(ALTER, DROP etc.) -> {@link Action} object
+     */
     private final Map<String, Action> actionMap;
 
     // used in ALL statement, e.g. grant select on all tables in all databases
