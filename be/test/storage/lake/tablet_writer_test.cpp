@@ -43,9 +43,9 @@ using namespace starrocks;
 using VSchema = starrocks::Schema;
 using VChunk = starrocks::Chunk;
 
-class DuplicateTabletWriterTest : public testing::Test {
+class LakeTabletWriterTest : public testing::Test, public testing::WithParamInterface<KeysType> {
 public:
-    DuplicateTabletWriterTest() {
+    LakeTabletWriterTest() {
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), nullptr, 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -59,7 +59,7 @@ public:
         auto schema = _tablet_metadata->mutable_schema();
         schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
+        schema->set_keys_type(GetParam());
         schema->set_num_rows_per_row_block(65535);
         auto c0 = schema->add_column();
         {
@@ -76,6 +76,7 @@ public:
             c1->set_type("INT");
             c1->set_is_key(false);
             c1->set_is_nullable(false);
+            c1->set_aggregation("REPLACE");
         }
 
         _tablet_schema = TabletSchema::create(*schema);
@@ -102,7 +103,7 @@ protected:
     std::shared_ptr<VSchema> _schema;
 };
 
-TEST_F(DuplicateTabletWriterTest, test_write_success) {
+TEST_P(LakeTabletWriterTest, test_write_success) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -180,7 +181,7 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     check_segment(seg1);
 }
 
-TEST_F(DuplicateTabletWriterTest, test_write_fail) {
+TEST_P(LakeTabletWriterTest, test_write_fail) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
@@ -199,7 +200,7 @@ TEST_F(DuplicateTabletWriterTest, test_write_fail) {
     ASSERT_ERROR(writer->write(chunk0));
 }
 
-TEST_F(DuplicateTabletWriterTest, test_close_without_finish) {
+TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
@@ -228,5 +229,8 @@ TEST_F(DuplicateTabletWriterTest, test_close_without_finish) {
     // segment file should be deleted
     ASSERT_TRUE(fs->path_exists(seg_path).is_not_found());
 }
+
+INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
+                         ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));
 
 } // namespace starrocks::lake
