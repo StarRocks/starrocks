@@ -45,7 +45,8 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     int row_sz = chunk_holder->value()->chunk->num_rows();
     if (_sort_heap == nullptr) {
         _sort_heap = std::make_unique<CommonCursorSortHeap>(detail::ChunkCursorComparator(_sort_desc));
-        _sort_heap->reserve(_number_of_rows_to_sort());
+        // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
+        _sort_heap->reserve(std::min<size_t>(_number_of_rows_to_sort(), 10'000'000ul));
         // build heap
         size_t direct_push = std::min<size_t>(_number_of_rows_to_sort(), row_sz);
         size_t i = 0;

@@ -400,7 +400,8 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     Columns left_columns = _merged_segment.order_by_columns;
 
     Permutation merged_perm;
-    merged_perm.reserve(rows_to_keep);
+    // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
+    merged_perm.reserve(std::min<size_t>(rows_to_keep, 10'000'000ul));
 
     RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
                                                 &merged_perm));
