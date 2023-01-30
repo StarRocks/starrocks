@@ -249,7 +249,8 @@ protected:
         Rowset::close_rowsets(_input_rowsets);
         VLOG(1) << "commit compaction. output version:" << _task_info.output_version
                 << ", output rowset version:" << _output_rowset->version()
-                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
+                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
+                << ", max_version:" << _tablet->max_continuous_version();
     }
 
     void _success_callback();
