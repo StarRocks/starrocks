@@ -1871,41 +1871,50 @@ public class OlapTable extends Table {
      */
     public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
-        RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+        if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
 
-        if (strictRange) {
-            // check if range of partitions and temp partitions are exactly same
-            List<Range<PartitionKey>> rangeList = Lists.newArrayList();
-            List<Range<PartitionKey>> tempRangeList = Lists.newArrayList();
-            for (String partName : partitionNames) {
-                Partition partition = nameToPartition.get(partName);
-                Preconditions.checkNotNull(partition);
-                rangeList.add(rangeInfo.getRange(partition.getId()));
+            if (strictRange) {
+                // check if range of partitions and temp partitions are exactly same
+                List<Range<PartitionKey>> rangeList = Lists.newArrayList();
+                List<Range<PartitionKey>> tempRangeList = Lists.newArrayList();
+                for (String partName : partitionNames) {
+                    Partition partition = nameToPartition.get(partName);
+                    Preconditions.checkNotNull(partition);
+                    rangeList.add(rangeInfo.getRange(partition.getId()));
+                }
+
+                for (String partName : tempPartitionNames) {
+                    Partition partition = tempPartitions.getPartition(partName);
+                    Preconditions.checkNotNull(partition);
+                    tempRangeList.add(rangeInfo.getRange(partition.getId()));
+                }
+                RangeUtils.checkRangeListsMatch(rangeList, tempRangeList);
+            } else {
+                // check after replacing, whether the range will conflict
+                Set<Long> replacePartitionIds = Sets.newHashSet();
+                for (String partName : partitionNames) {
+                    Partition partition = nameToPartition.get(partName);
+                    Preconditions.checkNotNull(partition);
+                    replacePartitionIds.add(partition.getId());
+                }
+                List<Range<PartitionKey>> replacePartitionRanges = Lists.newArrayList();
+                for (String partName : tempPartitionNames) {
+                    Partition partition = tempPartitions.getPartition(partName);
+                    Preconditions.checkNotNull(partition);
+                    replacePartitionRanges.add(rangeInfo.getRange(partition.getId()));
+                }
+                List<Range<PartitionKey>> sortedRangeList = rangeInfo.getRangeList(replacePartitionIds, false);
+                RangeUtils.checkRangeConflict(sortedRangeList, replacePartitionRanges);
             }
-
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
             for (String partName : tempPartitionNames) {
                 Partition partition = tempPartitions.getPartition(partName);
-                Preconditions.checkNotNull(partition);
-                tempRangeList.add(rangeInfo.getRange(partition.getId()));
+                CatalogUtils.checkPartitionValuesExistForReplaceListPartition(listInfo, partition);
             }
-            RangeUtils.checkRangeListsMatch(rangeList, tempRangeList);
-        } else {
-            // check after replacing, whether the range will conflict
-            Set<Long> replacePartitionIds = Sets.newHashSet();
-            for (String partName : partitionNames) {
-                Partition partition = nameToPartition.get(partName);
-                Preconditions.checkNotNull(partition);
-                replacePartitionIds.add(partition.getId());
-            }
-            List<Range<PartitionKey>> replacePartitionRanges = Lists.newArrayList();
-            for (String partName : tempPartitionNames) {
-                Partition partition = tempPartitions.getPartition(partName);
-                Preconditions.checkNotNull(partition);
-                replacePartitionRanges.add(rangeInfo.getRange(partition.getId()));
-            }
-            List<Range<PartitionKey>> sortedRangeList = rangeInfo.getRangeList(replacePartitionIds, false);
-            RangeUtils.checkRangeConflict(sortedRangeList, replacePartitionRanges);
         }
+
 
         // begin to replace
         // 1. drop old partitions
@@ -1922,7 +1931,7 @@ public class OlapTable extends Table {
             // drop
             tempPartitions.dropPartition(partitionName, false);
             // move the range from idToTempRange to idToRange
-            rangeInfo.moveRangeFromTempToFormal(partition.getId());
+            partitionInfo.moveRangeFromTempToFormal(partition.getId());
         }
 
         // change the name so that after replacing, the partition name remain unchanged

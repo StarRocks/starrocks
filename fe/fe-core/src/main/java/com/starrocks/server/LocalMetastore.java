@@ -961,7 +961,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
                 partitionDesc.analyze(columnDefList, cloneProperties);
-                CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc);
+                CatalogUtils.checkPartitionValuesExistForReplaceListPartition(olapTable, partitionDesc,
+                        addPartitionClause.isTempPartition());
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }

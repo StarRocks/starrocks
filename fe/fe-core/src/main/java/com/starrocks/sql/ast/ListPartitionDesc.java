@@ -211,6 +211,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -220,6 +221,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             return listPartitionInfo;
         } catch (AnalysisException e) {
