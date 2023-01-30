@@ -316,6 +316,7 @@ message PCollectQueryStatistics {
     optional int64 cpu_cost_ns = 2;
     optional int64 scan_bytes = 3;
     optional int64 scan_rows = 4;
+    optional int64 mem_usage_bytes = 5;
 }
 
 message PCollectQueryStatisticsResult {
