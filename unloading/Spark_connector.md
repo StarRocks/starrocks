@@ -2,7 +2,7 @@
 
 StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark™)，支持通过 Spark 读取 StarRocks 中存储的数据。您可以使用 Spark 对读取到的数据进行复杂处理、机器学习等。
 
-Spark 连接器支持三种数据读取方式：临时视图、Spark DataFrame 和 Spark RDD。
+Spark 连接器支持三种数据读取方式：Spark SQL、Spark DataFrame 和 Spark RDD。
 
 您可以使用 Spark SQL 在 StarRocks 表上创建临时视图，然后通过临时视图直接读取 StarRocks 表的数据。
 
@@ -63,7 +63,7 @@ Spark 连接器支持三种数据读取方式：临时视图、Spark DataFrame �
 | 参数名称                             | 默认值            | 说明                                                         |
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
 | starrocks.fenodes                    | 无                | StarRocks 集群中 FE 的 HTTP 地址，格式为 `<fe_host>:<fe_http_port>`。支持输入多个地址，使用逗号 (,) 分隔。 |
-| starrocks.table.identifier           | 无                | StarRocks 表的名称，格式为 `<database_name>.<table_name>`.   |
+| starrocks.table.identifier           | 无                | StarRocks 表的名称，格式为 `<database_name>.<table_name>`。   |
 | starrocks.request.retries            | 3                 | 向 StarRocks 发送请求的重试次数。                            |
 | starrocks.request.connect.timeout.ms | 30000             | 向 StarRocks 发送请求的连接超时时间。                        |
 | starrocks.request.read.timeout.ms    | 30000             | 向 StarRocks 发送请求的读取超时时间。                        |
@@ -72,7 +72,7 @@ Spark 连接器支持三种数据读取方式：临时视图、Spark DataFrame �
 | starrocks.batch.size                 | 4096              | 单次从 BE 读取的最大行数。调大参数取值可减少 Spark 与 StarRocks 之间建立连接的次数，从而减轻网络延迟所带来的的额外时间开销。对于StarRocks 2.2及以后版本最小支持的batch size为4096，如果配置小于该值，则按4096处理 |
 | starrocks.exec.mem.limit             | 2147483648        | 单个查询的内存限制。单位：字节。默认内存限制为 2 GB。        |
 | starrocks.deserialize.arrow.async    | false             | 是否支持把 Arrow 格式异步转换为 Spark 连接器迭代所需的 RowBatch。 |
-| starrocks.deserialize.queue.size     | 64                | 异步转换 Arrow 格式的内部处理队列，当 `starrocks.deserialize.arrow.async` 为 `true` 时生效。 |
+| starrocks.deserialize.queue.size     | 64                | 异步转换 Arrow 格式时内部处理队列的大小，当 `starrocks.deserialize.arrow.async` 为 `true` 时生效。 |
 | starrocks.filter.query               | 无                | 指定过滤条件。多个过滤条件用 `and` 连接。StarRocks 根据指定的过滤条件完成对待读取数据的过滤。 |
 
 ### Spark SQL 和 Spark DataFrame 专有参数
@@ -120,7 +120,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 
 ## 使用示例
 
-假设您的 StarRocks 集群中已创建数据库 `test`，并且您拥有 **root** 账号权限。
+假设您的 StarRocks 集群中已创建数据库 `test`，并且您拥有 `root` 账号权限。
 
 ### 数据样例
 
@@ -147,7 +147,8 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 2. 向 `score_board` 表中插入数据。
 
    ```SQL
-   MySQL [test]> INSERT INTO score_board values
+   MySQL [test]> INSERT INTO score_board
+   VALUES
        (1, 'Bob', 21),
        (2, 'Stan', 21),
        (3, 'Sam', 22),
@@ -211,7 +212,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    sh spark-sql
    ```
 
-2. 在数据库 `test` 中的表 `score_board` 上创建一个名为 `spark_starrocks` 的临时视图：
+2. 运行如下命令，在数据库 `test` 中的表 `score_board` 上创建一个名为 `spark_starrocks` 的临时视图：
 
    ```SQL
    spark-sql> CREATE TEMPORARY VIEW spark_starrocks
@@ -225,7 +226,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
               );
    ```
 
-3. 从临时视图中读取数据：
+3. 运行如下命令，从临时视图中读取数据：
 
    ```SQL
    spark-sql> SELECT * FROM spark_starrocks;
@@ -399,7 +400,8 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 2. 向 `mytable` 表中插入数据。
 
    ```SQL
-   MySQL [test]> INSERT INTO mytable values
+   MySQL [test]> INSERT INTO mytable
+   VALUES
         (1, 11, '2022-01-02 08:00:00', 111),
         (2, 22, '2022-02-02 08:00:00', 222),
         (3, 33, '2022-03-02 08:00:00', 333);
@@ -438,7 +440,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    2022-08-09 18:57:38,091 INFO (nioEventLoopGroup-3-10|196) [TableQueryPlanAction.executeWithoutPassword():126] receive SQL statement [select `k`,`b`,`dt`,`v` from `test`.`mytable`] from external service [ user ['root'@'%']] for database [test] table [mytable]
    ```
 
-3. 在 StarRocks 数据库下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` 语句的执行计划，如下所示：
+3. 在数据库 `test` 下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` 语句的执行计划，如下所示：
 
    ```Scala
    MySQL [test]> EXPLAIN select `k`,`b`,`dt`,`v` from `test`.`mytable`;
@@ -497,7 +499,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    2022-08-09 19:02:31,253 INFO (nioEventLoopGroup-3-14|204) [TableQueryPlanAction.executeWithoutPassword():126] receive SQL statement [select `k`,`b`,`dt`,`v` from `test`.`mytable` where dt='2022-01-02 08:00:00'] from external service [ user ['root'@'%']] for database [test] table [mytable]
    ```
 
-3. 在 StarRocks 数据库下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where dt='2022-01-02 08:00:00' 语句的执行计划，如下所示：
+3. 在数据库 `test` 下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where dt='2022-01-02 08:00:00' 语句的执行计划，如下所示：
 
    ```Scala
    MySQL [test]> EXPLAIN select `k`,`b`,`dt`,`v` from `test`.`mytable` where dt='2022-01-02 08:00:00';
@@ -557,7 +559,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    2022-08-09 19:04:44,479 INFO (nioEventLoopGroup-3-16|208) [TableQueryPlanAction.executeWithoutPassword():126] receive SQL statement [select `k`,`b`,`dt`,`v` from `test`.`mytable` where k=1] from external service [ user ['root'@'%']] for database [test] table [mytable]
    ```
 
-3. 在 StarRocks 数据库下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where k=1 语句的执行计划，如下所示：
+3. 在数据库 `test` 数据库下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where k=1 语句的执行计划，如下所示：
 
    ```Scala
    MySQL [test]> EXPLAIN select `k`,`b`,`dt`,`v` from `test`.`mytable` where k=1;
@@ -618,7 +620,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    able [mytable]
    ```
 
-3. 在 StarRocks 数据库下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where k=7 and dt='2022-01-02 08:00:00' 语句的执行计划，如下所示：
+3. 在数据库 `test` 下，使用 EXPLAIN 来获取 SELECT `k`,`b`,`dt`,`v` from `test`.`mytable` where k=7 and dt='2022-01-02 08:00:00' 语句的执行计划，如下所示：
 
    ```Scala
    MySQL [test]> EXPLAIN select `k`,`b`,`dt`,`v` from `test`.`mytable` where k=7 and dt='2022-01-02 08:00:00';
@@ -653,7 +655,8 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 1. 往 1 个分区插入更多数据，如下所示：
 
    ```Scala
-   MySQL [test]> INSERT INTO mytable values
+   MySQL [test]> INSERT INTO mytable
+   VALUES
        (1, 11, "2022-01-02 08:00:00", 111), 
        (3, 33, "2022-01-02 08:00:00", 333), 
        (3, 33, "2022-01-02 08:00:00", 333), 
@@ -690,7 +693,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
           .load()
    ```
 
-4. 在 StarRocks 数据库下，开启 Profile 上报:
+4. 在数据库 `test` 下，开启 Profile 上报:
 
    ```SQL
    MySQL [test]> SET enable_profile = true;
