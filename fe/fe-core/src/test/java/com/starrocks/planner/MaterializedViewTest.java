@@ -61,7 +61,7 @@ public class MaterializedViewTest extends PlanTestBase {
                 "   DISTRIBUTED BY HASH(`col1`) BUCKETS 12\n" +
                 " AS " +
                 mv;
-        starRocksAssert.withNewMaterializedView(mvSQL);
+        starRocksAssert.withMaterializedView(mvSQL);
         String rewritePlan = getFragmentPlan(query);
         System.out.println(rewritePlan);
         starRocksAssert.dropMaterializedView("mv0");
