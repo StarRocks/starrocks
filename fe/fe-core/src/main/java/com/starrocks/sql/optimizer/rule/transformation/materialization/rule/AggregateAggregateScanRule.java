@@ -34,7 +34,7 @@ public class AggregateAggregateScanRule extends SingleTableRewriteBaseRule {
     private static AggregateAggregateScanRule INSTANCE = new AggregateAggregateScanRule();
 
     public AggregateAggregateScanRule() {
-        super(RuleType.TF_MV_AGGREGATE_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
+        super(RuleType.TF_MV_AGGREGATE_AGGREGATE_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.PATTERN_SCAN))));
     }
 
