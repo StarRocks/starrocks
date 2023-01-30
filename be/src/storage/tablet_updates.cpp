@@ -474,7 +474,7 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
     return Status::OK();
 }
 
-Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     auto span = Tracer::Instance().start_trace("rowset_commit");
     auto scope_span = trace::Scope(span);
     if (_error) {
@@ -484,7 +484,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     }
     Status st;
     {
-        std::lock_guard wl(_lock);
+        std::unique_lock<std::mutex> ul(_lock);
         if (_edit_version_infos.empty()) {
             string msg = strings::Substitute("tablet deleted when rowset_commit tablet:$0", _tablet.tablet_id());
             LOG(WARNING) << msg;
@@ -533,11 +533,14 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
             _check_for_apply();
+            st = _wait_for_version(EditVersion(version, 0), wait_time, ul);
         }
     }
-    if (!st.ok()) {
+    if (!st.ok() && !st.is_time_out()) {
         LOG(WARNING) << "rowset commit failed tablet:" << _tablet.tablet_id() << " version:" << version
                      << " txn_id: " << rowset->txn_id() << " pending:" << _pending_commits.size() << " msg:" << st;
+    } else if (st.is_time_out()) {
+        st = Status::OK();
     }
     return st;
 }
@@ -1095,6 +1098,9 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         return Status::InternalError(msg);
     }
     if (!(_edit_version_infos[_apply_version_idx]->version < version)) {
+        return Status::OK();
+    }
+    if (timeout_ms == 0) {
         return Status::OK();
     }
     int64_t wait_start = MonotonicMillis();
@@ -3072,7 +3078,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
             }
-            RETURN_IF_ERROR(rowset_commit(rowset->end_version(), rowset));
+            RETURN_IF_ERROR(rowset_commit(rowset->end_version(), rowset, 0));
         }
         LOG(INFO) << "load incremental snapshot done " << _debug_string(true);
         return Status::OK();
