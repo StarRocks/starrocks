@@ -16,9 +16,12 @@
 
 #include <memory>
 
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/schema_change_utils.h"
@@ -65,7 +68,12 @@ public:
               _base_tablet(base_tablet),
               _new_tablet(new_tablet),
               _version(version),
-              _chunk_changer(chunk_changer) {}
+              _chunk_changer(chunk_changer) {
+        CHECK(_base_tablet != nullptr);
+        CHECK(_new_tablet != nullptr);
+        CHECK(_chunk_changer != nullptr);
+    }
+
     ~ConvertedSchemaChange() override = default;
 
     Status init() override;
@@ -84,6 +92,7 @@ protected:
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;
     std::unique_ptr<MemPool> _mem_pool;
+    int64_t _next_rowset_id = 1; // Same as the value used in `lake::TabletManager::create_tablet()`
 };
 
 class DirectSchemaChange final : public ConvertedSchemaChange {
@@ -131,8 +140,7 @@ Status ConvertedSchemaChange::init() {
     _read_params.use_page_cache = false;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());
-    _base_schema =
-            ChunkHelper::convert_schema(*base_tablet_schema, *_chunk_changer->get_mutable_selected_column_indexs());
+    _base_schema = ChunkHelper::convert_schema(*base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ASSIGN_OR_RETURN(_new_tablet_schema, _new_tablet->get_schema());
     _new_schema = ChunkHelper::convert_schema(*_new_tablet_schema);
 
@@ -188,9 +196,11 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f));
     }
+    new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
+    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
     return Status::OK();
 }
 
@@ -257,17 +267,18 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     }
 
     RETURN_IF_ERROR(writer->flush());
-    auto tablet_writer = writer->tablet_writer();
-    RETURN_IF_ERROR(tablet_writer->finish());
+    RETURN_IF_ERROR(writer->finish());
 
     // update new rowset meta
-    for (auto& f : tablet_writer->files()) {
+    for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f));
     }
-    new_rowset_metadata->set_num_rows(tablet_writer->num_rows());
-    new_rowset_metadata->set_data_size(tablet_writer->data_size());
+    new_rowset_metadata->set_id(_next_rowset_id);
+    new_rowset_metadata->set_num_rows(writer->num_rows());
+    new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
+    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
     return Status::OK();
 }
 
@@ -351,8 +362,10 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     }
     RETURN_IF_ERROR(sc_procedure->init());
 
+    ASSIGN_OR_RETURN(auto base_metadata, base_tablet->get_metadata(alter_version));
+
     // convert rowsets
-    ASSIGN_OR_RETURN(auto rowsets, base_tablet->get_rowsets(alter_version));
+    ASSIGN_OR_RETURN(auto rowsets, base_tablet->get_rowsets(*base_metadata));
     for (const auto& rowset : rowsets) {
         auto st = sc_procedure->process(rowset, op_schema_change->add_rowsets());
         if (!st.ok()) {
@@ -362,6 +375,16 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
             LOG(WARNING) << err_msg;
             return st;
         }
+    }
+
+    // copy delete vector files if necessary
+    if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
+        for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
+            auto src = base_tablet->delvec_location(delvec.page().version());
+            auto dst = new_tablet->delvec_location(delvec.page().version());
+            RETURN_IF_ERROR(fs::copy_file(src, dst));
+        }
+        op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());
     }
 
     LOG(INFO) << "finish convert historical rowsets from base tablet to new tablet. "

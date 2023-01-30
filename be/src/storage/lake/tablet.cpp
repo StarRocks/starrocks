@@ -155,6 +155,10 @@ std::string Tablet::del_location(std::string_view del_name) const {
     return _mgr->del_location(_id, del_name);
 }
 
+std::string Tablet::delvec_location(int64_t version) const {
+    return _mgr->delvec_location(_id, version);
+}
+
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
 }

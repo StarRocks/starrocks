@@ -601,12 +601,14 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
         auto op_schema_change = txnlog.mutable_op_schema_change();
         op_schema_change->set_alter_version(3);
         auto rowset0 = op_schema_change->add_rowsets();
+        rowset0->set_id(1);
         rowset0->set_overlapped(true);
         rowset0->set_num_rows(2);
         rowset0->set_data_size(12);
         rowset0->add_segments("1.dat");
         rowset0->add_segments("2.dat");
         auto rowset1 = op_schema_change->add_rowsets();
+        rowset1->set_id(3);
         rowset1->set_overlapped(false);
         rowset1->set_num_rows(3);
         rowset1->set_data_size(13);

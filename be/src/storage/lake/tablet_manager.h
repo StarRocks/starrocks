@@ -132,6 +132,8 @@ public:
 
     std::string del_location(int64_t tablet_id, std::string_view del_name) const;
 
+    std::string delvec_location(int64_t tablet_id, int64_t version) const;
+
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }

@@ -537,7 +537,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
     // selected_column_index: 0 2 4
     // ref_column: 2 0 4
     // ref_base_reader_column_index: 1 0 2
-    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexs();
+    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexes();
     int32_t index = 0;
     for (const auto& iter : base_to_new) {
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(iter.second);

@@ -82,7 +82,17 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker();
 
-    [[nodiscard]] TabletWriter* tablet_writer();
+    // Return the list of files created by this DeltaWriter.
+    // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
+    std::vector<std::string> files() const;
+
+    // The sum of all segment file sizes, in bytes.
+    // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
+    int64_t data_size() const;
+
+    // The total number of rows have been written.
+    // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
+    int64_t num_rows() const;
 
 private:
     DeltaWriterImpl* _impl;
