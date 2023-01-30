@@ -40,10 +40,9 @@ class ExprContext;
 class FileWriter;
 
 struct ParquetBuilderOptions {
-    TCompressionType::type compression_type;
-    bool use_dictionary;
-    int64_t row_group_max_size;
-    std::vector<std::string> file_column_names;
+    TCompressionType::type compression_type{TCompressionType::SNAPPY};
+    bool use_dict{true};
+    int64_t row_group_max_size{128 * 1024 * 1024};
 };
 
 class ParquetOutputStream : public arrow::io::OutputStream {
@@ -56,12 +55,11 @@ public:
     arrow::Status Close() override;
 
     bool closed() const override { return _is_closed; }
-    size_t get_written_len() const;
 
 private:
     std::unique_ptr<WritableFile> _writable_file;
-    size_t _cur_pos = 0;
     bool _is_closed = false;
+    size_t _cur_pos = 0;
 };
 
 class ParquetBuildHelper {
@@ -78,7 +76,7 @@ public:
 class ParquetBuilder : public FileBuilder {
 public:
     ParquetBuilder(std::unique_ptr<WritableFile> writable_file, const std::vector<ExprContext*>& output_expr_ctxs,
-                   const ParquetBuilderOptions& options);
+                   const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
 
     ~ParquetBuilder() override = default;
 
@@ -89,11 +87,11 @@ public:
     Status finish() override;
 
 private:
-    Status _init(const ParquetBuilderOptions& options);
+    Status _init(const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
     void _init_properties(const ParquetBuilderOptions& options);
     Status _init_schema(const std::vector<std::string>& file_column_names);
     void _generate_rg_writer();
-    void _rg_writer_close();
+    void _flush_row_group();
     size_t _get_rg_written_bytes();
     void _check_size();
 
@@ -105,10 +103,8 @@ private:
     std::unique_ptr<::parquet::ParquetFileWriter> _file_writer;
     ::parquet::RowGroupWriter* _rg_writer = nullptr;
     std::vector<int64_t> _buffered_values_estimate;
-    int64_t _row_group_max_size;
-    int64_t _cur_written_rows{0};
-    std::atomic<bool> _rg_writer_closing = false;
-    std::atomic<bool> _closed = false;
+    const int64_t _row_group_max_size;
+    bool _closed = false;
     int64_t _total_row_group_writen_bytes{0};
 };
 

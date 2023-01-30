@@ -38,6 +38,7 @@
 #include "gen_cpp/DataSinks_types.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+#include "exec/parquet_builder.h"
 
 namespace starrocks {
 
@@ -58,10 +59,8 @@ struct ResultFileOptions {
     int write_buffer_size_kb;
     THdfsProperties hdfs_properties;
     bool use_broker;
-    int64_t max_row_group_bytes{0};
-    bool use_dict{true};
-    TCompressionType::type compression_type{TCompressionType::SNAPPY};
     std::vector<std::string> file_column_names;
+    ParquetBuilderOptions parquet_options;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -89,13 +88,13 @@ struct ResultFileOptions {
             file_column_names = t_opt.file_column_names;
         }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.parquet_max_group_bytes) {
-            max_row_group_bytes = t_opt.parquet_options.parquet_max_group_bytes;
+            parquet_options.row_group_max_size = t_opt.parquet_options.parquet_max_group_bytes;
         }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.use_dict) {
-            use_dict = t_opt.parquet_options.use_dict;
+            parquet_options.use_dict = t_opt.parquet_options.use_dict;
         }
         if (t_opt.__isset.parquet_options && t_opt.parquet_options.__isset.compression_type) {
-            compression_type = t_opt.parquet_options.compression_type;
+            parquet_options.compression_type = t_opt.parquet_options.compression_type;
         }
     }
 

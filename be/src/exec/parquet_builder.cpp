@@ -43,8 +43,11 @@ ParquetOutputStream::~ParquetOutputStream() {
 }
 
 arrow::Status ParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
-    Write(data->data(), data->size());
-    return arrow::Status::OK();
+    arrow::Status st = Write(data->data(), data->size());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to write data to output stream, err msg: " << st.message();
+    }
+    return st;
 }
 
 arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
@@ -81,21 +84,18 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
-std::size_t ParquetOutputStream::get_written_len() const {
-    return _cur_pos;
-}
-
 ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
-                               const std::vector<ExprContext*>& output_expr_ctxs, const ParquetBuilderOptions& options)
+                               const std::vector<ExprContext*>& output_expr_ctxs, const ParquetBuilderOptions& options,
+                               const std::vector<std::string>& file_column_names)
         : _writable_file(std::move(writable_file)),
           _output_expr_ctxs(output_expr_ctxs),
           _row_group_max_size(options.row_group_max_size) {
-    _init(options);
+    _init(options, file_column_names);
 }
 
-Status ParquetBuilder::_init(const ParquetBuilderOptions& options) {
+Status ParquetBuilder::_init(const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names) {
     _init_properties(options);
-    Status st = _init_schema(options.file_column_names);
+    Status st = _init_schema(file_column_names);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to init parquet schema: " << st;
     }
@@ -109,7 +109,7 @@ Status ParquetBuilder::_init(const ParquetBuilderOptions& options) {
 void ParquetBuilder::_init_properties(const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
-    options.use_dictionary ? builder.enable_dictionary() : builder.disable_dictionary();
+    options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
     ParquetBuildHelper::build_compression_type(builder, options.compression_type);
     _properties = builder.build();
 }
@@ -213,10 +213,6 @@ void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Build
         builder.compression(parquet::Compression::BZ2);
         break;
     }
-    case TCompressionType::DEFAULT_COMPRESSION: {
-        builder.compression(parquet::Compression::UNCOMPRESSED);
-        break;
-    }
     default:
         builder.compression(parquet::Compression::UNCOMPRESSED);
     }
@@ -225,7 +221,6 @@ void ParquetBuildHelper::build_compression_type(parquet::WriterProperties::Build
 void ParquetBuilder::_generate_rg_writer() {
     if (_rg_writer == nullptr) {
         _rg_writer = _file_writer->AppendBufferedRowGroup();
-        _cur_written_rows = 0;
     }
 }
 
@@ -244,7 +239,7 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
 
     size_t num_rows = chunk->num_rows();
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto& col = chunk->get_column_by_index(i);
+        const auto& col = chunk->get_column_by_index(i);
         bool nullable = col->is_nullable();
         auto null_column = nullable && down_cast<NullableColumn*>(col.get())->has_null()
                                    ? down_cast<NullableColumn*>(col.get())->null_column()
@@ -287,7 +282,6 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
         }
     }
 
-    _cur_written_rows += num_rows;
     _check_size();
     return Status::OK();
 }
@@ -296,33 +290,26 @@ size_t ParquetBuilder::_get_rg_written_bytes() {
     if (_rg_writer == nullptr) {
         return 0;
     }
-    int64_t estimated_bytes = 0;
-
-    for (long i : _buffered_values_estimate) {
-        estimated_bytes += i;
-    }
-
+    auto estimated_bytes = std::accumulate(_buffered_values_estimate.begin(), _buffered_values_estimate.end(), 0);
     return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + estimated_bytes;
 }
 
 void ParquetBuilder::_check_size() {
     if (ParquetBuilder::_get_rg_written_bytes() > _row_group_max_size) {
-        _rg_writer_close();
+        _flush_row_group();
     }
 }
 
-void ParquetBuilder::_rg_writer_close() {
-    _rg_writer_closing.store(true);
+void ParquetBuilder::_flush_row_group() {
     _rg_writer->Close();
-    _total_row_group_writen_bytes = _output_stream->get_written_len();
+    _total_row_group_writen_bytes = _output_stream->Tell().MoveValueUnsafe();
     _rg_writer = nullptr;
-    _rg_writer_closing.store(false);
     std::fill(_buffered_values_estimate.begin(), _buffered_values_estimate.end(), 0);
 }
 
 std::size_t ParquetBuilder::file_size() {
     DCHECK(_output_stream != nullptr);
-    if (_rg_writer_closing || _rg_writer == nullptr) {
+    if (_rg_writer == nullptr) {
         return 0;
     }
 
@@ -335,7 +322,7 @@ Status ParquetBuilder::finish() {
     }
 
     if (_rg_writer != nullptr) {
-        _rg_writer_close();
+        _flush_row_group();
     }
 
     _file_writer->Close();
@@ -344,7 +331,7 @@ Status ParquetBuilder::finish() {
         return Status::InternalError("Close file failed!");
     }
 
-    _closed.store(true);
+    _closed = true;
     return Status::OK();
 }
 
