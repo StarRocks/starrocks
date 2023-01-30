@@ -1301,6 +1301,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
+            // ** NOTICE **: always add new code at the end
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
@@ -1354,10 +1355,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+            loadRBACPrivilege(dis);
             checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
-            // TODO put this at the end of the image before 3.0 release
-            loadRBACPrivilege(dis);
+            // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1625,6 +1626,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+            // ** NOTICE **: always add new code at the end
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = nodeMgr.saveLeaderInfo(dos, checksum);
             checksum = nodeMgr.saveFrontends(dos, checksum);
@@ -1670,10 +1672,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+            saveRBACPrivilege(dos);
             checksum = warehouseMgr.saveWarehouses(dos, checksum);
             dos.writeLong(checksum);
-            // TODO put this at the end of the image before 3.0 release
-            saveRBACPrivilege(dos);
+            // ** NOTICE **: always add new code at the end
         }
 
         long saveImageEndTime = System.currentTimeMillis();
