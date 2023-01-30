@@ -70,11 +70,12 @@ public:
 
     bool check_if_exceed_max_task_num() {
         bool exceed = false;
-        std::lock_guard lg(_tasks_mutex);
         if (config::max_compaction_concurrency == 0) {
-            LOG(WARNING) << "register compaction task failed for compaction is disabled";
+            LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
             exceed = true;
-        } else if (_running_tasks.size() >= _max_task_num) {
+        }
+        std::lock_guard lg(_tasks_mutex);
+        if (_running_tasks.size() >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
