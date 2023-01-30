@@ -180,6 +180,10 @@ public class MvUtils {
         return isLogicalSPJG(root, 0);
     }
 
+    /**
+     * Whether `root` and its children are all Select/Project/Join/Group ops,
+     * NOTE: This method requires `root` must be Aggregate op to check whether MV is satisfiable quickly.
+     */
     public static boolean isLogicalSPJG(OptExpression root, int level) {
         if (root == null) {
             return false;
@@ -201,6 +205,9 @@ public class MvUtils {
         return isLogicalSPJG(child, level + 1);
     }
 
+    /**
+     *  Whether `root` and its children are Select/Project/Join ops.
+     */
     public static boolean isLogicalSPJ(OptExpression root) {
         if (root == null) {
             return false;
