@@ -256,23 +256,10 @@ Status UpdateManager::get_latest_del_vec(const TabletSegmentId& tsid, int64_t ba
     if (*found) {
         return Status::OK();
     }
-    {
-        // 2. find in cache
-        std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-        auto itr = _del_vec_cache.find(tsid);
-        if (itr != _del_vec_cache.end()) {
-            *pdelvec = itr->second;
-            return Status::OK();
-        }
-    }
-    // 3. find in file
+    // 2. find in file
     (*pdelvec).reset(new DelVector());
     int64_t latest_version = 0;
-    RETURN_IF_ERROR(get_del_vec_in_meta(tsid, base_version, pdelvec->get(), &latest_version));
-    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-    _del_vec_cache.emplace(tsid, *pdelvec);
-    _del_vec_cache_ver = std::max(_del_vec_cache_ver, latest_version);
-    return Status::OK();
+    return get_del_vec_in_meta(tsid, base_version, pdelvec->get(), &latest_version);
 }
 
 Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
@@ -287,38 +274,10 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
             return Status::OK();
         }
     }
-    {
-        // 2. find in delvec cache
-        std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-        if (version <= _del_vec_cache_ver) { // if delvec_cache is meet the requirements
-            auto itr = _del_vec_cache.find(tsid);
-            if (itr != _del_vec_cache.end()) {
-                if (version >= itr->second->version()) {
-                    LOG(INFO) << strings::Substitute(
-                            "get_del_vec cached tablet_segment=$0 version=$1 actual_version=$2", tsid.to_string(),
-                            version, itr->second->version());
-                    // cache valid
-                    *pdelvec = itr->second;
-                    return Status::OK();
-                }
-            }
-        }
-    }
     (*pdelvec).reset(new DelVector());
     int64_t latest_version = 0;
-    // 3. find in delvec file
+    // 2. find in delvec file
     RETURN_IF_ERROR(get_del_vec_in_meta(tsid, version, pdelvec->get(), &latest_version));
-    if ((*pdelvec)->version() == latest_version) {
-        std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-        auto itr = _del_vec_cache.find(tsid);
-        if (itr == _del_vec_cache.end()) {
-            _del_vec_cache.emplace(tsid, *pdelvec);
-        } else if (latest_version > itr->second->version()) {
-            // update cache to latest version
-            itr->second = (*pdelvec);
-        }
-        _del_vec_cache_ver = std::max(_del_vec_cache_ver, latest_version);
-    }
     return Status::OK();
 }
 
@@ -332,70 +291,12 @@ Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t m
     return Status::OK();
 }
 
-Status UpdateManager::set_cached_del_vec(
-        const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates, int64_t version) {
-    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-    for (const auto& each : cache_delvec_updates) {
-        auto itr = _del_vec_cache.find(each.first);
-        if (itr != _del_vec_cache.end()) {
-            if (each.second->version() <= itr->second->version()) {
-                string msg = strings::Substitute("UpdateManager::set_cached_del_vec: new version($0) < old version($1)",
-                                                 each.second->version(), itr->second->version());
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
-            } else {
-                itr->second = each.second;
-            }
-        } else {
-            _del_vec_cache.emplace(each.first, each.second);
-        }
-    }
-    _del_vec_cache_ver = version;
-    return Status::OK();
-}
-
 void UpdateManager::expire_cache() {
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
         _update_state_cache.clear_expired();
         _index_cache.clear_expired();
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
-}
-
-void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids) {
-    LOG(INFO) << "clear cached delvec cnt: " << tsids.size();
-    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-    for (const auto& tsid : tsids) {
-        auto itr = _del_vec_cache.find(tsid);
-        if (itr != _del_vec_cache.end()) {
-            _del_vec_cache.erase(itr);
-        }
-    }
-}
-
-void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentIdRange>& tsid_ranges) {
-    std::stringstream ss;
-    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-    for (const auto& range : tsid_ranges) {
-        if (!range.is_valid()) {
-            LOG(ERROR) << "invalid tsid range can't be clear: " << range;
-        } else {
-            auto from_iter = _del_vec_cache.lower_bound(range.left);
-            auto to_iter = _del_vec_cache.upper_bound(range.right);
-            bool done = false;
-            while (from_iter != to_iter) {
-                from_iter = _del_vec_cache.erase(from_iter);
-                done = true;
-            }
-            ss << range << ":done " << done << ",";
-        }
-    }
-    LOG(INFO) << "clear cached delvec ranges: " << ss.str();
-}
-
-size_t UpdateManager::cached_del_vec_size() {
-    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
-    return _del_vec_cache.size();
 }
 
 size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {

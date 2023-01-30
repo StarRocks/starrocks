@@ -241,7 +241,7 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   if [ ${DRY_RUN} -eq 0 ]; then
     if [ -x ${GTEST_PARALLEL} ]; then
         ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
-            --gtest_catch_exceptions=0 --gtest_filter=${TEST_NAME} \
+            --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
     else
         ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}

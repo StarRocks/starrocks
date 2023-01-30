@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -26,7 +25,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
@@ -38,7 +36,6 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/lake/txn_log.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -50,7 +47,7 @@ using VChunk = starrocks::Chunk;
 
 class TestLocationProvider : public LocationProvider {
 public:
-    explicit TestLocationProvider(std::string dir) : _dir(dir) {}
+    explicit TestLocationProvider(std::string dir) : _dir(std::move(dir)) {}
 
     std::set<int64_t> owned_tablets() const override { return _owned_shards; }
 
@@ -68,12 +65,11 @@ public:
 class PrimaryKeyHorizontalCompactionTest : public testing::Test {
 public:
     PrimaryKeyHorizontalCompactionTest() {
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
         _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
 
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -118,7 +114,6 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -130,7 +125,6 @@ protected:
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
         tablet.delete_txn_log(_txn_id);
         _txn_id++;
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
     }
 
@@ -172,11 +166,12 @@ protected:
         return ret;
     }
 
-    TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<TestLocationProvider> _location_provider;
-    LocationProvider* _backup_location_provider;
+    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
@@ -197,8 +192,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -219,7 +214,6 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
             EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, version - i)));
         }
     }
-    EXPECT_EQ(3, _tablet_manager->update_mgr()->cached_del_vec_size());
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
     _txn_id++;
@@ -236,12 +230,11 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
     // make sure delvecs have been gc
     config::lake_gc_segment_expire_seconds = 0;
     config::lake_gc_metadata_max_versions = 1;
-    ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager, _txn_id + 1));
-    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager));
+    ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
+    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get()));
     for (int ver = 1; ver <= version; ver++) {
         EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, ver)));
     }
-    EXPECT_EQ(1, _tablet_manager->update_mgr()->cached_del_vec_size());
 }
 
 // test write 3 diff chunk
@@ -260,8 +253,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test2) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -306,8 +299,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test3) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         if (i == 1) {
             ASSERT_OK(delta_writer->write(chunks[i], indexes_empty.data(), indexes_empty.size()));
@@ -350,8 +343,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -394,8 +387,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
         ASSERT_OK(delta_writer->finish());
@@ -406,8 +399,8 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
     }
     {
         _txn_id++;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_manager, tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
         ASSERT_OK(delta_writer->finish());

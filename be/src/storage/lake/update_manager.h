@@ -98,9 +98,6 @@ public:
     void remove_primary_index_cache(uint32_t tablet_id);
 
     void expire_cache();
-    void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
-    void clear_cached_del_vec(const std::vector<TabletSegmentIdRange>& tsid_ranges);
-    size_t cached_del_vec_size();
 
 private:
     Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
@@ -114,15 +111,7 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
-
-    // DelVector related states
-    std::mutex _del_vec_cache_lock;
-    std::map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
-    // use _del_vec_cache_ver to indice the valid position
-    int64_t _del_vec_cache_ver{0};
-
     std::atomic<int64_t> _last_clear_expired_cache_millis{0};
-
     LocationProvider* _location_provider;
 };
 

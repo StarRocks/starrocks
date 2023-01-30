@@ -181,4 +181,5 @@ add_library(Storage STATIC
     binlog_file_writer.cpp
     binlog_file_reader.cpp
     lake/update_compaction_state.cpp
+    lake/txn_log_applier.cpp
 )

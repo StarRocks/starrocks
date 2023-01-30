@@ -112,11 +112,15 @@ public:
 
     [[nodiscard]] std::string del_location(std::string_view del_name) const;
 
+    [[nodiscard]] std::string delvec_location(int64_t version) const;
+
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
     UpdateManager* update_mgr() { return _mgr->update_mgr(); }
+
+    TabletManager* tablet_mgr() { return _mgr; }
 
 private:
     TabletManager* _mgr;

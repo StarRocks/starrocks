@@ -110,13 +110,18 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
-    [[nodiscard]] TabletWriter* tablet_writer() { return _tablet_writer.get(); }
-
     [[nodiscard]] Status flush();
 
     [[nodiscard]] Status flush_async();
 
+    std::vector<std::string> files() const;
+
+    int64_t data_size() const;
+
+    int64_t num_rows() const;
+
     Status handle_partial_update();
+
     Status build_schema_and_writer();
 
 private:
@@ -322,6 +327,18 @@ void DeltaWriterImpl::close() {
     _partial_update_tablet_schema.reset();
 }
 
+std::vector<std::string> DeltaWriterImpl::files() const {
+    return (_tablet_writer != nullptr) ? _tablet_writer->files() : std::vector<std::string>();
+}
+
+int64_t DeltaWriterImpl::data_size() const {
+    return (_tablet_writer != nullptr) ? _tablet_writer->data_size() : 0;
+}
+
+int64_t DeltaWriterImpl::num_rows() const {
+    return (_tablet_writer != nullptr) ? _tablet_writer->num_rows() : 0;
+}
+
 //// DeltaWriter
 
 DeltaWriter::~DeltaWriter() {
@@ -363,10 +380,6 @@ MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
 }
 
-TabletWriter* DeltaWriter::tablet_writer() {
-    return _impl->tablet_writer();
-}
-
 Status DeltaWriter::flush() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush() in a bthread";
     return _impl->flush();
@@ -375,6 +388,18 @@ Status DeltaWriter::flush() {
 Status DeltaWriter::flush_async() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush_async() in a bthread";
     return _impl->flush_async();
+}
+
+std::vector<std::string> DeltaWriter::files() const {
+    return _impl->files();
+}
+
+int64_t DeltaWriter::data_size() const {
+    return _impl->data_size();
+}
+
+int64_t DeltaWriter::num_rows() const {
+    return _impl->num_rows();
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,

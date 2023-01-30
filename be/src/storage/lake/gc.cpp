@@ -247,9 +247,9 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     };
 
-    auto check_delvecs = [&](const TabletMetadataPtr metadata) {
-        for (const auto& delvec : metadata->delvec_meta().delvecs()) {
-            std::string delvec_name = tablet_delvec_filename(metadata->id(), delvec.page().version());
+    auto check_delvecs = [&](int64_t tablet_id, const DelvecMetadataPB& delvec_meta) {
+        for (const auto& delvec : delvec_meta.delvecs()) {
+            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.page().version());
             datafiles.erase(delvec_name);
         }
     };
@@ -276,7 +276,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
-        check_delvecs(metadata);
+        check_delvecs(metadata->id(), metadata->delvec_meta());
         if (is_primary_key(metadata.get())) {
             // find missed tsid range, only used in pk table
             find_missed_tsid_range(metadata.get(), missed_tsid_ranges);
@@ -307,6 +307,9 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
             for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
                 check_rowset(rowset);
             }
+            if (txn_log->op_schema_change().has_delvec_meta()) {
+                check_delvecs(txn_log->tablet_id(), txn_log->op_schema_change().delvec_meta());
+            }
         }
     }
 
@@ -325,8 +328,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
             ++it;
         }
     }
-    // clear useless delvec caches
-    tablet_mgr->update_mgr()->clear_cached_del_vec(missed_tsid_ranges);
 
     return datafiles;
 }
