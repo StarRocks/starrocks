@@ -30,7 +30,7 @@ import java.util.Map;
 public class CurrentQueryHostProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryHostProcNode.class);
     private static final ImmutableList<String> TITILE_NAMES = new ImmutableList.Builder<String>()
-            .add("Host").add("ScanBytes").add("ScanRows").add("CpuCostSeconds").build();
+            .add("Host").add("ScanBytes").add("ScanRows").add("CpuCostSeconds").add("MemUsageBytes").build();
 
     private QueryStatisticsItem item;
 
@@ -50,9 +50,10 @@ public class CurrentQueryHostProcNode implements ProcNodeInterface {
             CurrentQueryInfoProvider.QueryStatistics statistics = entry.getValue();
             final List<String> rowData = Lists.newArrayList();
             rowData.add(host);
-            rowData.add(QueryStatisticsFormatter.getScanBytes(statistics.scanBytes));
+            rowData.add(QueryStatisticsFormatter.getBytes(statistics.scanBytes));
             rowData.add(QueryStatisticsFormatter.getRowsReturned(statistics.scanRows));
             rowData.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.cpuCostNs));
+            rowData.add(QueryStatisticsFormatter.getBytes(statistics.memUsageBytes));
             sortedRowDatas.add(rowData);
         }
         sortedRowDatas.sort(new Comparator<List<String>>() {
