@@ -7,6 +7,7 @@ import java.util.Map;
 
 public class TypeMapping {
     public static Map<String, OffHeapColumnVector.OffHeapColumnType> hiveTypeMappings = new HashMap<>();
+
     static {
         hiveTypeMappings.put("byte", OffHeapColumnVector.OffHeapColumnType.BYTE);
         hiveTypeMappings.put("bool", OffHeapColumnVector.OffHeapColumnType.BOOLEAN);
@@ -21,5 +22,7 @@ public class TypeMapping {
         hiveTypeMappings.put("date", OffHeapColumnVector.OffHeapColumnType.DATE);
         hiveTypeMappings.put("timestamp", OffHeapColumnVector.OffHeapColumnType.DATETIME);
         hiveTypeMappings.put("decimal", OffHeapColumnVector.OffHeapColumnType.DECIMAL);
+        hiveTypeMappings.put("TimestampMicros", OffHeapColumnVector.OffHeapColumnType.DATETIME_MICROS);
+        hiveTypeMappings.put("TimestampMillis", OffHeapColumnVector.OffHeapColumnType.DATETIME_MILLIS);
     }
 }

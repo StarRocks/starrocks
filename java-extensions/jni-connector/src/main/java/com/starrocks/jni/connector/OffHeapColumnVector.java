@@ -21,7 +21,12 @@ public class OffHeapColumnVector {
         BINARY,
         STRING,
         DATE,
+        // INT96 timestamp type, hive compatible (hive version < 4.x)
         DATETIME,
+        // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)
+        DATETIME_MICROS,
+        // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)
+        DATETIME_MILLIS,
         DECIMAL
     }
 
@@ -74,10 +79,10 @@ public class OffHeapColumnVector {
         reset();
     }
 
-    public static boolean isArray(OffHeapColumnType type) {
-        return type == OffHeapColumnType.BINARY || type == OffHeapColumnType.STRING
-                || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DATETIME
-                || type == OffHeapColumnType.DECIMAL;
+    public boolean isByteStorageType() {
+        return type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL
+                || type == OffHeapColumnType.BINARY || type == OffHeapColumnType.DATETIME
+                || type == OffHeapColumnType.DATETIME_MICROS || type == OffHeapColumnType.DATETIME_MILLIS;
     }
 
     public long nullsNativeAddress() {
@@ -145,7 +150,7 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
         } else if (type == OffHeapColumnType.LONG || type == OffHeapColumnType.DOUBLE) {
             this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
-        } else if (isArray(type)) {
+        } else if (isByteStorageType()) {
             this.offsetData =
                     Platform.reallocateMemory(offsetData, oldCapacity * 4L, (newCapacity + 1) * 4L);
         } else {
@@ -157,7 +162,7 @@ public class OffHeapColumnVector {
     }
 
     private void reserveChildColumn() {
-        if (type == OffHeapColumnType.STRING || type == OffHeapColumnType.DATE || type == OffHeapColumnType.DECIMAL) {
+        if (isByteStorageType()) {
             int childCapacity = capacity;
             childCapacity *= DEFAULT_ARRAY_LENGTH;
             this.childColumns = new OffHeapColumnVector[1];

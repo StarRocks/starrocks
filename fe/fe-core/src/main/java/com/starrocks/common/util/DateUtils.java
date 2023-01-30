@@ -22,6 +22,8 @@ public class DateUtils {
     public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern("yyyy'Q'q");
     public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMM");
 
+    public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+
     public static final DateTimeFormatter DATE_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
     public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =

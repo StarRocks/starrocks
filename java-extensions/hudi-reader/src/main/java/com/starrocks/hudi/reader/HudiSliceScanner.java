@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.hudi.reader.HudiScannerUtils.MARK_TYPE_VALUE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
@@ -70,7 +71,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.dataFilePath = params.get("data_file_path");
         this.dataFileLenth = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
-        this.inputFormat = params.get("input_format");;
+        this.inputFormat = params.get("input_format");
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
@@ -110,6 +111,14 @@ public class HudiSliceScanner extends ConnectorScanner {
             }
             initOffHeapTableWriter(requiredTypes, fetchSize, TypeMapping.hiveTypeMappings);
 
+            // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
+            for (int i = 0; i < this.hiveColumnTypes.length; i++) {
+                String type = this.hiveColumnTypes[i];
+                if (MARK_TYPE_VALUE_MAPPING.containsKey(type)) {
+                    this.hiveColumnTypes[i] = MARK_TYPE_VALUE_MAPPING.get(type);
+                }
+            }
+
             properties.setProperty("hive.io.file.readcolumn.ids", columnIdBuilder.toString());
             properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
             properties.setProperty("columns", this.hiveColumnNames);
@@ -123,7 +132,8 @@ public class HudiSliceScanner extends ConnectorScanner {
             Path path = new Path(realtimePath);
             FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
             List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
-            FileSplit hudiSplit = new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
+            FileSplit hudiSplit =
+                    new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
 
             InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
             reader = (RecordReader<NullWritable, ArrayWritable>) inputFormatClass
@@ -172,7 +182,13 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         scanData(i, null);
                     } else {
-                        Object fieldValue = ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
+                        Object fieldValue = null;
+                        if (HudiScannerUtils.isInt64Timestamp(getType(i))) {
+                            fieldValue = HudiScannerUtils.getTimestamp(fieldData, getType(i));
+                        } else {
+                            fieldValue =
+                                    ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
+                        }
                         scanData(i, fieldValue);
                     }
                 }
@@ -187,11 +203,13 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     private InputFormat<?, ?> createInputFormat(Configuration conf, String inputFormat) throws Exception {
         Class<?> clazz = conf.getClassByName(inputFormat);
-        Class<? extends InputFormat<?, ?>> cls = (Class<? extends InputFormat<?, ?>>) clazz.asSubclass(InputFormat.class);
+        Class<? extends InputFormat<?, ?>> cls =
+                (Class<? extends InputFormat<?, ?>>) clazz.asSubclass(InputFormat.class);
         return ReflectionUtils.newInstance(cls, conf);
     }
 
-    private Deserializer getDeserializer(Configuration configuration, Properties properties, String name) throws Exception {
+    private Deserializer getDeserializer(Configuration configuration, Properties properties, String name)
+            throws Exception {
         Class<? extends Deserializer> deserializerClass = Class.forName(name, true, JavaUtils.getClassLoader())
                 .asSubclass(Deserializer.class);
         Deserializer deserializer = deserializerClass.getConstructor().newInstance();
