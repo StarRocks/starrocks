@@ -63,7 +63,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             }
             OptimizerTask task = tasks.pop();
             context.getOptimizerContext().setTaskContext(context);
-            if (context.getOptimizerContext().getTraceInfo().isVerboseOptimizer()) {
+            if (context.getOptimizerContext().getTraceInfo().isTraceOptimizer()) {
                 executeWithRecord(task);
             } else {
                 task.execute();
@@ -79,20 +79,10 @@ public class SeriallyTaskScheduler implements TaskScheduler {
 
     private void executeWithRecord(OptimizerTask task) {
         String timerName = "";
-        if (task instanceof ApplyRuleTask) {
-            timerName = "Optimizer.CostBaseOptimize.ApplyRuleTask";
-        } else if (task instanceof DeriveStatsTask) {
-            timerName = "Optimizer.CostBaseOptimize.DeriveStatsTask";
-        } else if (task instanceof EnforceAndCostTask) {
-            timerName = "Optimizer.CostBaseOptimize.EnforceAndCostTask";
-        } else if (task instanceof ExploreGroupTask) {
-            timerName = "Optimizer.CostBaseOptimize.ExploreGroupTask";
-        } else if (task instanceof OptimizeExpressionTask) {
-            timerName = "Optimizer.CostBaseOptimize.OptimizeExpressionTask";
-        } else if (task instanceof OptimizeGroupTask) {
-            timerName = "Optimizer.CostBaseOptimize.OptimizeGroupTask";
-        } else if (task instanceof RewriteTreeTask) {
-            timerName = "Optimizer.RuleBaseOptimize.RewriteTreeTask";
+        if (task instanceof RewriteTreeTask) {
+            timerName = "Optimizer.RuleBaseOptimize." + task.getClass().getSimpleName();
+        } else {
+            timerName = "Optimizer.CostBaseOptimize." + task.getClass().getSimpleName();
         }
         try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(timerName)) {
             task.execute();

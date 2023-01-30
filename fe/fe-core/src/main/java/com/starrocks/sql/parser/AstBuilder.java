@@ -3144,12 +3144,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.optimizerTrace() != null) {
-            if (context.optimizerTrace().VERBOSE() != null) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE_OPTIMIZER);
-            } else {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.OPTIMIZER);
-            }
-
+            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.OPTIMIZER);
         }
 
         return queryStatement;

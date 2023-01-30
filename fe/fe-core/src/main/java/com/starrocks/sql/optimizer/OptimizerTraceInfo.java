@@ -28,13 +28,13 @@ public class OptimizerTraceInfo {
     private final Map<String, Integer> rulesAppliedTimes = new HashMap<>();
     private final Stopwatch stopwatch;
 
-    private boolean verboseOptimizer;
+    private boolean traceOptimizer;
 
     public OptimizerTraceInfo(UUID queryId, StatementBase stmt) {
         this.queryId = queryId;
         this.stopwatch = Stopwatch.createStarted();
-        if (stmt != null && stmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE_OPTIMIZER) {
-            verboseOptimizer = true;
+        if (stmt != null && stmt.getExplainLevel() == StatementBase.ExplainLevel.OPTIMIZER) {
+            traceOptimizer = true;
         }
 
     }
@@ -62,11 +62,11 @@ public class OptimizerTraceInfo {
         return sb.toString();
     }
 
-    public boolean isVerboseOptimizer() {
-        return verboseOptimizer;
+    public boolean isTraceOptimizer() {
+        return traceOptimizer;
     }
 
-    public void setVerboseOptimizer(boolean verboseOptimizer) {
-        this.verboseOptimizer = verboseOptimizer;
+    public void setTraceOptimizer(boolean traceOptimizer) {
+        this.traceOptimizer = traceOptimizer;
     }
 }

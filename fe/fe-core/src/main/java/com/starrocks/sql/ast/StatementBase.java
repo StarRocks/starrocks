@@ -48,8 +48,7 @@ public abstract class StatementBase implements ParseNode {
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
         COST,
-        OPTIMIZER,
-        VERBOSE_OPTIMIZER
+        OPTIMIZER
     }
 
     private ExplainLevel explainLevel;

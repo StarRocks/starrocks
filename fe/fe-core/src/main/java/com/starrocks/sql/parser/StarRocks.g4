@@ -1884,7 +1884,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE VERBOSE? OPTIMIZER
+    : TRACE OPTIMIZER
     ;
 
 partitionDesc
