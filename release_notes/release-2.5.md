@@ -71,6 +71,7 @@
 - 会话变量 `is_report_success` 更名为 `enable_profile`，可通过 SHOW VARIABLES 语句查看。
 - 新增四个关键字：`CURRENT_DATE`, `CURRENT_TIME`, `LOCALTIME`, `LOCALTIMESTAMP`。[#14319](https://github.com/StarRocks/starrocks/pull/14319)
 - 表名和库名的长度限制放宽至不超过 1023 个字符。 [#14929](https://github.com/StarRocks/starrocks/pull/14929) [#15020](https://github.com/StarRocks/starrocks/pull/15020)
+- BE配置项 enable_event_based_compaction_framework 和 enable_size_tiered_compaction_strategy 默认开启，能够在tablet数比较多或者单个tablet数据量比较大的场景下大幅降低compaction的开销。
 
 ### 升级注意事项
 
