@@ -544,7 +544,6 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
         if (sender->destinations().size() > 1 || dest_dop > 1) {
             is_pipeline_level_shuffle = true;
         }
-
         DCHECK_GT(dest_dop, 0);
     }
 
