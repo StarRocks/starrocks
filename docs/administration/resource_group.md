@@ -60,13 +60,9 @@ On the basis of the above resource consumption restrictions, you can further res
 
 > Note: When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query` or `normal`.
+- `type`:
 
-<<<<<<< HEAD
-=======
 - The default value is `normal`. You do not need specify `normal` in the parameter `type`.
-- When loading tasks hit a `insert` resource group, the BE node reserves the specified CPU resources for the loading tasks.
->>>>>>> d1da76352 ([Doc] Fix issues in Config and RG (#16983))
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
 - When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
 
@@ -89,9 +85,6 @@ Classifiers support the following conditions:
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
 
-<<<<<<< HEAD
-> Note: You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
-=======
 > **NOTE**
 >
 > You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
@@ -104,7 +97,6 @@ A classifier matches a query only when one or all conditions of the classifier m
 > - `big_query_cpu_second_limit`: 0
 > - `big_query_scan_rows_limit`: 0
 > - `big_query_mem_limit`: 0
->>>>>>> d1da76352 ([Doc] Fix issues in Config and RG (#16983))
 
 StarRocks calculates the degree of matching between a query and a classifier by using the following rules:
 
