@@ -44,7 +44,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `mem_limit`
 
-  This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Unit: %. Valid values: (0, 1).
+  This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Valid values: (0, 1).
 
   > Note: The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
 
