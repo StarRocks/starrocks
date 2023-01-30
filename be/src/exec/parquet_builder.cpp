@@ -63,12 +63,11 @@ arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
         return arrow::Status::IOError(st.to_string());
     }
 
-    _cur_pos += nbytes;
     return arrow::Status::OK();
 }
 
 arrow::Result<int64_t> ParquetOutputStream::Tell() const {
-    return _cur_pos;
+    return _writable_file->size();
 }
 
 arrow::Status ParquetOutputStream::Close() {

@@ -59,7 +59,6 @@ public:
 private:
     std::unique_ptr<WritableFile> _writable_file;
     bool _is_closed = false;
-    size_t _cur_pos = 0;
 };
 
 class ParquetBuildHelper {
