@@ -34,6 +34,7 @@ fe/fe-core/gen
 fe/fe-common/.classpath
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
+fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
 dependency-reduced-pom.xml
 tags
 .tags

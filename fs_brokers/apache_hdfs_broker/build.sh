@@ -52,13 +52,15 @@ mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
 rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz
 
 # jindosdk-4.6.2.tar.gz is very large, about 931M, so we cache it in local disk
-if [[ ! -f ./jindosdk-4.6.2.tar.gz ]]; then
+if [ ! -d ${BROKER_HOME}/jindosdk-4.6.2 ]; then
     echo "download aliyun jindo..."
     wget https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/release/4.6.2/jindosdk-4.6.2.tar.gz
+    tar xvf jindosdk-4.6.2.tar.gz
 fi
-tar xvf jindosdk-4.6.2.tar.gz
 cp -r jindosdk-4.6.2/lib/*.jar ${BROKER_OUTPUT}/lib/
-rm -r jindosdk-4.6.2
+if [ -f ${BROKER_HOME}/jindosdk-4.6.2.tar.gz ]; then
+    rm -r ${BROKER_HOME}/jindosdk-4.6.2.tar.gz
+fi
 
 
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
@@ -68,8 +70,6 @@ cp -r -p ${BROKER_HOME}/conf/log4j.properties ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/target/lib/* ${BROKER_OUTPUT}/lib/
 cp -r -p ${BROKER_HOME}/target/apache_hdfs_broker.jar ${BROKER_OUTPUT}/lib/
 
-echo ""
-echo ""
 echo ""
 echo "***************************************"
 echo "**Successfully build StarRocks Broker**"
