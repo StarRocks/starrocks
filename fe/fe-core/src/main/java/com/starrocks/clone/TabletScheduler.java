@@ -148,6 +148,7 @@ public class TabletScheduler extends LeaderDaemon {
     private Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
     private ClusterLoadStatistic loadStatistic;
     private long lastStatUpdateTime = 0;
+    private long lastClusterLoadLoggingTime = 0;
 
     private long lastSlotAdjustTime = 0;
 
@@ -389,8 +390,9 @@ public class TabletScheduler extends LeaderDaemon {
     private void updateClusterLoadStatistic() {
         ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
-        if (System.currentTimeMillis() - lastStatUpdateTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
+        if (System.currentTimeMillis() - lastClusterLoadLoggingTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
             LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+            lastClusterLoadLoggingTime = System.currentTimeMillis();
         }
         this.loadStatistic = clusterLoadStatistic;
     }
