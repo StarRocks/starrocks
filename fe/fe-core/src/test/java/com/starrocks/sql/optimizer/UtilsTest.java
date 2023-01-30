@@ -298,7 +298,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testCapableSemiReorder() {
+    public void testCountJoinNode() {
         OptExpression root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
@@ -306,27 +306,41 @@ public class UtilsTest {
                         OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
-        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 1));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+        assertEquals(1, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
+
 
         root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
                 OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
-                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
                                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                                         OptExpression.create(
-                                                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
+                                                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
                                         OptExpression.create(
                                                 new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
                                 OptExpression.create(
                                         new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
-        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 0));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 1));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+        assertEquals(2, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
+
+
+
+        root = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, null)),
+                OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                                        OptExpression.create(
+                                                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                                        OptExpression.create(
+                                                new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                                OptExpression.create(
+                                        new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
+                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+
+        assertEquals(4, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
     }
 }

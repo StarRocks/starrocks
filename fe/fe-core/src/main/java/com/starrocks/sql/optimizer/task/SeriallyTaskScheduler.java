@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Stopwatch;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
@@ -62,12 +63,39 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             }
             OptimizerTask task = tasks.pop();
             context.getOptimizerContext().setTaskContext(context);
-            task.execute();
+            if (context.getOptimizerContext().getTraceInfo().isVerboseOptimizer()) {
+                executeWithRecord(task);
+            } else {
+                task.execute();
+            }
         }
     }
 
     @Override
     public void pushTask(OptimizerTask task) {
         tasks.push(task);
+    }
+
+
+    private void executeWithRecord(OptimizerTask task) {
+        String timerName = "";
+        if (task instanceof ApplyRuleTask) {
+            timerName = "Optimizer.CostBaseOptimize.ApplyRuleTask";
+        } else if (task instanceof DeriveStatsTask) {
+            timerName = "Optimizer.CostBaseOptimize.DeriveStatsTask";
+        } else if (task instanceof EnforceAndCostTask) {
+            timerName = "Optimizer.CostBaseOptimize.EnforceAndCostTask";
+        } else if (task instanceof ExploreGroupTask) {
+            timerName = "Optimizer.CostBaseOptimize.ExploreGroupTask";
+        } else if (task instanceof OptimizeExpressionTask) {
+            timerName = "Optimizer.CostBaseOptimize.OptimizeExpressionTask";
+        } else if (task instanceof OptimizeGroupTask) {
+            timerName = "Optimizer.CostBaseOptimize.OptimizeGroupTask";
+        } else if (task instanceof RewriteTreeTask) {
+            timerName = "Optimizer.RuleBaseOptimize.RewriteTreeTask";
+        }
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(timerName)) {
+            task.execute();
+        }
     }
 }
