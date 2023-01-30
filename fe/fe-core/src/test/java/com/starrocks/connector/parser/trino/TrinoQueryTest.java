@@ -220,7 +220,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 2> : CAST(ARRAY<boolean>[NULL][1] AS SMALLINT) + 1\n" +
                 "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>" +
                 "[[1,2,3],[1,1,1]][2][2] AS SMALLINT)");
 

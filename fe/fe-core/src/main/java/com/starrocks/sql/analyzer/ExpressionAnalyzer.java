@@ -298,6 +298,10 @@ public class ExpressionAnalyzer {
                     } else {
                         targetItemType = TypeManager.getCommonSuperType(
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
+                        if (targetItemType.isNull()) {
+                            // For empty array, any item type works out, here we pick Boolean
+                            targetItemType = Type.BOOLEAN;
+                        }
                     }
 
                     // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type

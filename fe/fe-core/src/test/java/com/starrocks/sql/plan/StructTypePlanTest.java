@@ -148,7 +148,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testLambda() throws Exception {
         String sql = "select array_map(x->x, [])";
-        assertVerbosePlanContains(sql, "ARRAY<unknown type: NULL_TYPE>[]");
+        assertVerbosePlanContains(sql, "ARRAY<boolean>[]");
         sql = "select array_map(x->x+1, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_sortby(x->x+1, c3.d) from test";
