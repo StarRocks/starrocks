@@ -1700,7 +1700,8 @@ public class PrivilegeCheckerV2 {
                 }
             }
             if (!hasPrivilege) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "TABLE/VIEW/MV");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_ANY_ACTION_IN_DB_ACCESS_DENIED_ERROR,
+                        statement.getDbName());
             }
             return null;
         }
@@ -1712,10 +1713,7 @@ public class PrivilegeCheckerV2 {
             if (functionName.isGlobalFunction()) {
                 FunctionSearchDesc desc = statement.getFunction();
                 Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(desc);
-                if (function == null) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_FUNC_NOT_FOUND);
-                }
-                if (!PrivilegeManager.checkGlobalFunctionAction(context, function.signatureString(),
+                if (function != null && !PrivilegeManager.checkGlobalFunctionAction(context, function.signatureString(),
                         PrivilegeType.GlobalFunctionAction.DROP)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                             "DROP GLOBAL FUNCTION");
@@ -1725,13 +1723,18 @@ public class PrivilegeCheckerV2 {
 
             // db function.
             Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
-            Function function = db.getFunction(statement.getFunction());
-            if (null == function) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_FUNC_NOT_FOUND);
-            }
-            if (!PrivilegeManager.checkFunctionAction(context, functionName.getDb(), function.signatureString(),
-                    PrivilegeType.FunctionAction.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP FUNCTION");
+            if (db != null) {
+                try {
+                    db.readLock();
+                    Function function = db.getFunction(statement.getFunction());
+                    if (null != function && !PrivilegeManager.checkFunctionAction(context, functionName.getDb(),
+                            function.signatureString(), PrivilegeType.FunctionAction.DROP)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "DROP FUNCTION");
+                    }
+                } finally {
+                    db.readUnlock();
+                }
             }
             return null;
         }
