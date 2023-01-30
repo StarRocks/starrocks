@@ -1706,6 +1706,24 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
 }
 
 // =======================================================
+
+static bool can_run_jni_test() {
+    if (getenv("STARROCKS_SRC_HOME") == nullptr) {
+        // Right now it's very hard to construct jni ut, because we only build ut-binary but not java extensions.
+        // To make this test run, we have to define `STARROCKS_SRC_HOME` and `STARROCKS_HOME`(which has java-extensions)
+        // and we have to set following env vars
+        /*
+        STARROCKS_SRC_HOME=${STARROCKS_HOME} \
+        STARROCKS_HOME=${STARROCKS_HOME}/output/be \
+        HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/* \
+        CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH \
+        LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH \
+        */
+        return false;
+    }
+    return true;
+}
+
 /*
 
 CREATE TABLE `test_hudi_mor2` (
@@ -1734,17 +1752,7 @@ a       b       c       d       e
 
 */
 TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
-    if (getenv("STARROCKS_SRC_HOME") == nullptr) {
-        // Right now it's very hard to construct jni ut, because we only build ut-binary but not java extensions.
-        // To make this test run, we have to define `STARROCKS_SRC_HOME` and `STARROCKS_HOME`(which has java-extensions)
-        // and we have to set following env vars
-        /*
-        STARROCKS_SRC_HOME=${STARROCKS_HOME} \
-        STARROCKS_HOME=${STARROCKS_HOME}/output/be \
-        HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/* \
-        CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH \
-        LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH \
-        */
+    if (!can_run_jni_test()) {
         GTEST_SKIP();
     }
 
@@ -1827,6 +1835,91 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 3);
     EXPECT_EQ(scanner->raw_rows_read(), 3);
+    scanner->close(_runtime_state);
+}
+
+/*
+CREATE TABLE `test_hudi_mor` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<int>,
+  `d` map<string, int>,
+  `e` struct<a:int, b:string>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+spark-sql> select a,b,c,d,e from test_hudi_mor;
+a       b       c       d       e
+1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
+    if (!can_run_jni_test()) {
+        GTEST_SKIP();
+    }
+
+    // c: array<int>
+    TypeDescriptor C(LogicalType::TYPE_ARRAY);
+    C.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+
+    // d: map<string, int>
+    TypeDescriptor D(LogicalType::TYPE_MAP);
+    D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+    D.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+
+    TypeDescriptor E(LogicalType::TYPE_STRUCT);
+    E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    E.field_names.emplace_back("a");
+    E.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22));
+    E.field_names.emplace_back("b");
+
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                {"b", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"c", C},
+                                {"d", D},
+                                {"e", E},
+                                {""}};
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams2";
+    std::string parquet_file = basePath + "/64798197-be6a-4eca-9898-0c2ed75b9d65-0_0-54-41_20230105142938081.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths",
+                   basePath + "/.64798197-be6a-4eca-9898-0c2ed75b9d65-0_20230105142938081.log.1_0-95-78");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<int>#map<string,int>#struct<a:int,b:"
+                   "string>");
+    params.emplace("instant_time", "20230105143305070");
+    params.emplace("data_file_length", "436081");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInemplaceFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 1);
     scanner->close(_runtime_state);
 }
 
