@@ -44,7 +44,7 @@ public class MvRewriteOptimizationTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.dynamic_partition_check_interval_seconds = 1;
+        Config.dynamic_partition_check_interval_seconds = 10000;
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
         Config.bdbje_lock_timeout_second = 60;
@@ -1334,6 +1334,7 @@ public class MvRewriteOptimizationTest {
         cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
         cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
         cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+
         createAndRefreshMv("test", "ttl_union_mv_1", "CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`c3`)\n" +
@@ -1347,12 +1348,16 @@ public class MvRewriteOptimizationTest {
                 "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c2`) AS `c2`\n" +
                 "FROM `test_base_part`\n" +
                 "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
+
         MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
         Assert.assertNotNull(ttlMv1);
-        waitTtl(ttlMv1, 3, 200);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(3, ttlMv1.getPartitions().size());
+
         String query4 = "select c3, sum(c2) from test_base_part group by c3";
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
+        PlanTestBase.assertNotContains(plan4, "ttl_union_mv_1");
         dropMv("test", "ttl_union_mv_1");
 
         starRocksAssert.withTable("CREATE TABLE multi_mv_table (\n" +
@@ -1448,20 +1453,6 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "nested_mv_2");
         dropMv("test", "nested_mv_3");
         starRocksAssert.dropTable("nest_base_table_1");
-    }
-
-    private void waitTtl(MaterializedView mv, int number, int maxRound) throws InterruptedException, TimeoutException {
-        int round = 0;
-        while (true) {
-            if (mv.getPartitions().size() == number) {
-                break;
-            }
-            if (round >= maxRound) {
-                throw new TimeoutException("wait ttl timeout");
-            }
-            Thread.sleep(1000);
-            round++;
-        }
     }
 
     @Test
@@ -1670,7 +1661,8 @@ public class MvRewriteOptimizationTest {
                 "               )\n" +
                 "               AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
         MaterializedView ttlMv2 = getMv("test", "ttl_mv_2");
-        waitTtl(ttlMv2, 4, 100);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(4, ttlMv2.getPartitions().size());
 
         String query16 = "select k1, sum(v1) FROM ttl_base_table where k1=3 group by k1";
         String plan16 = getFragmentPlan(query16);

@@ -34,6 +34,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -533,6 +534,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             }
         }
         initialize = true;
+    }
+
+    @VisibleForTesting
+    public void runOnceForTest() {
+        runAfterCatalogReady();
     }
 
     @Override
