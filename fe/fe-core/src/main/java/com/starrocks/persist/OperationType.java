@@ -295,13 +295,22 @@ public class OperationType {
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 
-    // alter load
-    public static final short OP_ALTER_LOAD_JOB = 11100;
-
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 
     // MaterializedView Maintenance
     public static final short OP_MV_EPOCH_UPDATE = 11030;
     public static final short OP_MV_JOB_STATE = 11031;
+
+    // alter load
+    public static final short OP_ALTER_LOAD_JOB = 11100;
+
+    // warehouse
+    public static final short OP_CREATE_WH = 11110;
+    public static final short OP_DROP_WH = 11111;
+    public static final short OP_ALTER_WH_ADD_CLUSTER = 11112;
+    public static final short OP_ALTER_WH_REMOVE_CLUSTER = 11113;
+    public static final short OP_ALTER_WH_MOD_PROP = 11114;
+    public static final short OP_SUSPEND_WH = 11115;
+    public static final short OP_RESUME_WH = 11116;
 }
