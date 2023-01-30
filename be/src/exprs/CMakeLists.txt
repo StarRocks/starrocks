@@ -89,10 +89,3 @@ set(EXPR_FILES
 )
 
 add_library(Exprs ${EXPR_FILES})
-
-# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
-# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-  set_source_files_properties(json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-  set_source_files_properties(json_functions.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-endif()
