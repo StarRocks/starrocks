@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -66,11 +64,7 @@ public class ExpressionContext {
         // Add child property and statistics
         for (Group group : groupExpression.getInputs()) {
             childrenProperty.add(group.getLogicalProperty());
-            if (group.hasConfidenceStatistic(PhysicalPropertySet.EMPTY)) {
-                childrenStatistics.add(group.getConfidenceStatistic(PhysicalPropertySet.EMPTY));
-            } else {
-                childrenStatistics.add(group.getStatistics());
-            }
+            childrenStatistics.add(group.getStatistics());
         }
     }
 

@@ -203,7 +203,7 @@ OutPut Exchange Id: 15
 |  * ps_availqty-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673815217029703E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----12:EXCHANGE
 |       distribution type: SHUFFLE
@@ -217,7 +217,7 @@ OutPut Exchange Id: 15
 |  column statistics:
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673815217029703E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
 distribution type: SHUFFLE
