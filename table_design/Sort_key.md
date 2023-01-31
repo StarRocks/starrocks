@@ -22,22 +22,22 @@
 
 - 排序列的顺序必须与表定义的列顺序一致。
 
-例如，建表语句中声明要创建 `site_id`、`city_code`、`user_name` 和 `pv` 四列。这种情况下，正确的排序列组合和错误的排序列组合举例如下：
+例如，建表语句中声明要创建 `site_id`、`city_code`、`user_id` 和 `pv` 四列。这种情况下，正确的排序列组合和错误的排序列组合举例如下：
 
 - 正确的排序列
   - `site_id` 和 `city_code`
-  - `site_id`、`city_code` 和 `user_name`
+  - `site_id`、`city_code` 和 `user_id`
 
 - 错误的排序列
   - `city_code` 和 `site_id`
-  - `city_code` 和 `user_name`
+  - `city_code` 和 `user_id`
   - `site_id`、`city_code` 和 `pv`
 
 下面通过示例来说明如何创建使用各个数据模型的表，以下建表语句适用于至少部署三个 BE 节点的集群环境下。
 
 ### 明细模型
 
-创建一个名为 `site_access_duplicate` 的明细模型表，包含 `site_id`、`city_code`、`user_name` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_duplicate` 的明细模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -46,7 +46,7 @@ CREATE TABLE site_access_duplicate
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 DUPLICATE KEY(site_id, city_code)
@@ -55,7 +55,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### 聚合模型
 
-创建一个名为 `site_access_aggregate` 的聚合模型表，包含 `site_id`、`city_code`、`user_name` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_aggregate` 的聚合模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -64,16 +64,20 @@ CREATE TABLE site_access_aggregate
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT MAX,
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
+>**注意**
+>
+> 聚合模型表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
+
 ### 更新模型
 
-创建一个名为 `site_access_unique` 的更新模型表，包含 `site_id`、`city_code`、`user_name` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_unique` 的更新模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -82,7 +86,7 @@ CREATE TABLE site_access_unique
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 UNIQUE KEY(site_id, city_code)
@@ -91,7 +95,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### 主键模型
 
-创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_name` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -100,7 +104,7 @@ CREATE TABLE site_access_primary
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 PRIMARY KEY(site_id, city_code)
