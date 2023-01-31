@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
+import org.apache.logging.log4j.util.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -82,6 +83,9 @@ public class TableFunction extends Function {
                 new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
                         Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEachFunction);
+
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                FunctionSet.ILIKE, Strings.EMPTY, Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.BOOLEAN));
     }
 
     public List<Type> getTableFnReturnTypes() {

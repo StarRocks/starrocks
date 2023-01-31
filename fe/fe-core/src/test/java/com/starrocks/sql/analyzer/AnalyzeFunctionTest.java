@@ -238,6 +238,7 @@ public class AnalyzeFunctionTest {
 
         analyzeSuccess("select password('root')");
 
+        analyzeSuccess("select ilike(ta, ta) from tall");
         analyzeSuccess("select like(ta, ta) from tall");
         analyzeSuccess("select regexp(ta, ta) from tall");
         analyzeSuccess("select rlike(ta, ta) from tall");
