@@ -251,6 +251,7 @@ import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -2207,7 +2208,7 @@ public class GlobalStateMgr {
         }
         sb.append("\n) ENGINE=");
         if (table.isLakeTable()) {
-            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+            sb.append(EngineType.STARROCKS.name()).append(" ");
         } else {
             sb.append(table.getType().name()).append(" ");
         }
