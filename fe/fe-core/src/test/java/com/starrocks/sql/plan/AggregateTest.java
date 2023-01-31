@@ -132,7 +132,10 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByAsAnalyze() throws Exception {
         String sql = "select BITOR(825279661, 1960775729) as a from test_all_type group by a";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 11: expr");
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 11> : 1979700413");
+        assertContains(plan, "  2:EXCHANGE\n" +
+                "     limit: 1");
     }
 
     @Test
@@ -272,18 +275,12 @@ public class AggregateTest extends PlanTestBase {
     public void testAggregateAllConst() throws Exception {
         String sql = "select 'a', 'b' from t0 group by 'a', 'b'; ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n"
-                + "  |  <slot 4> : 4: expr\n"
-                + "  |  <slot 6> : 'b'\n"
-                + "  |  \n"
-                + "  2:AGGREGATE (update finalize)\n"
-                + "  |  group by: 4: expr\n"
-                + "  |  \n"
-                + "  1:Project\n"
-                + "  |  <slot 4> : 'a'\n"
-                + "  |  \n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0");
+        // aggregate node will be pruned by PruneGroupByKeysRule
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : 'a'\n" +
+                "  |  <slot 6> : 'b'");
+        assertContains(plan, "  2:EXCHANGE\n" +
+                "     limit: 1");
     }
 
     @Test
@@ -1553,29 +1550,30 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
         // check four phase aggregate
-        assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(19: count)\n" +
                 "  |  group by: 18: expr");
 
         sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
         // check four phase aggregate
-        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
 
         sql = "select count(distinct L_PARTKEY + 1) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
 
         sql = "select count(distinct L_SUPPKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, " 5:Project\n" +
+        assertContains(plan, "  5:Project\n" +
                 "  |  <slot 3> : 3: L_SUPPKEY\n" +
                 "  |  <slot 18> : 1.0001\n" +
                 "  |  <slot 20> : 20: count");
+
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -1583,9 +1581,10 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByConstantWithAggPrune() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         FeConstants.runningUnitTest = true;
+
         String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
@@ -1599,7 +1598,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
@@ -1609,7 +1608,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY\n");
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
 
         sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
@@ -1626,6 +1625,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  output: count(2: L_PARTKEY)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY");
+
         FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1878,7 +1878,7 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByLiteral() throws Exception {
         String sql = "select -9223372036854775808 group by TRUE;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
+        assertContains(plan, "  1:Project\n" +
                 "  |  <slot 3> : -9223372036854775808");
     }
 
@@ -1989,5 +1989,129 @@ public class AggregateTest extends PlanTestBase {
                 "  |  17 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 2 + 1");
         assertContains(plan, "  |  group by: [3: t1c, INT, true]\n" +
                 "  |  having: [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1 > 10");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule() throws Exception {
+        String sql = "select t1b,t1b+1,count(*) from test_all_type group by 1,2";
+        String plan = getFragmentPlan(sql);
+        // t1b+1 will be pruned
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 2: t1b");
+
+        sql = "select t1b,t1b+1,count(*) from test_all_type group by 2,1";
+        plan = getFragmentPlan(sql);
+        // both keys will be reserved because expr occurs in the first place
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 11: expr, 2: t1b\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+
+        // only the keys after original column will be pruned
+        sql = "select t1b+1,t1b,t1b+2,count(*) from test_all_type group by 1,2,3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 11: expr\n" +
+                "  |  <slot 12> : CAST(2: t1b AS INT) + 2\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 11: expr, 2: t1b\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+
+        sql = "select t1b,t1c,t1b+1,t1c+1,count(*) from test_all_type group by 1,2,3,4";
+        plan = getFragmentPlan(sql);
+        // t1b+1, t1c+1 will be pruned
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 1\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 2: t1b, 3: t1c");
+        // the first group by key is not simple column ref, can't be pruned
+        sql = "select 1 from test_all_type group by t1b+rand(), t1b+rand()+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 13> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr, 12: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : 14: cast + rand()\n" +
+                "  |  <slot 12> : 14: cast + rand() + 1.0\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 14> : CAST(2: t1b AS DOUBLE)");
+        sql = "select cast(id_decimal as decimal(38,2)),cast(id_decimal as decimal(37,2)) from test_all_type group by 1, 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: cast, 12: cast\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : CAST(10: id_decimal AS DECIMAL128(38,2))\n" +
+                "  |  <slot 12> : CAST(10: id_decimal AS DECIMAL128(37,2))");
+        // complex projections, aggregations and group by keys
+        sql = "select v4,abs(v4),cast(v5 as largeint),max(v4+v5+v6) from t1 group by v4,abs(v4),cast(v5 as largeint);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 4> : abs(1: v4)\n" +
+                "  |  <slot 5> : 5: cast\n" +
+                "  |  <slot 7> : 7: max\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(6: expr)\n" +
+                "  |  group by: 1: v4, 5: cast\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 5> : CAST(2: v5 AS LARGEINT)\n" +
+                "  |  <slot 6> : 1: v4 + 2: v5 + 3: v6");
+        // if all group by keys are constant and the query has aggregations
+        // we should reserve one key to ensure the correct result
+        sql = "select 'a',count(t1b) from test_all_type where t1c>10 group by 'c'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 'c'");
+        sql = "select 'a','b',count(t1b) from test_all_type where t1c>10 group by 'c','d'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 'c'");
+        // if all group by keys and projections are constant, we can remove the agg node and add a limit operator.
+        sql = "select 'a','b' from test_all_type group by 'c','d'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 13> : 'a'\n" +
+                "  |  <slot 14> : 'b'");
+        assertContains(plan, "  2:EXCHANGE\n" +
+                "     limit: 1");
     }
 }
