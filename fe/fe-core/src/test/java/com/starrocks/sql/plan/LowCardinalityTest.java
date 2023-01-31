@@ -1356,16 +1356,23 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
                 "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  <slot 20> : 9: S_ADDRESS\n" +
-                "  |  <slot 21> : 24: cast\n" +
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 20> : 9\n" +
+                "  |  <slot 21> : 25: cast\n" +
                 "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  <slot 23> : CAST(16: expr AS VARCHAR)\n" +
+                "  |  <slot 23> : CAST(CAST(9 AS DOUBLE) + 1.0 AS VARCHAR)\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 24> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  \n" +
+                "  3:Decode\n" +
+                "  |  <dict id 24> : <string id 9>\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 9: S_ADDRESS, 15: expr, 16: expr");
+                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
+                "  |  <slot 24> : 24: S_ADDRESS");
 
     }
 

@@ -444,8 +444,8 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: v5 AND 2: v2 = 8: v4] post
 [sql]
 select v1 from t0 group by v1, v1 in (1) having v1 in (1)
 [result]
-AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 4: expr]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 4: expr]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
+    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
         SCAN (columns[1: v1] predicate[1: v1 = 1])
 [end]
 

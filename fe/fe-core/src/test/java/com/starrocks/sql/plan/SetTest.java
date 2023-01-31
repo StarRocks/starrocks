@@ -507,7 +507,7 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "8:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
                 "  |  cardinality: 1\n" +

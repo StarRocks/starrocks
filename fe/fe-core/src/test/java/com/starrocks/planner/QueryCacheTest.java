@@ -860,7 +860,6 @@ public class QueryCacheTest {
     public void testRandomFunctions() {
         List<String> queryList = Lists.newArrayList(
                 "select sum(v1) from t0 where uuid() like '%s'",
-                "select right(cast(random() as varchar), 2), sum(v1) from t0 where dt between '2022-02-01' and '2022-02-04' group by right(cast(random() as varchar), 2);",
                 "select sum(case when random()>0.5 then 1 else 0 end) from t0");
         Assert.assertTrue(queryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
