@@ -533,7 +533,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withTable(entry.getValue());
+            starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
@@ -594,9 +594,13 @@ public class UtFrameUtils {
 
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+
+        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer");
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transform((statement).getQueryRelation());
+        t.close();
 
+        t = PlannerProfile.getScopedTimer("Optimizer");
         Optimizer optimizer = new Optimizer();
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -604,17 +608,22 @@ public class UtFrameUtils {
                 new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
+        t.close();
 
+        t = PlannerProfile.getScopedTimer("Builder");
         ExecPlan execPlan = PlanFragmentBuilder
                 .createPhysicalPlan(optimizedPlan, connectContext,
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
                         TResultSinkType.MYSQL_PROTOCAL, true);
+        t.close();
 
         return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
+        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Planner");
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
+        t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 

@@ -50,7 +50,7 @@ limit: 100
 cardinality: 100
 column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-* count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -65,7 +65,7 @@ OutPut Exchange Id: 30
 |  cardinality: 100
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
 |
 28:AGGREGATE (merge finalize)
 |  aggregate: count[([71: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -73,7 +73,7 @@ OutPut Exchange Id: 30
 |  cardinality: 40000
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
 |
 27:EXCHANGE
 distribution type: SHUFFLE
@@ -82,7 +82,7 @@ cardinality: 40000
 
 PLAN FRAGMENT 2(F12)
 
-Input Partition: HASH_PARTITIONED: 54: l_orderkey
+Input Partition: HASH_PARTITIONED: 24: o_orderkey
 OutPut Partition: HASH_PARTITIONED: 2: s_name
 OutPut Exchange Id: 27
 
@@ -93,49 +93,54 @@ OutPut Exchange Id: 27
 |  cardinality: 40000
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 4800293.615398368, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
 |
 25:Project
 |  output columns:
 |  2 <-> [2: s_name, VARCHAR, true]
-|  cardinality: 4800294
+|  cardinality: 1600098
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |
 24:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE(S))
-|  equal join conjunct: [24: o_orderkey, INT, true] = [8: l_orderkey, INT, true]
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE(S))
+|  equal join conjunct: [37: l_orderkey, INT, true] = [8: l_orderkey, INT, true]
+|  other join predicates: [39: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (8: l_orderkey), remote = true
 |  output columns: 2
-|  cardinality: 4800294
+|  cardinality: 1600098
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800293.615398368] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800293.615398368] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600097.871799456] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600097.871799456] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 |----23:Project
 |    |  output columns:
 |    |  2 <-> [2: s_name, VARCHAR, true]
 |    |  8 <-> [8: l_orderkey, INT, true]
-|    |  cardinality: 4800294
+|    |  10 <-> [10: l_suppkey, INT, true]
+|    |  cardinality: 1600099
 |    |  column statistics:
 |    |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800293.615398368] ESTIMATE
+|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600099.4718989278] ESTIMATE
+|    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |    |
 |    22:HASH JOIN
-|    |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE(S))
-|    |  equal join conjunct: [37: l_orderkey, INT, true] = [8: l_orderkey, INT, true]
-|    |  other join predicates: [39: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
+|    |  join op: RIGHT ANTI JOIN (BUCKET_SHUFFLE(S))
+|    |  equal join conjunct: [54: l_orderkey, INT, true] = [8: l_orderkey, INT, true]
+|    |  other join predicates: [56: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
 |    |  build runtime filters:
 |    |  - filter_id = 3, build_expr = (8: l_orderkey), remote = true
-|    |  output columns: 2, 8
-|    |  cardinality: 4800294
+|    |  output columns: 2, 8, 10
+|    |  cardinality: 1600099
 |    |  column statistics:
 |    |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800293.615398368] ESTIMATE
+|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600099.4718989278] ESTIMATE
 |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800293.615398368] ESTIMATE
+|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600099.4718989278] ESTIMATE
 |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |
 |    |----21:Project
@@ -143,26 +148,24 @@ OutPut Exchange Id: 27
 |    |    |  2 <-> [2: s_name, VARCHAR, true]
 |    |    |  8 <-> [8: l_orderkey, INT, true]
 |    |    |  10 <-> [10: l_suppkey, INT, true]
-|    |    |  cardinality: 4800298
+|    |    |  cardinality: 4000253
 |    |    |  column statistics:
 |    |    |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800298.415696784] ESTIMATE
+|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.6799999997] ESTIMATE
 |    |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |    |    |
 |    |    20:HASH JOIN
-|    |    |  join op: RIGHT ANTI JOIN (PARTITIONED)
-|    |    |  equal join conjunct: [54: l_orderkey, INT, true] = [8: l_orderkey, INT, true]
-|    |    |  other join predicates: [56: l_suppkey, INT, true] != [10: l_suppkey, INT, true]
+|    |    |  join op: INNER JOIN (PARTITIONED)
+|    |    |  equal join conjunct: [24: o_orderkey, INT, true] = [8: l_orderkey, INT, true]
 |    |    |  build runtime filters:
 |    |    |  - filter_id = 2, build_expr = (8: l_orderkey), remote = true
 |    |    |  output columns: 2, 8, 10
-|    |    |  cardinality: 4800298
+|    |    |  cardinality: 4000253
 |    |    |  column statistics:
+|    |    |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |    |    |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800298.415696784] ESTIMATE
+|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.6799999997] ESTIMATE
 |    |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4800298.415696784] ESTIMATE
-|    |    |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |    |
 |    |    |----19:EXCHANGE
 |    |    |       distribution type: SHUFFLE
@@ -171,22 +174,22 @@ OutPut Exchange Id: 27
 |    |    |
 |    |    7:EXCHANGE
 |    |       distribution type: SHUFFLE
-|    |       partition exprs: [54: l_orderkey, INT, true]
-|    |       cardinality: 300018951
+|    |       partition exprs: [24: o_orderkey, INT, true]
+|    |       cardinality: 50000000
 |    |
 |    4:EXCHANGE
 |       distribution type: SHUFFLE
-|       partition exprs: [37: l_orderkey, INT, true]
-|       cardinality: 600037902
+|       partition exprs: [54: l_orderkey, INT, true]
+|       cardinality: 300018951
 |       probe runtime filters:
-|       - filter_id = 3, probe_expr = (37: l_orderkey)
+|       - filter_id = 3, probe_expr = (54: l_orderkey)
 |
-2:EXCHANGE
+1:EXCHANGE
 distribution type: SHUFFLE
-partition exprs: [24: o_orderkey, INT, true]
-cardinality: 50000000
+partition exprs: [37: l_orderkey, INT, true]
+cardinality: 600037902
 probe runtime filters:
-- filter_id = 4, probe_expr = (24: o_orderkey)
+- filter_id = 4, probe_expr = (37: l_orderkey)
 
 PLAN FRAGMENT 3(F06)
 
@@ -320,66 +323,17 @@ column statistics:
 PLAN FRAGMENT 6(F04)
 
 Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 54: l_orderkey
+OutPut Partition: HASH_PARTITIONED: 24: o_orderkey
 OutPut Exchange Id: 07
 
 6:Project
-|  output columns:
-|  54 <-> [54: l_orderkey, INT, true]
-|  56 <-> [56: l_suppkey, INT, true]
-|  cardinality: 300018951
-|  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|
-5:HdfsScanNode
-TABLE: lineitem
-NON-PARTITION PREDICATES: 66: l_receiptdate > 65: l_commitdate
-partitions=1/1
-avgRowSize=20.0
-numNodes=0
-cardinality: 300018951
-probe runtime filters:
-- filter_id = 2, probe_expr = (54: l_orderkey)
-column statistics:
-* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-* l_commitdate-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
-* l_receiptdate-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] ESTIMATE
-
-PLAN FRAGMENT 7(F02)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 37: l_orderkey
-OutPut Exchange Id: 04
-
-3:HdfsScanNode
-TABLE: lineitem
-NON-PARTITION PREDICATES: 37: l_orderkey IS NOT NULL
-partitions=1/1
-avgRowSize=12.0
-numNodes=0
-cardinality: 600037902
-probe runtime filters:
-- filter_id = 3, probe_expr = (37: l_orderkey)
-column statistics:
-* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-
-PLAN FRAGMENT 8(F00)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 24: o_orderkey
-OutPut Exchange Id: 02
-
-1:Project
 |  output columns:
 |  24 <-> [24: o_orderkey, INT, true]
 |  cardinality: 50000000
 |  column statistics:
 |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5.0E7] ESTIMATE
 |
-0:HdfsScanNode
+5:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 26: o_orderstatus = 'F'
 MIN/MAX PREDICATES: 74: o_orderstatus <= 'F', 75: o_orderstatus >= 'F'
@@ -388,9 +342,58 @@ avgRowSize=9.0
 numNodes=0
 cardinality: 50000000
 probe runtime filters:
-- filter_id = 4, probe_expr = (24: o_orderkey)
+- filter_id = 2, probe_expr = (24: o_orderkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5.0E7] ESTIMATE
 * o_orderstatus-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
+
+PLAN FRAGMENT 7(F02)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 54: l_orderkey
+OutPut Exchange Id: 04
+
+3:Project
+|  output columns:
+|  54 <-> [54: l_orderkey, INT, true]
+|  56 <-> [56: l_suppkey, INT, true]
+|  cardinality: 300018951
+|  column statistics:
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|
+2:HdfsScanNode
+TABLE: lineitem
+NON-PARTITION PREDICATES: 66: l_receiptdate > 65: l_commitdate
+partitions=1/1
+avgRowSize=20.0
+numNodes=0
+cardinality: 300018951
+probe runtime filters:
+- filter_id = 3, probe_expr = (54: l_orderkey)
+column statistics:
+* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* l_commitdate-->[6.967872E8, 9.097632E8, 0.0, 4.0, 2466.0] ESTIMATE
+* l_receiptdate-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] ESTIMATE
+
+PLAN FRAGMENT 8(F00)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 37: l_orderkey
+OutPut Exchange Id: 01
+
+0:HdfsScanNode
+TABLE: lineitem
+NON-PARTITION PREDICATES: 37: l_orderkey IS NOT NULL
+partitions=1/1
+avgRowSize=12.0
+numNodes=0
+cardinality: 600037902
+probe runtime filters:
+- filter_id = 4, probe_expr = (37: l_orderkey)
+column statistics:
+* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 [end]
 

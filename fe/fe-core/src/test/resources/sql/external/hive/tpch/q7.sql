@@ -46,12 +46,12 @@ RESULT SINK
 
 26:MERGING-EXCHANGE
 distribution type: GATHER
-cardinality: 1
+cardinality: 352
 column statistics:
-* n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-* n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
@@ -62,27 +62,27 @@ OutPut Exchange Id: 26
 25:SORT
 |  order by: [42, VARCHAR, true] ASC, [46, VARCHAR, true] ASC, [49, SMALLINT, true] ASC
 |  offset: 0
-|  cardinality: 1
+|  cardinality: 352
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 24:AGGREGATE (merge finalize)
 |  aggregate: sum[([51: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
-|  cardinality: 1
+|  cardinality: 352
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 23:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
-cardinality: 1
+cardinality: 352
 
 PLAN FRAGMENT 2(F14)
 
@@ -94,12 +94,12 @@ OutPut Exchange Id: 23
 |  STREAMING
 |  aggregate: sum[([50: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
-|  cardinality: 1
+|  cardinality: 352
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 21:Project
 |  output columns:
@@ -107,12 +107,12 @@ OutPut Exchange Id: 23
 |  46 <-> [46: n_name, VARCHAR, true]
 |  49 <-> year[([18: l_shipdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
 |  50 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
-|  cardinality: 6245147
+|  cardinality: 554680
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
 |
 20:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -121,19 +121,17 @@ OutPut Exchange Id: 23
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (33: c_custkey), remote = true
 |  output columns: 13, 14, 18, 42, 46
-|  cardinality: 6245147
+|  cardinality: 554680
 |  column statistics:
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 277562.0869449505] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * l_shipdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * o_custkey-->[1.0, 1.5E7, 0.0, 8.0, 6939052.173623761] ESTIMATE
-|  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 6939052.173623761] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
 |
 |----19:EXCHANGE
 |       distribution type: SHUFFLE

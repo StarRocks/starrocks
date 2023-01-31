@@ -1608,16 +1608,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
