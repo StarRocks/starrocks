@@ -62,7 +62,7 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
-    public void testDateFloor() {
+    public void testTimeSlice() {
         analyzeSuccess("select time_slice(th, interval 1 year) from tall");
         analyzeSuccess("select time_slice(th, interval 1 month) from tall");
         analyzeSuccess("select time_slice(th, interval 1 day) from tall");
@@ -71,6 +71,7 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select time_slice(th, interval 1 hour) from tall");
         analyzeSuccess("select time_slice(th, interval 1 minute) from tall");
         analyzeSuccess("select time_slice(th, interval 1 second) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 second) as time from tall group by time");
 
         analyzeFail("select time_slice(ta, th) from tall",
                 "time_slice requires second parameter must be a constant interval");

@@ -101,19 +101,19 @@ public:
 
     TPartitionType::type get_partition_type() const { return _part_type; }
 
-    std::vector<ExprContext*>& get_partition_exprs() { return _partition_expr_ctxs; }
+    const std::vector<ExprContext*>& get_partition_exprs() const { return _partition_expr_ctxs; }
 
     int32_t get_destinations_size() const { return _channels.size(); }
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 
-    const std::vector<TPlanFragmentDestination>& destinations() { return _destinations; }
+    const std::vector<TPlanFragmentDestination>& destinations() const { return _destinations; }
 
     int sender_id() const { return _sender_id; }
 
     const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
 
-    const std::vector<int32_t>& output_columns() { return _output_columns; }
+    const std::vector<int32_t>& output_columns() const { return _output_columns; }
 
 private:
     class Channel;

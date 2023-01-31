@@ -684,6 +684,10 @@ public class OlapScanNode extends ScanNode {
         this.isPreAggregation = true;
     }
 
+    public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.selectedPartitionIds = selectedPartitionIds;
+    }
+
     public void setTabletId2BucketSeq(Map<Long, Integer> tabletId2BucketSeq) {
         this.tabletId2BucketSeq = tabletId2BucketSeq;
     }
