@@ -67,7 +67,7 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayElementExpr() throws Exception {
         String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  <slot 2> : NULL\n" +
+        Assert.assertTrue(plan.contains("  |  <slot 2> : CAST(ARRAY<boolean>[][1] AS SMALLINT) + 1\n" +
                 "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + " +
                 "CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS SMALLINT)"));
 
@@ -118,15 +118,15 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select [][1]";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from (values(1,2,3), (4,5,6)) t";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [v1,v2] from t0";
         plan = getFragmentPlan(sql);
@@ -211,6 +211,33 @@ public class ArrayTypeTest extends PlanTestBase {
             expectedEx.expectMessage(
                     String.format("No matching function with signature: %s(ARRAY<bigint(20)>)", fnName.toLowerCase()));
             getFragmentPlan(sql);
+        }
+    }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        {
+            String sql = "select cast([] as array<varchar(200)>)";
+            String thriftPlan = getThriftPlan(sql);
+            assertNotContains(thriftPlan, "NULL_TYPE");
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : CAST(ARRAY<boolean>[] AS ARRAY<VARCHAR(200)>)\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NUL");
+        }
+        {
+            String sql = "select cast(null as array<varchar(200)>)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : NULL\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NULL");
         }
     }
 }
