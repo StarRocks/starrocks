@@ -34,9 +34,17 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -45,6 +53,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -207,6 +216,36 @@ public class SelectStmtTest {
         for (String q: queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
+        }
+    }
+
+    private void assertNoCastStringAsStringInPlan(String sql) throws Exception {
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second;
+        List<ScalarOperator> operators = execPlan.getPhysicalPlan().getInputs().stream().flatMap(input ->
+                input.getOp().getProjection().getColumnRefMap().values().stream()).collect(Collectors.toList());
+        Assert.assertTrue(operators.stream().noneMatch(op -> (op instanceof CastOperator) &&
+                op.getType().isStringType() &&
+                op.getChild(0).getType().isStringType()));
+    }
+
+    @Test
+    public void testFoldCastOfChildExprsOfSetOperation() throws Exception {
+        String sql0 = "select cast('abcdefg' as varchar(2)) a, cast('abc' as  varchar(3)) b\n" +
+                "intersect\n" +
+                "select cast('aa123456789' as varchar) a, cast('abcd' as varchar(4)) b";
+
+        String sql1 = "select k1, group_concat(k2) as k2 from db1.tbl1 group by k1 \n" +
+                "except\n" +
+                "select k1, cast(k4 as varchar(255)) from db1.tbl1";
+
+        String sql2 = "select k1, k2 from db1.tbl1\n" +
+                "union all\n" +
+                "select cast(concat(k1, 'abc') as varchar(256)) as k1, cast(concat(k2, 'abc') as varchar(256)) as k2 " +
+                "from db1.tbl1\n" +
+                "union all\n" +
+                "select cast('abcdef' as varchar) k1, cast('deadbeef' as varchar(1999)) k2";
+        for (String sql : Arrays.asList(sql0, sql1, sql2)) {
+            assertNoCastStringAsStringInPlan(sql);
         }
     }
 }

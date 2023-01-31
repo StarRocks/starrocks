@@ -1335,27 +1335,15 @@ private:
         return builder.build(column->is_constant());
     }
 
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) {
-        if (type().len <= 0) {
-            return column;
-        }
-
-        ColumnViewer<TYPE_VARCHAR> viewer(column);
-        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
-
-        for (int row = 0; row < viewer.size(); ++row) {
-            if (viewer.is_null(row)) {
-                builder.append_null();
-                continue;
-            }
-
-            auto value = viewer.value(row);
-            int sz = std::min(type().len, (int)value.size);
-            builder.append(Slice(value.data, sz));
-        }
-
-        return builder.build(column->is_constant());
-    }
+    // cast(string as string) is trivial operation, just return the input column.
+    // This behavior is not compatible with MySQL
+    // 1. cast(string as varchar(n)) supported in SR, but not supported in MySQL
+    // 2. cast(string as char(n)) supported in both SR and MySQL, but in SR, in some queries, length
+    //    of char is neglected. in MySQL, the input string shall be truncated if its length is larger than
+    //    length of char.
+    // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
+    // of the length of char/varchar and return input column directly.
+    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column; }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
