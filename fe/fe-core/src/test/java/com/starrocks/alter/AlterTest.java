@@ -1687,14 +1687,14 @@ public class AlterTest {
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testAddMultiItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1734,14 +1734,14 @@ public class AlterTest {
 
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testAddSingleItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1779,14 +1779,14 @@ public class AlterTest {
 
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testSingleItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1855,14 +1855,14 @@ public class AlterTest {
         file.delete();
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testMultiItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2043,14 +2043,14 @@ public class AlterTest {
         Config.use_staros = false;
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2073,14 +2073,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2107,14 +2107,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2137,14 +2137,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +

@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -88,6 +89,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToValues.put(partitionId, values);
     }
 
+    public void setIdToIsTempPartition(long partitionId, boolean isTemp) {
+        this.idToIsTempPartition.put(partitionId, isTemp);
+    }
+
     public void setLiteralExprValues(long partitionId, List<String> values) throws AnalysisException {
         List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
         for (String value : values) {
@@ -97,6 +102,16 @@ public class ListPartitionInfo extends PartitionInfo {
             partitionValues.add(partitionValue);
         }
         this.idToLiteralExprValues.put(partitionId, partitionValues);
+    }
+
+    public List<Long> getPartitionIds(boolean isTemp) {
+        List<Long> partitionIds = Lists.newArrayList();
+        idToIsTempPartition.forEach((k, v) -> {
+            if (v.equals(isTemp)) {
+                partitionIds.add(k);
+            }
+        });
+        return partitionIds;
     }
 
     public void setBatchLiteralExprValues(Map<Long, List<String>> batchValues) throws AnalysisException {
@@ -345,5 +360,21 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+    }
+
+    @Override
+    public void dropPartition(long partitionId) {
+        super.dropPartition(partitionId);
+        idToValues.remove(partitionId);
+        idToLiteralExprValues.remove(partitionId);
+        idToMultiValues.remove(partitionId);
+        idToMultiLiteralExprValues.remove(partitionId);
+        idToIsTempPartition.remove(partitionId);
+    }
+
+    @Override
+    public void moveRangeFromTempToFormal(long tempPartitionId) {
+        super.moveRangeFromTempToFormal(tempPartitionId);
+        idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
     }
 }
