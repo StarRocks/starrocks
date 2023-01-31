@@ -56,16 +56,16 @@ public:
     virtual bool could_local_shuffle() const { return _could_local_shuffle; }
     void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
     virtual TPartitionType::type partition_type() const { return _partition_type; }
-    void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; };
-    virtual const std::vector<ExprContext*>& partition_exprs() const { return _empty_partition_exprs; }
+    void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; }
+    virtual const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+    void set_partition_exprs(const std::vector<ExprContext*>& partition_exprs) { _partition_exprs = partition_exprs; }
 
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
     TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
-    // Because partition_exprs() returns const reference, we need a non-temporal empty vector here.
-    const std::vector<ExprContext*> _empty_partition_exprs;
+    std::vector<ExprContext*> _partition_exprs;
 };
 
 class SourceOperator : public Operator {

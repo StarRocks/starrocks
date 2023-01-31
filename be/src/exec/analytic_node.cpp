@@ -321,9 +321,8 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (_tnode.analytic_node.partition_exprs.empty()) {
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
     }
-    auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
-    auto could_local_shuffle = context->source_operator(ops_with_sink)->could_local_shuffle();
-    auto partition_type = context->source_operator(ops_with_sink)->partition_type();
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    auto degree_of_parallelism = upstream_source_op->degree_of_parallelism();
 
     AnalytorFactoryPtr analytor_factory =
             std::make_shared<AnalytorFactory>(degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc);
@@ -338,10 +337,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto source_op =
             std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
     this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
-
-    source_op->set_degree_of_parallelism(degree_of_parallelism);
-    source_op->set_could_local_shuffle(could_local_shuffle);
-    source_op->set_partition_type(partition_type);
+    context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));
 
     if (limit() != -1) {
