@@ -3482,7 +3482,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false, true);
+                    Maps.newHashMap(), false, false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
