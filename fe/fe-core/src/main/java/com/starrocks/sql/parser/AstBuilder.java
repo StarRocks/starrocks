@@ -613,7 +613,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(listPartitionDesc);
             }
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
-            throw new ParsingException("List partition is not supported.");
         }
         return partitionDesc;
     }
@@ -3156,6 +3155,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionDesc = (PartitionDesc) visitSingleRangePartition(context.singleRangePartition());
         } else if (context.multiRangePartition() != null) {
             partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+        }  else if (context.singleItemListPartitionDesc() != null) {
+            partitionDesc = (PartitionDesc) visitSingleItemListPartitionDesc(context.singleItemListPartitionDesc());
+        } else if (context.multiItemListPartitionDesc() != null) {
+            partitionDesc = (PartitionDesc) visitMultiItemListPartitionDesc(context.multiItemListPartitionDesc());
         }
         DistributionDesc distributionDesc = null;
         if (context.distributionDesc() != null) {
