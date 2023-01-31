@@ -18,7 +18,7 @@ WITH BROKER "<broker_name>"
 [opt_properties]
 ```
 
-Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
@@ -323,9 +323,22 @@ The following parameters are supported:
 
   Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
 
-- `priority`
+## Column mapping
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
+When you load data, you can configure column mapping between the data file and the destination table by using the `column_list` parameter. If the columns of the data file can be mapped one on one in sequence onto the columns of the destination table, you do not need to specify the `column_list` parameter. Otherwise, you must specify the `column_list` parameter, as shown in the following two use cases:
+
+- The columns of the data file can be mapped one on one onto the columns of the destination table, and the data does not need to be computed by functions before it is loaded into the destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged.
+
+  For example, the destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the destination table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+
+- The columns of the data file cannot be mapped one on one onto the columns of the destination table, and the data needs to be computed by functions before it is loaded into the mapping destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the destination table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the destination table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the destination table column names. For example, you can specify `(col1, col2, col3, temp)`, in which the fourth column of the data file is temporarily named `temp`.
+  - The destination table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `(col, year = year(col), month=month(col), day=day(col))`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping destination table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the destination table column `year`.
 
 ## Examples
 
