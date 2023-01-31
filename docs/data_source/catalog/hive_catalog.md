@@ -117,6 +117,8 @@ The parameter description is as follows:
 >
 > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
+## Use catalog to query Hive data
+
 After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## Caching strategy of Hive metadata
