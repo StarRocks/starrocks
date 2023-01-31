@@ -216,7 +216,7 @@ public class PrivilegeManager {
             userToPrivilegeCollection.put(UserIdentity.createAnalyzedUserIdentWithIp("root", "%"), rootCollection);
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
-            throw new RuntimeException("should not happened!", e);
+            throw new RuntimeException("Fatal error when initializing built-in role and user", e);
         }
     }
 
@@ -632,6 +632,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkTableAction(collection, db, table, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on table {}.{}, message: {}",
+                    action, db, table, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on table {}.{}", action, db, table, e);
             return false;
@@ -648,6 +652,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkDbAction(collection, db, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on database {}, message: {}",
+                    action, db, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on db {}", action, db, e);
             return false;
@@ -660,6 +668,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkResourceAction(collection, name, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on resource {}, message: {}",
+                    action, name, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on resource {}", action, name, e);
             return false;
@@ -675,6 +687,10 @@ public class PrivilegeManager {
                     PrivilegeType.RESOURCE.name(), Arrays.asList(name), manager.globalStateMgr);
             short resourceTypeId = manager.analyzeType(PrivilegeType.RESOURCE.name());
             return manager.provider.searchAnyActionOnObject(resourceTypeId, resourceObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on resource {}, message: {}",
+                    name, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on resource {}", name, e);
             return false;
@@ -687,6 +703,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkResourceGroupAction(collection, name, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on resource group {}, message: {}",
+                    action, name, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on resource group {}", action, name, e);
             return false;
@@ -699,6 +719,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkGlobalFunctionAction(collection, name, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on global function {}, message: {}",
+                    action, name, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on global function {}", action, name, e);
             return false;
@@ -711,23 +735,31 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkCatalogAction(collection, name, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on catalog {}, message: {}",
+                    action, name, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on catalog {}", action, name, e);
             return false;
         }
     }
 
-    public static boolean checkAnyActionOnCatalog(ConnectContext context, String name) {
+    public static boolean checkAnyActionOnCatalog(ConnectContext context, String catalogName) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             // 1. check for any action on catalog
             PEntryObject catalogObject = manager.provider.generateObject(
-                    PrivilegeType.CATALOG.name(), Arrays.asList(name), manager.globalStateMgr);
+                    PrivilegeType.CATALOG.name(), Arrays.asList(catalogName), manager.globalStateMgr);
             short catalogTypeId = manager.analyzeType(PrivilegeType.CATALOG.name());
             return manager.provider.searchAnyActionOnObject(catalogTypeId, catalogObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on catalog {}, message: {}",
+                    catalogName, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on catalog {}", name, e);
+            LOG.warn("caught exception when checking any action on catalog {}", catalogName, e);
             return false;
         }
     }
@@ -738,6 +770,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkViewAction(collection, db, view, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on view {}.{}, message: {}",
+                    action, db, view, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on view {}.{}", action, db, view, e);
             return false;
@@ -751,6 +787,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkMaterializedViewAction(collection, db, materializedView, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on materialized view {}.{}, message: {}",
+                    action, db, materializedView, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on materialized view {}.{}",
                     action, db, materializedView, e);
@@ -765,6 +805,10 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             return manager.checkFunctionAction(collection, db, functionSig, action);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on function {}.{}, message: {}",
+                    action, db, functionSig, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on function {}.{}",
                     action, db, functionSig, e);
@@ -782,8 +826,13 @@ public class PrivilegeManager {
                     manager.globalStateMgr);
             short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
             return manager.provider.searchAnyActionOnObject(mvTypeId, materializedViewObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on materialized view {}.{}, message: {}",
+                    db, materializedView, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on materialized view {}", db, e);
+            LOG.warn("caught exception when checking any action on materialized view {}.{}",
+                    db, materializedView, e);
             return false;
         }
     }
@@ -802,8 +851,12 @@ public class PrivilegeManager {
                     PrivilegeType.VIEW.name(), Arrays.asList(db, view), manager.globalStateMgr);
             short viewId = manager.analyzeType(PrivilegeType.VIEW.name());
             return manager.provider.searchAnyActionOnObject(viewId, viewObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on view {}.{}, message: {}",
+                    db, view, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on view {}", db, e);
+            LOG.warn("caught exception when checking any action on view {}.{}", db, view, e);
             return false;
         }
     }
@@ -825,6 +878,10 @@ public class PrivilegeManager {
                     PrivilegeType.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
             short dbTypeId = manager.analyzeType(PrivilegeType.DATABASE.name());
             return manager.provider.searchAnyActionOnObject(dbTypeId, dbObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on database {}, message: {}",
+                    db, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on db {}", db, e);
             return false;
@@ -874,6 +931,10 @@ public class PrivilegeManager {
                     manager.globalStateMgr);
             short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
             return manager.provider.searchAnyActionOnObject(mvTypeId, allMvInDbObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on or in database {}, message: {}",
+                    db, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on or in db {}", db, e);
             return false;
@@ -936,6 +997,10 @@ public class PrivilegeManager {
                 }
             }
             return false;
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action {} in database {}, message: {}",
+                    actionName, db, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action {} in db {}", actionName, db, e);
             return false;
@@ -950,8 +1015,12 @@ public class PrivilegeManager {
                     PrivilegeType.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
             short tableTypeId = manager.analyzeType(PrivilegeType.TABLE.name());
             return manager.provider.searchAnyActionOnObject(tableTypeId, tableObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on table {}.{}, message: {}",
+                    db, table, e.getMessage());
+            return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on db {}", db, e);
+            LOG.warn("caught exception when checking any action on table {}.{}", db, table, e);
             return false;
         }
     }

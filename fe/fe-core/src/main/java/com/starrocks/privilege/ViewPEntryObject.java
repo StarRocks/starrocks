@@ -36,11 +36,11 @@ public class ViewPEntryObject extends TablePEntryObject {
         }
         Database database = mgr.getDb(tokens.get(0));
         if (database == null) {
-            throw new PrivilegeException("cannot find db: " + tokens.get(0));
+            throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
         }
         Table table = database.getTable(tokens.get(1));
         if (table == null || !table.getType().equals(Table.TableType.VIEW)) {
-            throw new PrivilegeException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
+            throw new PrivObjNotFoundException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
         }
         return new ViewPEntryObject(database.getId(), table.getId());
     }
