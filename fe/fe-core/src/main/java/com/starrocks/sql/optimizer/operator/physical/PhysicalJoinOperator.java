@@ -76,12 +76,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalJoinOperator that = (PhysicalJoinOperator) o;
         return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }
