@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
@@ -63,22 +64,7 @@ public class CreateTableAnalyzer {
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
-    private static final String DEFAULT_ENGINE_NAME = "olap";
-
     private static final String ELASTICSEARCH = "elasticsearch";
-
-    public enum EngineType {
-        OLAP,
-        MYSQL,
-        BROKER,
-        ELASTICSEARCH,
-        HIVE,
-        ICEBERG,
-        HUDI,
-        JDBC,
-        STARROCKS,
-        FILE
-    }
 
     public enum CharsetType {
         UTF8,
@@ -87,10 +73,10 @@ public class CreateTableAnalyzer {
 
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
-            return DEFAULT_ENGINE_NAME;
+            return EngineType.defaultEngine().name();
         }
 
-        if (engineName.equalsIgnoreCase(CreateTableStmt.LAKE_ENGINE_NAME) && !Config.use_staros) {
+        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) && !Config.use_staros) {
             throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
         }
 
@@ -367,5 +353,4 @@ public class CreateTableAnalyzer {
             }
         }
     }
-
 }
