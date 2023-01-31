@@ -47,12 +47,12 @@ StreamScanOperator::~StreamScanOperator() {
 
 void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
     auto tablet_id = _chunk_sources[chunk_source_index]->get_lane_owner();
-    auto binlog_offset =
-            _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
+    auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
     DCHECK(binlog_offset != nullptr);
     _chunk_sources[chunk_source_index]->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
-    _chunk_sources[chunk_source_index]->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
+    _chunk_sources[chunk_source_index]->set_epoch_limit(_current_epoch_info.max_scan_rows,
+                                                        _current_epoch_info.max_exec_millis);
     _chunk_sources[chunk_source_index]->reset_status();
 }
 

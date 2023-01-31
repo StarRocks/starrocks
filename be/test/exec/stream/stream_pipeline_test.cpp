@@ -55,7 +55,7 @@ Status StreamPipelineTest::prepare() {
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
     _fragment_ctx->set_is_stream_pipeline(true);
-    _fragment_ctx->set_is_stream_test(true)
+    _fragment_ctx->set_is_stream_test(true);
 
             _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();

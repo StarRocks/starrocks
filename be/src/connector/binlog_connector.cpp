@@ -206,7 +206,7 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
 Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
     VLOG_ROW << "[binlog data source] mock_chunk:";
     int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
-    if (num >= 2) {
+    if (num >= 1) {
         return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
     }
     auto chunk_temp = std::make_shared<Chunk>();
