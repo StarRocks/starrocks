@@ -174,7 +174,7 @@ public class ConnectScheduler {
         for (ConnectContext ctx : connectionMap.values()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 if (!ctx.getQualifiedUser().equals(user) &&
-                        !PrivilegeManager.checkSystemAction(currContext, PrivilegeType.SystemAction.OPERATE)) {
+                        !PrivilegeManager.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
                     continue;
                 }
             } else {

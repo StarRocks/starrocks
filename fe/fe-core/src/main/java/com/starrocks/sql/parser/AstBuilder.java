@@ -94,7 +94,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -4252,7 +4252,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAllGlobalFunctions(StarRocksParser.GrantRevokeClauseContext grantRevokeClauseContext,
                                              StarRocksParser.PrivilegeActionListContext privilegeActionListContext,
                                              boolean isGrant) {
-        String type = PrivilegeType.GLOBAL_FUNCTION.getPlural();
+        String type = ObjectType.GLOBAL_FUNCTION.getPlural();
         List<String> allTypes = ImmutableList.of(type);
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setAll(allTypes, null, null);

@@ -35,7 +35,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
-        for (PrivilegeType type : PrivilegeType.values()) {
+        for (ObjectType type : ObjectType.values()) {
             TYPE_STRING_TO_ID.put(type.toString(), (short) type.getId());
             TYPE_ID_TO_STRING.put((short) type.getId(), type.toString());
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
@@ -78,16 +78,16 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public Action getAction(short typeId, String actionName) throws PrivilegeException {
-        Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(typeId);
+    public Action getAction(short objectTypeId, String actionName) throws PrivilegeException {
+        Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(objectTypeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(typeId) +
+            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(objectTypeId) +
                     " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         Action action = actionMap.get(actionName);
         if (action == null) {
             throw new PrivilegeException("cannot find action " + actionName + " in " + actionMap.keySet() +
-                    " on object type " + TYPE_ID_TO_STRING.get(typeId).toUpperCase());
+                    " on object type " + TYPE_ID_TO_STRING.get(objectTypeId).toUpperCase());
         }
         return action;
     }
@@ -104,7 +104,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     @Override
     public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr)
             throws PrivilegeException {
-        PrivilegeType type = PrivilegeType.valueOf(typeStr);
+        ObjectType type = ObjectType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, objectTokens);
@@ -151,7 +151,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public PEntryObject generateObject(
             String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
             throws PrivilegeException {
-        PrivilegeType type = PrivilegeType.valueOf(typeStr);
+        ObjectType type = ObjectType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, allTypes, restrictType, restrictName);

@@ -1013,7 +1013,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
             // check INSERT action on table
-            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.TableAction.INSERT)) {
+            if (!PrivilegeManager.checkTableAction(currentUser, db, tbl, PrivilegeType.INSERT)) {
                 throw new AuthenticationException(
                         "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
             }
@@ -1489,7 +1489,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     if (!PrivilegeManager.checkTableAction(userIdentity, dbName,
-                            tableName, PrivilegeType.TableAction.INSERT)) {
+                            tableName, PrivilegeType.INSERT)) {
                         throw new UnauthorizedException(String.format(
                                 "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
                                 userIdentity.getQualifiedUser(), userIdentity.getHost(), dbName, tableName));

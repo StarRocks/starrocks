@@ -296,9 +296,9 @@ public abstract class BaseAction implements IAction {
     }
 
     // For new RBAC privilege framework
-    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType.SystemAction... systemActions)
+    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions)
             throws UnauthorizedException {
-        for (PrivilegeType.SystemAction systemAction : systemActions) {
+        for (PrivilegeType systemAction : systemActions) {
             if (!PrivilegeManager.checkSystemAction(currentUser, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");
@@ -343,7 +343,7 @@ public abstract class BaseAction implements IAction {
     }
 
     protected void checkTableAction(ConnectContext context, String db, String tbl,
-                                    PrivilegeType.TableAction action) throws UnauthorizedException {
+                                    PrivilegeType action) throws UnauthorizedException {
         if (!PrivilegeManager.checkTableAction(context, db, tbl, action)) {
             throw new UnauthorizedException("Access denied; you need (at least one of) the "
                     + action.name() + " privilege(s) for this operation");
