@@ -266,6 +266,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         baseTableInfo.getDbName(), table, Lists.newArrayList());
             }
         }
+        // External table support cache meta for query level (refer to CachingHiveMetastore::createQueryLevelInstance),
+        // we need to invalid these cache after refresh table
+        context.getCtx().getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
+        // Refresh table will generate new table, there need to add relatedMaterializedViews for it
+        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
+            Table table = tablePair.second;
+            if (!table.isLocalTable()) {
+                baseTableInfo.getTable().addRelatedMaterializedView(materializedView.getMvId());
+            }
+        }
     }
 
     private void updateMeta(ExecPlan execPlan) {
