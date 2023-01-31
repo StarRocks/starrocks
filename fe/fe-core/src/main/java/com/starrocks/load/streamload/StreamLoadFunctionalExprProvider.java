@@ -164,7 +164,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                     cxt,
                     task.getDBName(),
                     task.getTableName(),
-                    PrivilegeType.TableAction.INSERT);
+                    PrivilegeType.INSERT);
         } else {
             return GlobalStateMgr.getCurrentState().getAuth()
                     .checkTblPriv(cxt, task.getDBName(), task.getTableName(), PrivPredicate.LOAD);

@@ -89,7 +89,7 @@ public class GetLoadInfoAction extends RestBaseAction {
         } else {
             for (String tblName : info.tblNames) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.TableAction.INSERT);
+                    checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
                 } else {
                     checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, tblName,
                             PrivPredicate.LOAD);

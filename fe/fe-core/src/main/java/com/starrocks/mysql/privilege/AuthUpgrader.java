@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.ActionSet;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
@@ -50,11 +51,11 @@ public class AuthUpgrader {
     private static final Logger LOG = LogManager.getLogger(AuthUpgrader.class);
 
     // constants used when upgrading
-    private static final String TABLE_TYPE_STR = PrivilegeType.TABLE.name();
-    private static final String DB_TYPE_STR = PrivilegeType.DATABASE.name();
-    private static final String CATALOG_TYPE_STR = PrivilegeType.CATALOG.name();
-    private static final String USER_TYPE_STR = PrivilegeType.USER.name();
-    private static final String RESOURCE_TYPE_STR = PrivilegeType.RESOURCE.name();
+    private static final String TABLE_TYPE_STR = ObjectType.TABLE.name();
+    private static final String DB_TYPE_STR = ObjectType.DATABASE.name();
+    private static final String CATALOG_TYPE_STR = ObjectType.CATALOG.name();
+    private static final String USER_TYPE_STR = ObjectType.USER.name();
+    private static final String RESOURCE_TYPE_STR = ObjectType.RESOURCE.name();
     private static final String STAR = "*";
     private Auth auth;
     private AuthenticationManager authenticationManager;
@@ -730,20 +731,20 @@ public class AuthUpgrader {
             case CREATE_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(dbTypeId,
                     Arrays.asList(
-                            PrivilegeType.DbAction.CREATE_TABLE.toString(),
-                            PrivilegeType.DbAction.CREATE_VIEW.toString(),
-                            PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW.toString()
+                            PrivilegeType.CREATE_TABLE.toString(),
+                            PrivilegeType.CREATE_VIEW.toString(),
+                            PrivilegeType.CREATE_MATERIALIZED_VIEW.toString()
                     ));
                 break;
 
             case DROP_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                        Arrays.asList(PrivilegeType.DbAction.DROP.toString()));
+                        Arrays.asList(PrivilegeType.DROP.toString()));
                 break;
 
             case ALTER_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                        Arrays.asList(PrivilegeType.DbAction.ALTER.toString()));
+                        Arrays.asList(PrivilegeType.ALTER.toString()));
                 break;
             default:
                 throw new AuthUpgradeUnrecoverableException("db privilege " + privilege + " hasn't implemented");
@@ -760,12 +761,12 @@ public class AuthUpgrader {
         if (db.equals(STAR)) {
             // for *.*
             objects = Arrays.asList(privilegeManager.analyzeObject(DB_TYPE_STR,
-                    Arrays.asList(PrivilegeType.DATABASE.getPlural()), null, null));
+                    Arrays.asList(ObjectType.DATABASE.getPlural()), null, null));
             if (privilege == Privilege.CREATE_PRIV) {
                 // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
                 collection.grant(catalogTypeId,
                         privilegeManager.analyzeActionSet(catalogTypeId,
-                                Arrays.asList(PrivilegeType.CatalogAction.CREATE_DATABASE.toString())),
+                                Arrays.asList(PrivilegeType.CREATE_DATABASE.toString())),
                         Arrays.asList(
                                 privilegeManager.analyzeObject(CATALOG_TYPE_STR,
                                         Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
@@ -786,22 +787,22 @@ public class AuthUpgrader {
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         // type
-        String viewTypeStr = PrivilegeType.VIEW.toString();
+        String viewTypeStr = ObjectType.VIEW.toString();
         short viewTypeId = privilegeManager.analyzeType(viewTypeStr);
 
         // action
-        PrivilegeType.ViewAction action;
+        PrivilegeType action;
         switch (privilege) {
             case SELECT_PRIV:
-                action = PrivilegeType.ViewAction.SELECT;
+                action = PrivilegeType.SELECT;
                 break;
 
             case ALTER_PRIV:
-                action = PrivilegeType.ViewAction.ALTER;
+                action = PrivilegeType.ALTER;
                 break;
 
             case DROP_PRIV:
-                action = PrivilegeType.ViewAction.DROP;
+                action = PrivilegeType.DROP;
                 break;
 
             default:
@@ -815,7 +816,7 @@ public class AuthUpgrader {
         if (db.equals(STAR)) {
             objects = Arrays.asList(privilegeManager.analyzeObject(
                     viewTypeStr,
-                    Arrays.asList(PrivilegeType.VIEW.getPlural(), PrivilegeType.DATABASE.getPlural()),
+                    Arrays.asList(ObjectType.VIEW.getPlural(), ObjectType.DATABASE.getPlural()),
                     null, null));
         } else if (table.equals(STAR)) {
             // ALL TABLES in db
@@ -849,25 +850,25 @@ public class AuthUpgrader {
         switch (privilege) {
             case SELECT_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.toString()));
+                        tableTypeId, Arrays.asList(PrivilegeType.SELECT.toString()));
                 break;
 
             case LOAD_PRIV:
                 List<String> actionStrs = Arrays.asList(
-                        PrivilegeType.TableAction.INSERT.toString(),
-                        PrivilegeType.TableAction.DELETE.toString(),
-                        PrivilegeType.TableAction.EXPORT.toString());
+                        PrivilegeType.INSERT.toString(),
+                        PrivilegeType.DELETE.toString(),
+                        PrivilegeType.EXPORT.toString());
                 actionSet = privilegeManager.analyzeActionSet(tableTypeId, actionStrs);
                 break;
 
             case DROP_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.DROP.toString()));
+                        tableTypeId, Arrays.asList(PrivilegeType.DROP.toString()));
                 break;
 
             case ALTER_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
-                        tableTypeId, Arrays.asList(PrivilegeType.TableAction.ALTER.toString()));
+                        tableTypeId, Arrays.asList(PrivilegeType.ALTER.toString()));
                 break;
 
             default:
@@ -879,7 +880,7 @@ public class AuthUpgrader {
         if (db.equals(STAR)) {
             objects = Arrays.asList(privilegeManager.analyzeObject(
                     TABLE_TYPE_STR,
-                    Arrays.asList(PrivilegeType.TABLE.getPlural(), PrivilegeType.DATABASE.getPlural()),
+                    Arrays.asList(ObjectType.TABLE.getPlural(), ObjectType.DATABASE.getPlural()),
                     null, null));
         } else if (table.equals(STAR)) {
             // ALL TABLES in db
@@ -905,7 +906,7 @@ public class AuthUpgrader {
             String db, String table, Privilege privilege, PrivilegeCollection collection,
             Set<Pair<String, String>> grantPatterns) throws PrivilegeException, AuthUpgradeUnrecoverableException {
         // type
-        String mvTypeStr = PrivilegeType.MATERIALIZED_VIEW.toString();
+        String mvTypeStr = ObjectType.MATERIALIZED_VIEW.toString();
         short mvTypeId = privilegeManager.analyzeType(mvTypeStr);
 
         // actionSet
@@ -914,18 +915,18 @@ public class AuthUpgrader {
             case ALTER_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
                         mvTypeId, Arrays.asList(
-                                PrivilegeType.MaterializedViewAction.ALTER.name(),
-                                PrivilegeType.MaterializedViewAction.REFRESH.name()
+                                PrivilegeType.ALTER.name(),
+                                PrivilegeType.REFRESH.name()
                         ));
                 break;
 
             case DROP_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
-                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.DROP.toString()));
+                        mvTypeId, Collections.singletonList(PrivilegeType.DROP.toString()));
                 break;
             case SELECT_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(
-                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.SELECT.toString()));
+                        mvTypeId, Collections.singletonList(PrivilegeType.SELECT.toString()));
                 break;
             default:
                 throw new AuthUpgradeUnrecoverableException("materialized view privilege "
@@ -937,7 +938,7 @@ public class AuthUpgrader {
         if (db.equals(STAR)) {
             objects = Collections.singletonList(privilegeManager.analyzeObject(
                 mvTypeStr,
-                Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural(), PrivilegeType.DATABASE.getPlural()),
+                Arrays.asList(ObjectType.MATERIALIZED_VIEW.getPlural(), ObjectType.DATABASE.getPlural()),
                 null, null));
         } else if (table.equals(STAR)) {
             // ALL TABLES in db
@@ -972,7 +973,7 @@ public class AuthUpgrader {
         short userTypeId = privilegeManager.analyzeType(USER_TYPE_STR);
         ActionSet impersonateActionSet = privilegeManager.analyzeActionSet(
                 userTypeId,
-                Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
+                Arrays.asList(PrivilegeType.IMPERSONATE.toString()));
         collection.grant(userTypeId, impersonateActionSet, objects, false);
     }
 
@@ -991,7 +992,7 @@ public class AuthUpgrader {
                 }
                 short resourceTypeId = privilegeManager.analyzeType(RESOURCE_TYPE_STR);
                 ActionSet actionSet = privilegeManager.analyzeActionSet(
-                        resourceTypeId, Arrays.asList(PrivilegeType.ResourceAction.USAGE.toString()));
+                        resourceTypeId, Arrays.asList(PrivilegeType.USAGE.toString()));
                 collection.grant(resourceTypeId, actionSet, objects, isGrant);
                 break;
             }

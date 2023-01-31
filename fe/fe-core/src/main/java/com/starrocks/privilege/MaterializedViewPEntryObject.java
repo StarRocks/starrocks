@@ -49,7 +49,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             throws PrivilegeException {
         if (allTypes.size() == 1) {
             if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
+                    || !restrictType.equals(ObjectType.DATABASE.toString())
                     || StringUtils.isEmpty(restrictName)) {
                 throw new PrivilegeException("ALL MATERIALIZED VIEWS must be restricted with database!");
             }
@@ -60,7 +60,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             }
             return new MaterializedViewPEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
+            if (!allTypes.get(1).equals(ObjectType.DATABASE.getPlural())) {
                 throw new PrivilegeException(
                         "ALL MATERIALIZED VIEWS must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
             }
