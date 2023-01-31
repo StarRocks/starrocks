@@ -98,15 +98,11 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     return Status::OK();
 }
 
-SortedRuns ChunksSorterHeapSort::get_sorted_runs() {
-    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
-}
-
 size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 
-Status ChunksSorterHeapSort::done(RuntimeState* state) {
+Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();

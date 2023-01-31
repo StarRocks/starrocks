@@ -27,10 +27,9 @@ public:
 
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     int64_t mem_usage() const override;
@@ -44,11 +43,11 @@ private:
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
 
-    size_t _total_rows = 0;               // Total rows of sorting data
-    Permutation _sort_permutation;        // Temp permutation for sorting
-    ChunkPtr _unsorted_chunk;             // Unsorted chunk, accumulate it to a larger chunk
-    std::vector<ChunkPtr> _sorted_chunks; // Partial sorted, but not merged
-    SortedRuns _merged_runs;              // After merge
+    size_t _total_rows = 0;                     // Total rows of sorting data
+    Permutation _sort_permutation;              // Temp permutation for sorting
+    ChunkPtr _unsorted_chunk;                   // Unsorted chunk, accumulate it to a larger chunk
+    std::vector<ChunkUniquePtr> _sorted_chunks; // Partial sorted, but not merged
+    SortedRuns _merged_runs;                    // After merge
 
     // TODO: further tunning the buffer parameter
     static constexpr size_t kMaxBufferedChunkSize = 1024000;   // Max buffer 1024000 rows

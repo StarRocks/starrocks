@@ -150,16 +150,6 @@ void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }
 
-Status ChunksSorter::finish(RuntimeState* state) {
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(done(state)));
-    _is_sink_complete = true;
-    return Status::OK();
-}
-
-bool ChunksSorter::sink_complete() {
-    return _is_sink_complete;
-}
-
 StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
         vectorized::Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
         const std::vector<OrderByType>& order_by_types) {
@@ -212,6 +202,11 @@ StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
     }
 
     return materialize_chunk;
+}
+
+Status ChunksSorter::done(RuntimeState* state) {
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(do_done(state)));
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized
