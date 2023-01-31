@@ -537,9 +537,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? "olap" :
+                context.engineDesc() == null ? null :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
-                context.charsetDesc() == null ? "utf8" :
+                context.charsetDesc() == null ? null :
                         ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc()),
