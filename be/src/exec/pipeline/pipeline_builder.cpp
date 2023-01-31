@@ -32,12 +32,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
     // predecessor pipeline comes to end.
     add_pipeline(pred_operators);
 
-    OpFactories operators_source_with_local_exchange;
-    // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
-    local_exchange_source->set_degree_of_parallelism(num_receivers);
-    // A new pipeline is created, LocalExchangeSourceOperator is added as the head of the pipeline.
-    operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
-    return operators_source_with_local_exchange;
+    return {std::move(local_exchange_source)};
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
@@ -76,12 +71,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     // predecessor pipeline comes to end.
     add_pipeline(pred_operators);
 
-    OpFactories operators_source_with_local_exchange;
-    // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
-    local_exchange_source->set_degree_of_parallelism(num_receivers);
-    // A new pipeline is created, LocalExchangeSourceOperator is added as the head of the pipeline.
-    operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
-    return operators_source_with_local_exchange;
+    return {std::move(local_exchange_source)};
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
