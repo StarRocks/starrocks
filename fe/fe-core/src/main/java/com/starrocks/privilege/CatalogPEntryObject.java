@@ -53,7 +53,7 @@ public class CatalogPEntryObject implements PEntryObject {
         } else {
             Catalog catalog = mgr.getCatalogMgr().getCatalogByName(name);
             if (catalog == null) {
-                throw new PrivilegeException("cannot find catalog: " + name);
+                throw new PrivObjNotFoundException("cannot find catalog: " + name);
             }
             id = catalog.getId();
         }
