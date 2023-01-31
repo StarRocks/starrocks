@@ -45,16 +45,28 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
+import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 // For syntax select * from tbl INTO OUTFILE xxxx
 public class OutFileClause implements ParseNode {
-    private static final Logger LOG = LogManager.getLogger(OutFileClause.class);
+    public static final Map<String, TCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
+            Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+
+    static {
+        PARQUET_COMPRESSION_TYPE_MAP.put("snappy", TCompressionType.SNAPPY);
+        PARQUET_COMPRESSION_TYPE_MAP.put("gzip", TCompressionType.GZIP);
+        PARQUET_COMPRESSION_TYPE_MAP.put("brotli", TCompressionType.BROTLI);
+        PARQUET_COMPRESSION_TYPE_MAP.put("zstd", TCompressionType.ZSTD);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
+        PARQUET_COMPRESSION_TYPE_MAP.put("lzo", TCompressionType.LZO);
+        PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
+        PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
+    }
 
     // Old properties still use this prefix, new properties will not.
     private static final String OLD_BROKER_PROP_PREFIX = "broker.";
@@ -62,10 +74,14 @@ public class OutFileClause implements ParseNode {
     private static final String PROP_COLUMN_SEPARATOR = "column_separator";
     private static final String PROP_LINE_DELIMITER = "line_delimiter";
     private static final String PROP_MAX_FILE_SIZE = "max_file_size";
+    public static final String PARQUET_COMPRESSION_TYPE = "compression_type";
+    public static final String PARQUET_USE_DICT = "use_dictionary";
+    public static final String PARQUET_MAX_ROW_GROUP_SIZE = "max_row_group_bytes";
 
     private static final long DEFAULT_MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024L; // 1GB
     private static final long MIN_FILE_SIZE_BYTES = 5 * 1024 * 1024L; // 5MB
     private static final long MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024L; // 2GB
+    public static final long DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES = 128 * 1024 * 1024; // 128MB
 
     private String filePath;
     private String format;
@@ -77,6 +93,9 @@ public class OutFileClause implements ParseNode {
     private TFileFormatType fileFormatType;
     private long maxFileSizeBytes = DEFAULT_MAX_FILE_SIZE_BYTES;
     private BrokerDesc brokerDesc = null;
+    private TCompressionType compressionType = TCompressionType.SNAPPY;
+    private long maxParquetRowGroupBytes = DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES;
+    private boolean useDict = true;
 
     public OutFileClause(String filePath, String format, Map<String, String> properties) {
         this.filePath = filePath;
@@ -115,10 +134,13 @@ public class OutFileClause implements ParseNode {
             throw new AnalysisException("Must specify file in OUTFILE clause");
         }
 
-        if (!format.equals("csv")) {
-            throw new AnalysisException("Only support CSV format");
+        if (format.equals("csv")) {
+            fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
+        } else if (format.equals("parquet")) {
+            fileFormatType = TFileFormatType.FORMAT_PARQUET;
+        } else {
+            throw new AnalysisException("Only support CSV and PARQUET format");
         }
-        fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
 
         analyzeProperties();
 
@@ -145,6 +167,32 @@ public class OutFileClause implements ParseNode {
                 throw new AnalysisException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
             rowDelimiter = properties.get(PROP_LINE_DELIMITER);
+        }
+
+        if (properties.containsKey(PARQUET_COMPRESSION_TYPE)) {
+            if (!isParquetFormat()) {
+                throw new AnalysisException(PARQUET_COMPRESSION_TYPE + " is only for PARQUET format");
+            }
+            String type = properties.get(PARQUET_COMPRESSION_TYPE);
+            if (PARQUET_COMPRESSION_TYPE_MAP.containsKey(type)) {
+                compressionType = PARQUET_COMPRESSION_TYPE_MAP.get(type);
+            } else {
+                throw new AnalysisException("compression type is invalid, type: " + type);
+            }
+        }
+
+        if (properties.containsKey(PARQUET_USE_DICT)) {
+            if (!isParquetFormat()) {
+                throw new AnalysisException(PARQUET_USE_DICT + " is only for PARQUET format");
+            }
+            useDict = Boolean.getBoolean(properties.get(PARQUET_USE_DICT));
+        }
+
+        if (properties.containsKey(PARQUET_MAX_ROW_GROUP_SIZE)) {
+            if (!isParquetFormat()) {
+                throw new AnalysisException(PARQUET_MAX_ROW_GROUP_SIZE + " is only for PARQUET format");
+            }
+            maxParquetRowGroupBytes = Long.getLong(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
@@ -189,6 +237,10 @@ public class OutFileClause implements ParseNode {
                 || fileFormatType == TFileFormatType.FORMAT_CSV_PLAIN;
     }
 
+    private boolean isParquetFormat() {
+        return fileFormatType == TFileFormatType.FORMAT_PARQUET;
+    }
+
     @Override
     public OutFileClause clone() {
         return new OutFileClause(this);
@@ -205,12 +257,20 @@ public class OutFileClause implements ParseNode {
         return sb.toString();
     }
 
-    public TResultFileSinkOptions toSinkOptions() {
+    public TResultFileSinkOptions toSinkOptions(List<String> columnOutputNames) {
         TResultFileSinkOptions sinkOptions = new TResultFileSinkOptions(filePath, fileFormatType);
         if (isCsvFormat()) {
             sinkOptions.setColumn_separator(columnSeparator);
             sinkOptions.setRow_delimiter(rowDelimiter);
+        } else if (isParquetFormat()) {
+            TParquetOptions parquetOptions = new TParquetOptions();
+            parquetOptions.setCompression_type(compressionType);
+            parquetOptions.setParquet_max_group_bytes(maxParquetRowGroupBytes);
+            parquetOptions.setUse_dict(useDict);
+            sinkOptions.setParquet_options(parquetOptions);
+            sinkOptions.setFile_column_names(columnOutputNames);
         }
+
         sinkOptions.setMax_file_size_bytes(maxFileSizeBytes);
         if (brokerDesc != null) {
             if (!brokerDesc.hasBroker()) {

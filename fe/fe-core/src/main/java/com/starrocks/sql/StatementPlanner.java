@@ -162,7 +162,12 @@ public class StatementPlanner {
             return;
         }
 
+        List<String> columnOutputNames = queryStmt.getQueryRelation().getColumnOutputNames();
+        if (columnOutputNames.size() != plan.getOutputExprs().size()) {
+            throw new RuntimeException(String.format("output column names size isn't equal output exprs size, %d vs %d",
+                    columnOutputNames.size(), plan.getOutputExprs().size()));
+        }
         ResultSink resultSink = (ResultSink) topFragment.getSink();
-        resultSink.setOutfileInfo(queryStmt.getOutFileClause());
+        resultSink.setOutfileInfo(queryStmt.getOutFileClause(), columnOutputNames);
     }
 }

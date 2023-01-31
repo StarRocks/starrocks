@@ -79,6 +79,7 @@ set(EXEC_FILES
     arrow_to_json_converter.cpp
     parquet_scanner.cpp
     parquet_reader.cpp
+    parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
