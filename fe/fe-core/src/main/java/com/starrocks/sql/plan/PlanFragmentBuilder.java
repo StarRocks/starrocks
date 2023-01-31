@@ -1293,6 +1293,10 @@ public class PlanFragmentBuilder {
                         new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
+
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
                 // count function is update function, but sum is merge function
@@ -1322,7 +1326,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
-            if ((node.isOnePhaseAgg() || node.isMergedLocalAgg())
+            if ((node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal())
                     && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 estimateDopOfOnePhaseAgg(inputFragment);

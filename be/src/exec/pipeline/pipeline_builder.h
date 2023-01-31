@@ -69,6 +69,9 @@ public:
     // Whether the building pipeline `ops` need local shuffle for the next operator.
     bool could_local_shuffle(OpFactories ops) const;
 
+    void inherit_upstream_source_properties(SourceOperatorFactory* downstream_source,
+                                            SourceOperatorFactory* upstream_source);
+
 private:
     OpFactories _do_maybe_interpolate_local_shuffle_exchange(
             RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
