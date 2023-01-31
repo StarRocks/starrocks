@@ -604,7 +604,7 @@ public class DataDescription {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!PrivilegeManager.checkTableAction(ConnectContext.get(), fullDbName,
-                    tableName, PrivilegeType.TableAction.INSERT)) {
+                    tableName, PrivilegeType.INSERT)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "INSERT",
                         ConnectContext.get().getQualifiedUser(),
                         ConnectContext.get().getRemoteIP(), tableName);
@@ -622,7 +622,7 @@ public class DataDescription {
         if (isLoadFromTable()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkTableAction(ConnectContext.get(), fullDbName,
-                        srcTableName, PrivilegeType.TableAction.SELECT)) {
+                        srcTableName, PrivilegeType.SELECT)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                             ConnectContext.get().getQualifiedUser(),
                             ConnectContext.get().getRemoteIP(), srcTableName);

@@ -54,7 +54,7 @@ public class FunctionPEntryObject implements PEntryObject {
             throws PrivilegeException {
         if (allTypes.size() == 1) {
             if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
+                    || !restrictType.equals(ObjectType.DATABASE.toString())
                     || StringUtils.isEmpty(restrictName)) {
                 throw new PrivilegeException("ALL FUNCTIONS must be restricted with database!");
             }
@@ -65,7 +65,7 @@ public class FunctionPEntryObject implements PEntryObject {
             }
             return new FunctionPEntryObject(database.getId(), ALL_FUNCTIONS_SIG);
         } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
+            if (!allTypes.get(1).equals(ObjectType.DATABASE.getPlural())) {
                 throw new PrivilegeException(
                         "ALL FUNCTIONS must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
             }

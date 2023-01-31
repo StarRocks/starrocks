@@ -33,10 +33,10 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -208,7 +208,7 @@ public class PrivilegeStmtAnalyzerV2 {
             stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
             String[] name = stmt.getFunctionName().split("\\.");
             FunctionName functionName;
-            if (stmt.getTypeId() == PrivilegeType.GLOBAL_FUNCTION.getId()) {
+            if (stmt.getTypeId() == ObjectType.GLOBAL_FUNCTION.getId()) {
                 if (name.length != 1) {
                     throw new AnalysisException("global function has no database");
                 }

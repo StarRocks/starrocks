@@ -421,7 +421,7 @@ public class ShowExecutor {
                         if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
                                 checkTableAction(connectContext, baseTableInfo.getDbName(),
                                 baseTableInfo.getTableName(),
-                                PrivilegeType.TableAction.SELECT)) {
+                                PrivilegeType.SELECT)) {
                             baseTableHasPrivilege.set(false);
                         }
                     });
@@ -1659,7 +1659,7 @@ public class ShowExecutor {
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 if (!PrivilegeManager.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
-                        PrivilegeType.TableAction.EXPORT)) {
+                        PrivilegeType.EXPORT)) {
                     privilegeDeny.set(true);
                 }
             });

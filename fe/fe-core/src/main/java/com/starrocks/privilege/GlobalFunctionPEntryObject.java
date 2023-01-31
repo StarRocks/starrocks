@@ -45,7 +45,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
             GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
             throws PrivilegeException {
         if (allTypes.size() == 1) {
-            Preconditions.checkState(allTypes.get(0).equals(PrivilegeType.GLOBAL_FUNCTION.getPlural()));
+            Preconditions.checkState(allTypes.get(0).equals(ObjectType.GLOBAL_FUNCTION.getPlural()));
             Preconditions.checkArgument(restrictType == null);
             Preconditions.checkArgument(restrictName == null);
             return new GlobalFunctionPEntryObject(ALL_GLOBAL_FUNCTION_SIGS);
