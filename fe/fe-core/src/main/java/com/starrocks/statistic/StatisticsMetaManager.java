@@ -136,12 +136,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         // if use_staros, create lake table
-        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
         KeysType keysType = KeysType.UNIQUE_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
-                engine,
+                null,
                 new KeysDesc(keysType, KEY_COLUMN_NAMES),
                 null,
                 new HashDistributionDesc(10, KEY_COLUMN_NAMES),
@@ -169,13 +168,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         // if use_staros, create lake table, which not support primary key
-        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
-        KeysType keysType = Config.use_staros ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                engine,
-                new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
+                null,
+                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
                 properties,
@@ -201,14 +198,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
-        // if use_staros, create lake table, which not support primary key
-        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
-        KeysType keysType = Config.use_staros ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                engine,
-                new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
+                null,
+                new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
                 properties,

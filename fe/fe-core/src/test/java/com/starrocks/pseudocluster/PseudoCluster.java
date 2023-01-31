@@ -416,7 +416,6 @@ public class PseudoCluster {
         // statistics affects table read times counter, so disable it
         Config.enable_statistic_collect = false;
         Config.plugin_dir = runDir + "/plugins";
-        Config.use_staros = true;
         Map<String, String> feConfMap = Maps.newHashMap();
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
