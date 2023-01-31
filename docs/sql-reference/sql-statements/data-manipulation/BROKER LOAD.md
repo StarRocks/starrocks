@@ -18,11 +18,15 @@ WITH BROKER "<broker_name>"
 [opt_properties]
 ```
 
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
+
 ## Parameters
 
-### `LABEL`
+### `database_name` and `label_name`
 
-The label of the load job.
+`label_name` specifies the label of the load job.
+
+`database_name` optionally specifies the name of the database to which the destination table belongs.
 
 Each load job has a label that is unique across the entire database. You can use the label of a load job to view the execution status of the load job and prevent repeatedly loading the same data. When a load job enters the **FINISHED** state, its label cannot be reused. Only the label of a load job that has entered the **CANCELLED** state can be reused. In most cases, the label of a load job is reused to retry that load job and load the same data, thereby implementing Exactly-Once semantics.
 
@@ -321,22 +325,6 @@ The following parameters are supported:
 
   Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
 
-- `priority`
-
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
-
-<<<<<<< HEAD
-=======
-    You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
-
-- `merge_condition`
-
-  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
-
-  > **NOTE**
-  >
-  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates.
-
 ## Column mapping
 
 When you load data, you can configure column mapping between the data file and the destination table by using the `column_list` parameter. If the columns of the data file can be mapped one on one in sequence onto the columns of the destination table, you do not need to specify the `column_list` parameter. Otherwise, you must specify the `column_list` parameter, as shown in the following two use cases:
@@ -354,7 +342,6 @@ When you load data, you can configure column mapping between the data file and t
   - The destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the destination table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the destination table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the destination table column names. For example, you can specify `(col1, col2, col3, temp)`, in which the fourth column of the data file is temporarily named `temp`.
   - The destination table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `(col, year = year(col), month=month(col), day=day(col))`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping destination table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the destination table column `year`.
 
->>>>>>> 47583db50 (Update BROKER LOAD.md (#16586))
 ## Examples
 
 This section uses HDFS as an example to describe various load configurations.
