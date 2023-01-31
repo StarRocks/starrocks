@@ -722,7 +722,7 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 17: ps_partkey = 1: p_partkey"));
+                "  |  equal join conjunct: 18: ps_suppkey = 10: s_suppkey"));
         FeConstants.isReplayFromQueryDump = false;
     }
 

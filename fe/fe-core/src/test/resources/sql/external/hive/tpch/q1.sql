@@ -38,7 +38,7 @@ column statistics:
 * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-* count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+* count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
 
@@ -60,7 +60,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
 |  aggregate: sum[([19: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true], sum[([20: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true], sum[([21: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([22: sum, DECIMAL128(38,6), true]); args: DECIMAL128; result: DECIMAL128(38,6); args nullable: true; result nullable: true], avg[([23: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], count[([26: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -76,7 +76,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
 cardinality: 3
