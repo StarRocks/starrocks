@@ -95,11 +95,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### 主键模型
 
-<<<<<<< HEAD
-创建一个名为 `site_access_primary` 的更新模型表，包含 `site_id`、`city_code`、`user_name` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
-=======
 创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
->>>>>>> 04e33bd ([Doc] update sort key doc (#4276))
 
 建表语句如下：
 
