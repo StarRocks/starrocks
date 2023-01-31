@@ -22,22 +22,22 @@ When you define sort key columns for a table at table creation, take note of the
 
 - The sequence in which you list sort key columns must comply with the sequence in which you define the columns of the table.
 
-The following examples show allowed sort key columns and unallowed sort key columns of a table that consists of four columns, which are `site_id`, `city_code`, `user_name`, and `pv`:
+The following examples show allowed sort key columns and unallowed sort key columns of a table that consists of four columns, which are `site_id`, `city_code`, `user_id`, and `pv`:
 
 - Examples of allowed sort key columns
   - `site_id` and `city_code`
-  - `site_id`, `city_code`, and `user_name`
+  - `site_id`, `city_code`, and `user_id`
 
 - Examples of unallowed sort key columns
   - `city_code` and `site_id`
-  - `city_code` and `user_name`
+  - `city_code` and `user_id`
   - `site_id`, `city_code`, and `pv`
 
 The following sections provide examples of how to define sort key columns when you create tables that use various data models. These examples are suitable for StarRocks clusters that have at least three BEs.
 
 ### Duplicate Key
 
-Create a table named `site_access_duplicate`. The table consists of four columns: `site_id`, `city_code`, `user_name`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
+Create a table named `site_access_duplicate`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
 
 The statement for creating the table is as follows:
 
@@ -46,7 +46,7 @@ CREATE TABLE site_access_duplicate
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 DUPLICATE KEY(site_id, city_code)
@@ -55,7 +55,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### Aggregate Key
 
-Create a table named `site_access_aggregate`. The table consists of four columns: `site_id`, `city_code`, `user_name`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
+Create a table named `site_access_aggregate`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
 
 The statement for creating the table is as follows:
 
@@ -64,16 +64,20 @@ CREATE TABLE site_access_aggregate
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT MAX,
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
+>**NOTICE**
+>
+> For an Aggregate Key table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
+
 ### Unique Key
 
-Create a table named `site_access_unique`. The table consists of four columns: `site_id`, `city_code`, `user_name`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
+Create a table named `site_access_unique`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
 
 The statement for creating the table is as follows:
 
@@ -82,7 +86,7 @@ CREATE TABLE site_access_unique
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 UNIQUE KEY(site_id, city_code)
@@ -91,7 +95,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### Primary Key
 
-Create a table named `site_access_primary`. The table consists of four columns: `site_id`, `city_code`, `user_name`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
+Create a table named `site_access_primary`. The table consists of four columns: `site_id`, `city_code`, `user_id`, and `pv`, of which `site_id` and `city_code` are selected as sort key columns.
 
 The statement for creating the table is as follows:
 
@@ -100,7 +104,7 @@ CREATE TABLE site_access_primary
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
+    user_id INT,
     pv BIGINT DEFAULT '0'
 )
 PRIMARY KEY(site_id, city_code)
