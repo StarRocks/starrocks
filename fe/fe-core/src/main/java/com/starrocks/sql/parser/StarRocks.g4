@@ -1938,14 +1938,7 @@ optimizerTrace
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
-    | PARTITION BY partitionExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
-    ;
-
-partitionExpression
-    : YEAR '(' expression ')'
-    | MONTH '(' expression ')'
-    | DAY '(' expression ')'
-    | HOUR '(' expression ')'
+    | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     ;
 
 listPartitionDesc

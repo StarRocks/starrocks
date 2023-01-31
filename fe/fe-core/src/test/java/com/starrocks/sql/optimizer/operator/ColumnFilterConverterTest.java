@@ -28,6 +28,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -206,7 +207,8 @@ public class ColumnFilterConverterTest {
                 params);
         exprList.add(zdtestCallExpr);
         columns.add(new Column("date_col", ScalarType.DATE));
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns,
+                PartitionType.RANGE);
 
         return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
                 new RandomDistributionInfo(10));

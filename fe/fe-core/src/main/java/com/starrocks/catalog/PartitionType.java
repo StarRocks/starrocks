@@ -39,7 +39,8 @@ import com.starrocks.thrift.TPartitionType;
 public enum PartitionType {
     UNPARTITIONED("UNPARTITIONED"),
     RANGE("RANGE"),
-    LIST("LIST");
+    LIST("LIST"),
+    EXPR_RANGE("EXPR_RANGE");
 
     public String typeString;
 
@@ -63,6 +64,7 @@ public enum PartitionType {
             case UNPARTITIONED:
                 return TPartitionType.UNPARTITIONED;
             case RANGE:
+            case EXPR_RANGE:
                 return TPartitionType.RANGE_PARTITIONED;
             default:
                 return TPartitionType.UNPARTITIONED;
