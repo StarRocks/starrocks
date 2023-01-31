@@ -209,6 +209,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                                _analytic_partition_exprs);
     }
 
+    auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
