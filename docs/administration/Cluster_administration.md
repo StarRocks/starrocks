@@ -398,3 +398,15 @@ mysql> show variables like '%batch_size%';
 
 mysql> set global batch_size = 4096;
 ```
+
+#### Troubleshooting
+
+Q: I have upgraded StarRocks v2.0 to v2.1 or later versions. Stream Load returns NULL after loading BOOLEAN type data into an old table created in v2.0. How can I solve it?
+
+A: JSON Parser in StarRocks v2.1 was refactored, and its data conversion logic is not applicable to the BOOLEAN type fields in StarRocks 2.0 version, resulting in conversion errors.
+
+You can solve this problem by adding the following expression to the `Columns` parameter of the Stream Load command:
+
+```shell
+tmp, target=if(tmp,1,0)
+```
