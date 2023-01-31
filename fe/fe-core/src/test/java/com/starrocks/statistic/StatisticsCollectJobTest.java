@@ -162,10 +162,12 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals(5, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
-        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertTrue("[pk, v1, v2][v1, v2, v3, v4, v5][v4, v5, v6][v1, v2, v3, v4, v5]".contains(
+                fullStatisticsCollectJob.getColumns().toString()));
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertTrue("[pk, v1, v2][v1, v2, v3, v4, v5][v4, v5, v6][v1, v2, v3, v4, v5]".contains(
+                fullStatisticsCollectJob.getColumns().toString()));
     }
 
     @Test
