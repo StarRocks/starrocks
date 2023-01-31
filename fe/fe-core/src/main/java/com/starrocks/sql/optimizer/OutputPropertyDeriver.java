@@ -210,6 +210,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             } else if ((leftDistributionDesc.isShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
                     (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
                 // shuffle join
+<<<<<<< HEAD
                 return computeHashJoinDistributionPropertyInfo(node,
                         computeShuffleJoinOutputProperty(leftShuffleColumns),
                         leftOnPredicateColumns,
@@ -218,6 +219,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 // coordinator can not bucket shuffle data from left to right
                 Preconditions.checkState(false, "Children output property distribution error");
                 return PhysicalPropertySet.EMPTY;
+=======
+                PhysicalPropertySet outputProperty = computeShuffleJoinOutputProperty(node.getJoinType(),
+                        leftDistributionDesc.getColumns(), rightDistributionDesc.getColumns());
+                return computeHashJoinDistributionPropertyInfo(node, outputProperty,
+                        leftOnPredicateColumns, rightOnPredicateColumns, context);
+>>>>>>> e426bc590 ([BugFix] Complex shuffle join with aggregate bug (#16834))
             } else {
                 Preconditions.checkState(false, "Children output property distribution error");
                 return PhysicalPropertySet.EMPTY;
@@ -228,7 +235,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         }
     }
 
+<<<<<<< HEAD
     private PhysicalPropertySet computeShuffleJoinOutputProperty(List<Integer> leftShuffleColumns) {
+=======
+    private PhysicalPropertySet computeShuffleJoinOutputProperty(JoinOperator joinType,
+                                                                 List<Integer> leftShuffleColumns,
+                                                                 List<Integer> rightShuffleColumns) {
+>>>>>>> e426bc590 ([BugFix] Complex shuffle join with aggregate bug (#16834))
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
         if (!requiredShuffleDesc.isPresent()) {
             return PhysicalPropertySet.EMPTY;
@@ -236,7 +249,24 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         HashDistributionSpec leftShuffleDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
+<<<<<<< HEAD
         return createPropertySetByDistribution(leftShuffleDistribution);
+=======
+        // Get required properties for children.
+        List<PhysicalPropertySet> requiredProperties =
+                computeShuffleJoinRequiredProperties(requirements, leftShuffleColumns, rightShuffleColumns);
+        Preconditions.checkState(requiredProperties.size() == 2);
+
+        // when it's a right join, we should use right input cols to derive the output property
+        int dominatedIdx = joinType.isRightJoin() ? 1 : 0;
+        List<Integer> dominatedOutputColumns =
+                ((HashDistributionSpec) requiredProperties.get(dominatedIdx).getDistributionProperty().getSpec())
+                        .getShuffleColumns();
+        HashDistributionSpec outputShuffleDistribution = DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(dominatedOutputColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+
+        return createPropertySetByDistribution(outputShuffleDistribution);
+>>>>>>> e426bc590 ([BugFix] Complex shuffle join with aggregate bug (#16834))
     }
 
     private Optional<HashDistributionDesc> getRequiredShuffleDesc() {
