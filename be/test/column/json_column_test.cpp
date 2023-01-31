@@ -402,7 +402,7 @@ PARALLEL_TEST(JsonColumnTest, test_serialize) {
 class JsonConvertTestFixture : public ::testing::TestWithParam<std::tuple<std::string>> {
 public:
 };
-/*
+
 TEST_P(JsonConvertTestFixture, convert_from_simdjson) {
     using namespace simdjson;
     std::string param_0 = std::get<0>(GetParam());
@@ -414,7 +414,6 @@ TEST_P(JsonConvertTestFixture, convert_from_simdjson) {
     ASSERT_TRUE(maybe_json.ok());
     ASSERT_EQ(json_str.data(), maybe_json.value().to_string_uncheck());
 }
-*/
 
 INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
                          ::testing::Values(
