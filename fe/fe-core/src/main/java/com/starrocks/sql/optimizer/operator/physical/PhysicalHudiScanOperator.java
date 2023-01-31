@@ -51,23 +51,6 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalHudiScanOperator that = (PhysicalHudiScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHudiScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hashCode(super.hashCode(), table, predicates);
     }

@@ -49,22 +49,6 @@ public class PhysicalDeltaLakeScanOperator extends PhysicalScanOperator {
         return visitor.visitPhysicalDeltaLakeScan(optExpression, context);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalDeltaLakeScanOperator that = (PhysicalDeltaLakeScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalDeltaLakeScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
-    }
 
     @Override
     public int hashCode() {

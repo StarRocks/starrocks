@@ -57,17 +57,17 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
     }
 
     @Override
+    public int hashCode() {
+        return System.identityHashCode(this);
+    }
+
+    @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
             return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
         } else {
             return expressionContext.getChildLogicalProperty(0).getOutputColumns();
         }
-    }
-
-    @Override
-    public int hashCode() {
-        return System.identityHashCode(this);
     }
 
     @Override
