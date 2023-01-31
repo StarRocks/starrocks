@@ -1,10 +1,6 @@
 # 使用 Flink 连接器读取数据
 
-<<<<<<< HEAD
-本文介绍 Flink 如何通过 flink-connector-starrocks 的 source 功能读取 StarRocks 数据。
-=======
 StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。
->>>>>>> 522585b (update unload by flink connector doc (#4208))
 
 > **说明**
 >
@@ -87,123 +83,8 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 
 3. 将下载或者编译的 JAR 包放在 Flink 的 `lib` 目录中。
 
-<<<<<<< HEAD
-1. 根据 Flink 的版本，选择对应版本。下载 JAR 包 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases)。
-2. 如需调试代码，可选择对应分支代码自行编译
-3. 将下载或者编译的 JAR 包放在 Flink 的 lib 目录中。
 4. 重启 Flink。
 
-### 步骤二：调用 flink-connector-starrocks ，读取 StarRocks 数据
-
-> flink-connector-starrocks 的 source 功能暂时无法保证 exactly-once 语义。如果读取任务失败，您需要重复本步骤，再次创建读取任务。
-
-- 如您使用 Flink SQL 客户端（推荐），则需要参考如下命令，调用 flink-connector-starrocks，读取 StarRocks 的数据。相关参数说明，请参见[参数说明](#参数说明)。
-
-   ```SQL
-   -- 根据 StarRocks 的表，创建表和配置属性（包括 flink-connector-starrocks 和库表的信息）。
-   CREATE TABLE flink_test (
-       date_1 DATE,
-       datetime_1 TIMESTAMP(6),
-       char_1 CHAR(20),
-       varchar_1 VARCHAR,
-       boolean_1 BOOLEAN,
-       tinyint_1 TINYINT,
-       smallint_1 SMALLINT,
-       int_1 INT,
-       bigint_1 BIGINT,
-       largeint_1 STRING,
-       float_1 FLOAT,
-       double_1 DOUBLE,FLI
-       decimal_1 DECIMAL(27,9)
-   ) WITH (
-      'connector'='starrocks',
-      'scan-url'='192.168.xxx.xxx:8030,192.168.xxx.xxx:8030',
-      'jdbc-url'='jdbc:mysql://192.168.xxx.xxx:9030',
-      'username'='root',
-      'password'='xxxxxx',
-      'database-name'='flink_test',
-      'table-name'='flink_test'
-   );
-   -- 使用 SQL 语句读取 StarRocks 数据。
-   select date_1, smallint_1 from flink_test where char_1 <> 'A' and int_1 = -126;
-   ```
-
-   > - 仅支持使用部分 SQL 语句读取 StarRocks 数据，如`select ... from table_name where ...`。暂不支持除 COUNT 外的聚合函数。
-   > - 支持谓词下推。使用 SQL 语句时，支持自动进行谓词下推，比如上述例子中的过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 connector 中转换成适用于 StarRocks 的语句进行查询，不需要额外配置。
-   > - 不支持limit语句
-   > - 在任务失败的情况下，由于暂时没有 checkpoint 机制，无法保证数据一致性
-
-- 如您使用 Flink DataStream ，则需要先添加依赖，然后调用 flink-connector-starrocks，读取 StarRocks 的数据。
-
-1. 在 pom.xml 文件中添加如下依赖。
-
-   > x.x.x需要替换为 flink-connector-starrocks 的最新版本号，您可以单击[版本信息](https://search.maven.org/search?q=g:com.starrocks)获取。
-
-   ```SQL
-   <dependency>    
-       <groupId>com.starrocks</groupId>
-       <artifactId>flink-connector-starrocks</artifactId>
-       <!-- for flink-1.14 -->
-       <version>x.x.x_flink-1.14_2.11</version>
-       <version>x.x.x_flink-1.14_2.12</version>
-       <!-- for flink-1.13 -->
-       <version>x.x.x_flink-1.13_2.11</version>
-       <version>x.x.x_flink-1.13_2.12</version>
-       <!-- for flink-1.12 -->
-       <version>x.x.x_flink-1.12_2.11</version>
-       <version>x.x.x_flink-1.12_2.12</version>
-       <!-- for flink-1.11 -->
-       <version>x.x.x_flink-1.11_2.11</version>
-       <version>x.x.x_flink-1.11_2.12</version>
-   </dependency>
-   ```
-
-2. 参考如下示例代码，调用 flink-connector-starrocks，读取 StarRocks 的数据。相关参数说明，请参见[参数说明](#参数说明)。
-
-```Java
-import com.starrocks.connector.flink.StarRocksSource;
-import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
-
-public class StarRocksSourceApp {
-    public static void main(String[] args) {
-        StarRocksSourceOptions options = StarRocksSourceOptions.builder()
-               .withProperty("scan-url", "192.168.xxx.xxx:8030,192.168.xxx.xxx:8030")
-               .withProperty("jdbc-url", "jdbc:mysql://192.168.xxx.xxx:9030")
-               .withProperty("username", "root")
-               .withProperty("password", "xxxxxx")
-               .withProperty("table-name", "flink_test")
-               .withProperty("database-name", "test")
-               .build();
-        TableSchema tableSchema = TableSchema.builder()
-               .field("date_1", DataTypes.DATE())
-               .field("datetime_1", DataTypes.TIMESTAMP(6))
-               .field("char_1", DataTypes.CHAR(20))
-               .field("varchar_1", DataTypes.STRING())
-               .field("boolean_1", DataTypes.BOOLEAN())
-               .field("tinyint_1", DataTypes.TINYINT())
-               .field("smallint_1", DataTypes.SMALLINT())
-               .field("int_1", DataTypes.INT())
-               .field("bigint_1", DataTypes.BIGINT())
-               .field("largeint_1", DataTypes.STRING())
-               .field("float_1", DataTypes.FLOAT())
-               .field("double_1", DataTypes.DOUBLE())
-               .field("decimal_1", DataTypes.DECIMAL(27, 9))
-               .build();
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.addSource(StarRocksSource.source(options, tableSchema)).setParallelism(5).print();
-        env.execute("StarRocks flink source");
-    }
-
-}
-```
-
-=======
-4. 重启 Flink。
-
->>>>>>> 522585b (update unload by flink connector doc (#4208))
 ## 参数说明
 
 ### 通用参数
