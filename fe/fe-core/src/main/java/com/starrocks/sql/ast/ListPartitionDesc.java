@@ -74,6 +74,12 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
+        for (ColumnDef columnDef : columnDefList) {
+            if (columnDef.isAllowNull()) {
+                throw new AnalysisException("The list partition column does not support allow null currently, column:["
+                        + columnDef.getName() + "] should be set to not null.");
+            }
+        }
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
@@ -204,6 +210,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -213,6 +220,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
+                listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
             return listPartitionInfo;
         } catch (AnalysisException e) {
