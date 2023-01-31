@@ -21,7 +21,10 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.thrift.TJoinOp;
+
+import java.util.Set;
 
 public enum JoinOperator {
     INNER_JOIN("INNER JOIN", TJoinOp.INNER_JOIN),
@@ -121,6 +124,15 @@ public enum JoinOperator {
 
     public boolean isRightJoin() {
         return this == RIGHT_OUTER_JOIN || this == RIGHT_ANTI_JOIN || this == RIGHT_SEMI_JOIN;
+    }
+
+    public static Set<JoinOperator> semiAntiJoinSet() {
+        return Sets.newHashSet(LEFT_SEMI_JOIN, LEFT_ANTI_JOIN, NULL_AWARE_LEFT_ANTI_JOIN, RIGHT_SEMI_JOIN,
+                RIGHT_ANTI_JOIN);
+    }
+
+    public static Set<JoinOperator> innerCrossJoinSet() {
+        return Sets.newHashSet(INNER_JOIN, CROSS_JOIN);
     }
 }
 
