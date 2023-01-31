@@ -462,9 +462,15 @@ struct AggHashMapVariant {
 
     void convert_to_two_level(RuntimeState* state);
 
+    // release the hash table
+    void reset();
+
     size_t capacity() const;
+
     size_t size() const;
+
     size_t reserved_memory_usage(const MemPool* pool) const;
+
     size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
@@ -556,6 +562,8 @@ struct AggHashSetVariant {
     void init(RuntimeState* state, Type type_, AggStatistics* agg_stat);
 
     void convert_to_two_level(RuntimeState* state);
+
+    void reset();
 
     size_t capacity() const;
 

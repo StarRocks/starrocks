@@ -385,6 +385,12 @@ void Aggregator::close(RuntimeState* state) {
             }
         }
 
+        if (_is_only_group_by_columns) {
+            _hash_set_variant.reset();
+        } else {
+            _hash_map_variant.reset();
+        }
+
         Expr::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
             Expr::close(i, state);
