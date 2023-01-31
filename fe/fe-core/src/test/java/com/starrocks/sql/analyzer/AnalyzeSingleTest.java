@@ -73,7 +73,7 @@ public class AnalyzeSingleTest {
                 + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
-                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "line_delimiter is only for CSV format");
 
         analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
                 + "FORMAT AS CSV PROPERTIES" +
