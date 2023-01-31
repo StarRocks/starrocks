@@ -228,10 +228,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             } else if ((leftDistributionDesc.isShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
                     (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
                 // shuffle join
-                return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(node.getJoinType(), leftOnPredicateColumns, rightOnPredicateColumns),
-                        leftOnPredicateColumns,
-                        rightOnPredicateColumns, context);
+                PhysicalPropertySet outputProperty = computeShuffleJoinOutputProperty(node.getJoinType(),
+                        leftDistributionDesc.getColumns(), rightDistributionDesc.getColumns());
+                return computeHashJoinDistributionPropertyInfo(node, outputProperty,
+                        leftOnPredicateColumns, rightOnPredicateColumns, context);
             } else {
                 LOG.error("Children output property distribution error.left child property: {}, " +
                                 "right child property: {}, join node: {}",
@@ -247,8 +247,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     }
 
     private PhysicalPropertySet computeShuffleJoinOutputProperty(JoinOperator joinType,
-                                                                 List<Integer> leftOnPredicateColumns,
-                                                                 List<Integer> rightOnPredicateColumns) {
+                                                                 List<Integer> leftShuffleColumns,
+                                                                 List<Integer> rightShuffleColumns) {
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
         if (!requiredShuffleDesc.isPresent()) {
             return PhysicalPropertySet.EMPTY;
@@ -256,7 +256,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
         // Get required properties for children.
         List<PhysicalPropertySet> requiredProperties =
-                computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns, rightOnPredicateColumns);
+                computeShuffleJoinRequiredProperties(requirements, leftShuffleColumns, rightShuffleColumns);
         Preconditions.checkState(requiredProperties.size() == 2);
 
         // when it's a right join, we should use right input cols to derive the output property
