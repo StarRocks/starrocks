@@ -14,16 +14,30 @@
 
 package com.starrocks.catalog;
 
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Range;
+import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
@@ -35,19 +49,29 @@ import static java.util.stream.Collectors.toList;
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
 
     @SerializedName(value = "partitionExprs")
-    private final List<Expr> partitionExprs;
+    private List<Expr> partitionExprs;
 
-    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionRangePartitionInfo() {
+        this.type = PartitionType.EXPR_RANGE;
+    }
+
+
+    public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {
         super(columns);
         Preconditions.checkState(partitionExprs != null);
         Preconditions.checkState(partitionExprs.size() > 0);
         Preconditions.checkState(partitionExprs.size() == columns.size());
         this.partitionExprs = partitionExprs;
         this.isMultiColumnPartition = partitionExprs.size() > 0;
+        this.type = type;
     }
 
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
+    }
+
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
     }
 
     @Override
@@ -77,10 +101,75 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
             sb.append(")");
             return sb.toString();
         }
-        sb.append("RANGE(");
-        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList()))).append(")");
-        // in the future maybe need range partition info
+        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+        sb.append("\n(");
+        // sort range
+        List<Map.Entry<Long, Range<PartitionKey>>> entries = new ArrayList<>(getIdToRange(false).entrySet());
+        entries.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
+
+        int idx = 0;
+        PartitionInfo tblPartitionInfo = table.getPartitionInfo();
+
+        String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
+        short replicationNum;
+        if (replicationNumStr == null) {
+            replicationNum = FeConstants.default_replication_num;
+        } else {
+            replicationNum = Short.parseShort(replicationNumStr);
+        }
+
+        for (Map.Entry<Long, Range<PartitionKey>> entry : entries) {
+            Partition partition = table.getPartition(entry.getKey());
+            String partitionName = partition.getName();
+            Range<PartitionKey> range = entry.getValue();
+
+            // print all partitions' range is fixed range, even if some of them is created by less than range
+            sb.append("PARTITION ").append(partitionName).append(" VALUES [");
+            sb.append(range.lowerEndpoint().toSql());
+            sb.append(", ").append(range.upperEndpoint().toSql()).append(")");
+
+            if (partitionId != null) {
+                partitionId.add(entry.getKey());
+                break;
+            }
+            short curPartitionReplicationNum = tblPartitionInfo.getReplicationNum(entry.getKey());
+            if (curPartitionReplicationNum != replicationNum) {
+                sb.append("(").append("\"replication_num\" = \"").append(curPartitionReplicationNum).append("\")");
+            }
+            if (idx != entries.size() - 1) {
+                sb.append(",\n");
+            }
+            idx++;
+        }
+        sb.append(")");
         return sb.toString();
+    }
+
+    public static PartitionInfo read(DataInput in) throws IOException {
+        ExpressionRangePartitionInfo info = new ExpressionRangePartitionInfo();
+        info.readFields(in);
+        String json = Text.readString(in);
+        List<Expr> exprs = GsonUtils.GSON.fromJson(json, new TypeToken<List<Expr>>(){}.getType());
+        List<Column> partitionColumns = info.getPartitionColumns();
+        for (Expr expr : exprs) {
+            if (expr instanceof FunctionCallExpr) {
+                SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+                for (Column partitionColumn : partitionColumns) {
+                    if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
+                        PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
+                        slotRef.setType(partitionColumn.getType());
+                    }
+                }
+            }
+        }
+        info.setPartitionExprs(exprs);
+        return info;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        super.write(out);
+        Text.writeString(out, GsonUtils.GSON.toJson(partitionExprs));
     }
 
     public void renameTableName(String newTableName) {

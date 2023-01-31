@@ -53,6 +53,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -238,7 +239,7 @@ public class ShowExecutorTest {
                         Collections.singletonList(
                                 new SlotRef(
                                         new TableName("test", "testMv"), column1.getName())),
-                        Collections.singletonList(column1));
+                        Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();
                 minTimes = 0;

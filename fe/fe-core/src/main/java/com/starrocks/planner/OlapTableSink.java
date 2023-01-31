@@ -72,6 +72,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
@@ -273,7 +274,8 @@ public class OlapTableSink extends DataSink {
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {
-            case RANGE: {
+            case RANGE:
+            case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
                 for (Column partCol : rangePartitionInfo.getPartitionColumns()) {
                     partitionParam.addToPartition_columns(partCol.getName());

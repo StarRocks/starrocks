@@ -744,7 +744,6 @@ public class OlapTable extends Table {
 
     // partition Name -> Range
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
-        Preconditions.checkArgument(partitionInfo.getType() == PartitionType.RANGE);
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
@@ -828,11 +827,11 @@ public class OlapTable extends Table {
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
         //    of this partition depends on "reserveTablets"
-        //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
+        //    If "reserveTablets" is true, the tablets of this partition will not to delete.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
         if (partition != null) {
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.isRangePartition()) {
                 idToPartition.remove(partition.getId());
                 nameToPartition.remove(partitionName);
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
@@ -1361,6 +1360,8 @@ public class OlapTable extends Table {
             partitionInfo = RangePartitionInfo.read(in);
         } else if (partType == PartitionType.LIST) {
             partitionInfo = ListPartitionInfo.read(in);
+        } else if (partType == PartitionType.EXPR_RANGE) {
+            partitionInfo = ExpressionRangePartitionInfo.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
         }
@@ -1669,23 +1670,6 @@ public class OlapTable extends Table {
             }
         }
         return keysNum;
-    }
-
-    public boolean convertRandomDistributionToHashDistribution() {
-        boolean hasChanged = false;
-        List<Column> baseSchema = getBaseSchema();
-        if (defaultDistributionInfo.getType() == DistributionInfoType.RANDOM) {
-            defaultDistributionInfo =
-                    ((RandomDistributionInfo) defaultDistributionInfo).toHashDistributionInfo(baseSchema);
-            hasChanged = true;
-        }
-
-        for (Partition partition : idToPartition.values()) {
-            if (partition.convertRandomDistributionToHashDistribution(baseSchema)) {
-                hasChanged = true;
-            }
-        }
-        return hasChanged;
     }
 
     public void setReplicationNum(Short replicationNum) {
