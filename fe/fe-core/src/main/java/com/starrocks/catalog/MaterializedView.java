@@ -371,6 +371,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.active = true;
     }
 
+    public MvId getMvId() {
+        return new MvId(getDbId(), id);
+    }
+
     public long getDbId() {
         return dbId;
     }
