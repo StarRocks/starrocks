@@ -449,10 +449,12 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
     }
 
     Slice lower_key;
+    std::string lower_key_payload;
     // Empty short key of start ShortKeyOption means it is the first splitted key range,
     // so use start original short key to compare.
     if (lower->tuple_key != nullptr) {
-        lower_key = lower->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        lower_key_payload = lower->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        lower_key = Slice(lower_key_payload);
     } else if (!lower->short_key.empty()) {
         lower_key = lower->short_key;
     } else {
@@ -460,10 +462,12 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
     }
 
     Slice upper_key;
+    std::string upper_key_payload;
     // Empty short key of end ShortKeyOption means it is the last splitted key range,
     // so use end original short key to compare.
     if (upper->tuple_key != nullptr) {
-        upper_key = upper->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        upper_key_payload = upper->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        upper_key = Slice(upper_key_payload);
     } else if (!upper->short_key.empty()) {
         upper_key = upper->short_key;
     } else {
@@ -588,8 +592,8 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     RETURN_IF_ERROR(_largest_rowset->load());
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
-    _short_key_schema = std::make_shared<VectorizedSchema>(
-            ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
+    _short_key_schema =
+            std::make_shared<Schema>(ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
     _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);

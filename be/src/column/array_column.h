@@ -19,6 +19,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 
@@ -124,8 +125,10 @@ public:
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
     void compare_column(const Column& rhs, std::vector<int8_t>* output) const;
 
-    void crc32_hash_at(uint32_t* seed, int32_t idx) const override;
-    void fnv_hash_at(uint32_t* seed, int32_t idx) const override;
+    bool equals(size_t left, const Column& right_column, size_t right) const override;
+
+    void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
+    void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
@@ -164,7 +167,7 @@ public:
 
     bool is_nullable() const override { return false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 

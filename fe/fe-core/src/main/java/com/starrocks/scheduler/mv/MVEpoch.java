@@ -17,15 +17,23 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MvId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TMVEpoch;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
@@ -38,6 +46,10 @@ import java.util.Objects;
  */
 public class MVEpoch implements Writable {
 
+    private static final Logger LOG = LogManager.getLogger(MVEpoch.class);
+
+    @SerializedName("dbId")
+    private long dbId;
     @SerializedName("mvId")
     private long mvId;
     @SerializedName("epochState")
@@ -52,14 +64,35 @@ public class MVEpoch implements Writable {
     // Ephemeral states
     private transient long txnId;
 
-    public MVEpoch(long mvId) {
-        this.mvId = mvId;
+    private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
+
+    private transient List<TabletFailInfo> failedInfos = new ArrayList<>();
+
+    private transient AtomicLong numEpochFinished = new AtomicLong(0);
+
+    public MVEpoch(MvId mv) {
+        this.dbId = mv.getDbId();
+        this.mvId = mv.getId();
         this.startTimeMilli = System.currentTimeMillis();
         this.state = EpochState.INIT;
         this.binlogState = new BinlogConsumeStateVO();
     }
 
+    public static MVEpoch readEpoch(DataInput input) throws IOException {
+        MVEpoch epoch = GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
+        return epoch;
+    }
+
+    public List<TabletCommitInfo> getCommitInfos() {
+        return commitInfos;
+    }
+
+    public List<TabletFailInfo> getFailedInfos() {
+        return failedInfos;
+    }
+
     public void onReady() {
+        // TODO: Remove this later.
         Preconditions.checkState(state.equals(EpochState.INIT));
         this.state = EpochState.READY;
     }
@@ -90,8 +123,27 @@ public class MVEpoch implements Writable {
     }
 
     public void reset() {
-        Preconditions.checkState(state.equals(EpochState.COMMITTED) || state.equals(EpochState.FAILED));
+        Preconditions.checkState(state.equals(EpochState.COMMITTING) ||
+                state.equals(EpochState.COMMITTED) ||
+                state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
+        this.commitInfos.clear();;
+        this.failedInfos.clear();
+        numEpochFinished.set(0);
+    }
+
+    public long getNumEpochFinished() {
+        return numEpochFinished.get();
+    }
+
+    public void onEpochReport(List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos) {
+        LOG.info("onEpochReport: {}", this);
+        synchronized (this) {
+            this.commitInfos.addAll(commitInfos);
+            this.failedInfos.addAll(failInfos);
+        }
+        this.numEpochFinished.incrementAndGet();
+        LOG.info("onEpochReport done: {}", this);
     }
 
     public static MVEpoch read(DataInput input) throws IOException {
@@ -149,6 +201,10 @@ public class MVEpoch implements Writable {
             return this.equals(FAILED);
         }
 
+    }
+
+    public long getDbId() {
+        return dbId;
     }
 
     public long getMvId() {
@@ -221,12 +277,14 @@ public class MVEpoch implements Writable {
     @Override
     public String toString() {
         return "MVEpoch{" +
-                "mvId=" + mvId +
+                "dbId=" + dbId +
+                ", mvId=" + mvId +
                 ", state=" + state +
                 ", binlogState=" + binlogState +
                 ", startTimeMilli=" + startTimeMilli +
                 ", commitTimeMilli=" + commitTimeMilli +
                 ", txnId=" + txnId +
+                ", numEpochFinished=" + numEpochFinished +
                 '}';
     }
 }

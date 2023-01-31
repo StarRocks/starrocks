@@ -163,7 +163,14 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         }
 
         if (t_part.__isset.end_keys) {
-            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end keys");
+            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end_keys");
+        }
+
+        if (t_part.__isset.in_keys) {
+            part->in_keys.resize(t_part.in_keys.size());
+            for (int i = 0; i < t_part.in_keys.size(); i++) {
+                RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.in_keys[i], &part->in_keys[i]), "in_keys");
+            }
         }
 
         part->num_buckets = t_part.num_buckets;
@@ -192,7 +199,13 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             }
         }
         _partitions.emplace_back(part);
-        _partitions_map.emplace(&part->end_key, part);
+        if (t_part.__isset.in_keys) {
+            for (auto& in_key : part->in_keys) {
+                _partitions_map.emplace(&in_key, part);
+            }
+        } else {
+            _partitions_map.emplace(&part->end_key, part);
+        }
     }
 
     return Status::OK();
@@ -277,6 +290,14 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
             column->get_data().emplace_back(val);
             break;
         }
+        case TYPE_VARCHAR: {
+            int len = t_expr.string_literal.value.size();
+            const char* str_val = t_expr.string_literal.value.c_str();
+            Slice value(str_val, len);
+            auto* column = down_cast<BinaryColumn*>(_partition_columns[i].get());
+            column->append(value);
+            break;
+        }
         default: {
             std::stringstream ss;
             ss << "unsupported partition column node type, type=" << t_expr.node_type;
@@ -315,17 +336,18 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         ChunkRow row;
         row.columns = &partition_columns;
         row.index = 0;
+        bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
                 row.index = i;
-                auto it = _partitions_map.upper_bound(&row);
+                auto it = is_list_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
                 if (UNLIKELY(it == _partitions_map.end())) {
                     (*partitions)[i] = nullptr;
                     (*selection)[i] = 0;
                     if (invalid_row_index != nullptr) {
                         *invalid_row_index = i;
                     }
-                } else if (LIKELY(_part_contains(it->second, &row))) {
+                } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
                     (*partitions)[i] = it->second;
                     (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
                 } else {

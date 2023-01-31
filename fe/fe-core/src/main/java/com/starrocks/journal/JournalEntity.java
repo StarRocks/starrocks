@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BrokerMgr;
@@ -63,13 +64,14 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AlterWhClusterOplog;
+import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -96,6 +98,7 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -106,6 +109,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -118,6 +122,7 @@ import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
@@ -133,6 +138,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -190,6 +196,33 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_WH: {
+                data = Warehouse.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_SUSPEND_WH:
+            case OperationType.OP_DROP_WH: {
+                data = OpWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESUME_WH: {
+                data = ResumeWarehouseLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
+            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                data = AlterWhClusterOplog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_WH_MOD_PROP: {
+                data = AlterWhPropertyOplog.read(in);
                 isRead = true;
                 break;
             }
@@ -753,6 +786,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_UPDATE_USER_PROP_V2: {
+                data = UserPropertyInfo.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DROP_USER_V2: {
                 data = UserIdentity.read(in);
                 isRead = true;
@@ -769,13 +807,17 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_AUTH_UPGRDE_V2: {
+            case OperationType.OP_AUTH_UPGRADE_V2: {
                 data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_MV_JOB_STATE:
                 data = MVMaintenanceJob.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MV_EPOCH_UPDATE:
+                data = MVEpoch.read(in);
                 isRead = true;
                 break;
             default: {

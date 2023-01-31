@@ -72,7 +72,6 @@ public:
     // get_next only works after done().
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }

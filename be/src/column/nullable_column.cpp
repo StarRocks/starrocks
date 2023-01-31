@@ -15,6 +15,7 @@
 #include "column/nullable_column.h"
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "simd/simd.h"
@@ -88,7 +89,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 
 void NullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-    uint32_t orig_size = _null_column->size();
+    size_t orig_size = _null_column->size();
 
     if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
@@ -108,7 +109,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
 
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
-    uint32_t orig_size = _null_column->size();
+    size_t orig_size = _null_column->size();
 
     if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
@@ -222,7 +223,7 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::OK();
 }
 
-size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t NullableColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
     if (!_has_null) {
         _null_column->resize(s1);
@@ -379,7 +380,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     for (size_t i = 0; i < num; ++i) {
         xor_checksum ^= src[i];
         if (!src[i]) {
-            xor_checksum ^= _data_column->xor_checksum(i, i + 1);
+            xor_checksum ^= _data_column->xor_checksum(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1));
         }
     }
     return xor_checksum;

@@ -19,6 +19,7 @@
 
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
@@ -180,7 +181,7 @@ public:
 
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 
-    size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -200,7 +201,7 @@ public:
 
     Datum get(size_t n) const override { return Datum(_data[n]); }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 

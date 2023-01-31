@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "storage/del_vector.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "util/dynamic_cache.h"
@@ -32,6 +33,15 @@ class MemTracker;
 class KVStore;
 class RowsetUpdateState;
 class Tablet;
+
+class LocalDelvecLoader : public DelvecLoader {
+public:
+    LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    KVStore* _meta = nullptr;
+};
 
 // UpdateManager maintain update feature related data structures, including
 // PrimaryIndexe cache, RowsetUpdateState cache, DelVector cache and

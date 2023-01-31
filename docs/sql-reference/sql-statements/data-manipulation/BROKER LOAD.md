@@ -13,7 +13,7 @@ LOAD LABEL [<database_name>.]<label_name>
 )
 WITH BROKER
 [broker_properties]
-[opt_properties];
+[opt_properties]
 ```
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
@@ -67,6 +67,9 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   - `hdfs_host`: the IP address of the NameNode host in the HDFS cluster.
 
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
+
+  > **NOTICE**
+  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
 - `INTO TABLE`
 
@@ -218,28 +221,31 @@ If the source data is stored in an Amazon S3 bucket, provide the following confi
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key ID that you can use to access the Amazon S3 bucket. |
-| fs.s3a.secret.key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
+| aws.s3.access_key | The Access Key ID that you can use to access the Amazon S3 bucket. |
+| aws.s3.secret_key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
+| aws.s3.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
 
 For more information, see AWS documentation [Managing access keys for IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html).
 
 > **NOTE**
 >
-> - The S3A protocol is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+> If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
 
-#### Google CGS
+#### Google GCS
 
-If the source data is stored in a Google CGS bucket, provide the following configurations.
+If the source data is stored in a Google GCS bucket, provide the following configurations.
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key that you can use to access the Google CGS bucket. |
-| fs.s3a.secret.key | The Secret Key that you can use to access the Google CGS bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Google CGS bucket. |
+| fs.s3a.access.key | The Access Key that you can use to access the Google GCS bucket. |
+| fs.s3a.secret.key | The Secret Key that you can use to access the Google GCS bucket. |
+| fs.s3a.endpoint   | The endpoint that you can use to access the Google GCS bucket. |
 
-To create an Access/Secret key pair to access your Google CGS bucket, follow these steps:
+> **NOTE**
+>
+> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+
+To create an Access/Secret key pair to access your Google GCS bucket, follow these steps:
 
 1. Log in to [Google GCP](https://console.cloud.google.com/storage/settings).
 
@@ -323,13 +329,22 @@ The following parameters are supported:
 
     You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
-- `merge_condition`
+## Column mapping
 
-  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
+When you load data, you can configure column mapping between the data file and the destination table by using the `column_list` parameter. If the columns of the data file can be mapped one on one in sequence onto the columns of the destination table, you do not need to specify the `column_list` parameter. Otherwise, you must specify the `column_list` parameter, as shown in the following two use cases:
 
-  > **NOTE**
-  >
-  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates.
+- The columns of the data file can be mapped one on one onto the columns of the destination table, and the data does not need to be computed by functions before it is loaded into the destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged.
+
+  For example, the destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the destination table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+
+- The columns of the data file cannot be mapped one on one onto the columns of the destination table, and the data needs to be computed by functions before it is loaded into the mapping destination table columns.
+
+  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the destination table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the destination table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the destination table column names. For example, you can specify `(col1, col2, col3, temp)`, in which the fourth column of the data file is temporarily named `temp`.
+  - The destination table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `(col, year = year(col), month=month(col), day=day(col))`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping destination table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the destination table column `year`.
 
 ## Examples
 

@@ -19,6 +19,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -76,30 +77,6 @@ public:
             }
         }
         return true;
-#endif
-    }
-
-    void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
-        if (n == 0) return;
-        const uint32_t bucket_idx = hash_values[0] & _directory_mask;
-#ifdef __AVX2__
-        auto* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
-        __m256i now = _mm256_load_si256(addr);
-        for (size_t i = 0; i < n; i++) {
-            const __m256i mask = make_mask(hash_values[i] >> _log_num_buckets);
-            now = _mm256_or_si256(now, mask);
-        }
-        _mm256_store_si256(addr, now);
-#else
-        uint32_t masks[BITS_SET_PER_BLOCK];
-        for (size_t i = 0; i < n; i++) {
-            auto hash = hash_values[i];
-
-            make_mask(hash >> _log_num_buckets, masks);
-            for (int j = 0; j < BITS_SET_PER_BLOCK; ++j) {
-                _directory[bucket_idx][j] |= masks[j];
-            }
-        }
 #endif
     }
 
@@ -208,8 +185,8 @@ public:
 
     class RunningContext {
     public:
-        Column::Filter selection;
-        Column::Filter merged_selection;
+        Filter selection;
+        Filter merged_selection;
         bool use_merged_selection;
         std::vector<uint32_t> hash_values;
         const std::vector<int32_t>* bucketseq_to_partition;
@@ -721,7 +698,7 @@ private:
     template <bool hash_partition = false>
     void _t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
-        Column::Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
+        Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         _selection_filter.resize(size);
         uint8_t* _selection = _selection_filter.data();
 

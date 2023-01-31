@@ -215,11 +215,7 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
-// Number of etl thread pool size.
-CONF_Int32(etl_thread_pool_size, "8");
 CONF_Int32(udf_thread_pool_size, "1");
-// Number of etl thread pool size.
-CONF_Int32(etl_thread_pool_queue_size, "256");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -270,8 +266,6 @@ CONF_mInt32(max_garbage_sweep_interval, "3600");
 CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
 CONF_mInt32(trash_file_expire_time_sec, "259200");
-// check row nums for BE/CE and schema change. true is open, false is closed.
-CONF_mBool(row_nums_check, "true");
 //file descriptors cache, by default, cache 16384 descriptors
 CONF_Int32(file_descriptor_cache_capacity, "16384");
 // minimum file descriptor number
@@ -352,10 +346,10 @@ CONF_mInt64(min_base_compaction_size, "21474836480");
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
 CONF_Int64(max_row_source_mask_memory_bytes, "209715200");
 
-// Port to start debug webserver on
-CONF_Int32(webserver_port, "8040");
-// Number of webserver workers
-CONF_Int32(webserver_num_workers, "48");
+// Port to start debug http server in BE
+CONF_Int32(be_http_port, "8040");
+// Number of http workers in BE
+CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
@@ -404,22 +398,9 @@ CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
 CONF_Int32(fragment_pool_queue_size, "2048");
 
-//for cast
-// CONF_Bool(cast, "true");
-
 // Spill to disk when query
 // Writable scratch directories, splitted by ";"
 CONF_String(query_scratch_dirs, "${STARROCKS_HOME}");
-
-// Control the number of disks on the machine.  If 0, this comes from the system settings.
-CONF_Int32(num_disks, "0");
-// The maximum number of the threads per disk is also the max queue depth per disk.
-CONF_Int32(num_threads_per_disk, "0");
-// The read size is the size of the reads sent to os.
-// There is a trade off of latency and throughout, trying to keep disks busy but
-// not introduce seeks.  The literature seems to agree that with 8 MB reads, random
-// io and sequential io perform similarly.
-CONF_Int32(read_size, "8388608"); // 8 * 1024 * 1024, Read Size (in bytes)
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
@@ -440,16 +421,8 @@ CONF_Bool(use_mmap_allocate_chunk, "false");
 // acquire more free memory which can not be used by other modules
 CONF_Int64(chunk_reserved_bytes_limit, "2147483648");
 
-// The probing algorithm of partitioned hash table.
-// Enable quadratic probing hash table
-CONF_Bool(enable_quadratic_probing, "false");
-
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
-
-// for partition
-// CONF_Bool(enable_partitioned_hash_join, "false")
-CONF_Bool(enable_partitioned_aggregation, "true");
 
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
@@ -721,15 +694,15 @@ CONF_mBool(pipeline_print_profile, "false");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
-CONF_Int64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
+CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
 // Default is 16384*64, where 16384 is the chunk size in pipeline.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
-CONF_Int64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 //
 // Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
-CONF_Int64(tablet_internal_parallel_min_scan_dop, "4");
+CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
@@ -811,14 +784,6 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
-
-// Whether to enable segment overflow read
-// If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
-// after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
-// If false, segment will scan (remaining rows of chunk) rows each time, the final chunk after filtering
-// must be less than of equal to the capacity
-// default: true
-CONF_Bool(enable_segment_overflow_read_chunk, "true");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 

@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.MvId;
 import com.starrocks.common.io.DataOutputBuffer;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +35,7 @@ class MVEpochTest {
         binlog.getBinlogMap().put(
                 new BinlogConsumeStateVO.BinlogIdVO(1),
                 new BinlogConsumeStateVO.BinlogLSNVO(2, 1));
-        MVEpoch epoch = new MVEpoch(1024);
+        MVEpoch epoch = new MVEpoch(new MvId(0, 1024));
         epoch.onReady();
         epoch.onSchedule();
         epoch.onCommitting();

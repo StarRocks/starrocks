@@ -32,7 +32,7 @@ class TabletSchema;
 }
 
 namespace starrocks {
-class VectorizedSchema;
+class Schema;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -89,16 +89,13 @@ public:
 
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
-    StatusOr<std::unique_ptr<TabletWriter>> new_writer(RowsetTxnMetaPB* rowset_txn_meta,
-                                                       std::shared_ptr<const TabletSchema>& tschema);
-
-    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, VectorizedSchema schema);
+    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, Schema schema);
 
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
-    StatusOr<std::vector<RowsetPtr>> get_rowsets(TabletMetadata* metadata);
+    StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
 
     StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
                                       bool fill_cache);
@@ -115,11 +112,15 @@ public:
 
     [[nodiscard]] std::string del_location(std::string_view del_name) const;
 
+    [[nodiscard]] std::string delvec_location(int64_t version) const;
+
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
     UpdateManager* update_mgr() { return _mgr->update_mgr(); }
+
+    TabletManager* tablet_mgr() { return _mgr; }
 
 private:
     TabletManager* _mgr;

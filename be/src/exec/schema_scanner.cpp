@@ -44,6 +44,7 @@ Status SchemaScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("call Start before Init.");
     }
+    _runtime_state = state;
 
     return Status::OK();
 }

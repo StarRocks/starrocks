@@ -187,7 +187,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             OptExpression right = allCteConsumes.poll();
             OptExpression join;
             if (!hasGroupBy) {
-                join = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null),
+                join = OptExpression.create(
+                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, JoinOperator.HINT_UNREORDER),
                         left, right);
             } else {
                 // create inner join when aggregate has group by keys
@@ -234,7 +235,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             onPredicateList.add(onPredicate);
         }
         return OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                Utils.compoundAnd(onPredicateList)), left, right);
+                Utils.compoundAnd(onPredicateList), JoinOperator.HINT_UNREORDER), left, right);
     }
 
     private List<ColumnRefOperator> getJoinOnPredicateColumn(Operator operator) {
@@ -419,7 +420,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         if (consumeOutputMap.isEmpty()) {
             List<ColumnRefOperator> outputColumns =
                     produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
+                            map(factory::getColumnRef).collect(Collectors.toList());
             ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());

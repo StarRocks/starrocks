@@ -283,12 +283,14 @@ struct RowsetId {
     // to compatiable with old version
     void init(int64_t rowset_id) { init(1, rowset_id, 0, 0); }
 
-    void init(int64_t id_version, int64_t high, int64_t middle, int64_t low) {
+    void init(int64_t high, int64_t middle, int64_t low) { init(high >> 56, high & LOW_56_BITS, middle, low); }
+
+    void init(int64_t id_version, int64_t high_without_version, int64_t middle, int64_t low) {
         version = static_cast<int8_t>(id_version);
-        if (UNLIKELY(high >= MAX_ROWSET_ID)) {
-            LOG(FATAL) << "inc rowsetid is too large:" << high;
+        if (UNLIKELY(high_without_version >= MAX_ROWSET_ID)) {
+            LOG(FATAL) << "inc rowsetid is too large:" << high_without_version;
         }
-        hi = (id_version << 56) + (high & LOW_56_BITS);
+        hi = (id_version << 56) + (high_without_version & LOW_56_BITS);
         mi = middle;
         lo = low;
     }
@@ -328,17 +330,62 @@ struct RowsetId {
     }
 };
 
+struct HashOfRowsetId {
+    size_t operator()(const RowsetId& rowset_id) const {
+        size_t seed = 0;
+        seed = HashUtil::hash64(&rowset_id.hi, sizeof(rowset_id.hi), seed);
+        seed = HashUtil::hash64(&rowset_id.mi, sizeof(rowset_id.mi), seed);
+        seed = HashUtil::hash64(&rowset_id.lo, sizeof(rowset_id.lo), seed);
+        return seed;
+    }
+};
+
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;
+    TabletSegmentId() {}
+    TabletSegmentId(int64_t tid, uint32_t sid) : tablet_id(tid), segment_id(sid) {}
+    ~TabletSegmentId() {}
     bool operator==(const TabletSegmentId& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id;
+    }
+    bool operator<(const TabletSegmentId& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
     }
     std::string to_string() const {
         std::stringstream ss;
         ss << tablet_id << "_" << segment_id;
         return ss.str();
     };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentId& tsid) {
+        out << tsid.to_string();
+        return out;
+    }
+};
+
+struct TabletSegmentIdRange {
+    TabletSegmentId left;
+    TabletSegmentId right;
+    TabletSegmentIdRange(int64_t left_tid, uint32_t left_sid, int64_t right_tid, uint32_t right_sid)
+            : left(left_tid, left_sid), right(right_tid, right_sid) {}
+    ~TabletSegmentIdRange() {}
+    // make sure left <= right
+    bool is_valid() const { return left < right || left == right; }
+    std::string to_string() const {
+        std::stringstream ss;
+        ss << "[" << left.to_string() << "," << right.to_string() << "]";
+        return ss.str();
+    };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentIdRange& tsid_range) {
+        out << tsid_range.to_string();
+        return out;
+    }
 };
 
 } // namespace starrocks

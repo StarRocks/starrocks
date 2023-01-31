@@ -32,6 +32,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -40,7 +41,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -148,7 +148,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
 
         public String getDbName() {
-            return this.dbName;
+            return this.dbName != null ? this.dbName : getDb().getFullName();
         }
 
         public String getTableName() {
@@ -305,6 +305,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public void setTimeUnit(String timeUnit) {
             this.timeUnit = timeUnit;
+        }
+
+        @Override
+        public String toString() {
+            return "AsyncRefreshContext{" +
+                    "baseTableVisibleVersionMap=" + baseTableVisibleVersionMap +
+                    ", defineStartTime=" + defineStartTime +
+                    ", startTime=" + startTime +
+                    ", step=" + step +
+                    ", timeUnit='" + timeUnit + '\'' +
+                    '}';
         }
     }
 
@@ -577,7 +588,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setDatabase(db.getFullName());
         // set privilege
-        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
@@ -710,11 +721,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // storageCooldownTime
         Map<String, String> properties = this.getTableProperty().getProperties();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
                     .append("\" = \"");
             sb.append(TimeUtils.longToTimeString(
-                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
         }
 
         // partition TTL
@@ -766,7 +777,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     static {
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
         .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
         .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
         .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
@@ -789,7 +800,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // NEED_SHOW_PROPS
         NEED_SHOW_PROPS.forEach(prop -> {
             if (properties.containsKey(prop)) {
-                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
                     propsMap.put(prop, TimeUtils.longToTimeString(
                             Long.parseLong(properties.get(prop))));
                 } else {

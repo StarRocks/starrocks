@@ -240,7 +240,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         }
 
         public String format(Map<Integer, String> colMap) {
-            String colNames = columns.getStream().mapToObj(colMap::get).collect(Collectors.joining(","));
+            String colNames = columns.getStream().map(colMap::get).collect(Collectors.joining(","));
             return "Key{" +
                     "unique=" + unique +
                     ", columns=" + colNames +

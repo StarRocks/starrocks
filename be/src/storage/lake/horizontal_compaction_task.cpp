@@ -33,9 +33,6 @@ HorizontalCompactionTask::~HorizontalCompactionTask() = default;
 Status HorizontalCompactionTask::execute(Stats* stats) {
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     const KeysType keys_type = tablet_schema->keys_type();
-    if (keys_type == PRIMARY_KEYS) {
-        return Status::NotSupported("primary key compaction not supported");
-    }
     int64_t num_rows = 0;
     int64_t num_size = 0;
     for (auto& rowset : _input_rowsets) {
@@ -53,7 +50,7 @@ Status HorizontalCompactionTask::execute(Stats* stats) {
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
 
-    VectorizedSchema schema = ChunkHelper::convert_schema(*tablet_schema);
+    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;

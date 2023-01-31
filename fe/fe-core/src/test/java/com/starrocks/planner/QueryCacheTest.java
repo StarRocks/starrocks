@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.io.CharStreams;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.PartitionKey;
@@ -30,16 +30,19 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import kotlin.text.Charsets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -377,6 +380,23 @@ public class QueryCacheTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
+
+        String createTbl9StmtStr = "" +
+                "CREATE TABLE if not exists t9(\n" +
+                "REGION_CODE VARCHAR NOT NULL,\n" +
+                "REGION_NAME VARCHAR NOT NULL,\n" +
+                "v1 INT NOT NULL,\n" +
+                "v2 DECIMAL(7,2) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`REGION_CODE`, `REGION_NAME`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"default\"\n" +
+                ");";
+
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
@@ -395,10 +415,35 @@ public class QueryCacheTest {
         starRocksAssert.withTable(createTbl6StmtStr);
         starRocksAssert.withTable(createTbl7StmtStr);
         starRocksAssert.withTable(createTbl8StmtStr);
+        starRocksAssert.withTable(createTbl9StmtStr);
         starRocksAssert.withTable(hits);
+        getSsbCreateTableSqlList().forEach(createTblSql -> {
+            try {
+                starRocksAssert.withTable(createTblSql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
-    Optional<PlanFragment> getCachedFragment(String sql) {
+    public static List<String> getSsbCreateTableSqlList() {
+        List<String> ssbTableNames = Lists.newArrayList("lineorder", "customer", "dates", "supplier", "part");
+        ClassLoader loader = QueryCacheTest.class.getClassLoader();
+        List<String> createTableSqlList = ssbTableNames.stream().map(n -> {
+            try {
+                return CharStreams.toString(
+                        new InputStreamReader(
+                                Objects.requireNonNull(loader.getResourceAsStream("sql/ssb/" + n + ".sql")),
+                                Charsets.UTF_8));
+            } catch (Throwable e) {
+                return null;
+            }
+        }).collect(Collectors.toList());
+        Assert.assertFalse(createTableSqlList.contains(null));
+        return createTableSqlList;
+    }
+
+    List<PlanFragment> getCachedFragments(String sql) {
         ExecPlan plan = null;
         try {
             plan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
@@ -406,8 +451,12 @@ public class QueryCacheTest {
             e.printStackTrace();
             Assert.fail();
         }
-        Optional<PlanFragment> optFragment = plan.getFragments().stream()
-                .filter(f -> f.getCacheParam() != null).findFirst();
+        return plan.getFragments().stream()
+                .filter(f -> f.getCacheParam() != null).collect(Collectors.toList());
+    }
+
+    Optional<PlanFragment> getCachedFragment(String sql) {
+        Optional<PlanFragment> optFragment = getCachedFragments(sql).stream().findFirst();
         if (!optFragment.isPresent()) {
             System.out.println("wrong query:" + sql);
             try {
@@ -811,7 +860,6 @@ public class QueryCacheTest {
     public void testRandomFunctions() {
         List<String> queryList = Lists.newArrayList(
                 "select sum(v1) from t0 where uuid() like '%s'",
-                "select right(cast(random() as varchar), 2), sum(v1) from t0 where dt between '2022-02-01' and '2022-02-04' group by right(cast(random() as varchar), 2);",
                 "select sum(case when random()>0.5 then 1 else 0 end) from t0");
         Assert.assertTrue(queryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
@@ -1198,5 +1246,296 @@ public class QueryCacheTest {
             Assert.assertTrue(optFrag.isPresent());
             Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
+    }
+
+    @Test
+    public void testHashJoin() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "select sum(lo_revenue) as revenue\n" +
+                        "from lineorder join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25 and %s",
+                "select sum(lo_revenue) as revenue\n" +
+                        "from lineorder join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "where d_year = 1993  and lo_quantity < 25 and lo_discount between 1 and 3 and %s"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "lo_orderdate between '19930101' and '19990101'",
+                "lo_orderdate > '19940101'",
+                "lo_orderdate >= '19940101'",
+                "lo_orderdate < '19960101'",
+                "lo_orderdate <= '19960101'",
+                "lo_orderdate > '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate > '19950205' and lo_orderdate <= '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testHashJoin2() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "select sum(lo_revenue) as lo_revenue, d_year, p_brand\n" +
+                        "from lineorder\n" +
+                        "inner join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where p_category = 'MFGR#12' and s_region = 'AMERICA' and %s\n" +
+                        "group by d_year, p_brand\n" +
+                        "order by d_year, p_brand\n",
+
+                "select d_year, p_brand, sum(lo_revenue) as lo_revenue\n" +
+                        "from lineorder\n" +
+                        "inner join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where %s and p_category = 'MFGR#12' and s_region = 'AMERICA'\n" +
+                        "group by p_brand, d_year\n" +
+                        "order by d_year, p_brand\n",
+
+                "select d_year, p_brand, sum(lo_revenue) as lo_revenue\n" +
+                        "from lineorder\n" +
+                        "inner join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where %s and p_category = 'MFGR#12' and s_region = 'AMERICA'\n" +
+                        "group by p_brand, d_year\n" +
+                        "order by d_year\n",
+                "select d_year, p_brand, sum(lo_revenue) as lo_revenue\n" +
+                        "from lineorder\n" +
+                        "inner join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where %s and p_category = 'MFGR#12' and s_region = 'AMERICA'\n" +
+                        "group by p_brand, d_year\n" +
+                        "order by d_year\n" +
+                        "limit 1"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "lo_orderdate between '19930101' and '19990101'",
+                "lo_orderdate > '19940101'",
+                "lo_orderdate >= '19940101'",
+                "lo_orderdate < '19960101'",
+                "lo_orderdate <= '19960101'",
+                "lo_orderdate > '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate > '19950205' and lo_orderdate <= '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testHashJoin3() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "select c_nation, s_nation, d_year, sum(lo_revenue) as lo_revenue\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where c_region = 'ASIA' and s_region = 'ASIA' and %s\n" +
+                        "group by c_nation, s_nation, d_year\n" +
+                        "order by d_year asc, lo_revenue desc",
+                "select sum(lo_revenue) as lo_revenue,c_nation, s_nation, d_year\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where s_region = 'ASIA' and %s and c_region = 'ASIA'\n" +
+                        "group by s_nation, d_year, c_nation\n" +
+                        "order by d_year asc, lo_revenue desc",
+
+                "select sum(lo_revenue) as lo_revenue,c_nation, s_nation, d_year\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where s_region = 'ASIA' and %s and c_region = 'ASIA'\n" +
+                        "group by s_nation, d_year, c_nation"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "d_datekey between '19930101' and '19990101'",
+                "d_datekey > '19940101'",
+                "d_datekey >= '19940101'",
+                "d_datekey < '19960101'",
+                "d_datekey <= '19960101'",
+                "d_datekey > '19950205' and d_datekey < '19970712'",
+                "d_datekey > '19950205' and d_datekey <= '19970712'",
+                "d_datekey >= '19950205' and d_datekey < '19970712'",
+                "d_datekey >= '19950205' and d_datekey <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testHashJoin4() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "select d_year, c_nation, sum(lo_revenue) - sum(lo_supplycost) as profit\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "where c_region = 'AMERICA' and %s and s_region = 'AMERICA' and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')\n" +
+                        "group by d_year, c_nation\n" +
+                        "order by d_year, c_nation",
+                "select d_year, c_nation, sum(lo_revenue) + sum(lo_supplycost) as profit\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "join[broadcast] part on lo_partkey = p_partkey\n" +
+                        "where c_region = 'AMERICA' and s_region = 'AMERICA' and %s and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')\n" +
+                        "group by d_year, c_nation\n" +
+                        "order by d_year, c_nation"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "d_datekey between '19930101' and '19990101'",
+                "d_datekey > '19940101'",
+                "d_datekey >= '19940101'",
+                "d_datekey < '19960101'",
+                "d_datekey <= '19960101'",
+                "d_datekey > '19950205' and d_datekey < '19970712'",
+                "d_datekey > '19950205' and d_datekey <= '19970712'",
+                "d_datekey >= '19950205' and d_datekey < '19970712'",
+                "d_datekey >= '19950205' and d_datekey <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testHashJoinAndGroupingSets() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "select c_nation, s_nation, d_year, sum(lo_revenue) as lo_revenue\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where c_region = 'ASIA' and s_region = 'ASIA' and %s\n" +
+                        "group by cube(c_nation, s_nation, d_year)\n" +
+                        "order by d_year asc, lo_revenue desc",
+                "select sum(lo_revenue) as lo_revenue,c_nation, s_nation, d_year\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where s_region = 'ASIA' and %s and c_region = 'ASIA'\n" +
+                        "group by cube(s_nation, d_year, c_nation)\n" +
+                        "order by d_year asc, lo_revenue desc",
+
+                "select sum(lo_revenue) as lo_revenue,c_nation, s_nation, d_year\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
+                        "where s_region = 'ASIA' and %s and c_region = 'ASIA'\n" +
+                        "group by cube(s_nation, d_year, c_nation)"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "d_datekey between '19930101' and '19990101'",
+                "d_datekey > '19940101'",
+                "d_datekey >= '19940101'",
+                "d_datekey < '19960101'",
+                "d_datekey <= '19960101'",
+                "d_datekey > '19950205' and d_datekey < '19970712'",
+                "d_datekey > '19950205' and d_datekey <= '19970712'",
+                "d_datekey >= '19950205' and d_datekey < '19970712'",
+                "d_datekey >= '19950205' and d_datekey <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testAllSupportPlanNodes() {
+        List<String> sqlFormatList = Lists.newArrayList(
+                "with t1 as (\n" +
+                        "select p_brand, p_partkey, p_category,p_supplycost\n" +
+                        "from (\n" +
+                        "select p_brand, p_partkey, p_category, p_supplycost, row_number() over (partition by p_partkey, p_category order by p_supplycost) as rn\n" +
+                        "from\n" +
+                        "((select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.1, lo_supplycost) as p_supplycost \n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19950101 and 19951231\n" +
+                        "UNION ALL\n" +
+                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.2, lo_supplycost) as p_supplycost\n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19960101 and 19961231)\n" +
+                        "INTERSECT\n" +
+                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.3, lo_supplycost) as p_supplycost \n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19970101 and 19971231\n" +
+                        "EXCEPT\n" +
+                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.4, lo_supplycost) as p_supplycost \n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19980101 and 19981231) p\n" +
+                        ") pp\n" +
+                        "where rn = 1\n" +
+                        "order by p_supplycost\n" +
+                        "limit 100)\n" +
+                        "select d_year, s_city, p_brand, sum(lo_revenue) - sum(lo_supplycost) as profit\n" +
+                        "from lineorder\n" +
+                        "join[broadcast] dates on lo_orderdate = d_datekey\n" +
+                        "join[broadcast] customer on lo_custkey = c_custkey\n" +
+                        "join[broadcast] supplier on lo_suppkey <= s_suppkey\n" +
+                        "join[broadcast] t1 on lo_partkey = p_partkey\n" +
+                        "join (values(1),(2),(3)) v0\n" +
+                        "join unnest(split('1:2:4',':'))\n" +
+                        "where c_region = 'AMERICA'and s_nation = 'UNITED STATES'\n" +
+                        "and (d_year = 1997 or d_year = 1998)\n" +
+                        "and p_category = 'MFGR#14'\n" +
+                        "group by d_year, s_city, p_brand\n" +
+                        "order by d_year, s_city, p_brand;"
+        );
+        List<String> conjuncts = Lists.newArrayList(
+                "true",
+                "lo_orderdate between '19930101' and '19990101'",
+                "lo_orderdate > '19940101'",
+                "lo_orderdate >= '19940101'",
+                "lo_orderdate < '19960101'",
+                "lo_orderdate <= '19960101'",
+                "lo_orderdate > '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate > '19950205' and lo_orderdate <= '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate < '19970712'",
+                "lo_orderdate >= '19950205' and lo_orderdate <= '19970712'"
+        );
+        List<String> sqlList =
+                sqlFormatList.stream().flatMap(q -> conjuncts.stream().map(conj -> String.format(q, conj)))
+                        .collect(Collectors.toList());
+        testHelper(sqlList);
+    }
+
+    @Test
+    public void testMultipleCachePoint() {
+        String sql = "select sum(lo_revenue) as revenue\n" +
+                "from lineorder\n" +
+                "where lo_discount between 1 and 3 and lo_quantity < 25 " +
+                "and lo_supplycost = (select min(lo_supplycost + 1) from lineorder);";
+        Assert.assertEquals(2, getCachedFragments(sql).size());
+    }
+
+    @Test
+    public void testGroupByDifferentColumnsOnUnpartitionedTable() {
+        String sql0 = "SELECT REGION_CODE, count(*) from t9 group by 1;";
+        String sql1 = "SELECT REGION_NAME, count(*) from t9 group by 1;";
+        Optional<PlanFragment> frag0 = getCachedFragment(sql0);
+        Optional<PlanFragment> frag1 = getCachedFragment(sql1);
+        Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
+        Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
     }
 }

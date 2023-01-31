@@ -73,6 +73,10 @@ public:
 
     Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks);
 
+    pipeline::OperatorPtr get_internal_op(size_t i);
+
+    void set_precondition_ready(starrocks::RuntimeState* state) override;
+
 private:
     StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
     using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;

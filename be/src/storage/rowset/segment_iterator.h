@@ -23,10 +23,10 @@ namespace starrocks {
 class Segment;
 
 class ColumnPredicate;
-class VectorizedSchema;
+class Schema;
 class SegmentReadOptions;
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const VectorizedSchema& schema,
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
 
 } // namespace starrocks

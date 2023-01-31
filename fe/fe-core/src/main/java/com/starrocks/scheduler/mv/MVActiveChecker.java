@@ -19,6 +19,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -28,7 +29,7 @@ import java.util.List;
 
 public class MVActiveChecker extends LeaderDaemon {
     private static final long EXECUTOR_INTERVAL_MILLIS = 10000;
-    private static final Logger LOG = LogManager.getLogger(MVJobExecutor.class);
+    private static final Logger LOG = LogManager.getLogger(MVActiveChecker.class);
 
     public MVActiveChecker() {
         super("MV Active Checker", EXECUTOR_INTERVAL_MILLIS);
@@ -44,23 +45,26 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     private void runImpl() {
+        if (FeConstants.runningUnitTest) {
+            setStop();
+        }
+
         List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
                 listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
-        long startMillis = System.currentTimeMillis();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
                 for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
-                    if (table == null) {
+                    if (table == null && mv.isActive()) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
                                 baseTableInfo.getTableName(), mv.getId());
                         mv.setActive(false);
                         continue;
                     }
-                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    if (mv.isActive() && table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                         LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                                 baseTableInfo.getTableName(), mv.getId());
                         mv.setActive(false);
@@ -71,8 +75,5 @@ public class MVActiveChecker extends LeaderDaemon {
                 }
             }
         }
-
-        long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("[MVActiveChecker] finish check all materialized view in {}ms", duration);
     }
 }

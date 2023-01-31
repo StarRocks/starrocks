@@ -50,6 +50,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
@@ -75,12 +76,14 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -171,7 +174,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -249,6 +251,7 @@ import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -397,7 +400,7 @@ public class GlobalStateMgr {
 
     // We're developing a new privilege & authentication framework
     // This is used to turned on in hard code.
-    public static final boolean USING_NEW_PRIVILEGE = false;
+    public static final boolean USING_NEW_PRIVILEGE = true;
 
     // change to true in UT
     private AtomicBoolean usingNewPrivilege;
@@ -477,6 +480,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private WarehouseManager warehouseMgr;
+
     private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -553,8 +558,8 @@ public class GlobalStateMgr {
         this(false);
     }
 
-    // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCheckpointCatalog) {
+    // if isCkptGlobalState is true, it means that we should not collect thread pool metric
+    private GlobalStateMgr(boolean isCkptGlobalState) {
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -603,19 +608,19 @@ public class GlobalStateMgr {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
         this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
-                        Config.desired_max_waiting_jobs, !isCheckpointCatalog);
+                        Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                 Config.async_load_task_pool_size,
-                Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
+                Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -642,6 +647,7 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
@@ -676,7 +682,7 @@ public class GlobalStateMgr {
 
     public static GlobalStateMgr getCurrentState() {
         if (isCheckpointThread()) {
-            // only checkpoint thread it self will goes here.
+            // only checkpoint thread itself will go here.
             // so no need to care about the thread safe.
             if (CHECKPOINT == null) {
                 CHECKPOINT = new GlobalStateMgr(true);
@@ -859,6 +865,10 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
+    }
+
+    public WarehouseManager getWarehouseMgr() {
+        return warehouseMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1101,7 +1111,7 @@ public class GlobalStateMgr {
 
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
-            // start other daemon threads that should running on all FE
+            // start other daemon threads that should run on all FEs
             startNonLeaderDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
 
@@ -1292,6 +1302,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
+            // ** NOTICE **: always add new code at the end
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
@@ -1345,8 +1356,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
-            // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
+            checksum = warehouseMgr.loadWarehouses(dis, checksum);
+            remoteChecksum = dis.readLong();
+            // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1362,9 +1375,50 @@ public class GlobalStateMgr {
             domainResolver = new DomainResolver(auth);
         }
 
+        try {
+            postLoadImage();
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
+
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    private void postLoadImage() {
+        processMvRelatedMeta();
+    }
+
+    private void processMvRelatedMeta() {
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        long startMillis = System.currentTimeMillis();
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                    Table table = baseTableInfo.getTable();
+                    if (table == null) {
+                        LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
+                                baseTableInfo.getTableName(), mv.getId());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                        LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                                baseTableInfo.getTableName(), mv.getId());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    MvId mvId = new MvId(db.getId(), mv.getId());
+                    table.addRelatedMaterializedView(mvId);
+                }
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startMillis;
+        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
@@ -1573,6 +1627,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+            // ** NOTICE **: always add new code at the end
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = nodeMgr.saveLeaderInfo(dos, checksum);
             checksum = nodeMgr.saveFrontends(dos, checksum);
@@ -1618,9 +1673,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
-            // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
-
+            checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
+            // ** NOTICE **: always add new code at the end
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2152,7 +2208,7 @@ public class GlobalStateMgr {
         }
         sb.append("\n) ENGINE=");
         if (table.isLakeTable()) {
-            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+            sb.append(EngineType.STARROCKS.name()).append(" ");
         } else {
             sb.append(table.getType().name()).append(" ");
         }
@@ -2276,12 +2332,10 @@ public class GlobalStateMgr {
                 sb.append(olapTable.enablePersistentIndex()).append("\"");
 
                 // replicated_storage
-                if (olapTable.enableReplicatedStorage()) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                            .append("\" = \"");
-                    sb.append(olapTable.enableReplicatedStorage()).append("\"");
-                }
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
 
                 // binlog config
                 if (olapTable.containsBinlogConfig()) {
@@ -3060,6 +3114,7 @@ public class GlobalStateMgr {
                                 TTabletMetaType metaType) {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
+
     public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
         localMetastore.modifyBinlogMeta(db, table, binlogConfig);
     }
@@ -3086,6 +3141,14 @@ public class GlobalStateMgr {
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
         this.alter.getClusterHandler().cancel(stmt);
+    }
+
+    // Change current warehouse of this session.
+    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+        if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+        }
+        ctx.setCurrentWarehouse(newWarehouseName);
     }
 
     // Change current catalog of this session.
@@ -3125,10 +3188,14 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
+        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
@@ -3141,11 +3208,6 @@ public class GlobalStateMgr {
                             ctx.getQualifiedUser(), dbName);
                 }
             }
-        }
-
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
         ctx.setDatabase(dbName);

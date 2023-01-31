@@ -43,11 +43,25 @@ rm -rf ${BROKER_OUTPUT}
 install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
            ${BROKER_OUTPUT}lib/
 
-# download aliyun hadoop oss and tencent hadoop cos jar, this can not be found in maven repository, so we download it manually
+# download aliyun hadoop oss and tencent hadoop cos jar, this can not be found in maven repository, so we download it manually,
+# here we update oss library from hadoop-aliyun-2.7.2.jar to jindosdk-4.6.2 to consistent with the oss library in FE and BE
 wget http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz
 tar xzf broker_thirdparty_jars.tar.gz
+rm broker_thirdparty_jars/hadoop-aliyun-2.7.2.jar
 mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
 rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz
+
+# jindosdk-4.6.2.tar.gz is very large, about 931M, so we cache it in local disk
+if [ ! -d ${BROKER_HOME}/jindosdk-4.6.2 ]; then
+    echo "download aliyun jindo..."
+    wget https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/release/4.6.2/jindosdk-4.6.2.tar.gz
+    tar xvf jindosdk-4.6.2.tar.gz
+fi
+cp -r jindosdk-4.6.2/lib/*.jar ${BROKER_OUTPUT}/lib/
+if [ -f ${BROKER_HOME}/jindosdk-4.6.2.tar.gz ]; then
+    rm -r ${BROKER_HOME}/jindosdk-4.6.2.tar.gz
+fi
+
 
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
 cp -r -p ${BROKER_HOME}/conf/*.conf ${BROKER_OUTPUT}/conf/
@@ -56,4 +70,7 @@ cp -r -p ${BROKER_HOME}/conf/log4j.properties ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/target/lib/* ${BROKER_OUTPUT}/lib/
 cp -r -p ${BROKER_HOME}/target/apache_hdfs_broker.jar ${BROKER_OUTPUT}/lib/
 
-echo "Finished"
+echo ""
+echo "***************************************"
+echo "**Successfully build StarRocks Broker**"
+echo "***************************************"

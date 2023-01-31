@@ -177,8 +177,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "from t0";
         assertPlanContains(sql, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
-        sql =
-                "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
+        sql = "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
                         "from t0";
         assertPlanContains(sql, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
 
@@ -210,7 +209,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "ARRAY<ARRAY<tinyint(4)>>[[1,2],[3,4]][1][2]");
 
         sql = "select array[][1]";
-        assertPlanContains(sql, "ARRAY<unknown type: NULL_TYPE>[][1]");
+        assertPlanContains(sql, "ARRAY<boolean>[][1]");
 
         sql = "select array[v1 = 1, v2 = 2, true] from t0";
         assertPlanContains(sql, "<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]");
@@ -221,7 +220,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 2> : CAST(ARRAY<boolean>[NULL][1] AS SMALLINT) + 1\n" +
                 "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>" +
                 "[[1,2,3],[1,1,1]][2][2] AS SMALLINT)");
 
@@ -231,7 +230,6 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  <slot 4> : CAST(3: c2[1] AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
                 "  |  <slot 5> : 3: c2[1]");
     }
-
 
     @Test
     public void testSelectArrayFunction() throws Exception {
@@ -338,6 +336,115 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testAliasRelation() throws Exception {
+        String sql = "select * from (select 1,2,3)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 2\n" +
+                "  |  <slot 4> : 3");
+
+        sql = "select 1 from (select 1,2)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 1");
+
+        sql = "select v1+1 from (select v1,v2 from t0)";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 1: v1 + 1");
+
+        sql = "select a.v1+1 from (select v1, v2 from t0) a";
+        assertPlanContains(sql, "<slot 4> : 1: v1 + 1");
+
+        sql = "select v1 from (select v1 ,v4 from t0 join t1 on v2 = v5)";
+        assertPlanContains(sql, " 5:Project\n" +
+                "  |  <slot 1> : 1: v1");
+
+        sql = "select v1 from (select v1 from t0 cross join t1)";
+        assertPlanContains(sql, "5:Project\n" +
+                "  |  <slot 1> : 1: v1");
+
+        sql = "select\n" +
+                "    o_year,\n" +
+                "    sum(case\n" +
+                "            when nation = 'IRAN' then volume\n" +
+                "            else 0\n" +
+                "        end) / sum(volume) as mkt_share\n" +
+                "from\n" +
+                "    (\n" +
+                "        select\n" +
+                "            extract(year from o_orderdate) as o_year,\n" +
+                "            l_extendedprice * (1 - l_discount) as volume,\n" +
+                "            n2.n_name as nation\n" +
+                "        from\n" +
+                "            part,\n" +
+                "            supplier,\n" +
+                "            lineitem,\n" +
+                "            orders,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2,\n" +
+                "            region\n" +
+                "        where\n" +
+                "                p_partkey = l_partkey\n" +
+                "          and s_suppkey = l_suppkey\n" +
+                "          and l_orderkey = o_orderkey\n" +
+                "          and o_custkey = c_custkey\n" +
+                "          and c_nationkey = n1.n_nationkey\n" +
+                "          and n1.n_regionkey = r_regionkey\n" +
+                "          and r_name = 'MIDDLE EAST'\n" +
+                "          and s_nationkey = n2.n_nationkey\n" +
+                "          and o_orderdate between date '1995-01-01' and date '1996-12-31'\n" +
+                "          and p_type = 'ECONOMY ANODIZED STEEL'\n" +
+                "    ) \n" +
+                "group by\n" +
+                "    o_year\n" +
+                "order by\n" +
+                "    o_year ";
+        assertPlanContains(sql, "  41:Project\n" +
+                "  |  <slot 69> : 69: year\n" +
+                "  |  <slot 74> : 72: sum / 73: sum");
+    }
+
+    @Test
+    public void testSelectSetOperation() throws Exception {
+        String sql = "select * from t0 union select * from t1 union select * from t0";
+        assertPlanContains(sql, "7:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 10: v1, 11: v2, 12: v3\n" +
+                "  |  \n" +
+                "  0:UNION");
+
+        sql = "select * from t0 intersect select * from t1 intersect select * from t0";
+        assertPlanContains(sql, "0:INTERSECT");
+
+        sql = "select v1 from t0 except select v4 from t1 except select v2 from t0";
+        assertPlanContains(sql, "0:EXCEPT");
+
+        sql = "select v1 from t0 union all select v4 from t1 union select v2 from t0 limit 10";
+        assertPlanContains(sql, "0:UNION", "11:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 11: v1\n" +
+                "  |  limit: 10");
+
+        sql = "select * from (select * from t0 union all select * from t1 union all select * from t0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
+                "limit 2;";
+        assertPlanContains(sql, "0:UNION", "7:TOP-N\n" +
+                "  |  order by: <slot 10> 10: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2");
+
+        sql = "select * from (select v1 from t0 intersect select v4 from t1 intersect select v3 from t0 limit 10) tt " +
+                "order by v1 limit 2;";
+        assertPlanContains(sql, "0:INTERSECT\n" +
+                "  |  limit: 10",
+                "8:TOP-N\n" +
+                        "  |  order by: <slot 10> 10: v1 ASC\n" +
+                        "  |  offset: 0\n" +
+                        "  |  limit: 2");
+    }
+
+    @Test
     public void testSelectGroupBy() throws Exception {
         String sql = "select v1, count(v2) from t0 group by v1";
         assertPlanContains(sql, "output: count(2: v2)\n" +
@@ -376,6 +483,59 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select v1, v2, sum(v3) from t0 group by GROUPING SETS ((v1, v2),(v1),(v2),())";
         assertPlanContains(sql, "group by: 1: v1, 2: v2, 5: GROUPING_ID");
+    }
+
+    @Test
+    public void testSelectCTE() throws Exception {
+        String sql = "with c1(a,b,c) as (select * from t0) select c1.* from c1";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1(a,b,c) as (select * from t0) select t.* from c1 t";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1 as (select * from t0) select c1.* from c1";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1 as (select * from t0) select a.* from c1 a";
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+
+        sql = "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2";
+        assertPlanContains(sql, "3:NESTLOOP JOIN");
+
+        sql = "with tbl1 as (select v1, v2 from t0), tbl2 as (select v4, v5 from t1) select tbl1.*, tbl2.* from " +
+                "tbl1 join tbl2 on tbl1.v1 = tbl2.v4";
+        assertPlanContains(sql, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v1 = 10: v4");
+
+        sql = "with cte1 as ( with cte1 as (select * from t0) select * from cte1) select * from cte1";
+        assertPlanContains(sql, "10: v1 | 11: v2 | 12: v3");
+
+        sql = "with cte1 as (select * from test.t0), cte2 as (select * from cte1) select * from cte1";
+        assertPlanContains(sql, "7: v1 | 8: v2 | 9: v3");
+
+        sql = "with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1";
+        assertPlanContains(sql, "4: v1 | 5: v2");
+
+        sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
+                "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
+                "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
+        assertPlanContains(sql, "0:UNION");
+
+        sql = "with x0 as (select * from t0) " +
+                "select * from (with x1 as (select * from t1) select * from x1 join x0 on x1.v4 = x0.v1) tt";
+        assertPlanContains(sql, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v4 = 10: v1");
+
+        sql = "with x0 as (select * from t0) " +
+                "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
+        assertPlanContains(sql, "8:NESTLOOP JOIN", "LEFT SEMI JOIN (PARTITIONED)");
     }
 
     @Test

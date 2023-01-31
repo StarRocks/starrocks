@@ -19,6 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
@@ -33,25 +34,26 @@ class UpdateManager;
 
 class MetaFileBuilder {
 public:
-    explicit MetaFileBuilder(std::shared_ptr<TabletMetadata>& metadata_ptr);
-    ~MetaFileBuilder() {}
+    explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
+
     //// for PK table
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
-    Status finalize(LocationProvider* location_provider, UpdateManager* mgr);
-    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
-
-    //// for non-PK table
-    Status finalize(LocationProvider* location_provider);
-
-private:
-    Status _finalize_delvec(LocationProvider* location_provider, int64_t version);
+    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+    Status finalize();
+    StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
+    // when apply or finalize fail, need to clear primary index cache
+    void handle_failure();
 
 private:
+    Status _finalize_delvec(int64_t version);
+
+private:
+    Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
+    UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
-    std::vector<std::pair<TabletSegmentId, DelVectorPtr>> _cache_delvec_updates;
 };
 
 class MetaFileReader {
@@ -69,6 +71,13 @@ private:
     Status _err_status;
     bool _load;
 };
+
+bool is_primary_key(TabletMetadata* metadata);
+bool is_primary_key(const TabletMetadata& metadata);
+
+// TODO(yixin): cache rowset_rssid_to_path
+void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path);
+void find_missed_tsid_range(TabletMetadata* metadata, std::vector<TabletSegmentIdRange>& tsid_ranges);
 
 } // namespace lake
 } // namespace starrocks

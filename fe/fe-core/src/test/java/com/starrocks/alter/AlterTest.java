@@ -44,6 +44,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -64,7 +65,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -91,7 +91,6 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -349,6 +348,7 @@ public class AlterTest {
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -451,6 +451,7 @@ public class AlterTest {
         alterMaterializedView(alterStmt, false);
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
+        ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -1663,14 +1664,16 @@ public class AlterTest {
 
     @Test
     public void testRenameDb() throws Exception {
-        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
-        auth.createUser(createUserStmt);
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        authenticationManager.createUser(createUserStmt);
 
-        String sql = "grant ALTER_PRIV on test to testuser";
-        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
+        String sql = "grant ALTER on database test to testuser";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
         testUser.analyze();
@@ -1684,14 +1687,14 @@ public class AlterTest {
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testAddMultiItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1731,14 +1734,14 @@ public class AlterTest {
 
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testAddSingleItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1776,14 +1779,14 @@ public class AlterTest {
 
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testSingleItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -1852,14 +1855,14 @@ public class AlterTest {
         file.delete();
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testMultiItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2040,14 +2043,14 @@ public class AlterTest {
         Config.use_staros = false;
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2070,14 +2073,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2104,14 +2107,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +
@@ -2134,14 +2137,14 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = DdlException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) \n" +
+                "      dt VARCHAR(10) not null,\n" +
+                "      province VARCHAR(64) not null\n" +
                 ")\n" +
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(id)\n" +

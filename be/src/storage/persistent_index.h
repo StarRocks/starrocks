@@ -28,7 +28,7 @@
 namespace starrocks {
 
 class Tablet;
-class VectorizedSchema;
+class Schema;
 class Column;
 
 // Add version for persistent index file to support future upgrade compatibility
@@ -168,7 +168,7 @@ public:
                                                                  bool without_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket) const = 0;
+                                            size_t npage_hint, size_t nbucket, bool without_null) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -598,7 +598,7 @@ private:
     Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const VectorizedSchema& pkey_schema,
+    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const Schema& pkey_schema,
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,

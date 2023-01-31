@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -201,10 +200,11 @@ public class PredicateStatisticsCalculator {
             selectivity =
                     Math.max(selectivity, StatisticsEstimateCoefficient.IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT);
             double rowCount = statistics.getOutputRowCount() * selectivity;
-            return StatisticsEstimateUtils.adjustStatisticsByRowCount(Statistics.buildFrom(statistics).
-                    setOutputRowCount(rowCount).addColumnStatistics(
-                            ImmutableMap.of(children.get(0), ColumnStatistic.buildFrom(isNullColumnStatistic).
-                                    setNullsFraction(predicate.isNotNull() ? 0.0 : 1.0).build())).build(), rowCount);
+            Statistics.Builder builder = Statistics.buildFrom(statistics).setOutputRowCount(rowCount);
+            builder.addColumnStatistic(children.get(0), ColumnStatistic.buildFrom(isNullColumnStatistic)
+                    .setNullsFraction(predicate.isNotNull() ? 0.0 : 1.0)
+                    .build());
+            return StatisticsEstimateUtils.adjustStatisticsByRowCount(builder.build(), rowCount);
         }
 
         @Override
@@ -217,7 +217,7 @@ public class PredicateStatisticsCalculator {
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
                     "ConstantRef-cmp-ConstantRef not supported here, %s should be eliminated earlier",
-                            predicate);
+                    predicate);
             Preconditions.checkState(!(leftChild.isConstant() && rightChild.isVariable()),
                     "Constant-cmp-Column not supported here, %s should be deal earlier", predicate);
             // For CastOperator, we need use child as column statistics

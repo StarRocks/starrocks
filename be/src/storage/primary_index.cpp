@@ -922,11 +922,11 @@ PrimaryIndex::~PrimaryIndex() {
     }
 }
 
-PrimaryIndex::PrimaryIndex(const VectorizedSchema& pk_schema) {
+PrimaryIndex::PrimaryIndex(const Schema& pk_schema) {
     _set_schema(pk_schema);
 }
 
-void PrimaryIndex::_set_schema(const VectorizedSchema& pk_schema) {
+void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     _pk_schema = pk_schema;
     std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
@@ -1357,7 +1357,7 @@ std::string PrimaryIndex::to_string() const {
     return strings::Substitute("PrimaryIndex tablet:$0", _tablet_id);
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const VectorizedSchema& pk_schema) {
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 

@@ -18,6 +18,7 @@
 
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -138,7 +139,7 @@ public:
 
     ColumnPtr clone_shared() const override;
 
-    size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -200,13 +201,13 @@ public:
 
     const Buffer<T>& get_pool() const { return _pool; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        int size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        size_t size = this->size();
+        for (size_t i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

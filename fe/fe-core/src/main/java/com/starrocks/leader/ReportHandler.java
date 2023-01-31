@@ -1086,27 +1086,6 @@ public class ReportHandler extends Daemon {
                                 }
                                 break;
                             }
-
-                            if (replica.getVersion() > tTabletInfo.getVersion()) {
-                                LOG.warn("recover for replica {} of tablet {} on backend {}",
-                                        replica.getId(), tabletId, backendId);
-                                if (replica.getVersion() == tTabletInfo.getVersion() + 1) {
-                                    // this missing version is the last version of this replica
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            replica.getVersion(), /* set LFV to current FE version */
-                                            tTabletInfo.getVersion()); /* set LSV to BE report version */
-                                } else {
-                                    // this missing version is a hole
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            tTabletInfo.getVersion() + 1, /* LFV */
-                                            /* remain LSV unchanged, which should be equal to replica.version */
-                                            replica.getLastSuccessVersion());
-                                }
-                                // no need to write edit log, if FE crashed, this will be recovered again
-                                break;
-                            }
                         }
                     }
                 }
@@ -1283,7 +1262,7 @@ public class ReportHandler extends Daemon {
                         tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
                                 olapTable.getCurBinlogConfig()));
                     } else if (beBinlogConfigVersion == feBinlogConfigVersion) {
-                        if (olapTable.enableBinlog() && olapTable.getBinlogAvailableVersion().size() == 0) {
+                        if (olapTable.isBinlogEnabled() && olapTable.getBinlogAvailableVersion().size() == 0) {
                             // not to check here is that the function may need to get the write db lock
                             needToCheck = true;
                         }
@@ -1303,7 +1282,7 @@ public class ReportHandler extends Daemon {
             }
         }
 
-        LOG.info("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
+        LOG.debug("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
         if (!tabletToBinlogConfig.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig);

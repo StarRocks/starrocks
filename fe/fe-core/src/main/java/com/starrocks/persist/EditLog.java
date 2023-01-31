@@ -40,6 +40,7 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -75,7 +76,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -91,6 +91,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -101,6 +102,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -144,6 +146,55 @@ public class EditLog {
                     long id = Long.parseLong(idString);
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                             .initTransactionId(id + 1);
+                    break;
+                }
+                case OperationType.OP_CREATE_WH: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
+                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayAddCluster(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayRemoveCluster(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WH_MOD_PROP: {
+                    AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
+                    break;
+                }
+                case OperationType.OP_SUSPEND_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replaySuspendWarehouse(warehouseName);
+                    break;
+                }
+                case OperationType.OP_RESUME_WH: {
+                    ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
+                    break;
+                }
+                case OperationType.OP_DROP_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    String warehouseName = log.getWarehouseName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(warehouseName);
                     break;
                 }
                 case OperationType.OP_CREATE_DB: {
@@ -738,6 +789,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
+                case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -911,6 +964,11 @@ public class EditLog {
                             info.getUserIdentity(), info.getAuthenticationInfo());
                     break;
                 }
+                case OperationType.OP_UPDATE_USER_PROP_V2: {
+                    UserPropertyInfo info = (UserPropertyInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayUpdateUserProperty(info);
+                    break;
+                }
                 case OperationType.OP_DROP_USER_V2: {
                     UserIdentity userIdentity = (UserIdentity) journal.getData();
                     globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
@@ -926,7 +984,7 @@ public class EditLog {
                     globalStateMgr.getPrivilegeManager().replayDropRole(info);
                     break;
                 }
-                case OperationType.OP_AUTH_UPGRDE_V2: {
+                case OperationType.OP_AUTH_UPGRADE_V2: {
                     AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
                     globalStateMgr.replayAuthUpgrade(info);
                     break;
@@ -934,6 +992,11 @@ public class EditLog {
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
                     MVManager.getInstance().replay(job);
+                    break;
+                }
+                case OperationType.OP_MV_EPOCH_UPDATE: {
+                    MVEpoch epoch = (MVEpoch) journal.getData();
+                    MVManager.getInstance().replayEpoch(epoch);
                     break;
                 }
                 default: {
@@ -1014,8 +1077,8 @@ public class EditLog {
                     Thread.sleep(1000);
                 }
                 // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
-                // will simplely exit the whole process
+                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such
+                // scenario JournalWriter will simply exit the whole process
                 result = task.get();
                 break;
             } catch (InterruptedException | ExecutionException e) {
@@ -1037,6 +1100,34 @@ public class EditLog {
 
     public void logSaveTransactionId(long transactionId) {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+    }
+
+    public void logCreateWarehouse(Warehouse warehouse) {
+        logEdit(OperationType.OP_CREATE_WH, warehouse);
+    }
+
+    public void logAddCluster(AlterWhClusterOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_ADD_CLUSTER, log);
+    }
+
+    public void logRemoveCluster(AlterWhClusterOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_REMOVE_CLUSTER, log);
+    }
+
+    public void logModifyWhProperty(AlterWhPropertyOplog log) {
+        logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
+    }
+
+    public void logSuspendWarehouse(OpWarehouseLog log) {
+        logEdit(OperationType.OP_SUSPEND_WH, log);
+    }
+
+    public void logResumeWarehouse(ResumeWarehouseLog log) {
+        logEdit(OperationType.OP_RESUME_WH, log);
+    }
+
+    public void logDropWarehouse(OpWarehouseLog log) {
+        logEdit(OperationType.OP_DROP_WH, log);
     }
 
     public void logCreateDb(Database db) {
@@ -1598,6 +1689,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 
+    public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
+        logEdit(OperationType.OP_UPDATE_USER_PROP_V2, propertyInfo);
+    }
+
     public void logDropUser(UserIdentity userIdentity) {
         logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
     }
@@ -1637,7 +1732,7 @@ public class EditLog {
     }
 
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
-        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
+        logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

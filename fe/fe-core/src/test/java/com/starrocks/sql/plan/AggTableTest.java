@@ -69,8 +69,10 @@ public class AggTableTest extends PlanTestBase {
 
     @Test
     public void testSingleAgg6() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
         String sql = getFragmentPlan("select SUM(v3 + 1) from test_agg");
         assertTestAggOFF(sql, "The parameter of aggregate function isn't value column or CAST/CASE-WHEN expression");
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(true);
     }
 
     @Test

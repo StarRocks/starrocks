@@ -18,6 +18,19 @@
 
 namespace starrocks {
 
+MVMaintenanceTaskInfo MVMaintenanceTaskInfo::from_maintenance_task(const TMVMaintenanceTasks& maintenance_task) {
+    MVMaintenanceTaskInfo res;
+    res.signature = maintenance_task.signature;
+    res.db_name = maintenance_task.db_name;
+    res.mv_name = maintenance_task.mv_name;
+    res.db_id = maintenance_task.db_id;
+    res.mv_id = maintenance_task.mv_id;
+    res.job_id = maintenance_task.job_id;
+    res.task_id = maintenance_task.task_id;
+    res.query_id = maintenance_task.query_id;
+    return res;
+}
+
 EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch) {
     EpochInfo res;
     res.epoch_id = start_epoch.epoch.epoch_id;

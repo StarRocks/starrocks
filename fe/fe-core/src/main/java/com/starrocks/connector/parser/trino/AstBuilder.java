@@ -15,6 +15,7 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -54,8 +55,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
@@ -123,6 +126,7 @@ import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
 import io.trino.sql.tree.SearchedCaseExpression;
+import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
 import io.trino.sql.tree.SimpleGroupBy;
 import io.trino.sql.tree.SingleColumn;
@@ -137,6 +141,7 @@ import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
 import io.trino.sql.tree.WindowFrame;
 import io.trino.sql.tree.WindowSpecification;
+import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -152,6 +157,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final long sqlMode;
@@ -232,13 +238,50 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitQuery(Query node, ParseTreeContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(node.getQueryBody(), context);
+        // When trino have a simple query specification followed by order by, offset, limit or fetch,
+        // it fold the order by, limit, offset or fetch clauses into the query specification,
+        // no need to do anything else here.
+        if (!(node.getQueryBody() instanceof QuerySpecification)) {
+            if (node.getOrderBy().isPresent()) {
+                queryRelation.setOrderBy(visit(node.getOrderBy().get(), context, OrderByElement.class));
+            } else {
+                queryRelation.setOrderBy(new ArrayList<>());
+            }
+            queryRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
+        }
+
         // fetch
         // offset
         // with
+        List<CTERelation> withQuery = new ArrayList<>();
+        if (node.getWith().isPresent()) {
+            withQuery = visit(node.getWith().get().getQueries(), context, CTERelation.class);
+        }
+        withQuery.forEach(queryRelation::addCTERelation);
 
         return new QueryStatement(queryRelation);
     }
 
+    @Override
+    protected ParseNode visitWithQuery(WithQuery node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getQuery(), context);
+
+        return new CTERelation(
+                RelationId.of(queryStatement.getQueryRelation()).hashCode(),
+                node.getName().getValue(),
+                getColumnNames(node.getColumnNames()),
+                queryStatement);
+    }
+
+    public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
+        if (!columnNames.isPresent() || columnNames.get().isEmpty()) {
+            return null;
+        }
+
+        // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+        // to lowercase characters to facilitate subsequent matching.
+        return columnNames.get().stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+    }
 
     @Override
     protected ParseNode visitQuerySpecification(QuerySpecification node, ParseTreeContext context) {
@@ -412,28 +455,50 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new SubqueryRelation(queryStatement);
     }
 
-    @Override
-    protected ParseNode visitUnion(Union node, ParseTreeContext context) {
+    protected ParseNode visitSetOperation(SetOperation node, ParseTreeContext context) {
         QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
         QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
         SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+
+        if (node instanceof Union) {
+            if (left instanceof UnionRelation && ((UnionRelation) left).getQualifier().equals(setQualifier)) {
+                ((UnionRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new UnionRelation(Lists.newArrayList(left, right), setQualifier);
+            }
+        } else if (node instanceof Intersect) {
+            if (left instanceof IntersectRelation && ((IntersectRelation) left).getQualifier().equals(setQualifier)) {
+                ((IntersectRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+            }
+        } else if (node instanceof Except) {
+            if (left instanceof ExceptRelation && ((ExceptRelation) left).getQualifier().equals(setQualifier)) {
+                ((ExceptRelation) left).addRelation(right);
+                return left;
+            } else {
+                return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+            }
+        } else {
+            throw new IllegalArgumentException("Unsupported set operation: " + node);
+        }
+    }
+
+    @Override
+    protected ParseNode visitUnion(Union node, ParseTreeContext context) {
+        return visitSetOperation(node, context);
     }
 
     @Override
     protected ParseNode visitIntersect(Intersect node, ParseTreeContext context) {
-        QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
-        QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
-        SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new IntersectRelation(Lists.newArrayList(left, right), setQualifier);
+        return visitSetOperation(node, context);
     }
 
     @Override
     protected ParseNode visitExcept(Except node, ParseTreeContext context) {
-        QueryRelation left = (QueryRelation) visit(node.getRelations().get(0), context);
-        QueryRelation right = (QueryRelation) visit(node.getRelations().get(1), context);
-        SetQualifier setQualifier = node.isDistinct() ? SetQualifier.DISTINCT : SetQualifier.ALL;
-        return new ExceptRelation(Lists.newArrayList(left, right), setQualifier);
+        return visitSetOperation(node, context);
     }
 
     @Override
@@ -591,15 +656,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String fieldName = "";
         if (node.getField().isPresent()) {
             fieldName = node.getField().get().getValue();
-
         }
         if (base instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) base;
             List<String> parts = new ArrayList<>(slotRef.getQualifiedName().getParts());
             parts.add(fieldName);
             return new SlotRef(QualifiedName.of(parts));
-        } else {
-            return new SubfieldExpr(base, fieldName);
+        } else if (base instanceof SubfieldExpr) {
+            // Merge multi-level subfield access
+            SubfieldExpr subfieldExpr = (SubfieldExpr) base;
+            ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+            for (String tmpFieldName : subfieldExpr.getFieldNames()) {
+                builder.add(tmpFieldName);
+            }
+            builder.add(fieldName);
+            return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
+        }  else {
+            return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
 

@@ -253,7 +253,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                 return PrivilegeManager.checkTableAction(
                         cxt,
                         job.getDbFullName(),
-                        job.getName(),
+                        job.getTableName(),
                         PrivilegeType.TableAction.INSERT);
             } else {
                 return GlobalStateMgr.getCurrentState().getAuth()

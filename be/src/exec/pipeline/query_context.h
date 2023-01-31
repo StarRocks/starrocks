@@ -118,6 +118,7 @@ public:
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
+    int64_t current_mem_usage_bytes() const { return _mem_tracker->consumption(); }
     void incr_cpu_cost(int64_t cost) {
         _total_cpu_cost_ns += cost;
         _delta_cpu_cost_ns += cost;
@@ -232,7 +233,7 @@ private:
     void _stop_clean_func() { _stop.store(true); }
     bool _is_stopped() { return _stop; }
     size_t _slot_idx(const TUniqueId& query_id);
-    void _clean_slot_unlocked(size_t i);
+    void _clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del);
 
 private:
     const size_t _num_slots;

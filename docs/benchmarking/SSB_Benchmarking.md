@@ -226,13 +226,10 @@ For more information about how to create a ClickHouse table and import data to t
     database: ssb
 
     # cluster ports
-      http_port: 8030
-      be_heartbeat_port: 9050
-      broker_port: 8000
+    http_port: 8030
+    be_heartbeat_port: 9050
+    broker_port: 8000
 
-    # parallel_fragment_exec_instance_num 设置并行度,建议是每个集群节点逻辑核数的一半,以下以8为例
-      parallel_num: 8
-    ...
     ```
 
 2. Run the following script to create a table:

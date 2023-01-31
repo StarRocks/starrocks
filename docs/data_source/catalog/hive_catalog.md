@@ -131,7 +131,7 @@ The properties of the Hive catalog. This parameter is required. You can configur
     >
     > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
-- [Preview] If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+- If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
 
     | **Property**                           | **Required** | **Description**                                              |
     | -------------------------------------- | ------------ | ------------------------------------------------------------ |
@@ -177,6 +177,8 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
     | **Property**                       | **Required** | **Description**                                              |
     | ---------------------------------- | ------------ | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
+
+## Use catalog to query Hive data
 
 After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 

@@ -83,7 +83,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     _build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     _build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
-    _build_buckets_counter = ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT);
+    _build_buckets_counter =
+            ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
     _runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
 
     HashTableParam param;
@@ -315,6 +316,21 @@ void HashJoiner::set_prober_finished() {
     }
 }
 
+Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {
+    _phase = HashJoinPhase::PROBE;
+    // _short_circuit_break maybe set _phase to HashJoinPhase::EOS
+    _short_circuit_break();
+    if (_phase == HashJoinPhase::EOS) {
+        return Status::OK();
+    }
+
+    _probe_input_chunk.reset();
+    _ht_has_remain = false;
+    _key_columns.resize(0);
+    _ht.reset_probe_state(state);
+    return Status::OK();
+}
+
 bool HashJoiner::_has_null(const ColumnPtr& column) {
     if (column->is_nullable()) {
         const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
@@ -330,8 +346,7 @@ Status HashJoiner::_build(RuntimeState* state) {
     return Status::OK();
 }
 
-Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
-                                                   bool& hit_all) {
+Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
@@ -369,7 +384,7 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filt
 }
 
 void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
-                                                 bool filter_all, bool hit_all, const Column::Filter& filter) {
+                                                 bool filter_all, bool hit_all, const Filter& filter) {
     if (filter_all) {
         for (size_t i = start_column; i < start_column + column_count; i++) {
             auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
@@ -400,7 +415,7 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
 Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
@@ -414,7 +429,7 @@ Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size
 Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
 
@@ -427,7 +442,7 @@ Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
 Status HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
-    Column::Filter filter;
+    Filter filter;
 
     _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
 

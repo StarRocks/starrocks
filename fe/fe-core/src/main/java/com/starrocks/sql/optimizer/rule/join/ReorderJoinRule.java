@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -84,8 +85,11 @@ public class ReorderJoinRule extends Rule {
 
     void enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
                    MultiJoinNode multiJoinNode) {
-        reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
-                multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
+                reorderAlgorithm.getClass().getSimpleName())) {
+            reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
+                    multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+        }
 
         List<OptExpression> reorderTopKResult = reorderAlgorithm.getResult();
         LogicalJoinOperator oldRoot = (LogicalJoinOperator) innerJoinRoot.getOp();
@@ -105,7 +109,7 @@ public class ReorderJoinRule extends Rule {
                 innerJoinRoot.getInputs().forEach(opt -> outputColumns.union(opt.getOutputColumns()));
 
                 projectMap.putAll(outputColumns.getStream()
-                        .mapToObj(context.getColumnRefFactory()::getColumnRef)
+                        .map(context.getColumnRefFactory()::getColumnRef)
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
             } else {
                 outputColumns.union(oldRoot.getProjection().getOutputColumns());
@@ -249,7 +253,7 @@ public class ReorderJoinRule extends Rule {
                 joinOperator = new LogicalJoinOperator.Builder()
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
-                                .mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
+                                .map(optimizerContext.getColumnRefFactory()::getColumnRef)
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();

@@ -237,10 +237,10 @@ S2_SOURCE=s2geometry-0.9.0
 S2_MD5SUM="293552c7646193b8b4a01556808fe155"
 
 # BITSHUFFLE
-BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.3.5.tar.gz"
-BITSHUFFLE_NAME=bitshuffle-0.3.5.tar.gz
-BITSHUFFLE_SOURCE=bitshuffle-0.3.5
-BITSHUFFLE_MD5SUM="2648ec7ccd0b896595c6636d926fc867"
+BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.5.1.tar.gz"
+BITSHUFFLE_NAME=bitshuffle-0.5.1.tar.gz
+BITSHUFFLE_SOURCE=bitshuffle-0.5.1
+BITSHUFFLE_MD5SUM="b3bf6a9838927f7eb62214981c138e2f"
 
 # CROARINGBITMAP
 CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/v0.2.60.tar.gz"
@@ -328,10 +328,10 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20221213.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230117.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="0741b8a9b0bd41f3b5798ca08e34bb61"
+CACHELIB_MD5SUM="9ed7137220d25b6c591966fdcb03208e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -343,7 +343,7 @@ STREAMVBYTE_MD5SUM="251d9200d27dda9120653b4928a23a86"
 BROKER_THIRDPARTY_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_NAME="broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_SOURCE="broker_thirdparty_jars"
-BROKER_THIRDPARTY_JARS_MD5SUM="87433dd5e54091d8eb63fbdb35622ea9"
+BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \

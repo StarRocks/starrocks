@@ -2527,7 +2527,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -2664,10 +2664,10 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                                                 const std::vector<ChunkIteratorPtr>& seg_iterators,
                                                 ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    VectorizedSchema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -2736,7 +2736,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     std::vector<ChunkPtr> chunk_arr;
 
-    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkSorter chunk_sorter(_chunk_allocator);
 
     OlapReaderStatistics stats;
@@ -2779,7 +2779,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-        VectorizedSchema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
+        Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
         ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
         for (auto& seg_iterator : seg_iterators) {
@@ -3471,10 +3471,10 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.size() >= config::tablet_max_versions || versions.size() >= num_rowset_full_clone * 20) {
             string msg = strings::Substitute(
                     "get_rowsets_for_snapshot: too many rowsets for incremental clone "
-                    "#rowset:$0 #rowset_for_full_clone:$1 $2",
+                    "#rowset:$0 #rowset_for_full_clone:$1 switch to full clone $2",
                     versions.size(), num_rowset_full_clone, _debug_version_info(false));
             LOG(INFO) << msg;
-            return Status::NotFound(msg);
+            return Status::OK();
         }
         rowsetids.reserve(versions.size());
         // compare two lists to find matching versions and record rowsetid

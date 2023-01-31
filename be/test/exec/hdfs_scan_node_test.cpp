@@ -152,7 +152,6 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -172,7 +171,6 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
     tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     // partition_conjuncts
@@ -186,7 +184,6 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
     node0.__isset.opcode = true;
     node0.__isset.child_type = true;
     node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
     nodes.emplace_back(node0);
 
     TExprNode node1;
@@ -197,7 +194,6 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
     t_slot_ref.slot_id = 0;
     t_slot_ref.tuple_id = 0;
     node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
     node1.is_nullable = true;
     nodes.emplace_back(node1);
 
@@ -208,7 +204,6 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
     TIntLiteral int_literal;
     int_literal.value = 1;
     node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
     node2.is_nullable = false;
     nodes.emplace_back(node2);
 
@@ -308,7 +303,6 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
         TIntLiteral int_literal;
         int_literal.value = 0;
         node.__set_int_literal(int_literal);
-        node.use_vectorized = true;
         node.is_nullable = false;
         node.has_nullable_child = false;
         nodes.emplace_back(node);
@@ -329,7 +323,6 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
         TIntLiteral int_literal;
         int_literal.value = 1;
         node.__set_int_literal(int_literal);
-        node.use_vectorized = true;
         node.is_nullable = false;
         node.has_nullable_child = false;
         nodes.emplace_back(node);

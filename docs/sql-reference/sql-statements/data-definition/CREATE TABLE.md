@@ -9,8 +9,8 @@ Creates a new table in StarRocks.
 ```Plain%20Text
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
-[, index_definition1[, ndex_definition12,]])
-[ENGINE = [olap|mysql|elasticsearch|hive]]
+[, index_definition1[, index_definition12,]])
+[ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
@@ -60,7 +60,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 **agg_type**：aggregation type. If not specified, this column is key column.
 If specified, it is value column. The aggregation types supported are as follows:
 
-- SUM、MAX、MIN、REPLACE
+- SUM, MAX, MIN, REPLACE
 - HLL_UNION (only for HLL type)
 - BITMAP_UNION(only for BITMAP)
 - REPLACE_IF_NOT_NULL：This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value.
@@ -90,13 +90,14 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
 ### ENGINE type
 
-Default value: olap. Optional: mysql, elasticsearch, and hive.
+Default value: olap. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
 
-- For MySQL, properties should include:
+Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and hudi (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
+
+- For MySQL, specify the following properties:
 
     ```Plain%20Text
     PROPERTIES (
-
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
         "user" = "your_user_name",
@@ -108,33 +109,32 @@ Default value: olap. Optional: mysql, elasticsearch, and hive.
 
     Note:
 
-    "table_name" in mysql should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this mysql table on StarRocks. They can either be different or the same.
+    "table_name" in MySQL should indicate the real table name. In contrast, "table_name" in CREATE TABLE statement indicates the name of this mysql table on StarRocks. They can either be different or the same.
 
-    The aim of creating mysql tables in StarRocks is to access mysql database. StarRocks itself does not maintain or store any mysql data.
+    The aim of creating MySQL tables in StarRocks is to access MySQL database. StarRocks itself does not maintain or store any MySQL data.
 
 - For Elasticsearch, specify the following properties:
 
-```Plain%20Text
-PROPERTIES (
+    ```Plain%20Text
+    PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
     "type" = "doc"
-
     )
     ```
 
-    - `host`: the URL that is used to connect your Elasticsearch cluster. You can specify one or more URLs.
-    - `user`: the account of the root user that is used to log in to your Elasticsearch cluster for which basic authentication is enabled.
-    - `password`: the password of the preceding root account.
-    - `index`: the index of the StarRocks table in your Elasticsearch cluster. The index name is the same as the StarRocks table name. You can set this parameter to the alias of the StarRocks table.
-    - `type`: the type of index. The default value is `doc`.
+  - `hosts`: the URL that is used to connect your Elasticsearch cluster. You can specify one or more URLs.
+  - `user`: the account of the root user that is used to log in to your Elasticsearch cluster for which basic authentication is enabled.
+  - `password`: the password of the preceding root account.
+  - `index`: the index of the StarRocks table in your Elasticsearch cluster. The index name is the same as the StarRocks table name. You can set this parameter to the alias of the StarRocks table.
+  - `type`: the type of index. The default value is `doc`.
 
-- For Hive, properties should include:
+- For Hive, specify the following properties:
 
-    ```SQL
+    ```Plain%20Text
     PROPERTIES (
 
         "database" = "hive_db_name",
@@ -143,37 +143,58 @@ PROPERTIES (
     )
     ```
 
-    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. hive.metastore.uris and Hive metastore are server addresses.
+    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. hive.metastore.uris is the server address.
+
+- For JDBC, specify the following properties:
+
+    ```Plain%20Text
+    PROPERTIES (
+    "resource"="jdbc0",
+    "table"="dest_tbl"
+    )
+    ```
+
+    `resource` is the JDBC resource name and `table` is the destination table.
+
+- For Iceberg, specify the following properties:
+
+   ```Plain%20Text
+    PROPERTIES (
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table"
+    )
+    ```
+
+    `resource` is the Iceberg resource name. `database` is the Iceberg database. `table` is the Iceberg table.
+
+- For Hudi, specify the following properties:
+
+  ```Plain%20Text
+    PROPERTIES (
+    "resource" = "hudi0", 
+    "database" = "hudi", 
+    "table" = "hudi_table" 
+    )
+    ```
 
 ### key_desc
 
 Syntax：
 
 ```SQL
-`key_type(k1[,k2 ...])`
+key_type(k1[,k2 ...])
 ```
 
-Note：
+Data is sequenced in specified key columns and has different attributes for different key types:
 
-```Plain%20Text
-Data is sequenced in specified key columns and has different attributes for different key_type. 
+- AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
+- UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
+- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. **DUPLICATE KEY is the default type. Data will be sequenced according to key columns.**
 
-Key_type supports: 
-
-AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis. 
-
-UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns. 
-
-DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
-
-DUPLICATE KEY is set as default. Data will be sequenced according to key columns. 
-
-
-
-Please note: 
-
-Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY. 
-```
+> **NOTE**
+>
+> Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
 
 ### partition_desc
 
@@ -275,7 +296,9 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 ### PROPERTIES
 
-- If ENGINE type is olap. Users can specify storage medium, cooldown time and replica number.
+#### Specify storage medium, storage cooldown time, replica number
+
+- If ENGINE type is olap. Users can specify storage medium, cooldown time, and replica number.
 
 ```Plain%20Text
 PROPERTIES (
@@ -297,7 +320,9 @@ replication_num: number of replicas in the specified partition. Default number: 
 
 When the table has only one partition, the properties belongs to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions through ADD ADDITION and MODIFY PARTITION statements.
 
-- If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
+#### Add bloomfilter index for a column
+
+If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
 
 ```SQL
 PROPERTIES (
@@ -305,7 +330,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use Colocate Join attributes, please specify it in properties.
+#### Use Colocate Join
+
+If you want to use Colocate Join attributes, specify it in `properties`.
 
 ```SQL
 PROPERTIES (
@@ -313,7 +340,9 @@ PROPERTIES (
 )
 ```
 
-- If you want to use dynamic partition attributes, please specify it in properties.
+#### Configure dynamic partitions
+
+If you want to use dynamic partition attributes, please specify it in properties.
 
 ```SQL
 PROPERTIES (
@@ -321,12 +350,12 @@ PROPERTIES (
     "dynamic_partition.enable" = "true|false",
     "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
     "dynamic_partition.start" = "${integer_value}",
-    "dynamic_partitoin.end" = "${integer_value}",
+    "dynamic_partition.end" = "${integer_value}",
     "dynamic_partition.prefix" = "${string_value}",
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
-**`PROPERTIES`**:
+**`PROPERTIES`**
 
 | parameter                   | required | description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
@@ -337,7 +366,7 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | the prefix added to the names of dynamic partitions. The default value is `p`. |
 | dynamic_partition.buckets   | No       | the number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word BUCKETS or automatically set by StarRocks. |
 
-- [Preview] You can set a data compression algorithm when creating a table.
+#### Set data compression algorithm
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
 
@@ -350,7 +379,7 @@ The valid values of `compression` are:
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
-- [Preview] You can set write quorum for data loading.
+#### Set write quorum for data loading
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
 
@@ -365,7 +394,25 @@ The valid values of `write_quorum` are:
 > - Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
 > - StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
 
-- When building tables, Rollup can be created in bulk.
+#### Specify data writing and replication mode among replicas
+
+If your StarRocks cluster has multiple data replicas, you can specify the `single_leader_replication` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
+
+- `true` indicates that data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode reduces CPU cost caused by data writing to multiple replicas.
+- `false` indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
+
+2.4.0 and earlier versions only support "leaderless replication". 2.5.0 supports both "leaderless replication" and "single leader replication".
+
+You can modify this parameter using ALTER TABLE. Example:
+
+```sql
+    ALTER TABLE <tbl_name>
+    SET ("single_leader_replication" = "false");
+```
+
+#### Create rollup in bulk
+
+You can create rollup in bulk when you create a table.
 
 Syntax:
 
@@ -377,7 +424,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ## Examples
 
-Example 1: Create an olap table that uses Hash bucketing and column-based storage, and that is aggregated by identical key records.
+### Create an Aggregate Key table that uses Hash bucketing and column-based storage
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -394,7 +441,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-Example 2: Create an olap table that uses Hash bucketing and column-based storage, and that is aggregated by identical key records. Also, please set the storage medium and the cooldown time.
+### Create an Aggregate Key table and set the storage medium and cooldown time
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -434,7 +481,7 @@ PROPERTIES(
 );
 ```
 
-Example 3: Create an olap table that uses Range partition, Hash bucketing and the default column-based storage. Records with the same key should exist at the same time. Also, please set the initial storage medium and the cooldown time.
+### Create a Duplicate Key table that uses Range partition, Hash bucketing，and column-based storage, and set the storage medium and cooldown time
 
 LESS THAN
 
@@ -464,7 +511,7 @@ PROPERTIES(
 
 Note:
 
-This statement will create 3 data partitions:
+This statement will create three data partitions:
 
 ```SQL
 ( {    MIN     },   {"2014-01-01"} )
@@ -498,10 +545,10 @@ PROPERTIES(
 );
 ```
 
-- Create a mysql table.
+### Create a MySQL external table
 
 ```SQL
-CREATE TABLE example_db.table_mysql
+CREATE EXTERNAL TABLE example_db.table_mysql
 (
     k1 DATE,
     k2 INT,
@@ -521,7 +568,7 @@ PROPERTIES
 )
 ```
 
-- Create a table that contains HLL columns.
+### Create a table that contains HLL columns
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -537,7 +584,9 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-- Create table containing BITMAP_UNION aggregation type. (The original data type of v1 and v2 columns muse be TINYINT, SMALLINT, INT)
+### Create a table containing BITMAP_UNION aggregation type
+
+The original data type of `v1` and `v2` columns must be TINYINT, SMALLINT, or INT.
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -553,7 +602,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-- Create table t1 and t2 that support Colocate Join.
+### Create two tables that support Colocate Join
 
 ```SQL
 CREATE TABLE `t1` 
@@ -583,7 +632,7 @@ PROPERTIES
 );
 ```
 
-- Create a table with bitmap index
+### Create a table with bitmap index
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -601,7 +650,11 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-- Create a dynamic partition table. (The dynamic partitioning function should be turned on in FE configuration.) This table will create partitions for three days and delete those created three days ago. For example, assuming today is 2020-01-08, partitions with these names will be created: p20200108, p20200109, p20200110, p20200111. And their ranges are:
+### Create a dynamic partition table
+
+The dynamic partitioning function must be enabled ("dynamic_partition.enable" = "true") in FE configuration. For more information, see [Configure dynamic partitions](#configure-dynamic-partitions).
+
+This example creates partitions for the next three days and deletes partitions created three days ago. For example, if today is 2020-01-08, partitions with the following names will be created: p20200108, p20200109, p20200110, p20200111, and their ranges are:
 
 ```Plain%20Text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
@@ -630,6 +683,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2) BUCKETS 10
 PROPERTIES(
     "storage_medium" = "SSD",
+    "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
@@ -638,10 +692,12 @@ PROPERTIES(
 );
 ```
 
-- Create an external table in hive.
+### Create a Hive external table
+
+Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#hive-external-table).
 
 ```SQL
-CREATE TABLE example_db.table_hive
+CREATE EXTERNAL TABLE example_db.table_hive
 (
     k1 TINYINT,
     k2 VARCHAR(50),

@@ -35,6 +35,7 @@ public class ArrayType extends Type {
         if (itemType != null && itemType.isDecimalV3()) {
             throw new InternalError("Decimal32/64/128 is not supported in current version");
         }
+        Preconditions.checkState(!Type.NULL.equals(itemType), "array's item type cannot be NULL_TYPE");
         this.itemType = itemType;
     }
 
@@ -124,6 +125,12 @@ public class ArrayType extends Type {
     public void selectAllFields() {
         if (itemType.isComplexType()) {
             itemType.selectAllFields();
+        }
+    }
+
+    public void pruneUnusedSubfields() {
+        if (itemType.isComplexType()) {
+            itemType.pruneUnusedSubfields();
         }
     }
 

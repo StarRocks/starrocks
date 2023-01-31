@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
@@ -50,6 +51,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -59,7 +61,6 @@ import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
@@ -161,7 +162,7 @@ public class UtFrameUtils {
     public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(Auth.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
@@ -235,7 +236,11 @@ public class UtFrameUtils {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
+            boolean oldRunningUnitTest = FeConstants.runningUnitTest;
+            FeConstants.runningUnitTest = true;
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            FeConstants.runningUnitTest = oldRunningUnitTest;
+
             addMockBackend(10001);
 
             // sleep to wait first heartbeat
@@ -618,9 +623,13 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         Map<String, Database> dbs = null;
         try {
+            PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse");
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable()).get(0);
+            st.close();
+            PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Anazlye");
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            st1.close();
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);

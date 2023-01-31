@@ -1331,12 +1331,49 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testProjectWithUnionEmptySet() throws Exception {
-        String sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+        sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 16> : <string id 15>"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
+
+        // COW Case
+        sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 14> : 8\n" +
+                "  |  <slot 15> : clone(8)\n" +
+                "  |  \n" +
+                "  2:Decode\n" +
+                "  |  <dict id 16> : <string id 8>\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 16: S_ADDRESS");
+
+        sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
+                "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 20> : 9\n" +
+                "  |  <slot 21> : 25: cast\n" +
+                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  <slot 23> : CAST(CAST(9 AS DOUBLE) + 1.0 AS VARCHAR)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
+                "  |  \n" +
+                "  3:Decode\n" +
+                "  |  <dict id 24> : <string id 9>\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
+                "  |  <slot 24> : 24: S_ADDRESS");
+
     }
 
     @Test
@@ -1454,13 +1491,13 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(16: upper), min(16: upper), max(15: S_ADDRESS), sum(CAST(1: S_SUPPKEY AS BIGINT) + 1)\n" +
+                "  |  output: count(*), max(19: upper), min(19: upper), max(18: S_ADDRESS), sum(15: S_SUPPKEY)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 1> : 1: S_SUPPKEY\n" +
-                "  |  <slot 15> : 15: S_ADDRESS\n" +
-                "  |  <slot 16> : DictExpr(15: S_ADDRESS,[upper(<place-holder>)])");
+                "  |  <slot 15> : 1: S_SUPPKEY\n" +
+                "  |  <slot 18> : 18: S_ADDRESS\n" +
+                "  |  <slot 19> : DictExpr(18: S_ADDRESS,[upper(<place-holder>)])");
     }
 
     @Test

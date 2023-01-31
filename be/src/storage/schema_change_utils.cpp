@@ -230,7 +230,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                VectorizedField ref_field =
+                Field ref_field =
                         ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
                 Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
                 if (!st.ok()) {
@@ -284,9 +284,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
 
-                VectorizedField ref_field =
+                Field ref_field =
                         ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                VectorizedField new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
+                Field new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
 
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
                                                       new_col.get(), mem_pool);
@@ -336,8 +336,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     return true;
 }
 
-bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
-                                   const VectorizedSchema& new_schema, MemPool* mem_pool) {
+bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
+                                   const Schema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -537,7 +537,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
     // selected_column_index: 0 2 4
     // ref_column: 2 0 4
     // ref_base_reader_column_index: 1 0 2
-    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexs();
+    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexes();
     int32_t index = 0;
     for (const auto& iter : base_to_new) {
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(iter.second);

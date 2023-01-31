@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -126,15 +127,15 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getAuth().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getPrivilegeManager().createRole(createRoleStmt);
         return this;
     }
 
-    public StarRocksAssert withUser(String user, String roleName) throws Exception {
+    public StarRocksAssert withUser(String user) throws Exception {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
-                        "create user " + user + " default role '" + roleName + "';", ctx);
-        GlobalStateMgr.getCurrentState().getAuth().createUser(createUserStmt);
+                        "create user " + user + " identified by '';", ctx);
+        GlobalStateMgr.getCurrentState().getAuthenticationManager().createUser(createUserStmt);
         return this;
     }
 
@@ -244,32 +245,22 @@ public class StarRocksAssert {
         return this;
     }
 
-    // Add materialized view to the schema (use cup)
+    // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        } else {
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        }
         checkAlterJob();
         return this;
     }
-
-    // Add materialized view to the schema (use antlr)
-    public StarRocksAssert withMaterializedStatementView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStmt =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
-        checkAlterJob();
-        return this;
-    }
-
-    // why create this ? because query statement before property in old mv grammar
-    public StarRocksAssert withNewMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStatement =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
-        return this;
-    }
-
+    
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -282,6 +273,13 @@ public class StarRocksAssert {
     public StarRocksAssert withCatalog(String sql) throws Exception {
         CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
+        return this;
+    }
+
+    // With warehouse
+    public StarRocksAssert withWarehouse(String sql) throws Exception {
+        CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().createWarehouse(createWarehouseStmt);
         return this;
     }
 

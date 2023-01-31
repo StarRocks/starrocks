@@ -40,6 +40,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -61,8 +62,8 @@
 #include "exec/lake_meta_scan_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/project_node.h"
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
@@ -75,7 +76,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_pool.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -100,7 +100,6 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_counter(nullptr),
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
-          _use_vectorized(tnode.use_vectorized),
           _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
@@ -594,8 +593,8 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
 }
 
 Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk) {
-    Column::Filter filter(chunk->num_rows(), 1);
-    Column::Filter* raw_filter = &filter;
+    Filter filter(chunk->num_rows(), 1);
+    Filter* raw_filter = &filter;
 
     // prune chunk when pruned size is large enough
     // these constants are just came up without any specific reason.
@@ -669,11 +668,11 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     if (!apply_filter) {
         DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
     }
-    FilterPtr filter(new Column::Filter(chunk->num_rows(), 1));
+    FilterPtr filter(new Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
     }
-    Column::Filter* raw_filter = filter.get();
+    Filter* raw_filter = filter.get();
 
     for (auto* ctx : ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
@@ -846,6 +845,15 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
+}
+
+void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
+    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
+    // for now just disable it in stream pipelines:
+    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
+    if (!context->is_stream_pipeline()) {
+        ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
+    }
 }
 
 } // namespace starrocks

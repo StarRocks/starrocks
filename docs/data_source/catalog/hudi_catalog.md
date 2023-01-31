@@ -53,7 +53,7 @@ The properties of the Hudi catalog. This parameter is required. You need to conf
   >
   > Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
-- [Preview] If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+- If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
 
   | **Property**                           | **Required** | **Description**                                              |
   | -------------------------------------- | ------------ | ------------------------------------------------------------ |
@@ -100,7 +100,7 @@ If you want to query the latest Hudi data but the time interval for updating cac
 
 For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
-## What to do next
+## Use catalog to query Hudi data
 
 After you complete all the preceding operations, you can use the Hudi catalog to query Hudi data. For more information, see [Query external data](../catalog/query_external_data.md).
 

@@ -35,8 +35,10 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, si
         _opened_source_opcount[i] = 0;
     }
     _runtime_profile = std::make_unique<RuntimeProfile>("MultiCastLocalExchanger");
-    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter("PeakMemoryUsage", TUnit::BYTES);
-    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter("PeakBufferRowSize", TUnit::UNIT);
+    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter(
+            "PeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter(
+            "PeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
 }
 
 MultiCastLocalExchanger::~MultiCastLocalExchanger() {
@@ -218,8 +220,10 @@ bool MultiCastLocalExchangeSourceOperator::has_output() const {
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->open_sink_operator();
-    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter("ExchangerPeakMemoryUsage", TUnit::BYTES);
-    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter("ExchangerPeakBufferRowSize", TUnit::UNIT);
+    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     return Status::OK();
 }
 

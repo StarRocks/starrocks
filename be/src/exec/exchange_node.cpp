@@ -94,15 +94,11 @@ Status ExchangeNode::prepare(RuntimeState* state) {
 Status ExchangeNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    if (_use_vectorized) {
-        if (_is_merging) {
-            RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-            RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
-        }
-        return Status::OK();
+    if (_is_merging) {
+        RETURN_IF_ERROR(_sort_exec_exprs.open(state));
+        RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
     }
-
-    return Status::InternalError("Non-vectorized runtime engine is not supported now");
+    return Status::OK();
 }
 
 Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {
@@ -268,7 +264,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
 
     if (operators.back()->has_runtime_filters()) {
-        operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+        may_add_chunk_accumulate_operator(operators, context, id());
     }
 
     if (limit() != -1) {

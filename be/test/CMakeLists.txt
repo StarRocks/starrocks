@@ -8,7 +8,7 @@ set(EXEC_FILES
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
-        ./column/vectorized_field_test.cpp
+        ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
         ./column/map_column_test.cpp
@@ -16,7 +16,7 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
-        ./column/vectorized_schema_test.cpp
+        ./column/schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
@@ -162,7 +162,6 @@ set(EXEC_FILES
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
         ./storage/file_utils_test.cpp
-        ./storage/fs/file_block_manager_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
@@ -186,6 +185,7 @@ set(EXEC_FILES
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
+        ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -210,7 +210,6 @@ set(EXEC_FILES
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
-        ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
@@ -245,13 +244,14 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/storage_engine_test.cpp
+        ./storage/binlog_file_test.cpp
+        ./storage/publish_version_task_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
-        ./runtime/free_list_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
@@ -308,6 +308,7 @@ set(EXEC_FILES
         ./util/path_util_test.cpp
         ./util/priority_queue_test.cpp
         ./util/rle_encoding_test.cpp
+        ./util/runtime_profile_test.cpp
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
@@ -336,18 +337,6 @@ endif ()
 if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
-endif ()
-# simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
-# Unset architecture-specific flags to avoid breaking implement runtime dispatch.
-
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
 endif ()
 
 if (USE_AVX2)

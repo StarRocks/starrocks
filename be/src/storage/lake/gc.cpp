@@ -28,6 +28,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
@@ -229,6 +230,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         return iter_st;
     }
 
+    LOG(INFO) << "find_orphan_datafiles datafile cnt: " << datafiles.size();
     if (datafiles.empty()) {
         return datafiles;
     }
@@ -245,17 +247,26 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     };
 
-    auto check_delvecs = [&](const TabletMetadataPtr metadata) {
-        for (const auto& delvec : metadata->delvec_meta().delvecs()) {
-            std::string delvec_name = tablet_delvec_filename(metadata->id(), delvec.page().version());
+    auto check_delvecs = [&](int64_t tablet_id, const DelvecMetadataPB& delvec_meta) {
+        for (const auto& delvec : delvec_meta.delvecs()) {
+            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.page().version());
             datafiles.erase(delvec_name);
         }
     };
 
+    auto check_rewrite_segments = [&](const TxnLogPB_OpWrite& opwrite) {
+        for (const auto& seg : opwrite.rewrite_segments()) {
+            datafiles.erase(seg);
+        }
+    };
+
+    // record missed tsid range
+    std::vector<TabletSegmentIdRange> missed_tsid_ranges;
     for (const auto& filename : tablet_metadatas) {
         auto location = join_path(metadata_root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
         if (res.status().is_not_found()) {
+            LOG(WARNING) << fmt::format("find_orphan_datafiles tablet meta {} not found", location);
             continue;
         } else if (!res.ok()) {
             return res.status();
@@ -265,13 +276,18 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
-        check_delvecs(metadata);
+        check_delvecs(metadata->id(), metadata->delvec_meta());
+        if (is_primary_key(metadata.get())) {
+            // find missed tsid range, only used in pk table
+            find_missed_tsid_range(metadata.get(), missed_tsid_ranges);
+        }
     }
 
     for (const auto& filename : txn_logs) {
         auto location = join_path(txn_log_root_location, filename);
         auto res = tablet_mgr->get_txn_log(location, false);
         if (res.status().is_not_found()) {
+            LOG(WARNING) << fmt::format("find_orphan_datafiles txnlog {} not found", location);
             continue;
         } else if (!res.ok()) {
             return res.status();
@@ -281,6 +297,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         if (txn_log->has_op_write()) {
             check_rowset(txn_log->op_write().rowset());
             check_dels(txn_log->op_write());
+            check_rewrite_segments(txn_log->op_write());
         }
         if (txn_log->has_op_compaction()) {
             // No need to check input rowsets
@@ -289,6 +306,9 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         if (txn_log->has_op_schema_change()) {
             for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
                 check_rowset(rowset);
+            }
+            if (txn_log->op_schema_change().has_delvec_meta()) {
+                check_delvecs(txn_log->tablet_id(), txn_log->op_schema_change().delvec_meta());
             }
         }
     }
@@ -338,12 +358,14 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     if (min_tablet_id == INT64_MAX) {
-        LOG(INFO) << "Skiped segment GC of " << root_location << " because there is no tablet metadata";
+        LOG(INFO) << "Skiped datafile GC of " << root_location << " because there is no tablet metadata";
         return Status::OK();
     }
 
     if (owned_tablets.count(min_tablet_id) == 0) {
         // The tablet with the smallest ID is not managed by the current process, skip segment GC
+        LOG(INFO) << "Skiped datafile GC of " << root_location
+                  << " because the smallest ID is not managed by the current process";
         return Status::OK();
     }
 

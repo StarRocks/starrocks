@@ -294,7 +294,7 @@ SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* ex
 }
 
 void SortedRun::reset() {
-    chunk->reset();
+    chunk.reset();
     orderby.clear();
     range = {};
 }
@@ -468,7 +468,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output) {
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     std::vector<size_t> chunk_index(chunks.size(), 0);
 
@@ -486,7 +486,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                         return false;
                     }
                     chunk_index[i]++;
-                    *output = chunks[i]->clone_unique();
+                    *output = std::move(chunks[i]);
                     return true;
                 },
                 sort_exprs));

@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
 
 namespace starrocks {
@@ -59,7 +60,7 @@ TEST(FixedLengthColumnTest, test_basic) {
             column->append(i);
         }
 
-        Column::Filter filter;
+        Filter filter;
         for (int i = 0; i < 100; ++i) {
             filter.push_back(i % 2);
         }
@@ -137,7 +138,7 @@ TEST(FixedLengthColumnTest, test_nullable) {
             }
         }
 
-        Column::Filter filter;
+        Filter filter;
         for (int k = 0; k < 50; ++k) {
             filter.push_back(0);
         }

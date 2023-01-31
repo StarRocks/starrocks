@@ -26,21 +26,24 @@ namespace starrocks {
 namespace lake {
 
 class Tablet;
+class MetaFileBuilder;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const VectorizedSchema& pk_schema) : PrimaryIndex(pk_schema) {}
+    LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
     ~LakePrimaryIndex() {}
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
     //
     // [thread-safe]
-    Status lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version);
+    Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+                     const MetaFileBuilder* builder);
 
 private:
-    Status _do_lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version);
+    Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+                         const MetaFileBuilder* builder);
 };
 
 } // namespace lake

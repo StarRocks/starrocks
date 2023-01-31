@@ -160,6 +160,10 @@ public class SlotRef extends Expr {
         this.label = label;
     }
 
+    public SlotRef(SlotId slotId) {
+        this(new SlotDescriptor(slotId, "", Type.INVALID, false));
+    }
+
     public QualifiedName getQualifiedName() {
         return qualifiedName;
     }
@@ -339,9 +343,9 @@ public class SlotRef extends Expr {
     public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
-            SlotId newSlotId = normalizer.remapSlotId(desc.getId());
+            SlotId slotId = normalizer.isNotRemappingSlotId() ? desc.getId() : normalizer.remapSlotId(desc.getId());
             // tuple id is meaningless here
-            msg.slot_ref = new TSlotRef(newSlotId.asInt(), 0);
+            msg.slot_ref = new TSlotRef(slotId.asInt(), 0);
         } else {
             // slot id and tuple id are meaningless here
             msg.slot_ref = new TSlotRef(0, 0);

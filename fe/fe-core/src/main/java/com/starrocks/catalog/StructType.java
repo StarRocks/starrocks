@@ -56,6 +56,7 @@ public class StructType extends Type {
         Preconditions.checkArgument(structFields.size() > 0);
         this.fields = new ArrayList<>();
         for (StructField field : structFields) {
+            Preconditions.checkState(!Type.NULL.equals(field.getType()), "struct's field type cannot be NULL_TYPE");
             String lowerFieldName = field.getName().toLowerCase();
             if (fieldMap.containsKey(lowerFieldName)) {
                 LOG.warn(String.format("Contains the same struct subfield name: %s, ignore it", lowerFieldName));
@@ -75,6 +76,7 @@ public class StructType extends Type {
     public StructType(List<Type> fieldTypes) {
         ArrayList<StructField> newFields = new ArrayList<>();
         for (Type fieldType : fieldTypes) {
+            Preconditions.checkState(!Type.NULL.equals(fieldType), "struct's field type cannot be NULL_TYPE");
             newFields.add(new StructField(fieldType));
         }
         this.fields = newFields;
@@ -168,6 +170,23 @@ public class StructType extends Type {
         }
     }
 
+    public void pruneUnusedSubfields() {
+        for (int pos = selectedFields.length - 1; pos >= 0; pos--) {
+            StructField structField = fields.get(pos);
+            if (!selectedFields[pos]) {
+                fields.remove(pos);
+                fieldMap.remove(structField.getName());
+            }
+        }
+
+        for (StructField structField : fields) {
+            Type type = structField.getType();
+            if (type.isComplexType()) {
+                type.pruneUnusedSubfields();
+            }
+        }
+    }
+
     @Override
     public void selectAllFields() {
         Arrays.fill(selectedFields, true);
@@ -210,8 +229,6 @@ public class StructType extends Type {
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
-        Preconditions.checkArgument(selectedFields.length == fields.size());
-        node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);
         }

@@ -17,6 +17,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "util/slice.h"
 
@@ -196,7 +197,7 @@ public:
     }
 
     void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, _bytes.size());
+        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
         _slices_cache = false;
     }
 
@@ -221,13 +222,13 @@ public:
 
     uint32_t serialize_size(size_t idx) const override {
         // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
-        return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx];
+        return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
-    size_t filter_range(const Column::Filter& filter, size_t start, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -297,7 +298,7 @@ public:
 
     void invalidate_slice_cache() { _slices_cache = false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;

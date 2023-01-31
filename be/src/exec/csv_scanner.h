@@ -80,6 +80,8 @@ private:
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
     bool _use_v2;
+    CSVReader::Fields fields;
+    CSVRow row;
 };
 
 } // namespace starrocks

@@ -85,7 +85,7 @@ public class UseMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv1 " +
+                .withMaterializedView("create materialized view mv1 " +
                         "partition by ss " +
                         "distributed by hash(k2) " +
                         "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -93,7 +93,7 @@ public class UseMaterializedViewTest {
                         "\"replication_num\" = \"1\"\n" +
                         ") " +
                         "as select tbl1.k1 ss, k2 from tbl1;")
-                .withNewMaterializedView("create materialized view mv_to_drop " +
+                .withMaterializedView("create materialized view mv_to_drop " +
                         "partition by ss " +
                         "distributed by hash(k2) " +
                         "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +

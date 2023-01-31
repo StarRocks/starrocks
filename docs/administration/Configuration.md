@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters by running the following command:
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -76,7 +76,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows            | -    | 200000       | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size                   | -    | 64           | The default bucket number for a histogram.                   |
-| histogram_mcv_size                       | -    | 100          | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size                       | -    | 100          | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio                   | -    | 0.1          | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count           | -    | 10000000     | The maximum number of rows to collect for a histogram.       |
 | statistics_manager_sleep_time_sec        | s    | 60           | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:<ul><li>Create tables for storing statistics. </li><li>Delete statistics that have been deleted.</li><li>Delete expired statistics.</li></ul>|
@@ -412,7 +412,6 @@ BE static parameters are as follows.
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
-| row_nums_check | TRUE | N/A | The boolean value to control if to check the row counts before and after the compaction. The value true indicates to enable the row count check. The value false indicates disable the row count check. |
 | file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
 | min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
 | index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
@@ -422,15 +421,14 @@ BE static parameters are as follows.
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
-| webserver_port | 8040 | N/A | The HTTP server port. |
-| webserver_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
+| be_http_port | 8040 | N/A | The HTTP server port. |
+| be_http_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
 | load_data_reserve_hours | 4 | Hour | The reservation time for the files produced by small-scale loadings. |
 | number_tablet_writer_threads | 16 | N/A | The number of threads used for Stream Load. |
 | streaming_load_rpc_max_alive_time_sec | 1200 | Second | The RPC timeout for Stream Load. |
 | fragment_pool_thread_num_min | 64 | N/A | The minimum number of threads used for query. |
 | fragment_pool_thread_num_max | 4096 | N/A | The maximum number of threads used for query. |
 | fragment_pool_queue_size | 2048 | N/A | The upper limit of query number that can be processed on each BE node. |
-| enable_partitioned_aggregation | TRUE | N/A | The boolean value to control if to enable the Partition Aggregation. The value true indicates to enable the Partition Aggregation. The value false indicates to disable the Partition Aggregation. |
 | enable_token_check | TRUE | N/A | The boolean value to control if to enable the token check. The value true indicates to enable the token check. The value false indicates to disable the token check. |
 | enable_prefetch | TRUE | N/A | The boolean value to control if to enable the pre-fetch of the query. The value true indicates to enable the pre-fetch. The value false indicates to disable the pre-fetch. |
 | load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
@@ -495,15 +493,12 @@ BE static parameters are as follows.
 | enable_metric_calculator | 0 | N/A | |
 | enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
 | enable_orc_late_materialization | 1 | N/A | |
-| enable_quadratic_probing | 0 | N/A | |
 | enable_schema_change_v2 | 1 | N/A | |
 | enable_segment_overflow_read_chunk | 1 | N/A | |
 | enable_system_metrics | 1 | N/A | |
 | es_http_timeout_ms | 5000 | N/A | |
 | es_index_max_result_window | 10000 | N/A | |
 | es_scroll_keepalive | 5m | N/A | |
-| etl_thread_pool_queue_size | 256 | N/A | |
-| etl_thread_pool_size | 8 | N/A | |
 | experimental_s3_max_single_part_size | 16777216 | N/A | |
 | experimental_s3_min_upload_part_size | 16777216 | N/A | |
 | ignore_broken_disk | 0 | N/A | |
@@ -550,8 +545,6 @@ BE static parameters are as follows.
 | mmap_buffers | 0 | N/A | |
 | null_encoding | 0 | N/A | |
 | num_cores | 0 | N/A | |
-| num_disks | 0 | N/A | |
-| num_threads_per_disk | 0 | N/A | |
 | object_storage_access_key_id |  | N/A | |
 | object_storage_endpoint |  | N/A | |
 | object_storage_endpoint_path_style_access | 0 | N/A | |
@@ -590,7 +583,6 @@ BE static parameters are as follows.
 | query_cache_capacity | 536870912 | N/A | |
 | query_debug_trace_dir |  | N/A | |
 | query_scratch_dirs |  | N/A | |
-| read_size | 8388608 | N/A | |
 | release_snapshot_worker_count | 5 | N/A | |
 | repair_compaction_interval_seconds | 600 | N/A | |
 | rewrite_partial_segment | 1 | N/A | |

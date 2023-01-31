@@ -14,6 +14,7 @@
 
 #include "column/object_column.h"
 
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -197,7 +198,7 @@ uint32_t ObjectColumn<T>::serialize_size(size_t idx) const {
 }
 
 template <typename T>
-size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t ObjectColumn<T>::filter_range(const Filter& filter, size_t from, size_t to) {
     size_t old_sz = size();
     size_t new_sz = from;
     for (auto i = from; i < to; ++i) {
@@ -228,8 +229,9 @@ void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const
     std::string s;
     for (uint32_t i = from; i < to; ++i) {
         s.resize(_pool[i].serialize_size());
-        int32_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-        hash[i] = HashUtil::fnv_hash(s.data(), size, hash[i]);
+        //TODO: May be overflow here if the object is large then 2G.
+        size_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
+        hash[i] = HashUtil::fnv_hash(s.data(), static_cast<int32_t>(size), hash[i]);
     }
 }
 
@@ -289,17 +291,17 @@ ColumnPtr ObjectColumn<T>::clone_shared() const {
 }
 
 template <typename T>
-std::string ObjectColumn<T>::debug_item(uint32_t idx) const {
+std::string ObjectColumn<T>::debug_item(size_t idx) const {
     return "";
 }
 
 template <>
-std::string ObjectColumn<HyperLogLog>::debug_item(uint32_t idx) const {
+std::string ObjectColumn<HyperLogLog>::debug_item(size_t idx) const {
     return _pool[idx].to_string();
 }
 
 template <>
-std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
+std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
     return _pool[idx].to_string();
 }
 

@@ -19,16 +19,12 @@ import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -45,14 +41,6 @@ public class InformationSchemaDataSourceTest {
     
     @Test
     public void testGetTablesConfig() throws Exception {
-
-        new MockUp<Auth>() {
-            @Mock
-            public boolean checkDbPriv(UserIdentity currentUser, String db, PrivPredicate wanted) {
-                return true;
-            }
-        };
-
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
@@ -74,12 +62,14 @@ public class InformationSchemaDataSourceTest {
                                  "AS SELECT k1, k2 " +
                                  "FROM db1.tbl1 ";
         
-        starRocksAssert.withMaterializedStatementView(createMvStmtStr);
+        starRocksAssert.withMaterializedView(createMvStmtStr);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setPattern("db1");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
         req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);

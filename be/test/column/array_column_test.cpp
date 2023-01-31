@@ -175,7 +175,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{i, i * 2});
         }
 
-        Column::Filter filter(N, 1);
+        Filter filter(N, 1);
 
         column->filter_range(filter, 0, N);
         column->filter_range(filter, N / 10, N);
@@ -259,7 +259,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{i, i * 2});
         }
 
-        Column::Filter filter(N, 0);
+        Filter filter(N, 0);
         for (int i = 0; i < 32; i++) {
             filter[i] = i % 2;
         }
@@ -300,7 +300,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             }
             column->append_datum(array);
         }
-        Column::Filter filter(4096);
+        Filter filter(4096);
         for (int i = 0; i < 4096; i++) {
             filter[i] = i % 2;
         }
@@ -335,7 +335,7 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
             column->append_datum(DatumArray{DatumArray{i * 3, i * 3 + 1}, DatumArray{i * 2, i * 2 + 1}});
         }
 
-        Column::Filter filter(N, 1);
+        Filter filter(N, 1);
         column->filter_range(filter, 0, N);
         column->filter_range(filter, N / 10, N);
         column->filter_range(filter, N / 2, N);
@@ -530,6 +530,64 @@ PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
     column->compare_column(*column_2, &cmp_res);
     std::vector<int8_t> expected{-1, -1};
     ASSERT_EQ(expected, cmp_res);
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, equals) {
+    // lhs: [1,2,3], [4,5], [1,2]
+    // rhs: [3,2,1], [4,5], [1,null]
+    ArrayColumn::Ptr lhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = Int32Column::create();
+        lhs = ArrayColumn::create(elements, offsets);
+    }
+
+    {
+        lhs->elements_column()->append_datum(Datum(1));
+        lhs->elements_column()->append_datum(Datum(2));
+        lhs->elements_column()->append_datum(Datum(3));
+        lhs->offsets_column()->append_datum(Datum(3));
+    }
+    {
+        lhs->elements_column()->append_datum(Datum(4));
+        lhs->elements_column()->append_datum(Datum(5));
+        lhs->offsets_column()->append_datum(Datum(5));
+    }
+    {
+        lhs->elements_column()->append_datum(Datum(1));
+        lhs->elements_column()->append_datum(Datum(2));
+        lhs->offsets_column()->append_datum(Datum(7));
+    }
+
+    ArrayColumn::Ptr rhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = Int32Column::create();
+        auto nulls = NullColumn ::create();
+        rhs = ArrayColumn::create(NullableColumn::create(elements, nulls), offsets);
+    }
+
+    {
+        rhs->elements_column()->append_datum(Datum(3));
+        rhs->elements_column()->append_datum(Datum(2));
+        rhs->elements_column()->append_datum(Datum(1));
+        rhs->offsets_column()->append_datum(Datum(3));
+    }
+    {
+        rhs->elements_column()->append_datum(Datum(4));
+        rhs->elements_column()->append_datum(Datum(5));
+        rhs->offsets_column()->append_datum(Datum(5));
+    }
+    {
+        rhs->elements_column()->append_datum(Datum(1));
+        rhs->elements_column()->append_datum(Datum());
+        rhs->offsets_column()->append_datum(Datum(7));
+    }
+
+    ASSERT_FALSE(lhs->equals(0, *rhs, 0));
+    ASSERT_TRUE(lhs->equals(1, *rhs, 1));
+    ASSERT_FALSE(lhs->equals(2, *rhs, 2));
 }
 
 // NOLINTNEXTLINE

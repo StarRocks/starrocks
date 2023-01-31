@@ -88,7 +88,7 @@ Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         _is_finished = true;
         return Status::Cancelled("runtime state is cancelled");
     }
-    RETURN_IF_ERROR(_chunks_sorter->finish(state));
+    RETURN_IF_ERROR(_chunks_sorter->done(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.

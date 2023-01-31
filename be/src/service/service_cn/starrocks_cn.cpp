@@ -73,7 +73,7 @@ void start_cn() {
 
     // 3. Start http service.
     std::unique_ptr<starrocks::HttpServiceCN> http_service = std::make_unique<starrocks::HttpServiceCN>(
-            exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
+            exec_env, starrocks::config::be_http_port, starrocks::config::be_http_num_workers);
     if (auto status = http_service->start(); !status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks CN http service did not start correctly, exiting";

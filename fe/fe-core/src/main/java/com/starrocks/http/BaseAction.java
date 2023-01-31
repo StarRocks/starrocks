@@ -245,7 +245,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // Set 'CONTENT_TYPE' header if it havn't been set.
+    // Set 'CONTENT_TYPE' header if it hasn't been set.
     protected void checkDefaultContentTypeHeader(BaseResponse response, Object responseOj) {
         if (!Strings.isNullOrEmpty(response.getContentType())) {
             response.updateHeader(HttpHeaderNames.CONTENT_TYPE.toString(), response.getContentType());
@@ -298,11 +298,8 @@ public abstract class BaseAction implements IAction {
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType.SystemAction... systemActions)
             throws UnauthorizedException {
-        ConnectContext tmpContext = new ConnectContext();
-        tmpContext.setGlobalStateMgr(globalStateMgr);
-        tmpContext.setCurrentUserIdentity(currentUser);
         for (PrivilegeType.SystemAction systemAction : systemActions) {
-            if (!PrivilegeManager.checkSystemAction(tmpContext, systemAction)) {
+            if (!PrivilegeManager.checkSystemAction(currentUser, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");
             }
@@ -314,10 +311,13 @@ public abstract class BaseAction implements IAction {
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws UnauthorizedException {
         try {
             Set<Long> userOwnedRoles = PrivilegeManager.getOwnedRolesByUser(currentUser);
-            if (!userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) ||
-                    !userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)) {
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    userOwnedRoles.contains(PrivilegeManager.ROOT_ROLE_ID) ||
+                    (userOwnedRoles.contains(PrivilegeManager.DB_ADMIN_ROLE_ID) &&
+                            userOwnedRoles.contains(PrivilegeManager.USER_ADMIN_ROLE_ID)))) {
                 throw new UnauthorizedException(
-                        "Access denied; you need own db_admin and user_admin roles for this operation");
+                        "Access denied; you need own root role or own db_admin and user_admin roles for this " +
+                                "operation");
             }
         } catch (PrivilegeException e) {
             UnauthorizedException newException = new UnauthorizedException(

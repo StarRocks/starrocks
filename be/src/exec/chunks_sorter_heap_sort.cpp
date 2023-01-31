@@ -45,7 +45,8 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     int row_sz = chunk_holder->value()->chunk->num_rows();
     if (_sort_heap == nullptr) {
         _sort_heap = std::make_unique<CommonCursorSortHeap>(detail::ChunkCursorComparator(_sort_desc));
-        _sort_heap->reserve(_number_of_rows_to_sort());
+        // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
+        _sort_heap->reserve(std::min<size_t>(_number_of_rows_to_sort(), 10'000'000ul));
         // build heap
         size_t direct_push = std::min<size_t>(_number_of_rows_to_sort(), row_sz);
         size_t i = 0;
@@ -109,10 +110,6 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     }
     // TODO: merge chunk if necessary
     return Status::OK();
-}
-
-SortedRuns ChunksSorterHeapSort::get_sorted_runs() {
-    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
 }
 
 size_t ChunksSorterHeapSort::get_output_rows() const {
@@ -191,8 +188,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
 }
 
 template <LogicalType TYPE>
-void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter,
-                                                    int row_sz) {
+void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz) {
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
 
@@ -273,7 +269,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     const int cursor_rid = top_cursor.row_id();
     const int column_sz = top_cursor.data_segment()->order_by_columns.size();
 
-    Column::Filter filter(row_sz);
+    Filter filter(row_sz);
 
     // For single column special optimization
     if (_do_filter_data) {

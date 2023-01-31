@@ -302,8 +302,7 @@ public class PlanFragmentBuilder {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
-        boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
-        return !hasJoinNode;
+        return true;
     }
 
     private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
@@ -323,9 +322,7 @@ public class PlanFragmentBuilder {
         }
 
         if (useQueryCache(execPlan)) {
-            List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
-                    .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
-            for (PlanFragment fragment : fragmentsWithLeftmostOlapScanNode) {
+            for (PlanFragment fragment : execPlan.getFragments()) {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
@@ -525,7 +522,6 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsNullable(expr.isNullable());
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(expr.getType());
-
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
@@ -541,7 +537,7 @@ public class PlanFragmentBuilder {
             Statistics statistics = optExpression.getStatistics();
             Statistics.Builder b = Statistics.builder();
             b.setOutputRowCount(statistics.getOutputRowCount());
-            b.addColumnStatistics(statistics.getOutputColumnsStatistics(new ColumnRefSet(node.getOutputColumns())));
+            b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
             projectNode.computeStatistics(b.build());
 
             for (SlotId sid : projectMap.keySet()) {
@@ -673,6 +669,9 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
+                }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
@@ -692,6 +691,11 @@ public class PlanFragmentBuilder {
 
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            for (ScalarOperator predicate : node.getPrunedPartitionPredicates()) {
+                scanNode.getPrunedPartitionPredicates()
+                        .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
 
             tupleDescriptor.computeMemLayout();
@@ -764,8 +768,8 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
-                if (slotDescriptor.getType().isComplexType()) {
-                    slotDescriptor.setUsedSubfieldPosGroup(entry.getKey().getUsedSubfieldPosGroup());
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
@@ -1667,6 +1671,7 @@ public class PlanFragmentBuilder {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
+                aggregationNode.setIdenticallyDistributed(true);
             }
 
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
@@ -2134,7 +2139,7 @@ public class PlanFragmentBuilder {
                 }
 
                 outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
             }
 
             joinNode.setDistributionMode(distributionMode);
@@ -2730,7 +2735,7 @@ public class PlanFragmentBuilder {
                 }
 
                 outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+                joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
             }
 
             joinNode.setDistributionMode(distributionMode);

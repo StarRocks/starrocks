@@ -180,6 +180,9 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToInMemory.remove(partitionId);
     }
 
+    public void moveRangeFromTempToFormal(long tempPartitionId) {
+    }
+
     public void addPartition(long partitionId, DataProperty dataProperty,
                              short replicationNum,
                              boolean isInMemory) {

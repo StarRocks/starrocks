@@ -136,56 +136,54 @@ struct DatumBuilder<TYPE_DATETIME> {
 /// VectorChunkIterator
 class VectorChunkIterator final : public ChunkIterator {
 public:
-    VectorChunkIterator(VectorizedSchema schema, Datums c1)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1)} {}
+    VectorChunkIterator(Schema schema, Datums c1) : ChunkIterator(std::move(schema)), _columns{std::move(c1)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5)
             : ChunkIterator(std::move(schema)),
               _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4), std::move(c5)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3),
                                                          std::move(c4), std::move(c5), std::move(c6)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),
                                                          std::move(c5), std::move(c6), std::move(c7)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7, Datums c8)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
+                        Datums c8)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),
                                                          std::move(c5), std::move(c6), std::move(c7), std::move(c8)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7, Datums c8, Datums c9)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
+                        Datums c8, Datums c9)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3),
                                                          std::move(c4), std::move(c5), std::move(c6),
                                                          std::move(c7), std::move(c8), std::move(c9)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7, Datums c8, Datums c9, Datums c10)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
+                        Datums c8, Datums c9, Datums c10)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),
                                                          std::move(c5), std::move(c6), std::move(c7), std::move(c8),
                                                          std::move(c9), std::move(c10)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7, Datums c8, Datums c9, Datums c10, Datums c11)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
+                        Datums c8, Datums c9, Datums c10, Datums c11)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2),  std::move(c3), std::move(c4),
                                                          std::move(c5), std::move(c6),  std::move(c7), std::move(c8),
                                                          std::move(c9), std::move(c10), std::move(c11)} {}
 
-    VectorChunkIterator(VectorizedSchema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6,
-                        Datums c7, Datums c8, Datums c9, Datums c10, Datums c11, Datums c12)
+    VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
+                        Datums c8, Datums c9, Datums c10, Datums c11, Datums c12)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1),  std::move(c2),  std::move(c3),
                                                          std::move(c4),  std::move(c5),  std::move(c6),
                                                          std::move(c7),  std::move(c8),  std::move(c9),

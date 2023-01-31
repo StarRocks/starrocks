@@ -67,9 +67,9 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -111,7 +111,7 @@ import java.util.zip.Adler32;
  * Note: when you add a new olap table property, you should modify TableProperty class
  * ATTN: serialize by gson is used by MaterializedView
  */
-public class OlapTable extends Table implements GsonPostProcessable {
+public class OlapTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
     public enum OlapTableState {
@@ -274,24 +274,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (tableProperty == null) {
             tableProperty = new TableProperty(Maps.newHashMap());
         }
-        Map<String, String> properties = curBinlogConfig.toProperties();
-
-        // log binlogAvilableVerison when it's valid
-        // need't log if it's invalid
-        // for replay updateBinlogConfigInfo will invalidate binlogAvailableVersion
-        if (curBinlogConfig.getBinlogEnable()) {
-            Collection<Partition> allPartitions = getAllPartitions();
-            Map<String, String> partitonIdToAvailableVersion = new HashMap<>();
-            allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(
-                    TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion())));
-            properties.putAll(partitonIdToAvailableVersion);
-        }
-        tableProperty.modifyTableProperties(properties);
+        tableProperty.modifyTableProperties(curBinlogConfig.toProperties());
         tableProperty.setBinlogConfig(curBinlogConfig);
-        if (curBinlogConfig.getBinlogEnable()) {
-            tableProperty.buildBinlogAvailableVersion();
-        }
     }
 
     public boolean containsBinlogConfig() {
@@ -773,13 +757,22 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return partitionColumnNames;
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
+            for (Column column : partitionColumns) {
+                partitionColumnNames.add(column.getName());
+            }
+            return partitionColumnNames;
         }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        for (Column column : partitionColumns) {
-            partitionColumnNames.add(column.getName());
-        }
-        return partitionColumnNames;
+        throw new SemanticException("unknown partition info:" + partitionInfo.getClass().getName());
     }
 
     public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
@@ -838,27 +831,37 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
         if (partition != null) {
-            idToPartition.remove(partition.getId());
-            nameToPartition.remove(partitionName);
-
-            Preconditions.checkState(partitionInfo.isRangePartition());
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-
-            if (!isForceDrop) {
-                // recycle partition
-                GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
-                        rangePartitionInfo.getRange(partition.getId()),
-                        rangePartitionInfo.getDataProperty(partition.getId()),
-                        rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()),
-                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                        isLakeTable());
-            } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+            if (partitionInfo.isRangePartition()) {
+                idToPartition.remove(partition.getId());
+                nameToPartition.remove(partitionName);
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    // recycle range partition
+                    GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
+                            rangePartitionInfo.getRange(partition.getId()),
+                            rangePartitionInfo.getDataProperty(partition.getId()),
+                            rangePartitionInfo.getReplicationNum(partition.getId()),
+                            rangePartitionInfo.getIsInMemory(partition.getId()),
+                            rangePartitionInfo.getStorageCacheInfo(partition.getId()),
+                            isLakeTable());
+                } else if (!reserveTablets) {
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
+                // drop partition info
+                rangePartitionInfo.dropPartition(partition.getId());
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                if (!isForceDrop) {
+                    throw new SemanticException("List partition does not support recycle bin, " +
+                            "you can use force drop to drop it.");
+                } else if (!reserveTablets) {
+                    idToPartition.remove(partition.getId());
+                    nameToPartition.remove(partitionName);
+                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                }
+                // drop partition info
+                listPartitionInfo.dropPartition(partition.getId());
             }
-
-            // drop partition info
-            rangePartitionInfo.dropPartition(partition.getId());
         }
     }
 
@@ -1055,7 +1058,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (colocateMaterializedViewNames.contains(mvName)) {
             if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
                 ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-                colocateTableIndex.removeTable(this.id);
+                colocateTableIndex.removeTable(this.id, null, false /* isReplay */);
                 setInColocateMvGroup(false);
                 setColocateGroup(null);
             }
@@ -1069,7 +1072,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
             String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
             String groupName = dbName + ":" + rollupIndexName;
-            colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
+            try {
+                colocateTableIndex.addTableToGroup(dbId, this, groupName, null, false /* isReplay */);
+            } catch (DdlException e) {
+                // should not happen, just log an error here
+                LOG.error(e.getMessage());
+            }
             setInColocateMvGroup(true);
             setColocateGroup(groupName);
 
@@ -1435,6 +1443,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
         // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
@@ -1701,7 +1710,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
-    public Boolean enableBinlog() {
+    public Boolean isBinlogEnabled() {
         if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
             return false;
         }
@@ -1848,41 +1857,50 @@ public class OlapTable extends Table implements GsonPostProcessable {
      */
     public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
-        RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+        if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
 
-        if (strictRange) {
-            // check if range of partitions and temp partitions are exactly same
-            List<Range<PartitionKey>> rangeList = Lists.newArrayList();
-            List<Range<PartitionKey>> tempRangeList = Lists.newArrayList();
-            for (String partName : partitionNames) {
-                Partition partition = nameToPartition.get(partName);
-                Preconditions.checkNotNull(partition);
-                rangeList.add(rangeInfo.getRange(partition.getId()));
+            if (strictRange) {
+                // check if range of partitions and temp partitions are exactly same
+                List<Range<PartitionKey>> rangeList = Lists.newArrayList();
+                List<Range<PartitionKey>> tempRangeList = Lists.newArrayList();
+                for (String partName : partitionNames) {
+                    Partition partition = nameToPartition.get(partName);
+                    Preconditions.checkNotNull(partition);
+                    rangeList.add(rangeInfo.getRange(partition.getId()));
+                }
+
+                for (String partName : tempPartitionNames) {
+                    Partition partition = tempPartitions.getPartition(partName);
+                    Preconditions.checkNotNull(partition);
+                    tempRangeList.add(rangeInfo.getRange(partition.getId()));
+                }
+                RangeUtils.checkRangeListsMatch(rangeList, tempRangeList);
+            } else {
+                // check after replacing, whether the range will conflict
+                Set<Long> replacePartitionIds = Sets.newHashSet();
+                for (String partName : partitionNames) {
+                    Partition partition = nameToPartition.get(partName);
+                    Preconditions.checkNotNull(partition);
+                    replacePartitionIds.add(partition.getId());
+                }
+                List<Range<PartitionKey>> replacePartitionRanges = Lists.newArrayList();
+                for (String partName : tempPartitionNames) {
+                    Partition partition = tempPartitions.getPartition(partName);
+                    Preconditions.checkNotNull(partition);
+                    replacePartitionRanges.add(rangeInfo.getRange(partition.getId()));
+                }
+                List<Range<PartitionKey>> sortedRangeList = rangeInfo.getRangeList(replacePartitionIds, false);
+                RangeUtils.checkRangeConflict(sortedRangeList, replacePartitionRanges);
             }
-
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
             for (String partName : tempPartitionNames) {
                 Partition partition = tempPartitions.getPartition(partName);
-                Preconditions.checkNotNull(partition);
-                tempRangeList.add(rangeInfo.getRange(partition.getId()));
+                CatalogUtils.checkPartitionValuesExistForReplaceListPartition(listInfo, partition);
             }
-            RangeUtils.checkRangeListsMatch(rangeList, tempRangeList);
-        } else {
-            // check after replacing, whether the range will conflict
-            Set<Long> replacePartitionIds = Sets.newHashSet();
-            for (String partName : partitionNames) {
-                Partition partition = nameToPartition.get(partName);
-                Preconditions.checkNotNull(partition);
-                replacePartitionIds.add(partition.getId());
-            }
-            List<Range<PartitionKey>> replacePartitionRanges = Lists.newArrayList();
-            for (String partName : tempPartitionNames) {
-                Partition partition = tempPartitions.getPartition(partName);
-                Preconditions.checkNotNull(partition);
-                replacePartitionRanges.add(rangeInfo.getRange(partition.getId()));
-            }
-            List<Range<PartitionKey>> sortedRangeList = rangeInfo.getRangeList(replacePartitionIds, false);
-            RangeUtils.checkRangeConflict(sortedRangeList, replacePartitionRanges);
         }
+
 
         // begin to replace
         // 1. drop old partitions
@@ -1899,7 +1917,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             // drop
             tempPartitions.dropPartition(partitionName, false);
             // move the range from idToTempRange to idToRange
-            rangeInfo.moveRangeFromTempToFormal(partition.getId());
+            partitionInfo.moveRangeFromTempToFormal(partition.getId());
         }
 
         // change the name so that after replacing, the partition name remain unchanged
@@ -2034,7 +2052,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }
 

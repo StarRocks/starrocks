@@ -2,13 +2,17 @@
 
 This topic describes the resource group feature of StarRocks.
 
-Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, maintaining the system stability. StarRocks v2.5 supports compute resource isolation for loading through resource groups, thereby indirectly controlling the consumption of cluster resources by loading tasks.
+![resource group](../assets/resource_group.png)
 
-With this feature, you can divide the computing resources of each backend (BE) into multiple resource groups and associate each resource group with one or more classifiers. When you run a query, StarRocks compares the conditions of each classifier with the information about the query to identify the classifier that best matches the query. Then, StarRocks allocates computing resources to the query based on the resource quotas of the resource group associated with the identified classifier.
+With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
-Enhancement plan of Resource Group feature
+The roadmap of Resource Group:
 
-|  | Internal Table | External Table | Big Query Resources | Short Query Resources | Load Compute Resources | Schema Change Resources |
+- Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster.
+- In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
+- StarRocks v2.5 supports resource group for data loading.
+
+|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change |
 |---|---|---|---|---|---|---|
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ | √ | × | × |
@@ -48,17 +52,21 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `mem_limit`
 
-  This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Unit: %. Valid values: (0, 1).
+  This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Valid values: (0, 1).
 
   > **NOTE**
   >
   > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
 
 - `concurrency_limit`
-  This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries.
+
+  This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries. This parameter takes effect only when it is set greater than 0. Default: 0.
+
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
-- `big_query_cpu_second_limit`: This parameter specifies the upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second.
-- `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte.
+
+- `big_query_cpu_second_limit`: This parameter specifies the upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
+- `big_query_scan_rows_limit`: This parameter specifies the upper limit of row count that a big query can scan. This parameter takes effect only when it is set greater than 0. Default: 0.
+- `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte. This parameter takes effect only when it is set greater than 0. Default: 0.
 
 > **NOTE**
 >
@@ -66,13 +74,15 @@ On the basis of the above resource consumption restrictions, you can further res
 
 You can set the resource group `type` to `short_query`, `insert`, or `normal`.
 
+- The default value is `normal`. You do not need specify `normal` in the parameter `type`.
 - When loading tasks hit a `insert` resource group, the BE node reserves the specified CPU resources for the loading tasks.
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
 - When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
 
 > **CAUTION**
 >
-> You can create at most ONE short query resource group in a StarRocks Cluster.
+> - You can create at most ONE short query resource group in a StarRocks Cluster.
+> - StarRocks does not set set a hard upper limit of CPU resource for `short_query` resource group.
 
 ### classifier
 
@@ -91,6 +101,15 @@ A classifier matches a query only when one or all conditions of the classifier m
 > **NOTE**
 >
 > You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
+>
+> If a query does not hit any classifiers, the default resource group `default_wg` is used. The resource limits of `default_wg` are as follows:
+>
+> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE（> v2.3.7)
+> - `mem_limit`: 100%
+> - `concurrency_limit`: 0
+> - `big_query_cpu_second_limit`: 0
+> - `big_query_scan_rows_limit`: 0
+> - `big_query_mem_limit`: 0
 
 StarRocks calculates the degree of matching between a query and a classifier by using the following rules:
 
@@ -158,7 +177,7 @@ WITH (
     "cpu_core_limit" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT",
-    "type" = "normal" --The type of the resource group. Set the value to normal.
+    "type" = "str" --The type of the resource group. Set the value to normal.
 );
 ```
 
@@ -175,7 +194,6 @@ TO
 WITH (
     'cpu_core_limit' = '10',
     'mem_limit' = '20%',
-    'type' = 'normal',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
     'big_query_mem_limit' = '1073741824'
@@ -237,8 +255,7 @@ Execute the following statement to modify the resource quotas for an existing re
 ```SQL
 ALTER RESOURCE GROUP group_name WITH (
     'cpu_core_limit' = 'INT',
-    'mem_limit' = 'm%',
-    'type' = 'normal'
+    'mem_limit' = 'm%'
 );
 ```
 

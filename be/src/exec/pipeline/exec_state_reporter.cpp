@@ -28,14 +28,14 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::webserver_port << "/api/_load_error_log?"
+    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
 
 std::string to_http_path(const std::string& token, const std::string& file_name) {
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::webserver_port << "/api/_download_load?"
+    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
         << "token=" << token << "&file=" << file_name;
     return url.str();
 }
@@ -166,7 +166,17 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
     auto* stream_epoch_manager = query_ctx->stream_epoch_manager();
     DCHECK(stream_epoch_manager);
 
-    // query_id
+    params.__set_task_type(MVTaskType::REPORT_EPOCH);
+    // maintenance_task_info
+    auto task_info = stream_epoch_manager->maintenance_task_info();
+    params.__set_signature(task_info.signature);
+    params.__set_db_name(task_info.db_name);
+    params.__set_mv_name(task_info.mv_name);
+    params.__set_db_id(task_info.db_id);
+    params.__set_mv_id(task_info.mv_id);
+    params.__set_job_id(task_info.job_id);
+    params.__set_mv_id(task_info.mv_id);
+    params.__set_task_id(task_info.task_id);
     params.__set_query_id(query_ctx->query_id());
 
     // report_epoch

@@ -52,6 +52,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -60,6 +61,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -94,6 +96,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
@@ -111,6 +114,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -128,10 +132,12 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -169,12 +175,14 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -219,6 +227,10 @@ public class ShowExecutor {
             handleShowProc();
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
+        } else if (stmt instanceof ShowWarehousesStmt) {
+            handleShowWarehouses();
+        } else if (stmt instanceof ShowClustersStmt) {
+            handleShowClusters();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -321,6 +333,8 @@ public class ShowExecutor {
             handleShowComputeNodes();
         } else if (stmt instanceof ShowAuthenticationStmt) {
             handleShowAuthentication();
+        }  else if (stmt instanceof ShowCreateExternalCatalogStmt) {
+            handleShowCreateExternalCatalog();
         } else {
             handleEmtpy();
         }
@@ -402,7 +416,10 @@ public class ShowExecutor {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                        if (!PrivilegeManager.checkTableAction(connectContext, db.getFullName(),
+                        Table baseTable = baseTableInfo.getTable();
+                        // TODO: external table should check table action after PrivilegeManager support it.
+                        if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
+                                checkTableAction(connectContext, baseTableInfo.getDbName(),
                                 baseTableInfo.getTableName(),
                                 PrivilegeType.TableAction.SELECT)) {
                             baseTableHasPrivilege.set(false);
@@ -1306,7 +1323,7 @@ public class ShowExecutor {
         ProcNodeInterface procNodeI = showStmt.getNode();
         Preconditions.checkNotNull(procNodeI);
         List<List<String>> rows;
-        //Only SchemaChangeProc support where/order by/limit syntax
+        // Only SchemaChangeProc support where/order by/limit syntax
         if (procNodeI instanceof SchemaChangeProcDir) {
             rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
@@ -1678,12 +1695,14 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
+        // TODO(yiming): handle show grants in new RBAC privilege framework
         List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
+        // TODO(yiming): handle show roles in new RBAC privilege framework
         List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
@@ -1939,6 +1958,29 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 
+    // show warehouse statement
+    private void handleShowWarehouses() {
+        ShowWarehousesStmt showStmt = (ShowWarehousesStmt) stmt;
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+        List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
+                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
+    // show cluster statement
+    private void handleShowClusters() {
+        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
+        List<List<String>> rowSet = warehouse.getClustersInfo().stream()
+                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
+
     private List<List<String>> doPredicate(ShowStmt showStmt,
                                            ShowResultSetMetaData showResultSetMetaData,
                                            List<List<String>> rows) {
@@ -1962,5 +2004,33 @@ public class ShowExecutor {
         }
 
         return returnRows;
+    }
+
+    private void handleShowCreateExternalCatalog() {
+        ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        Catalog catalog =  connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        List<List<String>> rows = Lists.newArrayList();
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
+            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+            return;
+        }
+        // Create external catalog catalogName (
+        StringBuilder createCatalogSql = new StringBuilder();
+        createCatalogSql.append("CREATE EXTERNAL CATALOG ")
+                .append("`").append(catalogName).append("`")
+                .append("\n");
+
+        // Comment
+        String comment = catalog.getComment();
+        if (comment != null) {
+            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+        }
+        // Properties
+        createCatalogSql.append("PROPERTIES (")
+                .append(new PrintableMap<>(catalog.getConfig(), " = ", true, true))
+                .append("\n)");
+        rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

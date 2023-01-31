@@ -177,4 +177,9 @@ add_library(Storage STATIC
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    binlog_util.cpp
+    binlog_file_writer.cpp
+    binlog_file_reader.cpp
+    lake/update_compaction_state.cpp
+    lake/txn_log_applier.cpp
 )

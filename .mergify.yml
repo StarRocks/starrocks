@@ -4,4 +4,14 @@ commands_restrictions:
     conditions:
       - sender-permission>=read
 
+pull_request_rules:
+  - name: ingore backport patches when conflict
+    conditions:
+      - check-success=modify-branch-label
+    actions:
+      backport:
+        ignore_conflicts: false
+
+
+
 

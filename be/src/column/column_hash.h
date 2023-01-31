@@ -121,7 +121,7 @@ public:
 
 inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
-    return crc32(hash, (const unsigned char*)data, bytes);
+    return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
 #else
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % 4 /*sizeof(uint32_t)*/;
@@ -162,7 +162,7 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     return crc32(hash, (const unsigned char*)data, length);
 #else
     if (UNLIKELY(length < 8)) {
-        return crc_hash_32(data, length, hash);
+        return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
 
     uint64_t words = length / sizeof(uint64_t);
@@ -314,8 +314,8 @@ inline void hash_combine(uint64_t& seed, const T& val) {
 }
 
 inline uint64_t hash_128(uint64_t seed, int128_t val) {
-    size_t low = val;
-    size_t high = val >> 64;
+    auto low = static_cast<size_t>(val);
+    auto high = static_cast<size_t>(val >> 64);
     hash_combine(seed, low);
     hash_combine(seed, high);
     return seed;

@@ -56,6 +56,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
+#include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -333,29 +334,31 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
         cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
         cache_param.keys_type = tcache_param.keys_type;
+        if (tcache_param.__isset.cached_plan_node_ids) {
+            cache_param.cached_plan_node_ids.insert(tcache_param.cached_plan_node_ids.begin(),
+                                                    tcache_param.cached_plan_node_ids.end());
+        }
         _fragment_ctx->set_enable_cache(true);
     }
 
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
-
-        PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
-        if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
-            for (auto k = 0; k < scan_ranges.size(); ++k) {
-                scan_ranges_per_driver[k % dop].push_back(scan_ranges[k]);
-            }
-        }
-
-        const auto& scan_ranges_per_driver_seq = !scan_ranges_per_driver.empty()
-                                                         ? scan_ranges_per_driver
-                                                         : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
-
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
         _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
 
-        for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
-            for (auto& scan_range : scan_ranges) {
-                if (scan_range.scan_range.__isset.internal_scan_range && fragment.__isset.cache_param) {
+        if (scan_ranges_per_driver_seq.empty()) {
+            _fragment_ctx->set_enable_cache(false);
+        }
+
+        bool should_compute_cache_key_prefix = _fragment_ctx->enable_cache() &&
+                                               _fragment_ctx->cache_param().cached_plan_node_ids.count(scan_node->id());
+        if (should_compute_cache_key_prefix) {
+            for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
+                for (auto& scan_range : scan_ranges) {
+                    if (!scan_range.scan_range.__isset.internal_scan_range) {
+                        continue;
+                    }
                     const auto& tcache_param = fragment.cache_param;
                     auto& internal_scan_range = scan_range.scan_range.internal_scan_range;
                     auto tablet_id = internal_scan_range.tablet_id;
@@ -376,9 +379,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             }
         }
 
-        if (scan_ranges_per_driver_seq.empty()) {
-            _fragment_ctx->set_enable_cache(false);
-        }
         // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
         //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
@@ -477,6 +477,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
+    auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -485,7 +486,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& pipelines = _fragment_ctx->pipelines();
 
     // Build pipelines
-    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism);
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, is_stream_pipeline);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
 
@@ -553,28 +554,66 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
-    int64_t prepare_time = 0;
-    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+    struct {
+        int64_t prepare_time = 0;
+        int64_t prepare_query_ctx_time = 0;
+        int64_t prepare_fragment_ctx_time = 0;
+        int64_t prepare_runtime_state_time = 0;
+        int64_t prepare_pipeline_driver_time = 0;
+    } profiler;
+
+    DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* prepare_timer =
                     ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
-            COUNTER_SET(prepare_timer, prepare_time);
+            COUNTER_SET(prepare_timer, profiler.prepare_time);
+            auto* prepare_query_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-query-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
+
+            auto* prepare_fragment_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-fragment-ctx",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
+
+            auto* prepare_runtime_state_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-runtime-state",
+                                             "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
+
+            auto* prepare_pipeline_driver_timer =
+                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(),
+                                             "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
         } else {
             _fail_cleanup();
         }
     });
-    SCOPED_RAW_TIMER(&prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
-    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
-    RETURN_IF_ERROR(_prepare_fragment_ctx(request));
-    RETURN_IF_ERROR(_prepare_workgroup(request));
-    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
-    RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
-    RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
-    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    SCOPED_RAW_TIMER(&profiler.prepare_time);
+    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
+        RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_fragment_ctx_time);
+        RETURN_IF_ERROR(_prepare_fragment_ctx(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_runtime_state_time);
+        RETURN_IF_ERROR(_prepare_workgroup(request));
+        RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
+        RETURN_IF_ERROR(_prepare_global_dict(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
+        RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+        RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;

@@ -500,7 +500,8 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_scan_profile, "RawRowsRead", TUnit::UNIT);
     _read_pages_num_counter = ADD_COUNTER(_scan_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
-    _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
+    _pushdown_predicates_counter =
+            ADD_COUNTER_SKIP_MERGE(_scan_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
     _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");

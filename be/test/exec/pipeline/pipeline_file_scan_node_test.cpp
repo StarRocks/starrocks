@@ -89,7 +89,7 @@ public:
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
 
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, false));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 
@@ -194,7 +194,6 @@ std::shared_ptr<TPlanNode> PipeLineFileScanNodeTest::_create_tplan_node() {
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;

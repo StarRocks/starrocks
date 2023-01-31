@@ -42,6 +42,8 @@ public class MapType extends Type {
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
+        Preconditions.checkState(!Type.NULL.equals(keyType), "map's key type cannot be NULL_TYPE");
+        Preconditions.checkState(!Type.NULL.equals(valueType), "map's value type cannot be NULL_TYPE");
         selectedFields = new Boolean[] { false, false };
         this.keyType = keyType;
         this.valueType = valueType;
@@ -65,6 +67,17 @@ public class MapType extends Type {
         if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
             valueType.selectAllFields();
         }
+    }
+
+    public void pruneUnusedSubfields() {
+        // We set pruned subfield to NULL in map
+        if (!selectedFields[0]) {
+            keyType = ScalarType.UNKNOWN_TYPE;
+        }
+        if (!selectedFields[1]) {
+            valueType = ScalarType.UNKNOWN_TYPE;
+        }
+        Preconditions.checkArgument(!keyType.isNull() || !valueType.isNull());
     }
 
     @Override
@@ -141,10 +154,7 @@ public class MapType extends Type {
     public void toThrift(TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
-        Preconditions.checkNotNull(keyType);
-        Preconditions.checkNotNull(valueType);
         node.setType(TTypeNodeType.MAP);
-        node.setSelected_fields(Arrays.asList(selectedFields));
         keyType.toThrift(container);
         valueType.toThrift(container);
     }

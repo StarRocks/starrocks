@@ -92,10 +92,9 @@ export_mem_limit_from_conf() {
         return 1
     fi
 
-    if [[ (-v mem_limit) && ($mem_limit -le $mem_total) ]]; then
+    if [[ (-v mem_limit) && ("$mem_limit" != "max") && ($mem_limit -le $mem_total) ]]; then
       mem_total=$mem_limit
     fi
-
 
     if [ "$mem_limit_is_set" == "false" ]; then
         # if not set, the mem limit if 90% of total memory
@@ -169,5 +168,5 @@ export_shared_envvars() {
 # Export cachelib libraries
 export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }

@@ -272,7 +272,7 @@ PARALLEL_TEST(JsonColumnTest, test_filter) {
         json_column->append(JsonValue::parse(json_str).value());
     }
 
-    Column::Filter filter(N, 1);
+    Filter filter(N, 1);
     json_column->filter_range(filter, 0, N);
     ASSERT_EQ(N, json_column->size());
 }
@@ -382,5 +382,54 @@ PARALLEL_TEST(JsonColumnTest, test_assign) {
         EXPECT_EQ(JsonValue::parse("1").value(), *json);
     }
 }
+
+PARALLEL_TEST(JsonColumnTest, test_serialize) {
+    auto column = RunTimeColumnType<TYPE_JSON>::create();
+    JsonValue json = JsonValue::parse("1").value();
+    column->append(&json);
+
+    EXPECT_EQ(json.serialize_size(), column->serialize_size(0));
+    std::vector<uint8_t> buffer;
+    buffer.resize(json.serialize_size());
+    column->serialize(0, buffer.data());
+
+    // deserialize
+    auto new_column = column->clone_empty();
+    new_column->deserialize_and_append(buffer.data());
+    EXPECT_EQ(0, column->compare_at(0, 0, *new_column, 1));
+}
+
+class JsonConvertTestFixture : public ::testing::TestWithParam<std::tuple<std::string>> {
+public:
+};
+
+TEST_P(JsonConvertTestFixture, convert_from_simdjson) {
+    using namespace simdjson;
+    std::string param_0 = std::get<0>(GetParam());
+    ondemand::parser parser;
+    padded_string json_str(param_0);
+    ondemand::document doc = parser.iterate(json_str);
+    ondemand::object obj = doc.get_object();
+    auto maybe_json = JsonValue::from_simdjson(&obj);
+    ASSERT_TRUE(maybe_json.ok());
+    ASSERT_EQ(json_str.data(), maybe_json.value().to_string_uncheck());
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
+                         ::testing::Values(
+                                 // clang-format off
+                                    std::make_tuple(R"({"a": 1})"),
+                                    std::make_tuple(R"({"a": null})"),
+                                    std::make_tuple(R"({"a": ""})"),
+                                    std::make_tuple(R"({"a": [1, 2, 3]})"),
+                                    std::make_tuple(R"({"a": {"b": 1}})"),
+
+                                    // empty key
+                                    std::make_tuple(R"({"a": {"": ""}})"),
+                                    // empty array
+                                    std::make_tuple(R"({"a": []})")
+
+                                 // clang-format on
+                                 ));
 
 } // namespace starrocks
