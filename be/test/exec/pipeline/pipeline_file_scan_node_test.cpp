@@ -397,13 +397,13 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     auto tnode = _create_tplan_node();
     auto* descs = _create_table_desc(types);
-    auto file_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_pool, *tnode, *descs);
+    auto file_scan_node = _pool->add(new starrocks::ConnectorScanNode(_pool, *tnode, *descs));
 
     Status status = file_scan_node->init(*tnode, _runtime_state);
     ASSERT_TRUE(status.ok());
 
     auto scan_ranges = _create_csv_scan_ranges(types);
-    generate_morse_queue({file_scan_node.get()}, scan_ranges);
+    generate_morse_queue({file_scan_node}, scan_ranges);
 
     starrocks::pipeline::CounterPtr sinkCounter = std::make_shared<starrocks::pipeline::FileScanCounter>();
 
