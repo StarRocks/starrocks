@@ -447,6 +447,7 @@
       + [DataX](/faq/loading/DataX_faq.md)
       + [CloudCanal 数据导入](/faq/loading/CloudCanal_load_faq.md)
   + [SQL FAQ](/faq/Sql_faq.md)
+  + [Query Dump](/faq/Dump_query.md)
   + [视频资源](/faq/Video.md)
   + [其他](/faq/Others.md)
 + 性能测试
