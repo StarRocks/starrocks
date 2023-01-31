@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -22,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Objects;
 
 public class PhysicalSetOperation extends PhysicalOperator {
     protected List<ColumnRefOperator> outputColumnRefOp;
@@ -63,13 +63,16 @@ public class PhysicalSetOperation extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalSetOperation that = (PhysicalSetOperation) o;
-        return Objects.equal(outputColumnRefOp, that.outputColumnRefOp) &&
-                Objects.equal(childOutputColumns, that.childOutputColumns);
+        return Objects.equals(outputColumnRefOp, that.outputColumnRefOp) &&
+                Objects.equals(childOutputColumns, that.childOutputColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(outputColumnRefOp, childOutputColumns);
+        return Objects.hash(super.hashCode(), outputColumnRefOp, childOutputColumns);
     }
 }

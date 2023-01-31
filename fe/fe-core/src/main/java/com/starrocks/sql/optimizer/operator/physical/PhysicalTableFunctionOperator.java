@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -26,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Objects;
 
 public class PhysicalTableFunctionOperator extends PhysicalOperator {
     private final TableFunction fn;
@@ -92,14 +92,18 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalTableFunctionOperator that = (PhysicalTableFunctionOperator) o;
-        return Objects.equal(fn, that.fn) && Objects.equal(fnResultColumnRefSet, that.fnResultColumnRefSet) &&
-                Objects.equal(outerColumnRefSet, that.outerColumnRefSet) &&
-                Objects.equal(fnParamColumnRef, that.fnParamColumnRef);
+        return Objects.equals(fn, that.fn) &&
+                Objects.equals(fnResultColumnRefSet, that.fnResultColumnRefSet) &&
+                Objects.equals(outerColumnRefSet, that.outerColumnRefSet) &&
+                Objects.equals(fnParamColumnRef, that.fnParamColumnRef);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnRef);
+        return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnRef);
     }
 }

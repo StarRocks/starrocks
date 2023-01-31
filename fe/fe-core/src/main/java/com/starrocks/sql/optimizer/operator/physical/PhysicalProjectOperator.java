@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -27,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class PhysicalProjectOperator extends PhysicalOperator {
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
@@ -56,14 +56,17 @@ public class PhysicalProjectOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalProjectOperator that = (PhysicalProjectOperator) o;
-        return Objects.equal(columnRefMap, that.columnRefMap) &&
-                Objects.equal(commonSubOperatorMap, that.commonSubOperatorMap);
+        return Objects.equals(columnRefMap, that.columnRefMap) &&
+                Objects.equals(commonSubOperatorMap, that.commonSubOperatorMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(columnRefMap, commonSubOperatorMap);
+        return Objects.hash(super.hashCode(), columnRefMap, commonSubOperatorMap);
     }
 
     @Override

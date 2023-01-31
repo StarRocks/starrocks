@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
@@ -94,23 +93,25 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(sortPhase, orderSpec);
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalTopNOperator that = (PhysicalTopNOperator) o;
+        return offset == that.offset && partitionLimit == that.partitionLimit && isSplit == that.isSplit &&
+                isEnforced == that.isEnforced && Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                sortPhase == that.sortPhase && topNType == that.topNType;
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalTopNOperator)) {
-            return false;
-        }
-
-        PhysicalTopNOperator rhs = (PhysicalTopNOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return sortPhase.equals(rhs.sortPhase) &&
-                orderSpec.equals(rhs.orderSpec);
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), offset, sortPhase, orderSpec);
     }
 
     @Override

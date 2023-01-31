@@ -96,16 +96,21 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalWindowOperator that = (PhysicalWindowOperator) o;
         return Objects.equals(analyticCall, that.analyticCall) &&
                 Objects.equals(partitionExpressions, that.partitionExpressions) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                Objects.equals(analyticWindow, that.analyticWindow);
+                Objects.equals(analyticWindow, that.analyticWindow) &&
+                Objects.equals(enforceOrderBy, that.enforceOrderBy);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(analyticCall, partitionExpressions, orderByElements, analyticWindow);
+        return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
+                enforceOrderBy);
     }
 
     @Override

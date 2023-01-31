@@ -74,14 +74,18 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalRepeatOperator that = (PhysicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
-                Objects.equals(repeatColumnRef, that.repeatColumnRef);
+                Objects.equals(repeatColumnRef, that.repeatColumnRef) &&
+                Objects.equals(groupingIds, that.groupingIds);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(outputGrouping, repeatColumnRef);
+        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRef, groupingIds);
     }
 
     @Override
