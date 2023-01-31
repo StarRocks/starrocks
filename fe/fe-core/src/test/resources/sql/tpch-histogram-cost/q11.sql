@@ -78,10 +78,10 @@ OutPut Exchange Id: 30
 |  cardinality: 3200000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[1.0, 9999000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----7:EXCHANGE
@@ -162,10 +162,10 @@ OutPut Exchange Id: 22
 |  output columns: 24, 25
 |  cardinality: 3200000
 |  column statistics:
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[1.0, 9999000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----18:EXCHANGE

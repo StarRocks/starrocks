@@ -55,6 +55,7 @@ public class DeriveStatsTask extends OptimizerTask {
         statisticsCalculator.estimatorStats();
 
         Statistics currentStatistics = groupExpression.getGroup().getStatistics();
+        // @Todo: update choose algorithm, like choose the least predicate statistics
         // choose best statistics
         if (currentStatistics == null ||
                 (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount())) {
