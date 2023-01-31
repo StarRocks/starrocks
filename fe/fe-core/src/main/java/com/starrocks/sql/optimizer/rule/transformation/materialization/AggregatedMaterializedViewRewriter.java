@@ -365,7 +365,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (newAggregations == null) {
             return null;
         }
-        return createNewAggregate(queryAgg, newAggregations, aggregateMapping, unionExpr);
+        OptExpression result = createNewAggregate(queryAgg, newAggregations, aggregateMapping, unionExpr);
+        deriveLogicalProperty(result);
+        return result;
     }
 
     private OptExpression createNewAggregate(LogicalAggregationOperator queryAgg,
