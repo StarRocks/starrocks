@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -198,7 +199,13 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
-        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
+        OptimizerTraceInfo traceInfo;
+        if (connectContext.getExecutor() == null) {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
+        } else {
+            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
+        }
+        context.setTraceInfo(traceInfo);
 
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
@@ -362,9 +369,9 @@ public class Optimizer {
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        if (!sessionVariable.isDisableJoinReorder()
-                && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
-            if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
+        int innerCrossJoinNode = Utils.countJoinNodeSize(tree, JoinOperator.innerCrossJoinSet());
+        if (!sessionVariable.isDisableJoinReorder() && innerCrossJoinNode < sessionVariable.getCboMaxReorderNode()) {
+            if (innerCrossJoinNode > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 CTEUtils.collectForceCteStatistics(memo, context);
 
                 OptimizerTraceUtil.logOptExpression(connectContext, "before ReorderJoinRule:\n%s", tree);
@@ -373,15 +380,16 @@ public class Optimizer {
 
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
-                if (Utils.capableSemiReorder(tree, false, 0, sessionVariable.getCboMaxReorderNodeUseExhaustive())) {
+                if (Utils.countJoinNodeSize(tree, JoinOperator.semiAntiJoinSet()) <
+                        sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                     context.getRuleSet().getTransformRules().add(new SemiReorderRule());
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
         }
 
-        if (sessionVariable.isEnableOuterJoinReorder() &&
-                Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
+        if (!sessionVariable.isDisableJoinReorder() && sessionVariable.isEnableOuterJoinReorder()
+                && Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 

@@ -34,7 +34,10 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.thrift.TJoinOp;
+
+import java.util.Set;
 
 public enum JoinOperator {
     INNER_JOIN("INNER JOIN", TJoinOp.INNER_JOIN),
@@ -150,6 +153,15 @@ public enum JoinOperator {
     // 4. LEFT_ANTI_JOIN: lhs.flatMap(l->rhs.flatMap(r->if( l match r){emptyList()} else {listOf(l)}))
     public boolean isLeftTransform() {
         return this == INNER_JOIN || this == LEFT_SEMI_JOIN || this == LEFT_OUTER_JOIN || this == LEFT_ANTI_JOIN;
+    }
+
+    public static Set<JoinOperator> semiAntiJoinSet() {
+        return Sets.newHashSet(LEFT_SEMI_JOIN, LEFT_ANTI_JOIN, NULL_AWARE_LEFT_ANTI_JOIN, RIGHT_SEMI_JOIN,
+                RIGHT_ANTI_JOIN);
+    }
+
+    public static Set<JoinOperator> innerCrossJoinSet() {
+        return Sets.newHashSet(INNER_JOIN, CROSS_JOIN);
     }
 }
 

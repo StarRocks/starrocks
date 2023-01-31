@@ -298,7 +298,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testCapableSemiReorder() {
+    public void testCountJoinNode() {
         OptExpression root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
@@ -306,27 +306,51 @@ public class UtilsTest {
                         OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
-        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 1));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+        assertEquals(1, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
 
+
+        //      outer join (left child semi join node = 1, right child semi join node = 3) => result is 3
+        //      /         \
+        //  semi join      semi join (left child semi join node = 1, right child semi join node = 1)
+        //                   /    \            => result is 1 + 1 + 1 = 3
+        //           outer join   semi join
+        //             /      \
+        //         semi join   node
         root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
                 OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
-                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
                                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                                         OptExpression.create(
-                                                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
+                                                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
                                         OptExpression.create(
                                                 new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
                                 OptExpression.create(
-                                        new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
-                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+                                        new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)))));
 
-        Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 0));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 1));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
-        Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+        assertEquals(3, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
+
+        //      semi join (left child semi join node = 0, right child semi join node = 3) => result is 0 + 3 + 1 = 4
+        //      /         \
+        //  inner join   semi join (left child semi join node = 2, right child semi join node = 0)
+        //                /    \            => result is 2 + 0 + 1 = 3
+        //        semi join    node
+        //         /      \
+        //   semi join  node
+        root = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, null)),
+                OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null),
+                                        OptExpression.create(
+                                                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                                        OptExpression.create(
+                                                new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                                OptExpression.create(
+                                        new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))));
+
+        assertEquals(4, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
     }
 }
