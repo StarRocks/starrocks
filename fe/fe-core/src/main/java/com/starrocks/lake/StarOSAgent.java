@@ -31,6 +31,8 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.PlacementPolicy;
+import com.staros.proto.PlacementPreference;
+import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -307,7 +309,8 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+            List<Long> matchShardIds)
         throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
@@ -322,6 +325,15 @@ public class StarOSAgent {
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                if (matchShardIds != null) {
+                    builder.clearPlacementPreferences();
+                    PlacementPreference preference = PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(matchShardIds.get(i))
+                            .build();
+                    builder.addPlacementPreferences(preference);
+                }
                 createShardInfoList.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfoList);
