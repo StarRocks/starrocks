@@ -65,7 +65,7 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(ChunkPtr chunk) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(const ChunkPtr& chunk) {
     SCOPED_TIMER(_aggregator->streaming_timer());
     ChunkPtr res = std::make_shared<Chunk>();
     RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
@@ -73,7 +73,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(ChunkPtr c
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(ChunkPtr chunk, const size_t chunk_size) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const ChunkPtr& chunk,
+                                                                           const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
     if (_aggregator->is_none_group_by_exprs()) {
@@ -89,7 +90,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(Chunk
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(ChunkPtr chunk, const size_t chunk_size,
+Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(const ChunkPtr& chunk,
+                                                                               const size_t chunk_size,
                                                                                bool need_build) {
     if (need_build) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
@@ -140,7 +142,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(C
  *
  * SELECTIVE_PREAGG state aggregates continuous_limit chunks, then shifting to ADJUST state.
  */
-Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size) {
     size_t allocated_bytes = _aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool());
     const size_t continuous_limit = _auto_context.get_continuous_limit();
     switch (_auto_state) {
