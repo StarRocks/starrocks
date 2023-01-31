@@ -38,7 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class ColumnPruner {
+public class MVColumnPruner {
     private ColumnRefSet requiredOutputColumns;
 
     public OptExpression pruneColumns(OptExpression queryExpression) {
