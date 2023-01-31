@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -326,8 +327,10 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = leftSize * rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
-            double memCost = rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D;
+            double cpuCost = StatisticUtils.multiplyOutputSize(leftSize, StatisticUtils.multiplyOutputSize(rightSize,
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY));
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize,
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
