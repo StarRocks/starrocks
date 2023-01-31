@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -135,13 +134,6 @@ public class HudiColumnValue implements ColumnValue {
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
         StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
         List<? extends StructField> fields = inspector.getAllStructFieldRefs();
-        // if we don't do any prune, we preserve all fields.
-        if (structFieldIndex == null) {
-            structFieldIndex = new ArrayList<>(fields.size());
-            for (int i = 0; i < fields.size(); i++) {
-                structFieldIndex.add(i);
-            }
-        }
         for (int i = 0; i < structFieldIndex.size(); i++) {
             Integer idx = structFieldIndex.get(i);
             HudiColumnValue cv = null;

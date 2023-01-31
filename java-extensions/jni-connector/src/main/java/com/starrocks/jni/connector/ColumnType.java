@@ -305,15 +305,30 @@ public class ColumnType {
 
     public void pruneOnField(SelectedFields ssf, String name) {
         if (isStruct() || isMap() || isArray()) {
-            SelectedFields ssf2 = ssf.findChildren(name);
-            // If no spec at all, then select all fields
-            if (ssf2 != null) {
-                pruneOnSelectedFields(ssf2);
-            }
+            SelectedFields ssf2 = ssf != null ? ssf.findChildren(name) : null;
+            pruneOnSelectedFields(ssf2);
+        }
+    }
+
+    private void pruneChildren(SelectedFields ssf) {
+        for (int i = 0; i < childTypes.size(); i++) {
+            ColumnType type = childTypes.get(i);
+            String name = childNames.get(i);
+            type.pruneOnField(ssf, name);
         }
     }
 
     public void pruneOnSelectedFields(SelectedFields ssf) {
+        // If no spec at all, then select all fields
+        if (ssf == null) {
+            fieldIndex = new ArrayList<>();
+            for (int i = 0; i < childNames.size(); i++) {
+                fieldIndex.add(i);
+            }
+            pruneChildren(null);
+            return;
+        }
+
         // make index and prune on this struct.
         Map<String, Integer> index = new HashMap<>();
         for (int i = 0; i < childNames.size(); i++) {
@@ -338,13 +353,7 @@ public class ColumnType {
         }
         childNames = names;
         childTypes = types;
-
-        // prune on sub structs.
-        for (int i = 0; i < childTypes.size(); i++) {
-            ColumnType type = childTypes.get(i);
-            String name = childNames.get(i);
-            type.pruneOnField(ssf, name);
-        }
+        pruneChildren(ssf);
     }
 
     public void buildNestedFieldsSpec(String top, StringBuilder sb) {
