@@ -39,11 +39,11 @@ public class FunctionPEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
         }
         if (tokens.get(1).equals(FUNC_NOT_FOUND)) {
-            throw new PrivilegeException("func not found");
+            throw new PrivObjNotFoundException("func not found");
         }
         Database database = mgr.getDb(tokens.get(0));
         if (database == null) {
-            throw new PrivilegeException("cannot find db: " + tokens.get(0));
+            throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
         }
         String funcSig = tokens.get(1);
         return new FunctionPEntryObject(database.getId(), funcSig);

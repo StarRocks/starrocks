@@ -37,7 +37,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
 
         ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
         if (resourceGroup == null) {
-            throw new PrivilegeException("cannot find resource group: " + name);
+            throw new PrivObjNotFoundException("cannot find resource group: " + name);
         }
         id = resourceGroup.getId();
         return new ResourceGroupPEntryObject(id);
