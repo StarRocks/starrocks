@@ -209,7 +209,7 @@ class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(AggregatorParamsPtr&& params);
 
-    virtual ~Aggregator() noexcept override {
+    ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
