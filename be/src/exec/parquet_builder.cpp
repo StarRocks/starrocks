@@ -285,6 +285,11 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
     return Status::OK();
 }
 
+// The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.
+// total_bytes_written: total bytes written by the page writer
+// total_compressed_types: total bytes still compressed but not written
+// estimated_bytes: Estimated size of all column chunk uncompressed values that are not written to a page yet. it
+// mainly includes value buffer size and repetition buffer size and definition buffer value for each column.
 size_t ParquetBuilder::_get_rg_written_bytes() {
     if (_rg_writer == nullptr) {
         return 0;
