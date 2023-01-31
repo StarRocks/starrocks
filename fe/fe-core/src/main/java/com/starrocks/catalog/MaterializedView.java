@@ -148,7 +148,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
 
         public String getDbName() {
-            return this.dbName;
+            return this.dbName != null ? this.dbName : getDb().getFullName();
         }
 
         public String getTableName() {

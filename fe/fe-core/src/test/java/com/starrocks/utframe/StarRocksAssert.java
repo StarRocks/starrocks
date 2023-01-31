@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -272,6 +273,13 @@ public class StarRocksAssert {
     public StarRocksAssert withCatalog(String sql) throws Exception {
         CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
+        return this;
+    }
+
+    // With warehouse
+    public StarRocksAssert withWarehouse(String sql) throws Exception {
+        CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().createWarehouse(createWarehouseStmt);
         return this;
     }
 

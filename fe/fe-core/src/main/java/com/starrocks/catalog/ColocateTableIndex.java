@@ -991,6 +991,26 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public void updateLakeTableColocationInfo(OlapTable olapTable) throws DdlException {
+        if (olapTable == null || !olapTable.isLakeTable()) { // skip non-lake table
+            return;
+        }
+
+        writeLock();
+        try {
+            if (!table2Group.containsKey(olapTable.getId())) { // skip non-colocate table
+                return;
+            }
+
+            GroupId groupId = table2Group.get(olapTable.getId());
+            LakeTable ltbl = (LakeTable) olapTable;
+            List<Long> shardGroupIds = ltbl.getShardGroupIds();
+            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
         if (!Config.use_staros) {
             return;

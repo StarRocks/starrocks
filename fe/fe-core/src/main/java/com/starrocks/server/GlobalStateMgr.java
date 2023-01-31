@@ -251,6 +251,7 @@ import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -479,6 +480,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private WarehouseManager warehouseMgr;
+
     private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -644,6 +647,7 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
@@ -861,6 +865,10 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
+    }
+
+    public WarehouseManager getWarehouseMgr() {
+        return warehouseMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1294,6 +1302,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
+            // ** NOTICE **: always add new code at the end
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
@@ -1347,8 +1356,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
-            // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
+            checksum = warehouseMgr.loadWarehouses(dis, checksum);
+            remoteChecksum = dis.readLong();
+            // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1616,6 +1627,7 @@ public class GlobalStateMgr {
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+            // ** NOTICE **: always add new code at the end
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = nodeMgr.saveLeaderInfo(dos, checksum);
             checksum = nodeMgr.saveFrontends(dos, checksum);
@@ -1661,8 +1673,10 @@ public class GlobalStateMgr {
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
-            // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
+            checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
+            // ** NOTICE **: always add new code at the end
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2194,7 +2208,7 @@ public class GlobalStateMgr {
         }
         sb.append("\n) ENGINE=");
         if (table.isLakeTable()) {
-            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+            sb.append(EngineType.STARROCKS.name()).append(" ");
         } else {
             sb.append(table.getType().name()).append(" ");
         }
@@ -3128,6 +3142,14 @@ public class GlobalStateMgr {
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
         this.alter.getClusterHandler().cancel(stmt);
+    }
+
+    // Change current warehouse of this session.
+    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+        if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+        }
+        ctx.setCurrentWarehouse(newWarehouseName);
     }
 
     // Change current catalog of this session.

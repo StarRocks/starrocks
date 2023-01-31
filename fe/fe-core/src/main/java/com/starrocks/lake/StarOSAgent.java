@@ -472,4 +472,15 @@ public class StarOSAgent {
             throw new DdlException("Failed to update meta group. error: " + e.getMessage());
         }
     }
+
+    // Mocked
+    public long createWorkerGroup(String size) throws DdlException {
+        return GlobalStateMgr.getCurrentState().getNextId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+    }
+
+    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
+    }
 }

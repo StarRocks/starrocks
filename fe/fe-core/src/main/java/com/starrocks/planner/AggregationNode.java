@@ -246,6 +246,7 @@ public class AggregationNode extends PlanNode {
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
+
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
