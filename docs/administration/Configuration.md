@@ -371,6 +371,11 @@ BE dynamic parameters are as follows.
 | tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
 | parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
+| be_exit_after_disk_write_hang_second | 60 | second | The time that BE waits to exit before the disk hangs. |
+| min_cmumulative_compaction_failure_interval_sec | 30 | second | The minimum time interval after Cumulative Compaction fails and retries. |
+| size_tiered_level_num | 7 | N/A | The level number of the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item. |
+| size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous level in the Size-tiered Compaction strategy. |
+| size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
 
 ### Configure BE static parameters
 
@@ -446,6 +451,12 @@ BE static parameters are as follows.
 | block_cache_block_size | 1048576  | Bytes | The size of each block. Unit: bytes. The default value is `1048576`, which is 1 MB. |
 | block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | 0 | Bytes | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
+| jdbc_connection_pool_size  | 8 | The JDBC connection pool size. Each BE node shares the same connection pool when accessing the external table with the same `jdbc_url`. |
+| jdbc_minimum_idle_connections  | 1 | The minimum number of idle connections in the JDBC connection pool. |
+| jdbc_connection_idle_timeout_ms  | 600000 | The JDBC idle connection timeout. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections of more than the number specified in the configuration item `jdbc_minimum_idle_connections`. |
+| query_cache_capacity  | 536870912 | The size of the Query Cache in BE. |
+| enable_event_based_compaction_framework  | TRUE | Whether to enable Event-based Compaction Framework.<ul><li>`true`: Event-based Compaction Framework is enabled.</li><li>`false`: Event-based Compaction Framework is disabled. </li></ul> Enabling Event-based Compaction Framework can solve the problem when StarRocks perform Compaction on a large number of tablets. |
+| enable_size_tiered_compaction_strategy  | TRUE |  Whether to enable the Size-tiered Compaction strategy.<ul><li>`true`: The size-tiered Compaction strategy is enabled.</li><li>`false`: The size-tiered Compaction strategy is disabled. </li></ul> |
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
