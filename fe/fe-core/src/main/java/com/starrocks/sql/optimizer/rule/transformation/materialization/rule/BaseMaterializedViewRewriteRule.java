@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.ColumnPruner;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 
 import java.util.List;
@@ -48,7 +48,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             List<OptExpression> rewrittens = rewriter.rewrite();
             if (rewrittens != null && !rewrittens.isEmpty()) {
                 for (OptExpression rewritten : rewrittens) {
-                    ColumnPruner columnPruner = new ColumnPruner();
+                    MVColumnPruner columnPruner = new MVColumnPruner();
                     OptExpression exprAfterPrune = columnPruner.pruneColumns(rewritten);
                     if (exprAfterPrune != null) {
                         results.add(exprAfterPrune);
