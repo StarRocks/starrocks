@@ -28,14 +28,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
-    private static final Map<String, PrivilegeType> TYPE_STRING_TO_ID = new HashMap<>();
+    private static final Map<String, ObjectType> TYPE_STRING_TO_ID = new HashMap<>();
     private static final Map<Short, String> TYPE_ID_TO_STRING = new HashMap<>();
     private static final Map<Short, Map<String, Action>> TYPE_TO_ACTION_MAP = new HashMap<>();
     private static final Map<String, String> PLURAL_TO_TYPE = new HashMap<>();
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
-        for (PrivilegeType type : PrivilegeType.values()) {
+        for (ObjectType type : ObjectType.values()) {
             TYPE_STRING_TO_ID.put(type.toString(), type);
             TYPE_ID_TO_STRING.put((short) type.getId(), type.toString());
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
@@ -59,9 +59,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public PrivilegeType getPrivilegeType(String typeStr) throws PrivilegeException {
+    public ObjectType getPrivilegeType(String typeStr) throws PrivilegeException {
 
-        PrivilegeType privilegeType = TYPE_STRING_TO_ID.get(typeStr);
+        ObjectType privilegeType = TYPE_STRING_TO_ID.get(typeStr);
         if (privilegeType == null) {
             throw new PrivilegeException("cannot find type " + typeStr + " in " + TYPE_STRING_TO_ID.keySet());
         } else {
@@ -85,16 +85,16 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public Action getAction(short typeId, String actionName) throws PrivilegeException {
-        Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(typeId);
+    public Action getAction(short objectTypeId, String actionName) throws PrivilegeException {
+        Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(objectTypeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(typeId) +
+            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(objectTypeId) +
                     " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         Action action = actionMap.get(actionName);
         if (action == null) {
             throw new PrivilegeException("cannot find action " + actionName + " in " + actionMap.keySet() +
-                    " on object type " + TYPE_ID_TO_STRING.get(typeId).toUpperCase());
+                    " on object type " + TYPE_ID_TO_STRING.get(objectTypeId).toUpperCase());
         }
         return action;
     }
@@ -111,7 +111,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     @Override
     public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr)
             throws PrivilegeException {
-        PrivilegeType type = PrivilegeType.valueOf(typeStr);
+        ObjectType type = ObjectType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, objectTokens);
@@ -158,7 +158,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public PEntryObject generateObject(
             String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
             throws PrivilegeException {
-        PrivilegeType type = PrivilegeType.valueOf(typeStr);
+        ObjectType type = ObjectType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, allTypes, restrictType, restrictName);
