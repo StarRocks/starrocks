@@ -526,6 +526,7 @@ public final class MetricRepo {
                 .collect(Collectors.toList());
 
         if (kafkaJobs.size() <= 0) {
+            GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
             return;
         }
 
