@@ -55,7 +55,7 @@ private:
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                          ScanNode* scan_node);
+                          ScanNode* scan_node, bool is_stream_pipeline = false);
 
     ~ConnectorScanOperator() override = default;
 
@@ -88,14 +88,24 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-private:
+    Status set_stream_offset(int64_t table_version, int64_t changelog_id) override;
+    void set_epoch_limit(int64_t read_limit, int64_t epoch_time_limit) override;
+
+    void reset_status() override {
+        _status = Status::OK();
+        _time_spent = 0;
+        _rows_read = 0;
+    }
+
+protected:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
-    const int64_t _limit; // -1: no limit
+    int64_t _limit = -1;      // -1: no limit
+    int64_t _time_limit = -1; // -1: not limit;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
@@ -105,10 +115,10 @@ private:
     // =========================
     RuntimeState* _runtime_state = nullptr;
     ChunkPipelineAccumulator _ck_acc;
-    Status _status = Status::OK();
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    uint64_t _time_spent = 0;
 };
 
 } // namespace pipeline

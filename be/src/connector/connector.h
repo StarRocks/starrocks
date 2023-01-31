@@ -61,6 +61,10 @@ public:
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
 
+    // for stream seek offset
+    virtual Status set_offset(int64_t table_version, int64_t changelog_id) { return Status::OK(); }
+    virtual Status reset_status() { return Status::OK(); }
+
 protected:
     int64_t _read_limit = -1; // no limit
     std::vector<ExprContext*> _conjunct_ctxs;

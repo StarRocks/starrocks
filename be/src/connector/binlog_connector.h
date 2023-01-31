@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/column.h"
+#include "column/stream_chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "storage/tablet.h"
 
@@ -67,6 +70,9 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
+    Status set_offset(int64_t table_version, int64_t changelog_id) override;
+    Status reset_status() override;
+
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
@@ -90,6 +96,13 @@ private:
 
     // Mock data for testing
     Status _mock_chunk(Chunk* chunk);
+    Status _mock_chunk_test(ChunkPtr* chunk);
+    std::atomic<int32_t> _chunk_num = 0;
+
+    // for stream offset
+    int64_t _table_version;
+    int64_t _changelog_id;
+    bool _is_stream_pipeline = false;
 };
 
 } // namespace starrocks::connector
