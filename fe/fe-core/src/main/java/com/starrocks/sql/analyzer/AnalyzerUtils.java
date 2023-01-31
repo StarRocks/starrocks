@@ -183,7 +183,7 @@ public class AnalyzerUtils {
         String name = fn.signatureString();
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
-                    PrivilegeType.GlobalFunctionAction.USAGE)) {
+                    PrivilegeType.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                                 "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
                         name), ErrorType.USER_ERROR);

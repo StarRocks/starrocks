@@ -1634,7 +1634,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create shard group
         long shardGroupId = 0;
         if (table.isLakeTable()) {
-            shardGroupId =  GlobalStateMgr.getCurrentState().getStarOSAgent().
+            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), table.getId(), partitionId);
         }
 
@@ -2187,7 +2187,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
             try {
                 boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
@@ -2215,8 +2215,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // replicated storage
         olapTable.setEnableReplicatedStorage(
                 PropertyAnalyzer.analyzeBooleanProp(
-                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                    Config.enable_replicated_storage_as_default_engine));
+                        properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                        Config.enable_replicated_storage_as_default_engine));
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -3563,7 +3563,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!PrivilegeManager.checkMaterializedViewAction(ConnectContext.get(),
                     stmt.getDbName(),
                     stmt.getMvName(),
-                    PrivilegeType.MaterializedViewAction.DROP)) {
+                    PrivilegeType.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "DROP MATERIALIZED VIEW");
             }

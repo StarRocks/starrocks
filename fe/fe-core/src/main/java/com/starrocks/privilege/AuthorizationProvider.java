@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import com.starrocks.analysis.UserIdentity;
@@ -40,7 +39,7 @@ public interface AuthorizationProvider {
      * analyze action type id -> action
      */
     Collection<Action> getAllActions(short typeId) throws PrivilegeException;
-    Action getAction(short typeId, String actionName) throws PrivilegeException;
+    Action getAction(short objectTypeId, String actionName) throws PrivilegeException;
 
     /**
      * analyze plural type name -> type name

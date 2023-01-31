@@ -77,7 +77,7 @@ public class CheckDecommissionAction extends RestBaseAction {
             throws DdlException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkActionOnSystem(currentUser, PrivilegeType.SystemAction.OPERATE);
+            checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
         } else {
             checkGlobalAuth(currentUser, PrivPredicate.OPERATOR);
         }
