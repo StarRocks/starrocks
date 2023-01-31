@@ -1,10 +1,6 @@
 # 使用 Flink 连接器读取数据
 
-<<<<<<< HEAD
-Starrocks 提供 flink-connector-starrocks，支持 Flink 通过 flink-connector-starrocks 的 source 功能批量读取 StarRocks 数据。本文介绍实现方案和使用方式。
-=======
 StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。
->>>>>>> 522585b (update unload by flink connector doc (#4208))
 
 > **说明**
 >
