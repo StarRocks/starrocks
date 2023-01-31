@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
@@ -27,6 +28,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
@@ -74,11 +76,15 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AnalyzerUtils {
+
+    public static final Set<String> SUPPORTED_PARTITION_FORMAT = ImmutableSet.of("hour", "day", "month", "year");
 
     public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
         if (Strings.isNullOrEmpty(dbName)) {
@@ -651,4 +657,15 @@ public class AnalyzerUtils {
         return result;
     }
 
+    public static SlotRef getSlotRefFromFunctionCall(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            ArrayList<Expr> children = expr.getChildren();
+            for (Expr child : children) {
+                if (child instanceof SlotRef) {
+                    return (SlotRef) child;
+                }
+            }
+        }
+        return null;
+    }
 }

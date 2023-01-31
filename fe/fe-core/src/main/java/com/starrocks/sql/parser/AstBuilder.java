@@ -96,6 +96,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -554,48 +555,61 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                 .stream().map(Identifier::getValue).collect(toList()));
     }
 
-    @Override
-    public ParseNode visitPartitionExpression(StarRocksParser.PartitionExpressionContext context) {
-        Expr expr = (Expr) visit(context.expression());
-        if (context.DAY() != null) {
-            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                    ImmutableList.of(new StringLiteral("day"), expr));
-        } else if (context.HOUR() != null) {
-            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                    ImmutableList.of(new StringLiteral("hour"), expr));
-        } else if (context.MONTH() != null) {
-            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                    ImmutableList.of(new StringLiteral("month"), expr));
-        } else if (context.YEAR() != null) {
-            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
-                    ImmutableList.of(new StringLiteral("year"), expr));
-        }
-        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(), expr);
-    }
-
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
-        if (context.partitionExpression() != null) {
+        if (context.functionCall() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
                 partitionDescList.add(rangePartitionDesc);
             }
-            Expr expr = (Expr) visit(context.partitionExpression());
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            String functionName = functionCallExpr.getFnName().getFunction();
             List<String> columnList = Lists.newArrayList();
-            if (expr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                ArrayList<Expr> children = functionCallExpr.getChildren();
-                for (Expr child : children) {
-                    if (child instanceof SlotRef) {
-                        SlotRef slotRef = (SlotRef) child;
-                        columnList.add(slotRef.getColumnName());
+            List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
+            if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+                if (paramsExpr.size() != 2) {
+                    throw new ParsingException("The date_trunc function should have 2 parameters");
+                }
+                Expr firstExpr = paramsExpr.get(0);
+                if (firstExpr instanceof StringLiteral) {
+                    StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                    String fmt = stringLiteral.getValue();
+                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                        throw new ParsingException("Unsupported date_trunc format %s", fmt);
                     }
+                } else {
+                    throw new ParsingException("Unsupported date_trunc params: %s", firstExpr.toSql());
+                }
+                Expr secondExpr = paramsExpr.get(1);
+                if (secondExpr instanceof SlotRef) {
+                    columnList.add(((SlotRef) secondExpr).getColumnName());
+                } else {
+                    throw new ParsingException("The second parameter of date_trunc only supports fields");
+                }
+            } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+                Expr firstExpr = paramsExpr.get(0);
+                if (firstExpr instanceof SlotRef) {
+                    columnList.add(((SlotRef) firstExpr).getColumnName());
+                } else {
+                    throw new ParsingException("The first parameter of time_slice only supports fields");
+                }
+                Expr secondExpr = paramsExpr.get(1);
+                Expr thirdExpr = paramsExpr.get(2);
+                if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                    StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                    String fmt = stringLiteral.getValue();
+                    if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                        throw new ParsingException("Unsupported time_slice format %s", fmt);
+                    }
+                } else {
+                    throw new ParsingException("Unsupported time_slice params: %s %s",
+                            secondExpr.toSql(), thirdExpr.toSql());
                 }
             } else {
-                throw new ParsingException("Unsupported partition expression: %s", expr);
+                throw new ParsingException("Unsupported partition expression: %s", functionCallExpr.toSql());
             }
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
-            return new ExpressionPartitionDesc(rangePartitionDesc, expr);
+            return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
 
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -4660,6 +4674,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         unitBoundary.getDescription().toLowerCase()));
 
                 return functionCallExpr;
+            } else if (context.expression().size() == 4) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                Expr e3 = (Expr) visit(context.expression(2));
+                Expr e4 = (Expr) visit(context.expression(3));
+                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
             } else {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"

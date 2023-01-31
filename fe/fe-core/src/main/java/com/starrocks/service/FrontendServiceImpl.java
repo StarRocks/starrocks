@@ -1647,8 +1647,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
             } catch (DdlException | AnalysisException e) {
+                LOG.warn(e);
                 result.setStatus(errorStatus);
-                result.setErr_msg(String.format("create partition failed. stmt:%s", addPartitionClause.toSql()));
+                result.setErr_msg(String.format("create partition failed. error:%s", e.getMessage()));
                 return result;
             }
         }

@@ -131,22 +131,38 @@ public class FrontendServiceImplTest {
                         "    pv BIGINT DEFAULT '0'\n" +
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                        "PARTITION BY day(event_day) (\n" +
+                        "PARTITION BY date_trunc('day', event_day) (\n" +
                         "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 month)\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
-                        ");");
+                        ");")
+                .withTable("CREATE TABLE site_access_2(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
+                        "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 year)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table site_access";
+        String dropSQL2 = "drop table site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
+            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }
