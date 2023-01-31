@@ -1356,7 +1356,6 @@ public class MvRewriteOptimizationTest {
         String query4 = "select c3, sum(c2) from test_base_part group by c3";
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
-        PlanTestBase.assertNotContains(plan4, "ttl_union_mv_1");
         dropMv("test", "ttl_union_mv_1");
 
         starRocksAssert.withTable("CREATE TABLE multi_mv_table (\n" +
