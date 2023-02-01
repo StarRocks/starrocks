@@ -1456,7 +1456,7 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
-Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+StatusOr<Expr*> VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                                        LogicalType to_type, bool allow_throw_exception) {
     if (to_type == TYPE_CHAR) {
         to_type = TYPE_VARCHAR;
@@ -1465,8 +1465,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         from_type = TYPE_VARCHAR;
     }
     if (from_type == TYPE_NULL) {
-        // NULL TO OTHER TYPE, direct return
-        from_type = to_type;
+        return Status::NotSupported("Not support cast from TYPE_NULL to TYPE_BOOLEAN");
     }
     if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
         return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
@@ -1482,7 +1481,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 
         Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
-            return nullptr;
+            std::string err = "vectorized engine not support from type: " + type_to_string(from_type) 
+                                    + ", to type: " + type_to_string(to_type);
+            return Status::NotSupported(err);
         }
         auto* child = new ColumnRef(cast);
         cast_element_expr->add_child(child);
@@ -1522,9 +1523,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                         << ", to type: " << type_to_string(to_type);
-            return nullptr;
+            std::string err = "vectorized engine not support from type: " + type_to_string(from_type) 
+                                    + ", to type: " + type_to_string(to_type);
+            return Status::NotSupported(err);
         }
     } else if (from_type == TYPE_JSON || to_type == TYPE_JSON) {
         // TODO(mofei) simplify type enumeration
@@ -1540,9 +1541,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                             << ", to type: " << type_to_string(to_type);
-                return nullptr;
+                std::string err = "vectorized engine not support from type: " + type_to_string(from_type) 
+                                    + ", to type: " + type_to_string(to_type);
+                return Status::NotSupported(err);
             }
         } else {
             switch (from_type) {
@@ -1561,15 +1562,15 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                             << ", to type: " << type_to_string(to_type);
-                return nullptr;
+                std::string err = "vectorized engine not support from type: " + type_to_string(from_type) 
+                                    + ", to type: " + type_to_string(to_type);
+                return Status::NotSupported(err);
             }
         }
     } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
-        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                     << ", to type: " << type_to_string(to_type);
-        return nullptr;
+        std::string err = "vectorized engine not support from type: " + type_to_string(from_type) 
+                                    + ", to type: " + type_to_string(to_type);
+        return Status::NotSupported(err);
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
@@ -1588,12 +1589,13 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support cast to type: " << type_to_string(to_type);
-            return nullptr;
+            std::string err = "vectorized engine not support cast to type: " + type_to_string(to_type);
+            return Status::NotSupported(err);
         }
     }
 
-    return nullptr;
+    std::string err = "vectorized engine not support cast to type: " + type_to_string(to_type);
+    return Status::NotSupported(err);
 }
 
 // NOTE: should return error status to avoid null in ASSIGN_OR_RETURN, otherwise causing crash
@@ -1638,11 +1640,8 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         }
         return std::make_unique<CastStructExpr>(node, std::move(field_casts));
     }
-    auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
-    if (res == nullptr) {
-        return Status::NotSupported(fmt::format("vectorized engine not support cast {} to {}.",
-                                                from_type.debug_string(), to_type.debug_string()));
-    }
+    ASSIGN_OR_RETURN(auto res, create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception));
+    
     std::unique_ptr<Expr> result(res);
     return std::move(result);
 }

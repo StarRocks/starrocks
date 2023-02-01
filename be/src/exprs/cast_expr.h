@@ -46,7 +46,7 @@ private:
     static StatusOr<std::unique_ptr<Expr>> create_cast_expr(ObjectPool* pool, const TExprNode& node,
                                                             const TypeDescriptor& from_type,
                                                             const TypeDescriptor& to_type, bool allow_throw_exception);
-    static Expr* create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+    static StatusOr<Expr*> create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                        LogicalType to_type, bool allow_throw_exception);
 };
 
