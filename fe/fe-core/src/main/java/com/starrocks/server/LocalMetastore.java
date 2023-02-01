@@ -2465,15 +2465,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.removeTable(tableId, olapTable, false /* isReplay */);
             }
         }
-        new Thread(() -> {
-            try {
-                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                        .executeDynamicPartitionForTable(db.getId(), tableId);
-            } catch (Exception ex) {
-                LOG.warn("Some problems were encountered in the process of triggering " +
-                        "the execution of dynamic partitioning", ex);
-            }
-        }).start();
+        if (olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+            new Thread(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                            .executeDynamicPartitionForTable(db.getId(), tableId);
+                } catch (Exception ex) {
+                    LOG.warn("Some problems were encountered in the process of triggering " +
+                            "the execution of dynamic partitioning", ex);
+                }
+            }).start();
+        }
     }
 
     private void createMysqlTable(Database db, CreateTableStmt stmt) throws DdlException {
