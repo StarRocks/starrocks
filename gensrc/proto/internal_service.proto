@@ -257,6 +257,64 @@ message PTabletWriterCancelResult {
 message PExecPlanFragmentRequest {
 };
 
+message PTabletReaderOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 tablet_id = 2;
+    optional int64 version = 3;
+}
+
+message PTabletReaderOpenResult {
+    optional StatusPB status = 1;
+    optional int64 reader_id = 2;
+}
+
+message PTabletReaderCloseRequest {
+    optional PUniqueId id = 1;
+    optional int64 reader_id = 2;
+}
+
+message PTabletReaderCloseResult {
+    optional StatusPB status = 1;
+}
+
+message PTabletReaderMultiGetRequest {
+    optional PUniqueId id = 1;
+    optional ChunkPB keys = 2;
+    repeated string values_columns = 3;
+}
+
+message PTabletReaderMultiGetResult {
+    optional StatusPB status = 1;
+    repeated bool found = 2;
+    optional ChunkPB values = 3;
+};
+
+message PTabletReaderScanOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 chunk_size = 2;
+    repeated string values_columns = 3;
+}
+
+message PTabletReaderScanOpenResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+};
+
+message PTabletReaderScanGetNextRequest {
+    optional PUniqueId id = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+}
+
+message PTabletReaderScanGetNextResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+}
+
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
@@ -454,5 +512,12 @@ service PInternalService {
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
+
+    // local tablet reader
+    rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns (PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns (PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns (PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns (PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 };
 

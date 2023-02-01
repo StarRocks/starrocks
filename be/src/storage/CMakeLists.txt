@@ -32,6 +32,7 @@ add_library(Storage STATIC
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+    local_tablet_reader.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
