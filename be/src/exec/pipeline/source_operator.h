@@ -47,6 +47,10 @@ protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
     TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
+<<<<<<< HEAD
+=======
+    MorselQueueFactory* _morsel_queue_factory = nullptr;
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130))
     std::vector<ExprContext*> _partition_exprs;
 };
 

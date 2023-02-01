@@ -214,6 +214,19 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
     }
 }
 
+<<<<<<< HEAD
+=======
+void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFactory* downstream_source,
+                                                                SourceOperatorFactory* upstream_source) {
+    downstream_source->set_degree_of_parallelism(upstream_source->degree_of_parallelism());
+    downstream_source->set_could_local_shuffle(upstream_source->could_local_shuffle());
+    downstream_source->set_partition_type(upstream_source->partition_type());
+    if (!upstream_source->partition_exprs().empty() || !downstream_source->partition_exprs().empty()) {
+        downstream_source->set_partition_exprs(upstream_source->partition_exprs());
+    }
+}
+
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130))
 /// PipelineBuilder.
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);

@@ -1325,9 +1325,13 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
+<<<<<<< HEAD
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if ((node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal())
                     && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
+=======
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130))
                 clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 estimateDopOfOnePhaseAgg(inputFragment);
             }
