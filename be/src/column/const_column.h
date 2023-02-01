@@ -201,7 +201,7 @@ public:
 
     size_t element_memory_usage(size_t from, size_t size) const override {
         // const column has only one element
-        return element_memory_usage();
+        return size == 0 ? 0 : element_memory_usage();
     }
 
     void swap_column(Column& rhs) override {
