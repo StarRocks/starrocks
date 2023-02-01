@@ -2104,24 +2104,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 StringLiteral stringLiteral = (StringLiteral) visit(formatPropsContext.escapeCharacter);
                 escape = stringLiteral.getValue();
             }
-            System.out.println(escape);
-    
             String enclose = null;
             if (formatPropsContext.encloseCharacter != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(formatPropsContext.encloseCharacter);
                 enclose = stringLiteral.getValue();
             }
-            System.out.println(enclose);
             long skipheader = 0;
             if (formatPropsContext.INTEGER_VALUE() != null) {
                 skipheader = Long.parseLong(formatPropsContext.INTEGER_VALUE().getText());
             }
-            System.out.println(skipheader);
             boolean trimspace = false;
             if (formatPropsContext.booleanValue() != null) {
                 trimspace = Boolean.parseBoolean(formatPropsContext.booleanValue().getText());
             }
-            System.out.println(trimspace);
             csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0), 
                                       escape == null ? 0 : (byte) escape.charAt(0), 
                                       skipheader, trimspace);
