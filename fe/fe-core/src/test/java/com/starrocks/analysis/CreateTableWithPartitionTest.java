@@ -250,7 +250,68 @@ public class CreateTableWithPartitionTest {
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_53 VALUES [('2020-12-28'), ('2021-01-04'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_02 VALUES [('2021-01-04'), ('2021-01-11'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_03 VALUES [('2021-01-11'), ('2021-01-15'))"));
+    }
 
+    @Test
+    public void testCreateTableBatchPartitionWeekThroughYear2023() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeekThroughYear2023 (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2022-12-26\") END (\"2023-01-23\") EVERY (INTERVAL 1 WEEK)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2022_53 VALUES [('2022-12-26'), ('2023-01-02'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_01 VALUES [('2023-01-02'), ('2023-01-09'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_02 VALUES [('2023-01-09'), ('2023-01-16'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_03 VALUES [('2023-01-16'), ('2023-01-23'))"));
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionWeekThroughYear2023Week4() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE site_access(\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(`event_day`)\n" +
+                "(START (\"2022-12-29\") END (\"2023-01-26\") EVERY (INTERVAL 1 WEEK))\n" +
+                "DISTRIBUTED BY HASH(`event_day`) BUCKETS 4 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"WEEK\",\n" +
+                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                "\"dynamic_partition.start\" = \"-2147483648\",\n" +
+                "\"dynamic_partition.end\" = \"2\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"4\",\n" +
+                "\"dynamic_partition.start_day_of_week\" = \"4\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2022_53 VALUES [('2022-12-29'), ('2023-01-05'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_01 VALUES [('2023-01-05'), ('2023-01-12'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_02 VALUES [('2023-01-12'), ('2023-01-19'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2023_03 VALUES [('2023-01-19'), ('2023-01-26'))"));
     }
 
     @Test
