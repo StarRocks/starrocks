@@ -25,15 +25,18 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
+import com.starrocks.common.util.TimeUtils;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoField;
-import java.time.temporal.WeekFields;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
 
@@ -42,6 +45,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private final String partitionEnd;
     private Long step;
     private String timeUnit;
+    private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
     private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
             TimestampArithmeticExpr.TimeUnit.HOUR,
             TimestampArithmeticExpr.TimeUnit.DAY,
@@ -141,6 +145,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         int dayOfMonth = 1;
+        TimeZone timeZone = TimeUtils.getSystemTimeZone();
         String partitionPrefix = defaultPrefix;
         if (properties != null) {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
@@ -170,7 +175,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 }
             }
         }
-        WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
 
@@ -184,12 +188,22 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
-                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthValue(),
-                            beginTime.getDayOfMonth());
-                    int weekOfYear = localDate.get(weekFields.weekOfYear());
-                    partitionName = String.format("%s%s_%02d", partitionPrefix,
-                            beginTime.format(DateUtils.YEAR_FORMATTER), weekOfYear);
-                    beginTime = beginTime.with(ChronoField.DAY_OF_WEEK, dayOfMonth);
+                    // Compatible with dynamic partitioning
+                    // First calculate the first day of the week, then calculate the week of the year
+                    beginTime = beginTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
+                    Calendar calendar = Calendar.getInstance(timeZone);
+                    try {
+                        calendar.setTime(DATEKEY_SDF.parse(beginTime.format(DateUtils.DATEKEY_FORMATTER)));
+                    } catch (ParseException e) {
+                        throw new RuntimeException(e);
+                    }
+                    int weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR);
+                    if (weekOfYear <= 1 && calendar.get(Calendar.MONTH) >= 11) {
+                        // eg: JDK think 2019-12-30 as the first week of year 2020, we need to handle this.
+                        // to make it as the 53rd week of year 2019.
+                        weekOfYear += 52;
+                    }
+                    partitionName = partitionPrefix + String.format("%s_%02d", calendar.get(Calendar.YEAR), weekOfYear);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
