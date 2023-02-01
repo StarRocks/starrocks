@@ -61,5 +61,7 @@ public class AnalyzeArrayTest {
                 "            array_contains([true, false, true], true),\n" +
                 "            array_contains([true, false, true], false)");
         analyzeSuccess("select array_length(null)");
+
+        analyzeFail("select array_concat([])");
     }
 }

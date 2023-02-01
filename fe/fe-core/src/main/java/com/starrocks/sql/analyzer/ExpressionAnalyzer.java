@@ -656,14 +656,16 @@ public class ExpressionAnalyzer {
         public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
             List<Type> leftTypes =
-                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType).collect(Collectors.toList());
+                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType)
+                            .collect(Collectors.toList());
 
             Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
             List<Type> rightTypes =
                     inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
                             collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
 
             for (int i = 0; i < rightTypes.size(); ++i) {
@@ -865,6 +867,11 @@ public class ExpressionAnalyzer {
                     argumentTypes[i] = Type.BIGINT;
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_CONCAT)) {
+                if (node.getChildren().size() < 2) {
+                    throw new SemanticException(fnName + " should have at least tow inputs");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
