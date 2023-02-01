@@ -273,8 +273,7 @@ public class SimpleExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                // For empty array, any item type works out, here we pick Boolean
-                node.setType(Type.ARRAY_BOOLEAN);
+                node.setType(new ArrayType(Type.NULL));
             }
             return null;
         }
