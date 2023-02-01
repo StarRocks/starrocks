@@ -322,7 +322,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), GetCurrentTimeNanos(), request.chunks_data_ref});
         if (_first_send_time == -1) {
             _first_send_time = MonotonicNanos();
         }
@@ -365,8 +365,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        _mem_tracker->release(request.chunks_data_ref->data_bytes);
+        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.chunks_data_ref->data_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
@@ -380,7 +380,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         }
-
         return Status::OK();
     }
 

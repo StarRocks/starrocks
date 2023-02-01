@@ -73,7 +73,7 @@ public:
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
     Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+                              const butil::IOBuf& attachment, std::shared_ptr<ChunksDataRef> chunks_data_ref);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -241,8 +241,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         }
     }
 
-    // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
-    // last packet
+    // Try to accumulate enough bytes before sending a RPC. When eos is true we should send last packet
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
@@ -250,9 +249,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         }
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+        auto chunks_data_ref = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
-                                  attachment_physical_bytes};
+                                  std::move(chunks_data_ref)};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -264,7 +263,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 
 Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
-                                                         int64_t attachment_physical_bytes) {
+                                                         std::shared_ptr<ChunksDataRef> chunks_data_ref) {
     if (_ignore_local_data) {
         return Status::OK();
     }
@@ -279,7 +278,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
-                              attachment_physical_bytes};
+                              chunks_data_ref};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
@@ -510,12 +509,11 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
                 butil::IOBuf attachment;
-                int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
+                auto chunks_data_ref = construct_brpc_attachment(_chunk_request, attachment);
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                        RETURN_IF_ERROR(
-                                _channels[idx]->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
+                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(state, copy, attachment, chunks_data_ref));
                     }
                 }
                 _current_request_bytes = 0;
@@ -617,10 +615,10 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
+        auto chunks_data_ref = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
+            channel->send_chunk_request(state, copy, attachment, chunks_data_ref);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -711,25 +709,34 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
-                                                        butil::IOBuf& attachment) {
-    int64_t attachment_physical_bytes = 0;
+std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
+        const PTransmitChunkParamsPtr& chunk_request, butil::IOBuf& attachment) {
+    auto chunks_data_ref = std::make_shared<ChunksDataRef>(0);
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
 
-        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        attachment.append(chunk->data());
-        attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
+        chunks_data_ref->data_bytes += chunk->data().size();
 
+        auto shared_data = std::make_shared<std::string>();
+        chunk->mutable_data()->swap(*shared_data);
+        if (UNLIKELY(chunk->data_size() != shared_data->size())) {
+            throw std::runtime_error(
+                    fmt::format("chunk size {} != shared data {}.", chunk->data_size(), shared_data->size()));
+        }
+        auto res = attachment.append_user_data((void*)shared_data->c_str(), shared_data->size(), [](void* buf) {});
+        if (UNLIKELY(res != 0)) {
+            throw std::runtime_error("append user data to brpc iobuf error.");
+        }
         chunk->clear_data();
+        chunks_data_ref->data_buffer.push_back(std::move(shared_data));
+
         // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
             chunk->mutable_data()->shrink_to_fit();
         }
     }
-
-    return attachment_physical_bytes;
+    return chunks_data_ref;
 }
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
