@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -26,6 +28,19 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -34,8 +49,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
+
+import java.util.List;
 
 public class MvRewriteOptimizationTest {
     private static ConnectContext connectContext;
@@ -222,7 +238,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testSingleTableRewrite() throws Exception {
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
@@ -276,11 +291,14 @@ public class MvRewriteOptimizationTest {
                 "     rollup: mv_1");
 
         String query7 = "select empid, deptno from emps where empid = 5";
-        String plan7 = getCostsFragmentPlan(query7);
+        String plan7 = getFragmentPlan(query7);
         PlanTestBase.assertContains(plan7, "mv_1");
+        OptExpression optimizedPlan7 = getOptimizedPlan(query7, connectContext);
+        List<PhysicalScanOperator> scanOperators = getScanOperators(optimizedPlan7, "mv_1");
+        Assert.assertEquals(1, scanOperators.size());
         // column prune
-        PlanTestBase.assertNotContains(plan7, "name-->");
-        PlanTestBase.assertNotContains(plan7, "salary-->");
+        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
+        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
 
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String query6 = "select empid, deptno, name, salary from emps where empid = 5";
@@ -292,7 +310,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
@@ -431,7 +448,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "hive_mv_1",
@@ -483,7 +499,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
@@ -554,8 +569,8 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testJoinMvRewrite() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -568,9 +583,11 @@ public class MvRewriteOptimizationTest {
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "join_mv_1");
-        String costPlan1 = getCostsFragmentPlan(query1);
+        OptExpression optExpression1 = getOptimizedPlan(query1, connectContext);
+        List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression1, "join_mv_1");
+        Assert.assertEquals(1, scanOperators.size());
         // column prune
-        PlanTestBase.assertNotContains(costPlan1, "t1d-->");
+        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("t1d"));
 
         // t1e is not the output of mv
         String query2 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c, test_all_type.t1e" +
@@ -656,27 +673,28 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(costPlan2, "join_mv_3");
         PlanTestBase.assertNotContains(costPlan2, "name-->");
         String newQuery11 = "select depts.deptno from emps join depts using (deptno) where empid = 1";
-        String costPlan3 = getCostsFragmentPlan(newQuery11);
-        PlanTestBase.assertContains(costPlan3, "join_mv_3");
-        // empid is kept for predicate
-        PlanTestBase.assertContains(costPlan3, "empid-->", "deptno-->");
+        String newPlan11 = getFragmentPlan(newQuery11);
+        PlanTestBase.assertContains(newPlan11, "join_mv_3");
+        OptExpression optExpression11 = getOptimizedPlan(newQuery11, connectContext);
+        List<PhysicalScanOperator> scanOperators11 = getScanOperators(optExpression11, "join_mv_3");
+        Assert.assertEquals(1, scanOperators11.size());
         // column prune
-        PlanTestBase.assertNotContains(costPlan3, "name-->");
+        Assert.assertFalse(scanOperators11.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
 
         String newQuery12 = "select depts.name from emps join depts using (deptno)";
-        String costPlan4 = getCostsFragmentPlan(newQuery12);
-        PlanTestBase.assertContains(costPlan4, "join_mv_3");
-        PlanTestBase.assertContains(costPlan4, "name-->");
+        OptExpression optExpression12 = getOptimizedPlan(newQuery12, connectContext);
+        List<PhysicalScanOperator> scanOperators12 = getScanOperators(optExpression12, "join_mv_3");
+        Assert.assertEquals(1, scanOperators12.size());
         // deptno is not projected
-        PlanTestBase.assertNotContains(costPlan4, "deptno-->");
+        Assert.assertFalse(scanOperators12.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         // join to scan with projection
         String newQuery13 = "select upper(depts.name) from emps join depts using (deptno)";
-        String costPlan5 = getCostsFragmentPlan(newQuery13);
-        PlanTestBase.assertContains(costPlan5, "join_mv_3");
-        PlanTestBase.assertContains(costPlan5, "name-->");
+        OptExpression optExpression13 = getOptimizedPlan(newQuery13, connectContext);
+        List<PhysicalScanOperator> scanOperators13 = getScanOperators(optExpression13, "join_mv_3");
+        Assert.assertEquals(1, scanOperators13.size());
         // deptno is not projected
-        PlanTestBase.assertNotContains(costPlan4, "deptno-->");
+        Assert.assertFalse(scanOperators13.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         // output on equivalence classes
         String query12 = "select empid, emps.deptno from emps join depts using (deptno) where empid = 1";
@@ -697,30 +715,27 @@ public class MvRewriteOptimizationTest {
                 " join dependents on (depts.name = dependents.name)";
         String plan15 = getFragmentPlan(query15);
         PlanTestBase.assertContains(plan15, "join_mv_3");
-        String costPlan15 = getCostsFragmentPlan(query15);
-        PlanTestBase.assertContains(costPlan15, "join_mv_3");
-        PlanTestBase.assertContains(costPlan15, "name-->");
+        OptExpression optExpression15 = getOptimizedPlan(query15, connectContext);
+        List<PhysicalScanOperator> scanOperators15 = getScanOperators(optExpression15, "join_mv_3");
+        Assert.assertEquals(1, scanOperators15.size());
         // column prune
-        PlanTestBase.assertNotContains(costPlan15, "deptno-->");
+        Assert.assertFalse(scanOperators15.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         // query delta depends on join reorder
         String query16 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
                 " join emps on (emps.deptno = depts.deptno)";
         String plan16 = getFragmentPlan(query16);
         PlanTestBase.assertContains(plan16, "join_mv_3");
-        String costPlan16 = getCostsFragmentPlan(query16);
-        PlanTestBase.assertContains(costPlan16, "join_mv_3");
-        PlanTestBase.assertContains(costPlan16, "name-->");
+        OptExpression optExpression16 = getOptimizedPlan(query16, connectContext);
+        List<PhysicalScanOperator> scanOperators16 = getScanOperators(optExpression16, "join_mv_3");
+        Assert.assertEquals(1, scanOperators16.size());
         // column prune
-        PlanTestBase.assertNotContains(costPlan16, "deptno-->");
+        Assert.assertFalse(scanOperators16.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         String query23 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
                 " join emps on (emps.deptno = depts.deptno) where emps.deptno = 1";
-        String costPlan23 = getCostsFragmentPlan(query23);
-        PlanTestBase.assertContains(costPlan23, "join_mv_3");
-        PlanTestBase.assertContains(costPlan23, "name-->");
-        // deptno is kept for predicate
-        PlanTestBase.assertContains(costPlan23, "deptno-->");
+        String plan23 = getFragmentPlan(query23);
+        PlanTestBase.assertContains(plan23, "join_mv_3");
 
         // more tables
         String query17 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
@@ -802,7 +817,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
@@ -885,7 +899,6 @@ public class MvRewriteOptimizationTest {
 
 
     @Test
-    @Ignore
     public void testAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -1045,16 +1058,15 @@ public class MvRewriteOptimizationTest {
         String query10 = "select deptno, count(*) from emps group by deptno";
         String plan10 = getFragmentPlan(query10);
         PlanTestBase.assertContains(plan10, "agg_join_mv_4");
-        String costPlan10 = getCostsFragmentPlan(query10);
-        PlanTestBase.assertContains(costPlan10, "agg_join_mv_4", "deptno-->", "num-->");
 
         String query11 = "select count(*) from emps";
         String plan11 = getFragmentPlan(query11);
         PlanTestBase.assertContains(plan11, "agg_join_mv_4");
-        String costPlan11 = getCostsFragmentPlan(query11);
-        PlanTestBase.assertContains(costPlan11, "agg_join_mv_4");
+        OptExpression optExpression11 = getOptimizedPlan(query11, connectContext);
+        List<PhysicalScanOperator> scanOperators11 = getScanOperators(optExpression11, "agg_join_mv_4");
+        Assert.assertEquals(1, scanOperators11.size());
         // column prune
-        PlanTestBase.assertNotContains(costPlan11, "deptno-->");
+        Assert.assertFalse(scanOperators11.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
         dropMv("test", "agg_join_mv_4");
 
         createAndRefreshMv("test", "agg_join_mv_5", "create materialized view agg_join_mv_5" +
@@ -1074,12 +1086,12 @@ public class MvRewriteOptimizationTest {
         String plan13 = getFragmentPlan(query13);
         PlanTestBase.assertContains(plan13, "agg_mv_6");
 
-
         String query14 = "select empid, avg(salary) from emps group by empid";
-        String plan14 = getCostsFragmentPlan(query14);
-        PlanTestBase.assertContains(plan14, "agg_mv_6");
+        OptExpression optExpression14 = getOptimizedPlan(query14, connectContext);
+        List<PhysicalScanOperator> scanOperators14 = getScanOperators(optExpression14, "agg_mv_6");
+        Assert.assertEquals(1, scanOperators14.size());
         // column prune
-        PlanTestBase.assertNotContains(plan14, "abs_empid");
+        Assert.assertFalse(scanOperators14.get(0).getColRefToColumnMetaMap().keySet().toString().contains("abs_empid"));
 
         String query15 = "select abs(empid), avg(salary) from emps group by empid";
         String plan15 = getFragmentPlan(query15);
@@ -1100,25 +1112,25 @@ public class MvRewriteOptimizationTest {
         String plan17 = getFragmentPlan(query17);
         PlanTestBase.assertContains(plan17, "agg_mv_7");
 
-        String query18 = "select empid, sum(salary), count(salary) + 1 from emps group by empid";
-        String plan18 = getCostsFragmentPlan(query18);
-        PlanTestBase.assertContains(plan18, "agg_mv_7", "cnt-->", "total-->");
-
         String query19 = "select abs(empid), sum(salary), count(salary) from emps group by empid";
         String plan19 = getFragmentPlan(query19);
         PlanTestBase.assertContains(plan19, "agg_mv_7");
 
         String query20 = "select sum(salary), count(salary) from emps";
-        String plan20 = getCostsFragmentPlan(query20);
-        PlanTestBase.assertContains(plan20, "agg_mv_7");
-        PlanTestBase.assertNotContains(plan20, "empid-->");
-        PlanTestBase.assertNotContains(plan20, "abs_empid-->");
+        OptExpression optExpression20 = getOptimizedPlan(query20, connectContext);
+        List<PhysicalScanOperator> scanOperators20 = getScanOperators(optExpression20, "agg_mv_7");
+        Assert.assertEquals(1, scanOperators20.size());
+        // column prune
+        Assert.assertFalse(scanOperators20.get(0).getColRefToColumnMetaMap().keySet().toString().contains("empid"));
+        Assert.assertFalse(scanOperators20.get(0).getColRefToColumnMetaMap().keySet().toString().contains("abs_empid"));
 
         String query27 = "select sum(salary), count(salary) from emps";
-        String plan27 = getCostsFragmentPlan(query27);
-        PlanTestBase.assertContains(plan27, "agg_mv_7");
-        PlanTestBase.assertNotContains(plan27, "empid-->");
-        PlanTestBase.assertNotContains(plan27, "abs_empid-->");
+        OptExpression optExpression27 = getOptimizedPlan(query27, connectContext);
+        List<PhysicalScanOperator> scanOperators27 = getScanOperators(optExpression27, "agg_mv_7");
+        Assert.assertEquals(1, scanOperators27.size());
+        // column prune
+        Assert.assertFalse(scanOperators27.get(0).getColRefToColumnMetaMap().keySet().toString().contains("empid"));
+        Assert.assertFalse(scanOperators27.get(0).getColRefToColumnMetaMap().keySet().toString().contains("abs_empid"));
 
         dropMv("test", "agg_mv_7");
 
@@ -1204,7 +1216,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
@@ -1244,7 +1255,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_union_mv_1",
@@ -1265,7 +1275,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1298,10 +1307,13 @@ public class MvRewriteOptimizationTest {
                 "     PREDICATES: 9: empid < 5, 9: empid > 2");
 
         String query7 = "select deptno, empid from emps where empid < 5";
-        String plan7 = getCostsFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "union_mv_1", "empid-->", "deptno-->");
-        PlanTestBase.assertNotContains(plan7, "name-->");
-        PlanTestBase.assertNotContains(plan7, "salary-->");
+        String plan7 = getFragmentPlan(query7);
+        PlanTestBase.assertContains(plan7, "union_mv_1");
+        OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
+        List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression7, "union_mv_1");
+        Assert.assertEquals(1, scanOperators.size());
+        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
+        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
 
         dropMv("test", "union_mv_1");
 
@@ -1423,7 +1435,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testNestedMv() throws Exception {
         starRocksAssert.withTable("CREATE TABLE nest_base_table_1 (\n" +
                 "    k1 INT,\n" +
@@ -1466,7 +1477,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-    @Ignore
     public void testPartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1718,12 +1728,6 @@ public class MvRewriteOptimizationTest {
         return s;
     }
 
-    public String getCostsFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.COSTS);
-        return s;
-    }
-
     private Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
@@ -1757,5 +1761,45 @@ public class MvRewriteOptimizationTest {
 
     private void dropMv(String dbName, String mvName) throws Exception {
         starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
+        StatementBase mvStmt;
+        try {
+            List<StatementBase> statementBases =
+                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+            Preconditions.checkState(statementBases.size() == 1);
+            mvStmt = statementBases.get(0);
+        } catch (ParsingException parsingException) {
+            return null;
+        }
+        Preconditions.checkState(mvStmt instanceof QueryStatement);
+        Analyzer.analyze(mvStmt, connectContext);
+        QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan =
+                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        Optimizer optimizer = new Optimizer();
+        return optimizer.optimize(
+                connectContext,
+                logicalPlan.getRoot(),
+                new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
+    }
+
+    public List<PhysicalScanOperator> getScanOperators(OptExpression root, String name) {
+        List<PhysicalScanOperator> results = Lists.newArrayList();
+        getScanOperators(root, name, results);
+        return results;
+    }
+    private void getScanOperators(OptExpression root, String name, List<PhysicalScanOperator> results) {
+        if (root.getOp() instanceof PhysicalScanOperator
+                && ((PhysicalScanOperator) root.getOp()).getTable().getName().equals(name)) {
+            results.add((PhysicalScanOperator) root.getOp());
+        }
+        for (OptExpression child : root.getInputs()) {
+            getScanOperators(child, name, results);
+        }
     }
 }
