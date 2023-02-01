@@ -209,7 +209,13 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                                _analytic_partition_exprs);
     }
 
+<<<<<<< HEAD:be/src/exec/vectorized/topn_node.cpp
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
+=======
+    // define a runtime filter holder
+    context->fragment_context()->runtime_filter_hub()->add_holder(_id);
+
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130)):be/src/exec/topn_node.cpp
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
