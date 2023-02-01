@@ -1637,6 +1637,10 @@ public class PlanFragmentBuilder {
                         new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
+
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
                 // count function is update function, but sum is merge function
@@ -1666,7 +1670,7 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
