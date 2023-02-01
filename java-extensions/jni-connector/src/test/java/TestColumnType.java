@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import com.starrocks.jni.connector.ColumnType;
-import com.starrocks.jni.connector.StructSelectedFields;
+import com.starrocks.jni.connector.SelectedFields;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -97,10 +97,10 @@ public class TestColumnType {
     public void pruneSturctType() {
         String s = "struct<a:int,b:string,c:struct<a:int,b:string,c:array<int>>,d:struct<a:array<string>>>";
         ColumnType t = new ColumnType(s);
-        StructSelectedFields ssf = new StructSelectedFields();
+        SelectedFields ssf = new SelectedFields();
         ssf.addMultipleNestedPath("d.a,c.c");
 
-        t.pruneOnStructSelectedFields(ssf);
+        t.pruneOnSelectedFields(ssf);
         Assert.assertTrue(t.isStruct());
         Assert.assertEquals(t.getChildTypes().size(), 2);
         Assert.assertEquals(String.join(",", t.getChildNames()), "d,c");

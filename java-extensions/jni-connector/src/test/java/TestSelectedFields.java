@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import com.starrocks.jni.connector.StructSelectedFields;
+import com.starrocks.jni.connector.SelectedFields;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class TestStructSelectedFields {
+public class TestSelectedFields {
 
     @Test
     public void testBasic() {
         String s = "e.a,e.b,e.c";
-        StructSelectedFields ssf = new StructSelectedFields();
+        SelectedFields ssf = new SelectedFields();
         ssf.addMultipleNestedPath(s);
         Assert.assertEquals(ssf.getFields().size(), 1);
         Assert.assertEquals(ssf.getFields().get(0), "e");
 
-        StructSelectedFields ssf2 = ssf.findChildren("e");
+        SelectedFields ssf2 = ssf.findChildren("e");
         Assert.assertEquals(ssf2.getFields().size(), 3);
         Assert.assertEquals(String.join(",", ssf2.getFields()), "a,b,c");
     }

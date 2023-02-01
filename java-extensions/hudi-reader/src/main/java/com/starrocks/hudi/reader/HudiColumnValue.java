@@ -135,11 +135,14 @@ public class HudiColumnValue implements ColumnValue {
         StructObjectInspector inspector = (StructObjectInspector) fieldInspector;
         List<? extends StructField> fields = inspector.getAllStructFieldRefs();
         for (int i = 0; i < structFieldIndex.size(); i++) {
-            StructField sf = fields.get(structFieldIndex.get(i));
-            Object o = inspector.getStructFieldData(fieldData, sf);
+            Integer idx = structFieldIndex.get(i);
             HudiColumnValue cv = null;
-            if (o != null) {
-                cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+            if (idx != null) {
+                StructField sf = fields.get(idx);
+                Object o = inspector.getStructFieldData(fieldData, sf);
+                if (o != null) {
+                    cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+                }
             }
             values.add(cv);
         }
