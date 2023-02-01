@@ -401,9 +401,9 @@ mysql> set global batch_size = 4096;
 
 #### Troubleshooting
 
-Q: I have upgraded StarRocks v2.0 to v2.1 or later versions. Stream Load returns NULL after loading BOOLEAN type data into an old table created in v2.0. How can I solve it?
+Q: I have recently upgraded StarRocks v2.0 to v2.1. When I load JSON-format BOOLEAN type data into an INT type column  using Stream Load, StarRocks returns NULL after . How can I solve it?
 
-A: JSON Parser in StarRocks v2.1 was refactored, and its data conversion logic is not applicable to the BOOLEAN type fields in StarRocks 2.0 version, resulting in conversion errors.
+A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into a INT type column, StarRocks 2.0 converts the data into `0` and `1` for loading. The JSON Parser in StarRocks v2.1 and later versions are refactored and do not parse fields as strings, resulting in this problem.
 
 You can solve this problem by adding the following expression to the `Columns` parameter of the Stream Load command:
 
