@@ -1,9 +1,13 @@
+# This dockerfile is specifically for buildx usage. It has the following assumptions:
+# 1) starrocks fe/be project is built;
+# 2) the output directory is renamed to amd64 or arm64 respectively.
+
 FROM ubuntu:22.04 as base_amd64
-RUN useradd --create-home --no-log-init --shell /bin/bash starrocks
+RUN groupadd -g 1000 starrocks && useradd --create-home --no-log-init --shell /bin/bash -u 1000 -g 1000 starrocks
 ONBUILD COPY --chown=starrocks:starrocks /amd64/fe /opt/starrocks/fe/
 
 FROM ubuntu:22.04 as base_arm64
-RUN useradd --create-home --no-log-init --shell /bin/bash starrocks
+RUN groupadd -g 1000 starrocks && useradd --create-home --no-log-init --shell /bin/bash -u 1000 -g 1000 starrocks
 ONBUILD COPY --chown=starrocks:starrocks /arm64/fe /opt/starrocks/fe/
 
 ARG TARGETARCH
