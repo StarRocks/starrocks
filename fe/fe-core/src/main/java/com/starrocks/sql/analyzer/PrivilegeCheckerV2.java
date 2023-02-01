@@ -140,6 +140,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
@@ -553,6 +554,13 @@ public class PrivilegeCheckerV2 {
         public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, ConnectContext context) {
             // `show routine load task` only show tables that user has any privilege on, we will check it in
             // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoadTask()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataStatement(ShowDataStmt statement, ConnectContext context) {
+            // `show data` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowData()` for details.
             return null;
         }
 
