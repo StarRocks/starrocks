@@ -401,12 +401,15 @@ mysql> set global batch_size = 4096;
 
 #### Troubleshooting
 
-Q: I have recently upgraded StarRocks v2.0 to v2.1. When I load JSON-format BOOLEAN type data into an INT type column  using Stream Load, StarRocks returns NULL after . How can I solve it?
+Q: I have recently upgraded StarRocks v2.0 to v2.1. When I load JSON-format BOOLEAN type data into an integer column using Stream Load, StarRocks returns NULL after . How can I solve it?
 
-A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into a INT type column, StarRocks 2.0 converts the data into `0` and `1` for loading. The JSON Parser in StarRocks v2.1 and later versions are refactored and do not parse fields as strings, resulting in this problem.
+A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into an integer column, StarRocks v2.0 converts the data into `0` and `1` for loading. StarRocks v2.1 refactored its JSON Paerser, which directly extracts the JSON fields according to the target column type, resulting in this problem.
 
-You can solve this problem by adding the following expression to the `Columns` parameter of the Stream Load command:
+You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `Columns` parameter of the Stream Load command. The complete command is as follows:
 
 ```shell
-tmp, target=if(tmp,1,0)
+curl --location-trusted -u root:
+-H "columns: <col_name_1>, <col_name_2>, <tmp>, <col_name_3>=if(<tmp>,1,0)" 
+-T demo.csv -XPUT 
+http://<fe_ip>:<fe_http_port>/api/<db_name>/<table_name>/_stream_load
 ```
