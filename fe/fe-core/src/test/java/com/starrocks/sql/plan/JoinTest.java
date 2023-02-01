@@ -2726,4 +2726,14 @@ public class JoinTest extends PlanTestBase {
                 "  13:AGGREGATE (merge finalize)\n" +
                 "  |  group by: 16: v4, 14: v2, 15: v3");
     }
+
+    @Test // shouldn't have exception
+    public void testRemoveAggregationFromAggTableRuluWithJoinAssociateRule() throws Exception {
+        String sql = "select t0.v1 from t0 inner join (select a.k1, a.k2 from " +
+                "(select k1, k2, k3 from test_agg group by k1, k2, k3) as a " +
+                "where EXISTS (select a.k2 from " +
+                "(select k1, k2, k3 from test_agg group by k1, k2, k3) as a )) " +
+                "subv0 on t0.v1 = subv0.k1;";
+        getFragmentPlan(sql);
+    }
 }
