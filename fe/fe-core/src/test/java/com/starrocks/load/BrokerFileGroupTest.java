@@ -28,6 +28,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.utframe.StarRocksAssert;
@@ -40,9 +41,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class BrokerFileGroupTest {
     @Mocked
@@ -76,17 +75,13 @@ public class BrokerFileGroupTest {
 
     @Test
     public void testCSVParams() throws UserException {
-        Map<String, String> formatProperties = new HashMap<String, String>();
-        formatProperties.put("skip_header", "3");
-        formatProperties.put("trim_space", "true");
-        formatProperties.put("escape", "|");
-        formatProperties.put("enclose", "'");
+        CsvFormat csvFormat = new CsvFormat((byte) '\'', (byte) '|', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
         DataDescription desc = new DataDescription("olapTable", null, 
                                 filePaths, null, null, 
                                 null, null, null,
-                                false, null, null, formatProperties);
+                                false, null, null, csvFormat);
         desc.analyze("testDb");
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
@@ -99,15 +94,13 @@ public class BrokerFileGroupTest {
 
     @Test
     public void testCSVParamsWithSpecialCharacter() throws UserException {
-        Map<String, String> formatProperties = new HashMap<String, String>();
-        formatProperties.put("escape", "\\");
-        formatProperties.put("enclose", "\t");
+        CsvFormat csvFormat = new CsvFormat((byte) '\t', (byte) '\\', 3, true);
         List<String> filePaths = new ArrayList<>();
         filePaths.add("/a/b/c/file");
         DataDescription desc = new DataDescription("olapTable", null, 
                                 filePaths, null, null, 
                                 null, null, null,
-                                false, null, null, formatProperties);
+                                false, null, null, csvFormat);
         desc.analyze("testDb");
 
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);

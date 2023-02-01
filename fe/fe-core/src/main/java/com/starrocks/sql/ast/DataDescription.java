@@ -35,6 +35,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -104,6 +105,7 @@ public class DataDescription {
     private final String fileFormat;
     private final boolean isNegative;
 
+    private CsvFormat csvFormat;
     private Map<String, String> formatProperties;
 
     // column names of source files
@@ -156,7 +158,7 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList,
                            Expr whereExpr,
-                           Map<String, String> formatProperties) {
+                           CsvFormat csvFormat) {
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
@@ -169,7 +171,7 @@ public class DataDescription {
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
         this.srcTableName = null;
-        this.formatProperties = formatProperties;
+        this.csvFormat = csvFormat;
     }
 
     // data from table external_hive_table
@@ -209,8 +211,8 @@ public class DataDescription {
         return filePaths;
     }
 
-    public Map<String, String> getFormatProperties() {
-        return formatProperties;
+    public CsvFormat getCsvFormat() {
+        return csvFormat;
     }
 
     public List<String> getFileFieldNames() {

@@ -52,6 +52,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -137,20 +138,17 @@ public class BrokerFileGroup implements Writable {
     }
 
     public void parseFormatProperties(DataDescription dataDescription) {
-        Map<String, String> formatProperties = dataDescription.getFormatProperties();
-        if (formatProperties != null) {
-            if (formatProperties.containsKey(ESCAPE)) {
-                escape = (byte) formatProperties.getOrDefault(ESCAPE, "0").charAt(0);
-            }
-            if (formatProperties.containsKey(ENCLOSE)) {
-                enclose = (byte) formatProperties.getOrDefault(ENCLOSE, "0").charAt(0);
-            }
-            if (formatProperties.containsKey(TRIMSPACE)) {
-                trimspace = Boolean.valueOf(formatProperties.getOrDefault(TRIMSPACE, "false"));
-            }
-            if (formatProperties.containsKey(SKIPHEADER)) {
-                skipHeader = Long.valueOf(formatProperties.getOrDefault(SKIPHEADER, "0"));
-            }
+        CsvFormat csvFormat = dataDescription.getCsvFormat();
+        if (csvFormat != null) {
+            escape = csvFormat.getEscape();
+            enclose = csvFormat.getEnclose();
+            skipHeader = csvFormat.getSkipheader();
+            trimspace = csvFormat.isTrimspace();
+        } else {
+            escape = 0;
+            enclose = 0;
+            skipHeader = 0;
+            trimspace = false;
         }
     }
 
