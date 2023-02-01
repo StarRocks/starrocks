@@ -2,13 +2,15 @@
 
 StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。
 
+Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream。推荐使用 Flink SQL。
+
 > **说明**
 >
 > Flink 连接器还支持将 Flink 读取到的数据写入另外一个 StarRocks 集群或其他存储系统上。参见[从 Apache Flink 持续导入](../loading/Flink-connector-starrocks.md)。
 
 ## 功能简介
 
-相较于 Flink 官方提供的 Flink JDBC 连接器 (JDBC Connector)，Flink 连接器具备从 StarRocks 集群中各 BE 节点并行读取数据的能力，大大提高了数据读取效率。以下是两种连接器的实现方案对比：
+相较于 Flink 官方提供的 Flink JDBC 连接器 (JDBC Connector)，StarRocks 自研的 Flink 连接器具备从 StarRocks 集群中各 BE 节点并行读取数据的能力，大大提高了数据读取效率。以下是两种连接器的实现方案对比：
 
 - Flink 连接器
 
@@ -89,7 +91,7 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 
 ### 通用参数
 
-以下参数适用于 Flink SQL 客户端和 Flink DataStream 两种读取方式。
+以下参数适用于 Flink SQL 和 Flink DataStream 两种读取方式。
 
 | 参数                        | 是否必填 | 数据类型 | 描述                                                         |
 | --------------------------- | -------- | -------- | ------------------------------------------------------------ |
@@ -144,7 +146,7 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 
 ## 使用示例
 
-支持通过 Flink SQL 客户端和 Flink DataStream 两种方式来读取数据。推荐使用 Flink SQL 客户端。
+假设您的 StarRocks 集群中已创建数据库 `test`，并且您拥有 `root` 账号权限。
 
 > **说明**
 >
@@ -152,10 +154,10 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 
 ### 数据样例
 
-1. 在 StarRocks 集群中创建一张名为 `score_board` 的表。
+1. 进入 `test` 数据库，创建一张名为 `score_board` 的表。
 
    ```SQL
-   CREATE TABLE `score_board`
+   MySQL [test]> CREATE TABLE `score_board`
    (
        `id` int(11) NOT NULL COMMENT "",
        `name` varchar(65533) NULL DEFAULT "" COMMENT "",
@@ -174,7 +176,7 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 2. 向 `score_board` 表中插入数据。
 
    ```SQL
-   INSERT INTO score_board values
+   MySQL [test]> INSERT INTO score_board values
        (1, 'Bob', 21),
        (2, 'Stan', 21),
        (3, 'Sam', 22),
@@ -198,7 +200,39 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
        (21, 'Jack', 29);
    ```
 
-### 使用 Flink SQL 客户端读取数据
+3. 查询 `score_board` 表的数据。
+
+   ```SQL
+   MySQL [test]> SELECT * FROM score_board;
+   +------+---------+-------+
+   | id   | name    | score |
+   +------+---------+-------+
+   |    1 | Bob     |    21 |
+   |    2 | Stan    |    21 |
+   |    3 | Sam     |    22 |
+   |    4 | Tony    |    22 |
+   |    5 | Alice   |    22 |
+   |    6 | Lucy    |    23 |
+   |    7 | Polly   |    23 |
+   |    8 | Tom     |    23 |
+   |    9 | Rose    |    24 |
+   |   10 | Jerry   |    24 |
+   |   11 | Jason   |    24 |
+   |   12 | Lily    |    25 |
+   |   13 | Stephen |    25 |
+   |   14 | David   |    25 |
+   |   15 | Eddie   |    26 |
+   |   16 | Kate    |    27 |
+   |   17 | Cathy   |    27 |
+   |   18 | Judy    |    27 |
+   |   19 | Julia   |    28 |
+   |   20 | Robert  |    28 |
+   |   21 | Jack    |    29 |
+   +------+---------+-------+
+   21 rows in set (0.00 sec)
+   ```
+
+### 使用 Flink SQL 读取数据
 
 1. 根据要待导入数据的 StarRocks 表，在 Flink 中创建一张表，例如 `flink_test`，并配置读取任务属性，包括设置 Flink 连接器和库表的信息：
 
@@ -227,10 +261,10 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
    SELECT id, name FROM flink_test WHERE score > 20;
    ```
 
-使用 Flink SQL 客户端读取数据时，需要注意以下事项：
+使用 Flink SQL 读取数据时，需要注意以下事项：
 
 - 仅支持使用部分 SQL 语句读取 StarRocks 中的数据，如 `SELECT ... FROM <table_name> WHERE ...`。暂不支持除 `count` 以外的聚合函数。
-- 使用 SQL 语句时，支持自动进行谓词下推。如上述示例中的过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink 连接器中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
+- 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink 连接器中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
 - 不支持 LIMIT 语句。
 - StarRocks 暂时不支持 Checkpoint 机制。因此，如果读取任务失败，则无法保证数据一致性。
 
@@ -295,4 +329,4 @@ StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apac
 
 ## 后续操作
 
-Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/zh/docs/try-flink/flink-operations-playground/#flink-webui-界面) 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 客户端对读取的数据进行计算，比如 Join。
+Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/zh/docs/try-flink/flink-operations-playground/#flink-webui-界面) 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。
