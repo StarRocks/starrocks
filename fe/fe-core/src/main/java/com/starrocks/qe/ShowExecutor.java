@@ -85,6 +85,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
@@ -94,6 +95,7 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
@@ -116,6 +118,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -187,6 +190,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -196,6 +200,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -1369,6 +1376,159 @@ public class ShowExecutor {
 
     private void handleShowData() {
         ShowDataStmt showStmt = (ShowDataStmt) stmt;
+        String dbName = showStmt.getDbName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        db.readLock();
+        try {
+            String tableName = showStmt.getTableName();
+            List<List<String>> totalRows = showStmt.getResultRows();
+            if (tableName == null) {
+                long totalSize = 0;
+                long totalReplicaCount = 0;
+
+                // sort by table name
+                List<Table> tables = db.getTables();
+                SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
+
+                for (Table table : tables) {
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                            dbName, table.getName(), PrivPredicate.SHOW)) {
+                        continue;
+                    }
+                    sortedTables.add(table);
+                }
+
+                for (Table table : sortedTables) {
+                    if (!table.isNativeTable()) {
+                        continue;
+                    }
+
+                    OlapTable olapTable = (OlapTable) table;
+                    long tableSize = olapTable.getDataSize();
+                    long replicaCount = olapTable.getReplicaCount();
+
+                    Pair<Double, String> tableSizePair = DebugUtil.getByteUint(tableSize);
+                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(tableSizePair.first) + " "
+                            + tableSizePair.second;
+
+                    List<String> row = Arrays.asList(table.getName(), readableSize, String.valueOf(replicaCount));
+                    totalRows.add(row);
+
+                    totalSize += tableSize;
+                    totalReplicaCount += replicaCount;
+                } // end for tables
+
+                Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
+                String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
+                        + totalSizePair.second;
+                List<String> total = Arrays.asList("Total", readableSize, String.valueOf(totalReplicaCount));
+                totalRows.add(total);
+
+                // quota
+                long quota = db.getDataQuota();
+                long replicaQuota = db.getReplicaQuota();
+                Pair<Double, String> quotaPair = DebugUtil.getByteUint(quota);
+                String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaPair.first) + " "
+                        + quotaPair.second;
+
+                List<String> quotaRow = Arrays.asList("Quota", readableQuota, String.valueOf(replicaQuota));
+                totalRows.add(quotaRow);
+
+                // left
+                long left = Math.max(0, quota - totalSize);
+                long replicaCountLeft = Math.max(0, replicaQuota - totalReplicaCount);
+                Pair<Double, String> leftPair = DebugUtil.getByteUint(left);
+                String readableLeft = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftPair.first) + " "
+                        + leftPair.second;
+                List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
+                totalRows.add(leftRow);
+            } else {
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!PrivilegeManager.checkAnyActionOnTable(connectContext, dbName, tableName)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
+                                connectContext.getQualifiedUser(),
+                                connectContext.getRemoteIP(),
+                                tableName);
+                    }
+                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                        dbName, tableName, PrivPredicate.SHOW)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
+                            connectContext.getQualifiedUser(),
+                            connectContext.getRemoteIP(),
+                            tableName);
+                }
+
+                Table table = db.getTable(tableName);
+                if (table == null) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                }
+
+                if (!table.isLocalTable()) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
+                }
+
+                OlapTable olapTable = (OlapTable) table;
+                int i = 0;
+                long totalSize = 0;
+                long totalReplicaCount = 0;
+
+                // sort by index name
+                Map<String, Long> indexNames = olapTable.getIndexNameToId();
+                Map<String, Long> sortedIndexNames = new TreeMap<String, Long>(indexNames);
+
+                for (Long indexId : sortedIndexNames.values()) {
+                    long indexSize = 0;
+                    long indexReplicaCount = 0;
+                    long indexRowCount = 0;
+                    for (Partition partition : olapTable.getAllPartitions()) {
+                        MaterializedIndex mIndex = partition.getIndex(indexId);
+                        indexSize += mIndex.getDataSize();
+                        indexReplicaCount += mIndex.getReplicaCount();
+                        indexRowCount += mIndex.getRowCount();
+                    }
+
+                    Pair<Double, String> indexSizePair = DebugUtil.getByteUint(indexSize);
+                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(indexSizePair.first) + " "
+                            + indexSizePair.second;
+
+                    List<String> row = null;
+                    if (i == 0) {
+                        row = Arrays.asList(tableName,
+                                olapTable.getIndexNameById(indexId),
+                                readableSize, String.valueOf(indexReplicaCount),
+                                String.valueOf(indexRowCount));
+                    } else {
+                        row = Arrays.asList("",
+                                olapTable.getIndexNameById(indexId),
+                                readableSize, String.valueOf(indexReplicaCount),
+                                String.valueOf(indexRowCount));
+                    }
+
+                    totalSize += indexSize;
+                    totalReplicaCount += indexReplicaCount;
+                    totalRows.add(row);
+
+                    i++;
+                } // end for indices
+
+                Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
+                String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
+                        + totalSizePair.second;
+                List<String> row = Arrays.asList("", "Total", readableSize, String.valueOf(totalReplicaCount), "");
+                totalRows.add(row);
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            db.readUnlock();
+        }
         resultSet = new ShowResultSet(showStmt.getMetaData(), showStmt.getResultRows());
     }
 
