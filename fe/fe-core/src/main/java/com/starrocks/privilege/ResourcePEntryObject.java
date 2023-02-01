@@ -25,6 +25,10 @@ public class ResourcePEntryObject implements PEntryObject {
     @SerializedName(value = "n")
     String name;  // can be null, means all resources
 
+    public String getName() {
+        return name;
+    }
+
     public static ResourcePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
             throw new PrivilegeException("invalid object tokens, should have one: " + tokens);
