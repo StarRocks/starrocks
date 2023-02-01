@@ -1243,9 +1243,9 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
 
+        Assert.assertNotNull(table.getPartition("p2017_12"));
         Assert.assertNotNull(table.getPartition("p2017_13"));
         Assert.assertNotNull(table.getPartition("p2017_14"));
-        Assert.assertNotNull(table.getPartition("p2017_15"));
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
