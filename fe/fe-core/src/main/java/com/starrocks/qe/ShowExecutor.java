@@ -111,6 +111,7 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.Action;
 import com.starrocks.privilege.CatalogPEntryObject;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
@@ -120,11 +121,9 @@ import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -434,8 +433,8 @@ public class ShowExecutor {
                         // TODO: external table should check table action after PrivilegeManager support it.
                         if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
                                 checkTableAction(connectContext, baseTableInfo.getDbName(),
-                                baseTableInfo.getTableName(),
-                                PrivilegeType.SELECT)) {
+                                        baseTableInfo.getTableName(),
+                                        PrivilegeType.SELECT)) {
                             baseTableHasPrivilege.set(false);
                         }
                     });
@@ -1739,8 +1738,8 @@ public class ShowExecutor {
                             String roleName = showStmt.getRole();
                             info.add(roleName);
 
-                            PrivilegeType privilegeType = privilegeManager.getPrivilegeType(typeToPrivilegeEntry.getKey());
-                            if (privilegeType.equals(PrivilegeType.CATALOG)) {
+                            ObjectType objectType = privilegeManager.getObjectType(typeToPrivilegeEntry.getKey());
+                            if (objectType.equals(ObjectType.CATALOG)) {
                                 CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                                 if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
                                     info.add(null);
@@ -1761,8 +1760,8 @@ public class ShowExecutor {
                             }
 
                             GrantPrivilegeStmt grantPrivilegeStmt =
-                                    new GrantPrivilegeStmt(new ArrayList<>(), privilegeType.name(), roleName);
-                            grantPrivilegeStmt.setPrivilegeType(privilegeType);
+                                    new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), roleName);
+                            grantPrivilegeStmt.setObjectType(objectType);
                             grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
                             grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
                             info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
@@ -1811,8 +1810,8 @@ public class ShowExecutor {
                                 List<String> info = new ArrayList<>();
                                 info.add(userIdentity.toString());
 
-                                PrivilegeType privilegeType = privilegeManager.getPrivilegeType(typeToPrivilegeEntry.getKey());
-                                if (privilegeType.equals(PrivilegeType.CATALOG)) {
+                                ObjectType objectType = privilegeManager.getObjectType(typeToPrivilegeEntry.getKey());
+                                if (objectType.equals(ObjectType.CATALOG)) {
                                     CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                                     List<Catalog> catalogs = new ArrayList<>(
                                             GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
@@ -1824,21 +1823,21 @@ public class ShowExecutor {
 
                                     List<String> privList = new ArrayList<>();
                                     for (Map.Entry<String, Action> actionEntry
-                                            : PrivilegeType.CATALOG.getActionMap().entrySet()) {
+                                            : ObjectType.CATALOG.getActionMap().entrySet()) {
                                         if (privilegeEntry.getActionSet().contains(actionEntry.getValue())) {
                                             privList.add(actionEntry.getValue().getName());
                                         }
                                     }
                                     GrantPrivilegeStmt grantPrivilegeStmt =
-                                            new GrantPrivilegeStmt(privList, PrivilegeType.CATALOG.name(), userIdentity);
+                                            new GrantPrivilegeStmt(privList, ObjectType.CATALOG.name(), userIdentity);
                                     info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
                                 } else {
                                     info.add("default");
                                 }
 
                                 GrantPrivilegeStmt grantPrivilegeStmt =
-                                        new GrantPrivilegeStmt(new ArrayList<>(), privilegeType.name(), userIdentity);
-                                grantPrivilegeStmt.setPrivilegeType(privilegeType);
+                                        new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), userIdentity);
+                                grantPrivilegeStmt.setObjectType(objectType);
                                 grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
                                 grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
                                 info.add(AstToStringBuilder.toString(grantPrivilegeStmt));

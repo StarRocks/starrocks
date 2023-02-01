@@ -60,7 +60,7 @@ import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
@@ -319,7 +319,7 @@ public class AstToStringBuilder {
                 }
 
                 List<String> privList = new ArrayList<>();
-                for (Map.Entry<String, Action> actionEntry : stmt.getPrivilegeType().getActionMap().entrySet()) {
+                for (Map.Entry<String, Action> actionEntry : stmt.getObjectType().getActionMap().entrySet()) {
                     if (stmt.getActionList().contains(actionEntry.getValue())) {
                         privList.add(actionEntry.getValue().getName());
                     }
@@ -327,20 +327,20 @@ public class AstToStringBuilder {
                 sb.append(Joiner.on(", ").join(privList));
                 sb.append(" ON ");
 
-                switch (stmt.getPrivilegeType()) {
+                switch (stmt.getObjectType()) {
                     case TABLE:
                     case VIEW:
                     case MATERIALIZED_VIEW: {
                         TablePEntryObject tablePEntryObject = (TablePEntryObject) stmt.getObjectList().get(0);
                         if (tablePEntryObject.getDatabaseId() == TablePEntryObject.ALL_DATABASE_ID) {
-                            sb.append("ALL ").append(stmt.getPrivilegeType().getPlural()).append(" IN ALL DATABASES");
+                            sb.append("ALL ").append(stmt.getObjectType().getPlural()).append(" IN ALL DATABASES");
                         } else {
                             Database database = GlobalStateMgr.getCurrentState().getDb(tablePEntryObject.getDatabaseId());
                             if (tablePEntryObject.getTableId() == TablePEntryObject.ALL_TABLES_ID) {
                                 sb.append("ALL TABLES ");
                                 sb.append("IN DATABASE ").append(database.getFullName());
                             } else {
-                                sb.append(stmt.getPrivilegeType().name()).append(" ");
+                                sb.append(stmt.getObjectType().name()).append(" ");
 
                                 Table table = database.getTable(tablePEntryObject.getTableId());
                                 sb.append(table.getName());
@@ -354,14 +354,14 @@ public class AstToStringBuilder {
                         if (dbPEntryObject.getId() == DbPEntryObject.ALL_DATABASE_ID) {
                             sb.append("ALL DATABASES");
                         } else {
-                            sb.append(stmt.getPrivilegeType().name()).append(" ");
+                            sb.append(stmt.getObjectType().name()).append(" ");
                             Database database = GlobalStateMgr.getCurrentState().getDb(dbPEntryObject.getId());
                             sb.append(database.getFullName());
                         }
                         break;
                     }
                     case SYSTEM: {
-                        sb.append(stmt.getPrivilegeType().name());
+                        sb.append(stmt.getObjectType().name());
                         break;
                     }
                     case USER: {
@@ -378,9 +378,9 @@ public class AstToStringBuilder {
                     case RESOURCE: {
                         ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) stmt.getObjectList().get(0);
                         if (resourcePEntryObject.getName() == null) {
-                            sb.append("ALL ").append(stmt.getPrivilegeType().getPlural());
+                            sb.append("ALL ").append(stmt.getObjectType().getPlural());
                         } else {
-                            sb.append(stmt.getPrivilegeType().name()).append(" ");
+                            sb.append(stmt.getObjectType().name()).append(" ");
                             sb.append(resourcePEntryObject.getName());
                         }
                         break;
@@ -390,7 +390,7 @@ public class AstToStringBuilder {
                         if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
                             sb.append("ALL CATALOGS");
                         } else {
-                            sb.append(stmt.getPrivilegeType().name()).append(" ");
+                            sb.append(stmt.getObjectType().name()).append(" ");
 
                             List<Catalog> catalogs =
                                     new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
@@ -420,7 +420,7 @@ public class AstToStringBuilder {
                                 sb.append("IN DATABASE ");
                                 sb.append(database.getFullName());
                             } else {
-                                sb.append(stmt.getPrivilegeType().name()).append(" ");
+                                sb.append(stmt.getObjectType().name()).append(" ");
                                 sb.append(functionSig);
                                 sb.append(" IN DATABASE ").append(database.getFullName());
                             }
@@ -435,7 +435,7 @@ public class AstToStringBuilder {
                         if (resourceGroupPEntryObject.getId() == ResourceGroupPEntryObject.ALL_RESOURCE_GROUP_ID) {
                             sb.append("ALL RESOURCE_GROUPS");
                         } else {
-                            sb.append(stmt.getPrivilegeType().name()).append(" ");
+                            sb.append(stmt.getObjectType().name()).append(" ");
                             sb.append(GlobalStateMgr.getCurrentState().getResourceGroupMgr()
                                     .getResourceGroup(resourceGroupPEntryObject.getId()));
                         }
@@ -447,9 +447,9 @@ public class AstToStringBuilder {
                                 (GlobalFunctionPEntryObject) stmt.getObjectList().get(0);
                         if (globalFunctionPEntryObject.getFunctionSig()
                                 .equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
-                            sb.append("ALL ").append(PrivilegeType.GLOBAL_FUNCTION.getPlural());
+                            sb.append("ALL ").append(ObjectType.GLOBAL_FUNCTION.getPlural());
                         } else {
-                            sb.append(stmt.getPrivilegeType().name()).append(" ");
+                            sb.append(stmt.getObjectType().name()).append(" ");
                             sb.append(globalFunctionPEntryObject.getFunctionSig());
                         }
                         break;

@@ -204,7 +204,7 @@ public class PrivilegeManager {
             // GRANT SELECT ON ALL TABLES IN information_schema
             List<PEntryObject> object = Collections.singletonList(new TablePEntryObject(
                     SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-            short tableTypeId = (short) provider.getPrivilegeType(PrivilegeType.TABLE.name()).getId();
+            short tableTypeId = (short) provider.getObjectType(ObjectType.TABLE.name()).getId();
             ActionSet selectAction =
                     analyzeActionSet(tableTypeId, Collections.singletonList(PrivilegeType.SELECT.name()));
             rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
@@ -1347,15 +1347,15 @@ public class PrivilegeManager {
     }
 
     public short analyzeType(String typeName) throws PrivilegeException {
-        return (short) provider.getPrivilegeType(typeName).getId();
+        return (short) (provider.getObjectType(typeName).ordinal());
     }
 
-    public PrivilegeType getPrivilegeType(short typeId) throws PrivilegeException {
-        return provider.getPrivilegeType(typeId);
+    public ObjectType getObjectType(short typeId) throws PrivilegeException {
+        return provider.getObjectType(typeId);
     }
 
-    public PrivilegeType getPrivilegeType(String typeName) throws PrivilegeException {
-        return provider.getPrivilegeType(typeName);
+    public ObjectType getObjectType(String typeName) throws PrivilegeException {
+        return provider.getObjectType(typeName);
     }
 
     public void createRole(CreateRoleStmt stmt) throws DdlException {

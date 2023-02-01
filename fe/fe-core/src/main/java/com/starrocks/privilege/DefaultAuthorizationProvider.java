@@ -59,19 +59,19 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public ObjectType getPrivilegeType(String typeStr) throws PrivilegeException {
+    public ObjectType getObjectType(String typeStr) throws PrivilegeException {
 
-        ObjectType privilegeType = TYPE_STRING_TO_ID.get(typeStr);
-        if (privilegeType == null) {
+        ObjectType objectType = TYPE_STRING_TO_ID.get(typeStr);
+        if (objectType == null) {
             throw new PrivilegeException("cannot find type " + typeStr + " in " + TYPE_STRING_TO_ID.keySet());
         } else {
-            return privilegeType;
+            return objectType;
         }
     }
 
     @Override
-    public PrivilegeType getPrivilegeType(short typeId) {
-        return PrivilegeType.values()[typeId - 1];
+    public ObjectType getObjectType(short typeId) {
+        return ObjectType.values()[typeId - 1];
     }
 
     @Override

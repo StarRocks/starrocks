@@ -20,8 +20,8 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.privilege.ActionSet;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 
 import java.util.List;
 
@@ -39,7 +39,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     private ResourcePattern resourcePattern = null;
 
     // the following fields is set by analyzer, for new RBAC privilege framework
-    private PrivilegeType privilegeType;
+    private ObjectType objectType;
     private ActionSet actionList;
     private List<PEntryObject> objectList;
 
@@ -144,15 +144,15 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     }
 
     public short getTypeId() {
-        return (short) privilegeType.getId();
+        return (short) objectType.getId();
     }
 
-    public PrivilegeType getPrivilegeType() {
-        return privilegeType;
+    public ObjectType getObjectType() {
+        return objectType;
     }
 
-    public void setPrivilegeType(PrivilegeType privilegeType) {
-        this.privilegeType = privilegeType;
+    public void setObjectType(ObjectType objectType) {
+        this.objectType = objectType;
     }
 
     public ActionSet getActionList() {

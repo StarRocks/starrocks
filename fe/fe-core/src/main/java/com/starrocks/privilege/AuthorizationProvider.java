@@ -35,9 +35,9 @@ public interface AuthorizationProvider {
      */
     Set<String> getAllTypes();
 
-    PrivilegeType getPrivilegeType(String typeStr) throws PrivilegeException;
+    ObjectType getObjectType(String typeStr) throws PrivilegeException;
 
-    PrivilegeType getPrivilegeType(short typeId) throws PrivilegeException;
+    ObjectType getObjectType(short typeId) throws PrivilegeException;
 
     /**
      * analyze action type id -> action
