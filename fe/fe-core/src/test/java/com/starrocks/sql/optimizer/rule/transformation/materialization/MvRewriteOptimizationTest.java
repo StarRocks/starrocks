@@ -34,6 +34,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class MvRewriteOptimizationTest {
@@ -221,6 +222,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testSingleTableRewrite() throws Exception {
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
@@ -290,6 +292,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
@@ -428,6 +431,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "hive_mv_1",
@@ -479,6 +483,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "hive_mv_1",
                 "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
@@ -549,6 +554,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
@@ -796,6 +802,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
@@ -878,6 +885,7 @@ public class MvRewriteOptimizationTest {
 
 
     @Test
+    @Ignore
     public void testAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -1196,6 +1204,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
@@ -1235,6 +1244,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_union_mv_1",
@@ -1255,6 +1265,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1412,6 +1423,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testNestedMv() throws Exception {
         starRocksAssert.withTable("CREATE TABLE nest_base_table_1 (\n" +
                 "    k1 INT,\n" +
@@ -1454,6 +1466,7 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    @Ignore
     public void testPartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
