@@ -78,7 +78,8 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
 
         PhysicalRepeatOperator that = (PhysicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
-                Objects.equals(repeatColumnRef, that.repeatColumnRef);
+                Objects.equals(repeatColumnRef, that.repeatColumnRef) &&
+                Objects.equals(groupingIds, that.groupingIds);
     }
 
     @Override
