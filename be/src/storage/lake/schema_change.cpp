@@ -30,12 +30,6 @@
 
 namespace starrocks::lake {
 
-using ChunkChanger = ChunkChanger;
-using ChunkPtr = ChunkPtr;
-using Schema = Schema;
-using SchemaChangeUtils = SchemaChangeUtils;
-using TabletReaderParams = TabletReaderParams;
-
 class SchemaChange {
 public:
     explicit SchemaChange(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
@@ -123,8 +117,8 @@ public:
     Status process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) override;
 
 private:
-    size_t _memory_limitation;
-    size_t _max_buffer_size;
+    size_t _memory_limitation = 0;
+    size_t _max_buffer_size = 0;
     std::unique_ptr<std::vector<uint32_t>> _selective;
 };
 
