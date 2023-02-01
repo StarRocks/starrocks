@@ -233,38 +233,31 @@ TEST_F(TableReaderTest, test_basic_read) {
     create_row(rows, (int64_t)2, (int32_t)1, (int32_t)1, (int16_t)1, (int32_t)1);
     create_row(rows, (int64_t)2, (int32_t)1, (int32_t)2, (int16_t)2, (int32_t)1);
     create_row(rows, (int64_t)2, (int32_t)1, (int32_t)3, (int16_t)3, (int32_t)1);
-    create_rowset(_tablets[1], 2, rows, 3, 6);
+    create_rowset(_tablets[0], 3, rows, 3, 6);
     create_row(rows, (int64_t)3, (int32_t)3, (int32_t)4, (int16_t)1, (int32_t)1);
     create_row(rows, (int64_t)4, (int32_t)2, (int32_t)3, (int16_t)2, (int32_t)1);
     create_row(rows, (int64_t)5, (int32_t)1, (int32_t)5, (int16_t)3, (int32_t)1);
-    create_rowset(_tablets[2], 2, rows, 6, 9);
+    create_rowset(_tablets[0], 4, rows, 6, 9);
+    while (true) {
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        EditVersion full_version;
+        ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(4, &dummy_rowsets, &full_version).ok());
+        if (full_version.major() == 4) {
+            break;
+        }
+        std::cerr << "waiting for version 4\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 
     // 2. build TableReaderParams, and create TableReader
-    TableReaderParams params;
+    LocalTableReaderParams params;
     // 2.1 data version to read
-    params.version = 2;
-
-    // 2.2 build TOlapTablePartitionParam
-    TOlapTableIndexTablets index;
-    index.__set_index_id(0);
-    std::vector<int64_t> tablet_ids;
-    for (auto& _tablet : _tablets) {
-        tablet_ids.push_back(_tablet->tablet_id());
-    }
-    index.__set_tablets(tablet_ids);
-
-    TOlapTablePartition partition;
-    partition.__set_id(0);
-    partition.__set_num_buckets(tablet_ids.size());
-    partition.__set_indexes({index});
-
-    params.partition_param.__set_db_id(db_id);
-    params.partition_param.__set_table_id(table_id);
-    params.partition_param.__set_version(0);
-    params.partition_param.__set_partitions({partition});
+    params.version = 4;
+    params.tablet_id = _tablets[0]->tablet_id();
 
     // 2.3 create TableReader
-    std::shared_ptr<TableReader> table_reader = std::make_shared<TableReader>(params);
+    std::shared_ptr<TableReader> table_reader = std::make_shared<TableReader>();
+    EXPECT_TRUE(table_reader->init(params).ok());
 
     // 3. verify multi_get
     ChunkPtr key_chunk = ChunkHelper::new_chunk(_key_schema, 10);
