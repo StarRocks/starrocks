@@ -183,37 +183,37 @@ After a partition is created, you can move on to the next step.
 
 1. [Download](https://releases.starrocks.io/resources/AuditLoader.zip) the Audit Loader installation package. The package contains multiple directories for different StarRocks versions. You must navigate to the corresponding directory and install the package that is compatible with your StarRocks.
 
-  - **2.4**: StarRocks v2.4.0 and later minor versions
-  - **2.3**: StarRocks v2.3.0 and later minor versions
-  - **2.2.1+**: StarRocks v2.2.1 and later minor versions
-  - **2.1-2.2.0**: StarRocks v2.2.0, StarRocks v2.1.0 and later minor versions
-  - **1.18.2-2.0**: StarRocks v2.0.0 and later minor versions, StarRocks v1.19.0 and later minor versions
+    - **2.4**: StarRocks v2.4.0 and later minor versions
+    - **2.3**: StarRocks v2.3.0 and later minor versions
+    - **2.2.1+**: StarRocks v2.2.1 and later minor versions
+    - **2.1-2.2.0**: StarRocks v2.2.0, StarRocks v2.1.0 and later minor versions
+    - **1.18.2-2.0**: StarRocks v2.0.0 and later minor versions, StarRocks v1.19.0 and later minor versions
 
 2. Unzip the installation package.
 
-  ```shell
-  unzip auditloader.zip
-  ```
+    ```shell
+    unzip auditloader.zip
+    ```
 
-  The following files are inflated:
+    The following files are inflated:
 
-  - **auditloader.jar**: the JAR file of Audit Loader.
-  - **plugin.properties**: the properties file of Audit Loader.
-  - **plugin.conf**: the configuration file of Audit Loader.
+    - **auditloader.jar**: the JAR file of Audit Loader.
+    - **plugin.properties**: the properties file of Audit Loader.
+    - **plugin.conf**: the configuration file of Audit Loader.
 
 3. Modify **plugin.conf** to configure Audit Loader. You must configure the following items to make sure Audit Loader can work properly:
 
-  - `frontend_host_port`: FE IP address and HTTP port, in the format `<fe_ip>:<fe_http_port>`. The default value is `127.0.0.1:8030`.
-  - `database`: name of the database you created to host audit logs.
-  - `table`: name of the table you created to host audit logs.
-  - `user`: your cluster username. You MUST have the privilege to load data (LOAD_PRIV) into the table.
-  - `password`: your user password.
+    - `frontend_host_port`: FE IP address and HTTP port, in the format `<fe_ip>:<fe_http_port>`. The default value is `127.0.0.1:8030`.
+    - `database`: name of the database you created to host audit logs.
+    - `table`: name of the table you created to host audit logs.
+    - `user`: your cluster username. You MUST have the privilege to load data (LOAD_PRIV) into the table.
+    - `password`: your user password.
 
 4. Zip the files back into a package.
 
-  ```shell
-  zip -q -m -r auditloader.zip auditloader.jar plugin.conf plugin.properties
-  ```
+    ```shell
+    zip -q -m -r auditloader.zip auditloader.jar plugin.conf plugin.properties
+    ```
 
 5. Dispatch the package to all machines that host FE nodes. Make sure all packages are stored in an identical path. Otherwise, the installation fails. Remember to copy the absolute path to the package after you dispatched the package.
 
@@ -231,71 +231,71 @@ See [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL%20PL
 
 1. You can check if the installation is successful via [SHOW PLUGINS](../sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md).
 
-  In the following example, the `Status` of the plugin `AuditLoader` is `INSTALLED`,  meaning installation is successful.
+    In the following example, the `Status` of the plugin `AuditLoader` is `INSTALLED`,  meaning installation is successful.
 
-  ```Plain
-  mysql> SHOW PLUGINS\G
-  *************************** 1. row ***************************
-      Name: __builtin_AuditLogBuilder
-      Type: AUDIT
-  Description: builtin audit logger
-      Version: 0.12.0
-  JavaVersion: 1.8.31
-  ClassName: com.starrocks.qe.AuditLogBuilder
-      SoName: NULL
-      Sources: Builtin
-      Status: INSTALLED
-  Properties: {}
-  *************************** 2. row ***************************
-      Name: AuditLoader
-      Type: AUDIT
-  Description: load audit log to olap load, and user can view the statistic of queries
-      Version: 1.0.1
-  JavaVersion: 1.8.0
-  ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
-      SoName: NULL
-      Sources: /x/xx/xxx/xxxxx/auditloader.zip
-      Status: INSTALLED
-  Properties: {}
-  2 rows in set (0.01 sec)
-  ```
+    ```Plain
+    mysql> SHOW PLUGINS\G
+    *************************** 1. row ***************************
+        Name: __builtin_AuditLogBuilder
+        Type: AUDIT
+    Description: builtin audit logger
+        Version: 0.12.0
+    JavaVersion: 1.8.31
+    ClassName: com.starrocks.qe.AuditLogBuilder
+        SoName: NULL
+        Sources: Builtin
+        Status: INSTALLED
+    Properties: {}
+    *************************** 2. row ***************************
+        Name: AuditLoader
+        Type: AUDIT
+    Description: load audit log to olap load, and user can view the statistic of queries
+        Version: 1.0.1
+    JavaVersion: 1.8.0
+    ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
+        SoName: NULL
+        Sources: /x/xx/xxx/xxxxx/auditloader.zip
+        Status: INSTALLED
+    Properties: {}
+    2 rows in set (0.01 sec)
+    ```
 
 2. Execute some random SQLs to generate audit logs, and wait for 60 seconds (or the time you have specified in the item `max_batch_interval_sec` when you configure Audit Loader) to allow Audit Loader to load audit logs into StarRocks.
 
 3. Check the audit logs by querying the table.
 
-  ```SQL
-  SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__;
-  ```
+    ```SQL
+    SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__;
+    ```
 
-  The following example shows when audit logs are loaded into the table successfully:
+    The following example shows when audit logs are loaded into the table successfully:
 
-  ```Plain
-  mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
-  *************************** 1. row ***************************
+    ```Plain
+    mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
+    *************************** 1. row ***************************
         queryId: 082ddf02-6492-11ed-a071-6ae6b1db20eb
-      timestamp: 2022-11-15 11:03:08
-       clientIp: xxx.xx.xxx.xx:33544
-           user: root
-  resourceGroup: default_wg
-             db: 
-          state: EOF
-      errorCode: 
-      queryTime: 8
-      scanBytes: 0
-       scanRows: 0
-     returnRows: 0
-      cpuCostNs: 62380
-   memCostBytes: 14504
-         stmtId: 33
+        timestamp: 2022-11-15 11:03:08
+        clientIp: xxx.xx.xxx.xx:33544
+            user: root
+    resourceGroup: default_wg
+                db: 
+            state: EOF
+        errorCode: 
+        queryTime: 8
+        scanBytes: 0
+        scanRows: 0
+        returnRows: 0
+        cpuCostNs: 62380
+    memCostBytes: 14504
+            stmtId: 33
         isQuery: 1
-           feIp: xxx.xx.xxx.xx
-           stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
-         digest: 
-   planCpuCosts: 21
-   planMemCosts: 0
-  1 row in set (0.01 sec)
-  ```
+            feIp: xxx.xx.xxx.xx
+            stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
+            digest: 
+    planCpuCosts: 21
+    planMemCosts: 0
+    1 row in set (0.01 sec)
+    ```
 
 ## Troubleshooting
 
