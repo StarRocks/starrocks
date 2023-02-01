@@ -17,7 +17,7 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.jni.connector.StructSelectedFields;
+import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -120,17 +120,15 @@ public class HudiSliceScanner extends ConnectorScanner {
             requiredTypes[i] = new ColumnType(requiredFields[i], type);
         }
 
-        StructSelectedFields ssf = new StructSelectedFields();
+        // prune fields
+        SelectedFields ssf = new SelectedFields();
         for (String nestField : nestedFields) {
             ssf.addNestedPath(nestField);
         }
         for (int i = 0; i < requiredFields.length; i++) {
             ColumnType type = requiredTypes[i];
             String name = requiredFields[i];
-            if (type.isStruct()) {
-                StructSelectedFields ssf2 = ssf.findChildren(name);
-                type.pruneOnStructSelectedFields(ssf2);
-            }
+            type.pruneOnField(ssf, name);
         }
     }
 
@@ -140,8 +138,16 @@ public class HudiSliceScanner extends ConnectorScanner {
                 Arrays.stream(this.requiredColumnIds).mapToObj(String::valueOf)
                         .collect(Collectors.joining(",")));
         properties.setProperty("hive.io.file.readcolumn.names", String.join(",", this.requiredFields));
-        if (this.nestedFields.length > 0) {
-            properties.setProperty("hive.io.file.readNestedColumn.paths", String.join(",", this.nestedFields));
+        // build `readNestedColumn.paths` spec.
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < requiredFields.length; i++) {
+            String name = requiredFields[i];
+            ColumnType type = requiredTypes[i];
+            type.buildNestedFieldsSpec(name, sb);
+        }
+        if (sb.length() > 0) {
+            sb.deleteCharAt(sb.length() - 1);
+            properties.setProperty("hive.io.file.readNestedColumn.paths", sb.toString());
         }
         properties.setProperty("columns", this.hiveColumnNames);
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp

@@ -126,9 +126,8 @@ public class OffHeapTable {
     }
 
     // for test only.
-    public void show(int rowLimit) {
+    public String dump(int rowLimit) {
         StringBuilder sb = new StringBuilder();
-        sb.append("OffHeapTable: numRows = " + numRows + "\n");
         for (int i = 0; i < rowLimit && i < numRows; i++) {
             sb.append("row" + i + ": [");
             for (int j = 0; j < vectors.length; j++) {
@@ -140,7 +139,12 @@ public class OffHeapTable {
             }
             sb.append("]\n");
         }
-        System.out.print(sb);
+        return sb.toString();
+    }
+
+    public void show(int rowLimit) {
+        System.out.println("OffHeapTable: numRows = " + numRows);
+        System.out.println(dump(rowLimit));
     }
 
     // for test only.
