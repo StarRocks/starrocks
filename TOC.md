@@ -29,7 +29,7 @@
   + [使用 Stream Load 事务接口导入](/loading/stream_load_transaction_interface.md)
   + [从 MySQL 实时同步](/loading/Flink_cdc_load.md)
   + [从 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
-  + [通过导入实现数据变更](/loading/PrimaryKeyLoad.md)
+  + [通过导入实现数据变更](/loading/Load_to_Primary_Key_tables.md)
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)

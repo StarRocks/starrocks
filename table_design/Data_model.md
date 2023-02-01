@@ -370,4 +370,4 @@ PROPERTIES("replication_num" = "3",
 
 ### 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[主键模型导入](../loading/PrimaryKeyLoad.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入总览](../loading/Loading_intro.md)。
