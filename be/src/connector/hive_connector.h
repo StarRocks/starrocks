@@ -71,6 +71,7 @@ private:
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    HdfsScanner* _create_hudi_jni_scanner();
 
     // =====================================
     ObjectPool _pool;
