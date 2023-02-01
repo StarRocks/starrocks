@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -8,6 +9,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -90,6 +92,12 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
         public Builder setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
             this.columnRefMap = columnRefMap;
+            return this;
+        }
+
+        @Override
+        public Builder setProjection(Projection projection) {
+            Preconditions.checkState(false, "Shouldn't set projection to Project Operator");
             return this;
         }
 
