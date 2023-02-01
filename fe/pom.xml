@@ -49,7 +49,7 @@ under the License.
         <parquet.version>1.10.1</parquet.version>
         <hadoop.version>3.3.3</hadoop.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.12.1</hudi.version>
+        <hudi.version>0.12.2</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
