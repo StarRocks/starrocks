@@ -98,6 +98,11 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             DCHECK(match_exactly_once);
         }
     } else {
+<<<<<<< HEAD:be/src/exec/vectorized/hash_join_node.cpp
+=======
+        // partition_exprs is only avaiable for the bucket shuffle join,
+        // so local shuffle use _probe_expr_ctxs and _build_expr_ctxs for the other joins.
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130)):be/src/exec/hash_join_node.cpp
         _probe_equivalence_partition_expr_ctxs = _probe_expr_ctxs;
         _build_equivalence_partition_expr_ctxs = _build_expr_ctxs;
     }

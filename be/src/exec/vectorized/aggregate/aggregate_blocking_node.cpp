@@ -167,6 +167,52 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/aggregate/aggregate_blocking_node.cpp
+=======
+template <class AggFactory, class SourceFactory, class SinkFactory>
+pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                    pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    // create aggregator factory
+    // shared by sink operator and source operator
+    auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
+
+    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    auto operators_generator = [this, should_cache, upstream_source_op, context](bool post_cache) {
+        // shared by sink operator and source operator
+        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
+        AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
+        aggregator_factory->set_aggr_mode(aggr_mode);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
+
+        context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+        return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
+    };
+
+    auto [agg_sink_op, agg_source_op] = operators_generator(false);
+    // Create a shared RefCountedRuntimeFilterCollector
+    // Initialize OperatorFactory's fields involving runtime filters.
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    ops_with_sink.push_back(std::move(agg_sink_op));
+
+    OpFactories ops_with_source;
+    // Initialize OperatorFactory's fields involving runtime filters.
+    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    ops_with_source.push_back(std::move(agg_source_op));
+
+    if (should_cache) {
+        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+    }
+    context->add_pipeline(ops_with_sink);
+
+    return ops_with_source;
+}
+
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130)):be/src/exec/aggregate/aggregate_blocking_node.cpp
 pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 

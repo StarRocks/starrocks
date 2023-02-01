@@ -210,7 +210,28 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
 pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+<<<<<<< HEAD:be/src/exec/vectorized/aggregate/distinct_streaming_node.cpp
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+=======
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+
+    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    auto operators_generator = [this, should_cache, upstream_source_op, context](bool post_cache) {
+        // shared by sink operator factory and source operator factory
+        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        AggrMode aggr_mode =
+                should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
+        aggregator_factory->set_aggr_mode(aggr_mode);
+        auto sink_operator = std::make_shared<AggregateDistinctStreamingSinkOperatorFactory>(
+                context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
+                context->next_operator_id(), id(), aggregator_factory);
+        context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+        return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
+    };
+    auto [agg_sink_op, agg_source_op] = operators_generator(true);
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130)):be/src/exec/aggregate/distinct_streaming_node.cpp
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -220,6 +241,7 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     auto sink_operator = std::make_shared<AggregateDistinctStreamingSinkOperatorFactory>(context->next_operator_id(),
                                                                                          id(), aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
+<<<<<<< HEAD:be/src/exec/vectorized/aggregate/distinct_streaming_node.cpp
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
     operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
@@ -234,6 +256,15 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     auto* upstream_source_op = context->source_operator(operators_with_sink);
     context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
     operators_with_source.push_back(std::move(source_operator));
+=======
+    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    ops_with_source.push_back(std::move(agg_source_op));
+
+    if (should_cache) {
+        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+    }
+    context->add_pipeline(ops_with_sink);
+>>>>>>> 052edd5a8 ([BugFix] Fix local shuffle (#17130)):be/src/exec/aggregate/distinct_streaming_node.cpp
     if (limit() != -1) {
         operators_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
