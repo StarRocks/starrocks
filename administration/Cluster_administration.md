@@ -408,6 +408,21 @@ mysql> show variables like '%batch_size%';
 mysql> set global batch_size = 4096;
 ```
 
+#### 故障排除
+
+Q：升级 StarRocks 2.0 至 2.1 及后期版本后，通过 Stream Load 将 JSON 格式的 BOOLEAN 类型数据导入至整形列中返回 NULL。我该如何处理？
+
+A：StarRocks 2.0 版本将所有字段作为字符串解析，然后进行类型转换。将执行格式为 JSON 且类型为 BOOLEAN 的数据（`true` 和 `false`）导入至整形列中时，StarRocks 2.0 会将数据转化为 `0` 和 `1` 后导入。StarRocks 2.1 及后期版本重制了 JSON Parser，直接按照目标列类型提取 JSON 字段，从而导致最终得到的数据为 NULL。
+
+您可以通过在导入命令 `columns` 项中添加表达式 `tmp, target=if(tmp,1,0)` 解决该问题。完整导入命令如下：
+
+```shell
+curl --location-trusted -u root:
+-H "columns: <col_name_1>, <col_name_2>, <tmp>, <col_name_3>=if(<tmp>,1,0)" 
+-T demo.csv -XPUT 
+http://<fe_ip>:<fe_http_port>/api/<db_name>/<table_name>/_stream_load
+```
+
 ## 回滚集群
 
 您可以通过命令回滚 StarRocks 版本，回滚范围包括所有安装包名为 **StarRocks-xx** 的版本。当升级后发现出现异常状况，不符合预期，想快速恢复服务的，可以按照下述操作回滚版本。
