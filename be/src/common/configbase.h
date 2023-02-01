@@ -104,6 +104,8 @@ public:
     bool load(const char* filename);
     template <typename T>
     bool get(const char* key, const char* defstr, T& retval) const;
+    bool contain(const char* key) const;
+    void set(const char* key, const char* value);
 
 private:
     std::map<std::string, std::string> file_conf_map;

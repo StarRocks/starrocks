@@ -24,6 +24,7 @@
 #include <map>
 #include <regex>
 #include <string>
+#include <thread>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
@@ -31,6 +32,7 @@
 
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "storage/options.h"
 
 namespace starrocks::config {
 
@@ -245,6 +247,14 @@ bool Properties::get(const char* key, const char* defstr, T& retval) const {
     return strtox(valstr, retval);
 }
 
+bool Properties::contain(const char* key) const {
+    return file_conf_map.find(std::string(key)) != file_conf_map.end();
+}
+
+void Properties::set(const char* key, const char* value) {
+    file_conf_map[key] = value;
+}
+
 template <typename T>
 bool update(const std::string& value, T& retval) {
     std::string valstr(value);
@@ -306,6 +316,35 @@ bool init(const char* filename, bool fillconfmap) {
         SET_FIELD(it.second, std::vector<int64_t>, fillconfmap);
         SET_FIELD(it.second, std::vector<double>, fillconfmap);
         SET_FIELD(it.second, std::vector<std::string>, fillconfmap);
+    }
+
+    // if user hasn't set flush_thread_num_per_store, then we will set
+    // default value to the flush_thread_num_per_store based on the disk num and core num
+    if (!props.contain("flush_thread_num_per_store")) {
+        size_t num_cores = std::thread::hardware_concurrency();
+        size_t disk_store_num = 1;
+
+        // get disk number
+        std::vector<starrocks::StorePath> paths;
+        auto status = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+        if (status.ok()) {
+            disk_store_num = std::max((size_t)1, paths.size());
+        }
+        // flush_thread_num_per_store * disk_store_num = num_cores / 3
+        size_t flush_thread_num_per_store = num_cores / 3 / disk_store_num;
+
+        // flush_thread_num_per_store should be between [2, 8]
+        flush_thread_num_per_store = std::max((size_t)2, std::min(flush_thread_num_per_store, (size_t)8));
+
+        props.set("flush_thread_num_per_store", std::to_string(flush_thread_num_per_store).c_str());
+
+        // update flush_thread_num_per_store
+        for (const auto& it : *Register::_s_field_map) {
+            if (!strcmp(it.second.name, "flush_thread_num_per_store") == 0) {
+                continue;
+            }
+            SET_FIELD(it.second, int32_t, fillconfmap);
+        }
     }
 
     return true;
