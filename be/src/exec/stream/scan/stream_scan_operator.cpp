@@ -56,6 +56,9 @@ void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_sour
     _chunk_sources[chunk_source_index]->reset_status();
 }
 
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of _pickup_morsel in ScanOperator,
+// maybe can abstract a method contains the same code later
 Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
     _close_chunk_source(state, chunk_source_index);
@@ -152,6 +155,9 @@ bool StreamScanOperator::is_finished() const {
     return ConnectorScanOperator::is_finished();
 }
 
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of has_output in ScanOperator,
+// maybe can abstract a method contains the same code later
 bool StreamScanOperator::has_output() const {
     if (_is_stream_pipeline) {
         if (_is_epoch_finished) {
@@ -244,6 +250,9 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of is_finished,
+// maybe can abstract a method contains the same code later
 bool StreamScanOperator::is_epoch_finished() const {
     if (_is_epoch_finished) {
         return true;

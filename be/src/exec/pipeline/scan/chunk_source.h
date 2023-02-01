@@ -66,7 +66,7 @@ public:
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
 
-    // for stream
+    // stream API
     virtual void reset_status() { _status = Status::OK(); }
     virtual Status set_stream_offset(int64_t table_version, int64_t changelog_id) { return Status::OK(); }
     virtual void set_epoch_limit(int64_t read_limit, int64_t time_limit) {}

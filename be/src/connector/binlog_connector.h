@@ -99,7 +99,7 @@ private:
     Status _mock_chunk_test(ChunkPtr* chunk);
     std::atomic<int32_t> _chunk_num = 0;
 
-    // for stream offset
+    // for binlog offset
     int64_t _table_version;
     int64_t _changelog_id;
     bool _is_stream_pipeline = false;
