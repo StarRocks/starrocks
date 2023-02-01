@@ -83,7 +83,7 @@
     + [时区](/administration/timezone.md)
     + [Information Schema](/administration/information_schema.md)
     + 管理资源
-      + [资源隔离](/administration/Resource_Group.md)
+      + [资源隔离](/administration/resource_group.md)
       + [查询队列](/administration/query_queues.md)
       + [查询管理](/administration/Query_management.md)
       + [内存管理](/administration/Memory_management.md)
