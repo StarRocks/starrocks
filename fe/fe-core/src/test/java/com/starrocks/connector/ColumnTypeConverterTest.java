@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
@@ -53,6 +52,11 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(222233, res[0]);
         Assert.assertEquals(4442, res[1]);
 
+        t1 = "decimal(3, 2)";
+        res = getPrecisionAndScale(t1);
+        Assert.assertEquals(3, res[0]);
+        Assert.assertEquals(2, res[1]);
+
         try {
             t1 = "decimal(3.222,2)";
             getPrecisionAndScale(t1);
@@ -63,14 +67,6 @@ public class ColumnTypeConverterTest {
 
         try {
             t1 = "decimal(a,2)";
-            getPrecisionAndScale(t1);
-            Assert.fail();
-        } catch (StarRocksConnectorException e) {
-            Assert.assertTrue(e.getMessage().contains("Failed to get"));
-        }
-
-        try {
-            t1 = "decimal(3, 2)";
             getPrecisionAndScale(t1);
             Assert.fail();
         } catch (StarRocksConnectorException e) {
@@ -129,12 +125,8 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
-        try {
-            new ArrayType(new ArrayType(itemType));
-            Assert.fail();
-        } catch (InternalError e) {
-            Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
-        }
+        Assert.assertEquals(new ArrayType(new ArrayType(itemType)),
+                fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
     }
 
     @Test
