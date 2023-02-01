@@ -29,6 +29,11 @@ message DelvecPagePB {
     optional uint64 size = 3;
 }
 
+message DelvecCacheKeyPB {
+    optional int64 id = 1;
+    optional DelvecPagePB delvec_page = 2;
+}
+
 // from segment to delvec page
 message DelvecPairPB {
     optional uint32 segment_id = 1;

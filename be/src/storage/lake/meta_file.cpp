@@ -28,6 +28,15 @@
 namespace starrocks {
 namespace lake {
 
+static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
+    DelvecCacheKeyPB cache_key_pb;
+    cache_key_pb.set_id(tablet_id);
+    cache_key_pb.mutable_delvec_page()->CopyFrom(page);
+    std::string cache_key;
+    cache_key_pb.SerializeToString(&cache_key);
+    return cache_key;
+}
+
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
         : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
@@ -87,6 +96,8 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             }
         }
         if (need_del) {
+            // free cache
+            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), delvec_it->page()));
             delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->erase(delvec_it);
             delvec_erase_cnt++;
         } else {
@@ -114,6 +125,9 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
         auto* each_delvec = _tablet_meta->mutable_delvec_meta()->mutable_delvecs(i);
         auto iter = _delvecs.find(each_delvec->segment_id());
         if (iter != _delvecs.end()) {
+            // erase old version delvec from cache
+            // free cache
+            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), each_delvec->page()));
             each_delvec->mutable_page()->set_version(version);
             each_delvec->mutable_page()->set_offset(iter->second.page().offset());
             each_delvec->mutable_page()->set_size(iter->second.page().size());
@@ -155,6 +169,8 @@ Status MetaFileBuilder::finalize() {
     if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
+    _update_mgr->update_primary_index_data_version(_tablet, version);
+    _has_finalized = true;
     return Status::OK();
 }
 
@@ -172,7 +188,11 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
 }
 
 void MetaFileBuilder::handle_failure() {
-    _update_mgr->remove_primary_index_cache(_tablet_meta->id());
+    if (is_primary_key(_tablet_meta.get()) && !_has_finalized) {
+        // if we meet failures and have not finalized yet, have to clear primary index cache,
+        // then we can retry again.
+        _update_mgr->remove_primary_index_cache(_tablet_meta->id());
+    }
 }
 
 MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {
@@ -216,10 +236,10 @@ Status MetaFileReader::load() {
     return Status::OK();
 }
 
-Status MetaFileReader::get_del_vec(LocationProvider* location_provider, uint32_t segment_id, DelVector* delvec,
-                                   int64_t* latest_version) {
+Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec) {
     if (_access_file == nullptr) return _err_status;
     if (!_load) return Status::InternalError("meta file reader not loaded");
+    const LocationProvider* location_provider = tablet_mgr->location_provider();
     for (const auto& each_delvec : _tablet_meta->delvec_meta().delvecs()) {
         if (each_delvec.segment_id() == segment_id) {
             MonotonicStopWatch watch;
@@ -231,6 +251,13 @@ Status MetaFileReader::get_del_vec(LocationProvider* location_provider, uint32_t
             // read from delvec file by each_delvec.page().version()
             const std::string filepath =
                     location_provider->tablet_delvec_location(_tablet_meta->id(), each_delvec.page().version());
+            // find in cache
+            std::string cache_key = delvec_cache_key(_tablet_meta->id(), each_delvec.page());
+            DelVectorPtr delvec_cache_ptr = tablet_mgr->lookup_delvec(cache_key);
+            if (delvec_cache_ptr != nullptr) {
+                delvec->copy_from(*delvec_cache_ptr);
+                return Status::OK();
+            }
             RandomAccessFileOptions opts{.skip_fill_local_cache = true};
             auto rf = fs::new_random_access_file(opts, filepath);
             if (!rf.ok()) {
@@ -239,7 +266,10 @@ Status MetaFileReader::get_del_vec(LocationProvider* location_provider, uint32_t
             RETURN_IF_ERROR((*rf)->read_at_fully(each_delvec.page().offset(), buf.data(), each_delvec.page().size()));
             // parse delvec
             RETURN_IF_ERROR(delvec->load(each_delvec.page().version(), buf.data(), each_delvec.page().size()));
-            *latest_version = each_delvec.page().version();
+            // put in cache
+            delvec_cache_ptr = std::make_shared<DelVector>();
+            delvec_cache_ptr->copy_from(*delvec);
+            tablet_mgr->cache_delvec(cache_key, delvec_cache_ptr);
             if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
                 LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
             }
@@ -269,18 +299,6 @@ void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uin
     for (auto& rs : metadata.rowsets()) {
         for (int i = 0; i < rs.segments_size(); i++) {
             rssid_to_path[rs.id() + i] = rs.segments(i);
-        }
-    }
-}
-
-void find_missed_tsid_range(TabletMetadata* metadata, std::vector<TabletSegmentIdRange>& tsid_ranges) {
-    CHECK(metadata != nullptr);
-    for (int i = 0; i < metadata->rowsets_size(); i++) {
-        uint32_t leftid = (i == 0) ? 1 : metadata->rowsets(i - 1).id() + metadata->rowsets(i - 1).segments_size();
-        uint32_t rightid = metadata->rowsets(i).id() - 1;
-        if (leftid <= rightid) {
-            // found missed tsid range
-            tsid_ranges.emplace_back(metadata->id(), leftid, metadata->id(), rightid);
         }
     }
 }

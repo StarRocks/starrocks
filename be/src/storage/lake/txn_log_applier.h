@@ -32,6 +32,8 @@ public:
 
     virtual Status init() { return Status::OK(); }
 
+    virtual Status check_meta_version() { return Status::OK(); }
+
     virtual Status apply(const TxnLogPB& tnx_log) = 0;
 
     virtual Status finish() = 0;

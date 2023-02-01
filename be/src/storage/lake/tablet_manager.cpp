@@ -55,7 +55,9 @@ TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager*
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
           _update_mgr(update_mgr),
-          _gc_checker_tid(INVALID_BTHREAD) {}
+          _gc_checker_tid(INVALID_BTHREAD) {
+    _update_mgr->set_tablet_mgr(this);
+}
 
 TabletManager::~TabletManager() {
     if (_gc_checker_tid != INVALID_BTHREAD) {
@@ -165,6 +167,23 @@ SegmentPtr TabletManager::lookup_segment(std::string_view key) {
 void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
+    (void)fill_metacache(key, value.release(), (int)mem_cost);
+}
+
+DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto value = static_cast<CacheValue*>(_metacache->value(handle));
+    auto delvec = std::get<DelVectorPtr>(*value);
+    _metacache->release(handle);
+    return delvec;
+}
+
+void TabletManager::cache_delvec(std::string_view key, DelVectorPtr delvec) {
+    auto mem_cost = delvec->memory_usage();
+    auto value = std::make_unique<CacheValue>(std::move(delvec));
     (void)fill_metacache(key, value.release(), (int)mem_cost);
 }
 
@@ -488,6 +507,20 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
 
     RETURN_IF_ERROR(log_applier->init());
+    auto check_st = log_applier->check_meta_version();
+    if (!check_st.ok()) {
+        if (check_st.is_already_exist()) {
+            // return the new tablet meta score
+            auto target_metadata_or = tablet->get_metadata(new_version);
+            if (target_metadata_or.ok()) {
+                return compaction_score(**target_metadata_or);
+            } else {
+                return target_metadata_or.status();
+            }
+        } else {
+            return check_st;
+        }
+    }
 
     // Apply txn logs
     int64_t alter_version = -1;

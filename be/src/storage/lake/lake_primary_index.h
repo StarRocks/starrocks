@@ -28,6 +28,8 @@ namespace lake {
 class Tablet;
 class MetaFileBuilder;
 
+enum CheckVersionResult { SUCCESS = 0, ADVANCE = 1, EXPIRED = 2 };
+
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
@@ -41,9 +43,24 @@ public:
     Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                      const MetaFileBuilder* builder);
 
+    CheckVersionResult check_data_version(int64_t base_version) {
+        if (base_version == _data_version) {
+            return CheckVersionResult::SUCCESS;
+        } else if (base_version < _data_version) {
+            return CheckVersionResult::EXPIRED;
+        } else {
+            return CheckVersionResult::ADVANCE;
+        }
+    }
+    void update_data_version(int64_t version) { _data_version = version; }
+
 private:
     Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
+
+private:
+    // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
+    int64_t _data_version = 0;
 };
 
 } // namespace lake

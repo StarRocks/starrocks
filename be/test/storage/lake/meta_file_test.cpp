@@ -111,7 +111,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(reader.load().ok());
     DelVector after_delvec;
     int64_t latest_version;
-    EXPECT_TRUE(reader.get_del_vec(s_location_provider.get(), segment_id, &after_delvec, &latest_version).ok());
+    EXPECT_TRUE(reader.get_del_vec(s_tablet_manager.get(), segment_id, &after_delvec, &latest_version).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
     EXPECT_EQ(version, latest_version);
     // 4. read meta
