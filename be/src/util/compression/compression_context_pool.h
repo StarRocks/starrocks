@@ -36,6 +36,7 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
+#include "util/moodycamel/concurrentqueue.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::compression {
@@ -82,7 +83,6 @@ public:
             : _creator(std::move(creator)),
               _deleter(std::move(deleter)),
               _resetter(std::move(resetter)),
-              _stack(),
               _created_counter(0) {
         auto metrics = StarRocksMetrics::instance()->metrics();
         std::string full_name = pool_name + "_context_pool_create_count";
@@ -92,16 +92,14 @@ public:
     }
 
     StatusOr<Ref> get() {
-        std::lock_guard<std::mutex> l(_stack_lock);
-        if (_stack.empty()) {
+        InternalRef ctx;
+        if (!_ctx_resources.try_dequeue(ctx)) {
             ASSIGN_OR_RETURN(T * t, _creator());
             _created_counter++;
             return Ref(t, get_deleter());
         }
-        auto ptr = std::move(_stack.back());
-        _stack.pop_back();
-        DCHECK(ptr);
-        return Ref(ptr.release(), get_deleter());
+        DCHECK(ctx != nullptr);
+        return Ref(ctx.release(), get_deleter());
     }
 
     size_t created_count() const { return _created_counter.load(); }
@@ -114,16 +112,6 @@ public:
 
     Resetter& get_resetter() { return _resetter; }
 
-    void flush_deep() {
-        flush_shallow();
-        // no backing stack, so deep == shallow
-    }
-
-    void flush_shallow() {
-        std::lock_guard<std::mutex> l(_stack_lock);
-        _stack->resize(0);
-    }
-
 private:
     void add(InternalRef ptr) {
         DCHECK(ptr);
@@ -134,16 +122,14 @@ private:
             return;
         }
 
-        std::lock_guard<std::mutex> l(_stack_lock);
-        _stack.push_back(std::move(ptr));
+        _ctx_resources.enqueue(std::move(ptr));
     }
 
     Creator _creator;
     Deleter _deleter;
     Resetter _resetter;
 
-    std::mutex _stack_lock;
-    std::vector<InternalRef> _stack;
+    moodycamel::ConcurrentQueue<InternalRef> _ctx_resources;
 
     std::unique_ptr<UIntGauge> _created_counter_metrics;
     std::atomic<size_t> _created_counter;
