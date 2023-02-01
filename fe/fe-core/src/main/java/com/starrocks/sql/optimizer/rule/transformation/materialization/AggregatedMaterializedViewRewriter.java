@@ -75,8 +75,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    public boolean isMVSatisfiable(OptExpression expression) {
-        // TODO: to support grouping set/rollup/cube
+    public boolean isValidPlan(OptExpression expression) {
+        // TODO: to support grouping sets/rollup/cube
         return MvUtils.isLogicalSPJG(expression);
     }
 

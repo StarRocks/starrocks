@@ -129,6 +129,22 @@ public class MvUtils {
         }
     }
 
+    public static List<JoinOperator> getAllJoinOperators(OptExpression root) {
+        List<JoinOperator> joinOperators = Lists.newArrayList();
+        getAllJoinOperators(root, joinOperators);
+        return joinOperators;
+    }
+
+    private static void getAllJoinOperators(OptExpression root, List<JoinOperator> joinOperators) {
+        if (root.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator join = (LogicalJoinOperator) root.getOp();
+            joinOperators.add(join.getJoinType());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getAllJoinOperators(child, joinOperators);
+            }
+        }
+    }
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
         List<LogicalScanOperator> scanOperators = Lists.newArrayList();
         getScanOperator(root, scanOperators);
@@ -344,8 +360,8 @@ public class MvUtils {
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
-            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
+            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN ||
+                    !isColumnEqualPredicate(joinOperator.getOnPredicate())) {
                 return false;
             }
         }
