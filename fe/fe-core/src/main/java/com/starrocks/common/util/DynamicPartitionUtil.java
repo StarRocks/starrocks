@@ -62,6 +62,7 @@ import java.time.DayOfWeek;
 import java.time.Month;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
@@ -489,7 +490,7 @@ public class DynamicPartitionUtil {
      * format: the format of the return date string.
      * <p>
      * Eg:
-     * Today is 2020-05-24, offset = -1, startOf.dayOfWeek = 3
+     * Today is 2020-05-24, offset = 0, startOf.dayOfWeek = 3
      * It will return 2020-05-20  (Wednesday of last week)
      */
     private static String getPartitionRangeOfWeek(ZonedDateTime current, int offset, StartOfDate startOf,
@@ -498,8 +499,7 @@ public class DynamicPartitionUtil {
         // 1. get the offset week
         ZonedDateTime offsetWeek = current.plusWeeks(offset);
         // 2. get the date of `startOf` week
-        long day = offsetWeek.getDayOfWeek().getValue();
-        ZonedDateTime resultTime = offsetWeek.plusDays(startOf.dayOfWeek - day);
+        ZonedDateTime resultTime = offsetWeek.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(startOf.dayOfWeek)));
         return getFormattedTimeWithoutHourMinuteSecond(resultTime, format);
     }
 
