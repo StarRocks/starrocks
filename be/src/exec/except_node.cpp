@@ -264,7 +264,8 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
-    except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    context->inherit_upstream_source_properties(except_output_source.get(),
+                                                context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));
     if (limit() != -1) {
         ops_with_except_output_source.emplace_back(
