@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -47,12 +46,6 @@ public class PhysicalDeltaLakeScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalDeltaLakeScan(optExpression, context);
-    }
-
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
 }
