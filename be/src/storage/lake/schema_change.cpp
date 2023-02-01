@@ -380,8 +380,8 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     // copy delete vector files if necessary
     if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
         for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
-            auto src = base_tablet->delvec_location(delvec.page().version());
-            auto dst = new_tablet->delvec_location(delvec.page().version());
+            auto src = base_tablet->delvec_location(delvec.second.version());
+            auto dst = new_tablet->delvec_location(delvec.second.version());
             RETURN_IF_ERROR(fs::copy_file(src, dst));
         }
         op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());

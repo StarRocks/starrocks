@@ -34,13 +34,10 @@ message DelvecCacheKeyPB {
     optional DelvecPagePB delvec_page = 2;
 }
 
-// from segment to delvec page
-message DelvecPairPB {
-    optional uint32 segment_id = 1;
-    optional DelvecPagePB page = 2;
+message DelvecMetadataPB {
+    // from segment id to delvec page
+    map<uint32, DelvecPagePB> delvecs = 1;
 }
-
-message DelvecMetadataPB { repeated DelvecPairPB delvecs = 1; }
 
 message RowsetMetadataPB {
     optional uint32 id = 1;

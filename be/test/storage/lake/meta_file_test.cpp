@@ -119,9 +119,8 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(reader2.load().ok());
     auto meta_st = reader2.get_meta();
     EXPECT_TRUE(meta_st.ok());
-    DelvecPairPB delvecpb = (*meta_st)->delvec_meta().delvecs(0);
-    EXPECT_EQ(delvecpb.segment_id(), segment_id);
-    EXPECT_EQ(delvecpb.page().version(), version);
+    DelvecPagePB delvec_pagepb = (*meta_st)->delvec_meta().delvecs()[segment_id];
+    EXPECT_EQ(delvec_pagepb.version(), version);
     // 5. update delvec
     metadata->set_version(version2);
     MetaFileBuilder builder2(metadata, s_update_manager.get());

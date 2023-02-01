@@ -55,7 +55,7 @@ private:
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
-    std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
+    std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     bool _has_finalized = false;
 };
 
