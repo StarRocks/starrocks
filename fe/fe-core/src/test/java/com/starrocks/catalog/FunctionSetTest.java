@@ -116,8 +116,8 @@ public class FunctionSetTest {
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
-        Assert.assertEquals(Type.ARRAY_BOOLEAN, fn.getReturnType());
-        Assert.assertEquals(Type.ARRAY_BOOLEAN, fn.getArgs()[0]);
+        Assert.assertEquals(new ArrayType(Type.NULL), fn.getReturnType());
+        Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
 
         // array_append(ARRAY<ARRAY<INT>>, ARRAY<INT>)
         argTypes = new Type[] {INT_ARRAY_ARRAY, INT_ARRAY};
@@ -240,6 +240,6 @@ public class FunctionSetTest {
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
         Assert.assertEquals(Type.INT, fn.getReturnType());
-        Assert.assertEquals(Type.ARRAY_BOOLEAN, fn.getArgs()[0]);
+        Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
     }
 }

@@ -42,8 +42,6 @@ public class MapType extends Type {
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
-        Preconditions.checkState(!Type.NULL.equals(keyType), "map's key type cannot be NULL_TYPE");
-        Preconditions.checkState(!Type.NULL.equals(valueType), "map's value type cannot be NULL_TYPE");
         selectedFields = new Boolean[] { false, false };
         this.keyType = keyType;
         this.valueType = valueType;
