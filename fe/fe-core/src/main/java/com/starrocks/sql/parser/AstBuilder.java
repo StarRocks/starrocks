@@ -2473,11 +2473,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowUserStatement(StarRocksParser.ShowUserStatementContext context) {
-        return new ShowUserStmt();
-    }
-
-    @Override
     public ParseNode visitShowUserPropertyStatement(StarRocksParser.ShowUserPropertyStatementContext context) {
         String user;
         String pattern;
@@ -3997,16 +3992,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitShowUserStatement(StarRocksParser.ShowUserStatementContext context) {
+        if (context.USERS() != null) {
+            return new ShowUserStmt(true);
+        } else {
+            return new ShowUserStmt(false);
+        }
+    }
+
+    @Override
     public ParseNode visitShowRolesStatement(StarRocksParser.ShowRolesStatementContext context) {
         return new ShowRolesStmt();
     }
 
     @Override
     public ParseNode visitShowGrantsStatement(StarRocksParser.ShowGrantsStatementContext context) {
-        boolean isAll = context.ALL() != null;
-        UserIdentity userId =
-                context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
-        return new ShowGrantsStmt(userId, isAll);
+        if (context.ROLE() != null) {
+            Identifier role = (Identifier) visit(context.identifierOrString());
+            return new ShowGrantsStmt(role.getValue());
+        } else {
+            UserIdentity userId = context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
+            return new ShowGrantsStmt(userId);
+        }
     }
 
     @Override
@@ -4052,29 +4059,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantRoleToUser(StarRocksParser.GrantRoleToUserContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new GrantRoleStmt(roleNameList, user.getUserIdentity());
     }
 
     @Override
     public ParseNode visitGrantRoleToRole(StarRocksParser.GrantRoleToRoleContext context) {
-        return new GrantRoleStmt(
-                ((Identifier) visit(context.identifierOrString(0))).getValue(),
-                ((Identifier) visit(context.identifierOrString(1))).getValue());
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue());
     }
 
     @Override
     public ParseNode visitRevokeRoleFromUser(StarRocksParser.RevokeRoleFromUserContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new RevokeRoleStmt(roleNameList, user.getUserIdentity());
     }
 
     @Override
     public ParseNode visitRevokeRoleFromRole(StarRocksParser.RevokeRoleFromRoleContext context) {
-        return new RevokeRoleStmt(
-                ((Identifier) visit(context.identifierOrString(0))).getValue(),
-                ((Identifier) visit(context.identifierOrString(1))).getValue());
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue());
     }
 
     @Override

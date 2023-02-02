@@ -124,7 +124,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find type TTTABLE in"));
+            Assert.assertTrue(e.getMessage().contains("cannot find privilege object type TTTABLE"));
         }
 
         sql = "revoke select on database db1 from test_user";
@@ -256,7 +256,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "grant test_role to test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", grantRoleStmt.getGranteeRole());
+        Assert.assertEquals("[test_role]", grantRoleStmt.getGranteeRole().toString());
         Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
 
         sql = "grant ___ to test_user";

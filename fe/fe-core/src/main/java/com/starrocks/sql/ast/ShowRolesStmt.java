@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 public class ShowRolesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -35,13 +36,23 @@ public class ShowRolesStmt extends ShowStmt {
         META_DATA = builder.build();
     }
 
-    public ShowRolesStmt() {
+    private static final ShowResultSetMetaData META_DATA_V2;
 
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+
+        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
+
+        META_DATA_V2 = builder.build();
     }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            return META_DATA_V2;
+        } else {
+            return META_DATA;
+        }
     }
 
     @Override

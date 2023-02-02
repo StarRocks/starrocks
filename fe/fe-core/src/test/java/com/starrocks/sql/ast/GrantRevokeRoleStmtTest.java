@@ -20,12 +20,15 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Collections;
 
 public class GrantRevokeRoleStmtTest {
 
@@ -81,14 +84,14 @@ public class GrantRevokeRoleStmtTest {
         GrantRoleStmt stmt = (GrantRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "grant test_role to test_user", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT 'test_role' TO 'test_user'@'%'", stmt.toString());
+        Assert.assertEquals("GRANT 'test_role' TO 'test_user'@'%'", AstToSQLBuilder.toSQL(stmt));
 
         // grant 2
         // user with host
         stmt = (GrantRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "grant 'test_role' to 'test_user'@'localhost'", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT 'test_role' TO 'test_user'@'localhost'", stmt.toString());
+        Assert.assertEquals("GRANT 'test_role' TO 'test_user'@'localhost'", AstToSQLBuilder.toSQL(stmt));
 
         // revoke
         // user with domain
@@ -96,7 +99,7 @@ public class GrantRevokeRoleStmtTest {
                 "revoke 'test_role' from 'test_user'@['starrocks.com']", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
         Assert.assertEquals("REVOKE 'test_role' " +
-                "FROM 'test_user'@['starrocks.com']", stmt2.toString());
+                "FROM 'test_user'@['starrocks.com']", AstToSQLBuilder.toSQL(stmt2));
     }
 
     @Test(expected = SemanticException.class)
@@ -114,7 +117,8 @@ public class GrantRevokeRoleStmtTest {
                 result = true;
             }
         };
-        GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        GrantRoleStmt stmt = new GrantRoleStmt(Collections.singletonList("test_role"),
+                new UserIdentity("test_user", "localhost"));
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
@@ -134,7 +138,8 @@ public class GrantRevokeRoleStmtTest {
                 result = false;
             }
         };
-        GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        GrantRoleStmt stmt = new GrantRoleStmt(Collections.singletonList("test_role"),
+                new UserIdentity("test_user", "localhost"));
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }

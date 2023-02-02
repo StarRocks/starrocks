@@ -27,18 +27,18 @@ public interface AuthorizationProvider {
      * return plugin id & version
      */
     short getPluginId();
+
     short getPluginVersion();
 
-    /**
-     * analyze type string -> id
-     */
-    Set<String> getAllTypes();
-    short getTypeIdByName(String typeStr) throws PrivilegeException;
+    Set<ObjectType> getAllPrivObjectTypes();
+
+    ObjectType getObjectType(short typeId) throws PrivilegeException;
 
     /**
      * analyze action type id -> action
      */
     Collection<Action> getAllActions(short typeId) throws PrivilegeException;
+
     Action getAction(short objectTypeId, String actionName) throws PrivilegeException;
 
     /**
@@ -97,7 +97,6 @@ public interface AuthorizationProvider {
             PrivilegeCollection currentPrivilegeCollection);
 
     /**
-     *
      * Search if any object in collection matches the specified object with required action.
      */
     boolean searchActionOnObject(

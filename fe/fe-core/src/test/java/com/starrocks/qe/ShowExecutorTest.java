@@ -783,12 +783,12 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowUser() throws AnalysisException, DdlException {
-        ctx.setQualifiedUser("root");
-        ShowUserStmt stmt = new ShowUserStmt();
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ShowUserStmt stmt = new ShowUserStmt(false);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("root", resultSet.getString(0));
+        Assert.assertEquals("'root'@'%'", resultSet.getString(0));
     }
 
     @Test
