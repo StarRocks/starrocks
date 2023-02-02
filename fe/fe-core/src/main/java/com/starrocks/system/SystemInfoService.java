@@ -55,6 +55,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -496,7 +497,7 @@ public class SystemInfoService {
             computeNode =
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             }
         }
         if (computeNode.getBrpcPort() < 0) {

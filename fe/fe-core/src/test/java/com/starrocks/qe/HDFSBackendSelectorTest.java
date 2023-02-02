@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
@@ -118,7 +117,7 @@ public class HDFSBackendSelectorTest {
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), false);
+                        ImmutableList.copyOf(computeNodes), false, false);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -167,7 +166,7 @@ public class HDFSBackendSelectorTest {
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), true);
+                        ImmutableList.copyOf(computeNodes), true, true);
         selector.computeScanRangeAssignment();
 
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
