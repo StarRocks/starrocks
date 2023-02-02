@@ -327,8 +327,10 @@ bitmap index supports the following modifications:
 
     ```sql
     ALTER TABLE example_db.my_table
-    SET ("single_leader_replication" = "false");
+    SET ("replicated_storage" = "false");
     ```
+
+   This example sets the data writing and replication mode among replicas to "leaderless replication", which means data is written to multiple replicas at the same time without differentiating primary and secondary replicas. For more information, see the `replicated_storage` parameter in [CREATE TABLE](CREATE%20TABLE.md).
 
 [partition]
 

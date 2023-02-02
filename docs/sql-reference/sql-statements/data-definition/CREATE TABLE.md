@@ -396,18 +396,16 @@ The valid values of `write_quorum` are:
 
 #### Specify data writing and replication mode among replicas
 
-If your StarRocks cluster has multiple data replicas, you can specify the `single_leader_replication` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
+If your StarRocks cluster has multiple data replicas, you can specify the `replicated_storage` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
 
-- `true` indicates that data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode reduces CPU cost caused by data writing to multiple replicas.
+- `true` (**default value**) indicates "single leader replication", which means data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode significantly reduces CPU cost caused by data writing to multiple replicas.
 - `false` indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
 
-2.4.0 and earlier versions only support "leaderless replication". 2.5.0 supports both "leaderless replication" and "single leader replication".
-
-You can modify this parameter using ALTER TABLE. Example:
+In most cases, using the default value gains better data writing performance. If you want to change the data writing and replication mode among replicas, run the ALTER TABLE command. Example:
 
 ```sql
-    ALTER TABLE <tbl_name>
-    SET ("single_leader_replication" = "false");
+    ALTER TABLE example_db.my_table
+    SET ("replicated_storage" = "false");
 ```
 
 #### Create rollup in bulk

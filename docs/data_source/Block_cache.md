@@ -8,7 +8,7 @@ To optimize the query performance in these scenarios, StarRocks 2.5 and later ve
 
 ## How it works
 
-For example, if you query a Parquet data file of 128 MB from Amazon S3, StarRocks splits the file into multiple blocks based on the `block_cache_block_size` parameter (used to determine the size of each block, see [Configurations for BEs](#configurations-for-bes) for more information). Assuming that the size of each block is 1 MB, StarRocks splits the file into 128 blocks: [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
+For example, if you query a Parquet data file of 128 MB from Amazon S3, StarRocks splits the file into multiple blocks (By default, the size of each block is 1 MB and we recommend you retain the default setting). In this case, StarRocks splits the file into 128 blocks: [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
 
 ```Plain
 hash(filename) + filesize + blockId
@@ -75,7 +75,6 @@ Add the following parameters to the **conf/be.conf** file of each BE. Then resta
 | block_cache_enable     | Whether block cache is enabled.<ul><li>`true`: Block cache is enabled.</li><li>`false`: Block cache is disabled. The value of this parameter defaults to `false`.</li></ul>To enable block cache, set the value of this parameter to `true`. |
 | block_cache_disk_path  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
 | block_cache_meta_path  | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_block_size | The size of each block. Unit: bytes. The default value is `1048576`, which is 1 MB. |
 | block_cache_mem_size   | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
 
