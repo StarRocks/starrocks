@@ -858,7 +858,7 @@ public class PlanTestBase {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.enable\" = \"false\",\n" +
                         "\"dynamic_partition.start\" = \"-3\",\n" +
                         "\"dynamic_partition.end\" = \"3\",\n" +
                         "\"dynamic_partition.time_unit\" = \"day\",\n" +
