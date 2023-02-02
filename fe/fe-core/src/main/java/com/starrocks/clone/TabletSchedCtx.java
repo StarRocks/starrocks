@@ -954,14 +954,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }
 
+            String finishInfo = "";
             if (cloneTask.isLocal()) {
                 unprotectedFinishLocalMigration(request);
             } else {
-                unprotectedFinishClone(request, db, partition, replicationNum);
+                finishInfo = unprotectedFinishClone(request, db, partition, replicationNum);
             }
 
             state = State.FINISHED;
-            LOG.info("clone finished: {}", this);
+            LOG.info("clone finished: {} {}", this, finishInfo);
         } catch (SchedException e) {
             // if failed to too many times, remove this task
             ++failedRunningCounter;
@@ -995,9 +996,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         replica.setPathHash(reportedTablet.getPath_hash());
     }
 
+<<<<<<< HEAD
     private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
                                         short replicationNum) throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+=======
+    private String unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
+                                          short replicationNum) throws SchedException {
+        List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+>>>>>>> 23e5e68cd ([Enhancement] add more info in logging for the cases of exec plan fragment failed and clone (#17194))
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
                 infoService, db.getClusterName(), visibleVersion, replicationNum,
                 aliveBeIdsInCluster);
@@ -1061,6 +1068,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             // so we keep it state unchanged, and log update replica
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
         }
+        return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
+                reportedTablet.getMin_readable_version());
     }
 
     /*
