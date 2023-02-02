@@ -2,7 +2,7 @@
 
 ## 2.3.8
 
-Release date: February 02, 2023
+Release date: February 2, 2023
 
 ### Bug fixes
 
