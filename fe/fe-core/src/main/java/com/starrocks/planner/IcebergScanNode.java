@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
@@ -32,6 +31,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.iceberg.IcebergConnector;
@@ -135,7 +135,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
         if (hostToBeId.isEmpty()) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
         }
     }
 
@@ -155,7 +155,8 @@ public class IcebergScanNode extends ScanNode {
      */
     public void preProcessIcebergPredicate(List<ScalarOperator> operators) {
         Types.StructType schema = srIcebergTable.getIcebergTable().schema().asStruct();
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         icebergPredicate = new ScalarOperatorToIcebergExpr().convert(operators, icebergContext);
     }
 
@@ -186,7 +187,8 @@ public class IcebergScanNode extends ScanNode {
                 }
                 ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
                         field.getType(), column.isAllowNull());
-                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
@@ -265,12 +267,14 @@ public class IcebergScanNode extends ScanNode {
                     TIcebergDeleteFile target = new TIcebergDeleteFile();
                     target.setFull_path(source.path().toString());
                     target.setFile_content(
-                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES : TIcebergFileContent.POSITION_DELETES);
+                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
+                                    TIcebergFileContent.POSITION_DELETES);
                     target.setLength(source.fileSizeInBytes());
 
                     if (source.content() == FileContent.EQUALITY_DELETES) {
                         source.equalityFieldIds().forEach(fieldId -> {
-                            equalityDeleteColumns.add(srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
+                            equalityDeleteColumns.add(
+                                    srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
                         });
                     }
 
@@ -344,7 +348,8 @@ public class IcebergScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
         }

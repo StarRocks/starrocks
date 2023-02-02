@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.system;
 
 import com.google.common.base.Objects;
@@ -310,6 +309,7 @@ public class ComputeNode implements IComputable, Writable {
     public long getMemUsedBytes() {
         return memUsedBytes;
     }
+
     public long getMemLimitBytes() {
         return memLimitBytes;
     }
@@ -326,7 +326,7 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                       int cpuUsedPermille) {
+                                    int cpuUsedPermille) {
 
         this.numRunningQueries = numRunningQueries;
         this.memLimitBytes = memLimitBytes;
@@ -471,7 +471,7 @@ public class ComputeNode implements IComputable, Writable {
                 isChanged = true;
                 // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
                 // This line to set 'lastStartTime' will be removed in due time
-                this.lastStartTime = hbResponse.getHbTime(); 
+                this.lastStartTime = hbResponse.getHbTime();
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
@@ -511,7 +511,7 @@ public class ComputeNode implements IComputable, Writable {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive.get() ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,

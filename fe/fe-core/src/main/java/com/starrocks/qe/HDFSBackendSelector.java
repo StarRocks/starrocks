@@ -25,6 +25,7 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -76,6 +77,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private final Map<TNetworkAddress, Long> addressToBackendId;
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
+    private boolean chooseComputeNode;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
     private final int kMaxNodeSizeUseRendezvousHashRing = 64;
@@ -140,11 +142,13 @@ public class HDFSBackendSelector implements BackendSelector {
                                Map<TNetworkAddress, Long> addressToBackendId,
                                Set<Long> usedBackendIDs,
                                ImmutableCollection<ComputeNode> computeNodes,
+                               boolean chooseComputeNode,
                                boolean forceScheduleLocal) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
         this.computeNodes = computeNodes;
+        this.chooseComputeNode = chooseComputeNode;
         this.forceScheduleLocal = forceScheduleLocal;
         this.addressToBackendId = addressToBackendId;
         this.usedBackendIDs = usedBackendIDs;
@@ -275,7 +279,7 @@ public class HDFSBackendSelector implements BackendSelector {
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
         if (hostToBackends.isEmpty()) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException(FeConstants.getNodeNotFoundError(chooseComputeNode));
         }
 
         // schedule scan ranges to co-located backends.
