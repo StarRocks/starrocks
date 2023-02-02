@@ -104,13 +104,12 @@ public class PolymorphicFunctionAnalyzer {
             }
 
             // Need to make input be a valid complex type if the input is Type NULL
-            // We choose boolean as the item type of complex type if input type is NULL_TYPE
             if (declType instanceof AnyArrayType) {
-                resolvedTypes[i] = inputType.isNull() ? Type.ARRAY_BOOLEAN : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.NULL) : inputType;
             } else if (declType instanceof AnyMapType) {
-                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.BOOLEAN, Type.BOOLEAN) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.NULL, Type.NULL) : inputType;
             } else if (declType instanceof AnyStructType) {
-                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.BOOLEAN)) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.NULL)) : inputType;
             } else {
                 resolvedTypes[i] = inputType;
             }
@@ -292,8 +291,8 @@ public class PolymorphicFunctionAnalyzer {
         } else if (typeElement != null) {
             typeArray = new ArrayType(typeElement);
         } else {
-            typeElement = Type.BOOLEAN;
-            typeArray = (ArrayType) Type.ARRAY_BOOLEAN;
+            typeElement = Type.NULL;
+            typeArray = new ArrayType(Type.NULL);
         }
 
         if (!typeArray.getItemType().matchesType(typeElement)) {

@@ -209,7 +209,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "ARRAY<ARRAY<tinyint(4)>>[[1,2],[3,4]][1][2]");
 
         sql = "select array[][1]";
-        assertPlanContains(sql, "ARRAY<boolean>[][1]");
+        assertPlanContains(sql, "ARRAY<unknown type: NULL_TYPE>[][1]");
 
         sql = "select array[v1 = 1, v2 = 2, true] from t0";
         assertPlanContains(sql, "<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]");
@@ -220,7 +220,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 2> : CAST(ARRAY<boolean>[NULL][1] AS SMALLINT) + 1\n" +
+                "  |  <slot 2> : NULL\n" +
                 "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>" +
                 "[[1,2,3],[1,1,1]][2][2] AS SMALLINT)");
 
