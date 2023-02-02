@@ -36,7 +36,7 @@
   - 优化了物化视图的刷新效率。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - 支持在建表时自动设置适当的分桶数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - 导入优化
-  - 优化多副本导入性能，支持 `single_leader_replication` 模式，性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
+  - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
   - 在单 HDFS 或单 Kerberos 环境下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键模型表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
@@ -71,9 +71,9 @@
 - 会话变量 `is_report_success` 更名为 `enable_profile`，可通过 SHOW VARIABLES 语句查看。
 - 新增四个关键字：`CURRENT_DATE`, `CURRENT_TIME`, `LOCALTIME`, `LOCALTIMESTAMP`。[#14319](https://github.com/StarRocks/starrocks/pull/14319)
 - 表名和库名的长度限制放宽至不超过 1023 个字符。 [#14929](https://github.com/StarRocks/starrocks/pull/14929) [#15020](https://github.com/StarRocks/starrocks/pull/15020)
-- BE配置项 enable_event_based_compaction_framework 和 enable_size_tiered_compaction_strategy 默认开启，能够在tablet数比较多或者单个tablet数据量比较大的场景下大幅降低compaction的开销。
+- BE配置项 `enable_event_based_compaction_framework` 和 `enable_size_tiered_compaction_strategy` 默认开启，能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 
 ### 升级注意事项
 
-- 可以从 2.0.x，2.1.x，2.2.x，2.3.x 或 2.4.x 升级。如需回滚版本，建议只回滚到 2.4.x。
+- 可以从 2.0.x，2.1.x，2.2.x，2.3.x 或 2.4.x 升级。一般不建议回滚版本，如需回滚，建议只回滚到 2.4.x。
 - 如果您的系统中存在已经创建的 List 分区表，需要先删除后再进行升级。
