@@ -169,6 +169,7 @@ protected:
 
     int _num_segment{0};
     int _num_delfile{0};
+    vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;

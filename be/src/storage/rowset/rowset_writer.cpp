@@ -144,6 +144,10 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        DCHECK(_delfile_idxes.size() == _num_delfile);
+        if (!_delfile_idxes.empty()) {
+            _rowset_meta_pb->mutable_delfile_idxes()->Add(_delfile_idxes.begin(), _delfile_idxes.end());
+        }
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
@@ -404,8 +408,13 @@ Status HorizontalRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* seg_in
         break;
     case FlushChunkState::UPSERT:
         break;
+    case FlushChunkState::DELETE:
+        _flush_chunk_state = FlushChunkState::MIXED;
+        break;
+    case FlushChunkState::MIXED:
+        break;
     default:
-        return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+        return Status::Cancelled("UNKNOWN flush chunk state");
     }
     return _flush_chunk(chunk, seg_info);
 }
@@ -449,6 +458,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             seg_info->set_delete_data_size(content.size());
             seg_info->set_delete_path(wfile->filename());
         }
+        _delfile_idxes.emplace_back(_num_segment + _num_delfile);
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -468,8 +478,12 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             break;
         case FlushChunkState::DELETE:
             break;
+        case FlushChunkState::UPSERT:
+            _flush_chunk_state = FlushChunkState::MIXED;
+        case FlushChunkState::MIXED:
+            break;
         default:
-            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+            return Status::Cancelled("UNKNOW flush chunk state");
         }
         RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
         return Status::OK();
@@ -480,10 +494,11 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             _flush_chunk_state = FlushChunkState::MIXED;
             break;
         default:
-            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+            break;
         }
+        RETURN_IF_ERROR(_flush_chunk(upserts, seg_info));
         RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
-        return _flush_chunk(upserts, seg_info);
+        return Status::OK();
     } else {
         return Status::OK();
     }
