@@ -371,7 +371,7 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
 // The maximum amount of data that can be processed by a stream load
-CONF_mInt64(streaming_load_max_mb, "10240");
+CONF_mInt64(streaming_load_max_mb, "102400");
 // Some data formats, such as JSON, cannot be streamed.
 // Therefore, it is necessary to limit the maximum number of
 // such data when using stream load to prevent excessive memory consumption.
