@@ -420,7 +420,7 @@ showCreateTableStatement
     ;
 
 showColumnStatement
-    : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+    : SHOW FULL? (COLUMNS | FIELDS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?
     ;
 
