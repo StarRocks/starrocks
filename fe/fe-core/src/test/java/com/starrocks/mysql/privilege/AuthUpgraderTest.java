@@ -17,7 +17,10 @@ package com.starrocks.mysql.privilege;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.privilege.PrivilegeManager;
@@ -382,6 +385,37 @@ public class AuthUpgraderTest {
             }
             checkPrivilegeAsUser(UserIdentity.createAnalyzedUserIdentWithDomain(
                     "domain_user", "localhost"), "select * from db1.tbl1");
+        }
+    }
+
+    private void checkPasswordEquals(String username, String pass) {
+        AuthenticationManager authenticationManager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        UserIdentity userIdentity = new UserIdentity(username, "%");
+        userIdentity.setIsAnalyzed();
+        UserAuthenticationInfo info =
+                authenticationManager.getUserToAuthenticationInfo().get(userIdentity);
+        System.out.println(info.getPassword().length);
+        System.out.println(ParseUtil.bytesToHexStr(info.getPassword()));
+        Assert.assertArrayEquals(info.getPassword(), ParseUtil.hexStrToBytes(pass));
+    }
+
+    @Test
+    public void testUserPasswordAfterUpgrade() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user testuserpass1",
+                "create user testuserpass2 identified by '123456'",
+                "alter user root identified by '123456'");
+
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            final String hexPass = "2A36424234383337454237343332393130354545343536384444413744433637454432434132414439";
+            checkPasswordEquals("testuserpass1", "");
+            checkPasswordEquals("testuserpass2", hexPass);
+            checkPasswordEquals("root", hexPass);
         }
     }
 

@@ -22,6 +22,7 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
@@ -32,7 +33,7 @@ public class UserAuthenticationInfo implements Writable {
     protected static final String ANY_USER = "%";
 
     @SerializedName(value = "p")
-    private byte[] password = null;
+    private byte[] password = MysqlPassword.EMPTY_PASSWORD;
     @SerializedName(value = "a")
     private String authPlugin = null;
     @SerializedName(value = "t")
