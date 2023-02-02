@@ -90,7 +90,8 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> createShards(int shardCount, int replicaNum, FilePathInfo path, FileCacheInfo cache, long groupId)
+            public List<Long> createShards(int shardCount, int replicaNum, FilePathInfo path, FileCacheInfo cache, long groupId,
+                    List<Long> matchShardIds)
                 throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
