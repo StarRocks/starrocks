@@ -33,11 +33,12 @@ public class BackgroundHiveMetadataProcessor extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(BackgroundHiveMetadataProcessor.class);
 
     public BackgroundHiveMetadataProcessor() {
-        super(BackgroundHiveMetadataProcessor.class.getName(), Config.background_refresh_hive_metadata_interval_sec);
+        super(BackgroundHiveMetadataProcessor.class.getName(), Config.background_refresh_hive_metadata_interval_millis);
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        LOG.info("Start to refresh hive external table metadata in the background");
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
         List<Database> databases = gsm.getDbIds().stream()
@@ -53,14 +54,19 @@ public class BackgroundHiveMetadataProcessor extends LeaderDaemon {
                     .collect(Collectors.toList());
             for (HiveTable table : tables) {
                 try {
+                    LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
+                            "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
+                    // we didn't use db locks to prevent background tasks from affecting the query.
+                    // So we need to check if the table to be refreshed exists.
                     if (db.getTable(table.getId()) != null) {
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }
                 } catch (Exception e) {
-                    LOG.error("background refresh hive metadata failed on {}.{}", db.getFullName(), table.getName(), e);
+                    LOG.error("Background refresh hive metadata failed on {}.{}", db.getFullName(), table.getName(), e);
                 }
             }
         }
+        LOG.info("This round of background refresh hive external table metadata is over");
     }
 }

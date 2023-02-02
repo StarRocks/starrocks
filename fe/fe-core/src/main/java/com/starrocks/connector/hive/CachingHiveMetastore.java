@@ -332,7 +332,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
             }
 
             refreshPartitions(presentPartitionNames, existNames, this::loadPartitionsByNames, partitionCache);
-            refreshPartitions(presentPartitionStatistics, existNames, this::loadPartitionsStatistics, partitionStatsCache);
+            if (Config.enable_refresh_hive_partitions_statistics) {
+                refreshPartitions(presentPartitionStatistics, existNames, this::loadPartitionsStatistics, partitionStatsCache);
+            }
         }
     }
 
