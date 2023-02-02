@@ -915,4 +915,175 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     ASSERT_EQ("[203, 204]", column->debug_item(3));
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+PARALLEL_TEST(ArrayColumnTest, test_assign) {
+    /// test assign comment arrays
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [1, 2, 3], [4, 5, 6]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    // assign
+    column->assign(4, 0);
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[1,2,3]", column->debug_item(1));
+    ASSERT_EQ("[1,2,3]", column->debug_item(2));
+    ASSERT_EQ("[1,2,3]", column->debug_item(3));
+
+    /// test assign [null]
+    elements = Int32Column::create();
+    auto nullable_elements = NullableColumn::create(std::move(elements), NullColumn::create());
+    offsets = UInt32Column ::create();
+    column = ArrayColumn::create(std::move(nullable_elements), std::move(offsets));
+    column->append_datum(DatumArray{Datum()});
+
+    column->assign(5, 0);
+    ASSERT_EQ(5, column->size());
+    ASSERT_TRUE(column->get(0).get_array()[0].is_null());
+    ASSERT_TRUE(column->get(4).get_array()[0].is_null());
+
+    /// test assign []
+    column->reset_column();
+    column->append_datum(DatumArray{});
+
+    column->assign(5, 0);
+    ASSERT_EQ(5, column->size());
+    ASSERT_TRUE(column->get(0).get_array().empty());
+    ASSERT_TRUE(column->get(4).get_array().empty());
+
+    /// test assign [null,null]
+    column->reset_column();
+    column->append_datum(DatumArray{Datum(), Datum()});
+
+    column->assign(5, 0);
+    ASSERT_EQ(5, column->size());
+    ASSERT_TRUE(column->get(0).get_array()[0].is_null());
+    ASSERT_TRUE(column->get(4).get_array()[1].is_null());
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [1, 2, 3], [4, 5, 6]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    auto null_map = NullColumn::create(2, 0);
+    auto res = column->empty_null_array(null_map);
+    ASSERT_FALSE(res);
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+
+    null_map->get_data()[0] = 1;
+    res = column->empty_null_array(null_map);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ("[]", column->debug_item(0));
+    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+
+    null_map->get_data()[1] = 1;
+    res = column->empty_null_array(null_map);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ("[]", column->debug_item(0));
+    ASSERT_EQ("[]", column->debug_item(1));
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_replicate) {
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [1, 2, 3], [4, 5, 6],[]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+    offsets->append(6);
+
+    Offsets off;
+    off.push_back(0);
+    off.push_back(3);
+    off.push_back(5);
+    off.push_back(7);
+
+    auto res = column->replicate(off);
+
+    ASSERT_EQ("[1,2,3]", res->debug_item(0));
+    ASSERT_EQ("[1,2,3]", res->debug_item(1));
+    ASSERT_EQ("[1,2,3]", res->debug_item(2));
+    ASSERT_EQ("[4,5,6]", res->debug_item(3));
+    ASSERT_EQ("[4,5,6]", res->debug_item(4));
+    ASSERT_EQ("[]", res->debug_item(5));
+    ASSERT_EQ("[]", res->debug_item(6));
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_element_memory_usage) {
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [],[1],[2, 3],[4, 5, 6]
+    offsets->append(0);
+
+    elements->append(1);
+    offsets->append(1);
+
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    ASSERT_EQ("[]", column->debug_item(0));
+    ASSERT_EQ("[1]", column->debug_item(1));
+    ASSERT_EQ("[2,3]", column->debug_item(2));
+    ASSERT_EQ("[4,5,6]", column->debug_item(3));
+
+    ASSERT_EQ(40, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {4, 8, 12, 16};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(expected_usage, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
+}
+
+} // namespace starrocks
+>>>>>>> 187c52c2d ([BugFix] fix Column::element_memory_usage (#17184))

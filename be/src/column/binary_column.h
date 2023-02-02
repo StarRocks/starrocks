@@ -230,9 +230,14 @@ public:
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
+<<<<<<< HEAD
     size_t shrink_memory_usage() const override {
         return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(_offsets[0]) +
                _slices.size() * sizeof(_slices[0]);
+=======
+    size_t element_memory_usage(size_t from, size_t size) const override {
+        return _offsets[from + size] - _offsets[from] + size * sizeof(T);
+>>>>>>> 187c52c2d ([BugFix] fix Column::element_memory_usage (#17184))
     }
 
     void swap_column(Column& rhs) override {
