@@ -60,7 +60,7 @@ public class TablePEntryObject implements PEntryObject {
 
             Database database = mgr.getDb(restrictName);
             if (database == null) {
-                throw new PrivilegeException("cannot find db: " + restrictName);
+                throw new PrivObjNotFoundException("cannot find db: " + restrictName);
             }
             return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {
