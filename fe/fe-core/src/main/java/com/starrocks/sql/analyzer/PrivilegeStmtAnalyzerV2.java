@@ -118,7 +118,7 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         private byte[] analysePassword(String originalPassword, boolean isPasswordPlain) {
             if (Strings.isNullOrEmpty(originalPassword)) {
-                return new byte[0];
+                return MysqlPassword.EMPTY_PASSWORD;
             }
             try {
                 if (isPasswordPlain) {

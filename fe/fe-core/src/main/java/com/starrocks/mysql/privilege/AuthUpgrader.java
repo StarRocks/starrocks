@@ -25,6 +25,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
@@ -121,7 +122,10 @@ public class AuthUpgrader {
             try {
                 UserIdentity userIdentity = entry.getUserIdent();
                 if (userIdentity.equals(UserIdentity.ROOT)) {
-                    LOG.info("ignore root entry : {}", entry);
+                    // we should keep the password for root after upgrade
+                    byte[] p = entry.getPassword().getPassword() == null ?
+                            MysqlPassword.EMPTY_PASSWORD : entry.getPassword().getPassword();
+                    authenticationManager.getUserToAuthenticationInfo().get(UserIdentity.ROOT).setPassword(p);
                     continue;
                 }
                 // 1. ignore fake entries created by domain resolver
@@ -150,7 +154,8 @@ public class AuthUpgrader {
             try {
                 authenticationManager.upgradeUserProperty(userName, userProperty.getMaxConn());
                 for (String hostname : whiteList.getAllDomains()) {
-                    byte[] p = whiteList.getPassword(hostname);
+                    byte[] p = whiteList.getPassword(hostname) == null ?
+                            MysqlPassword.EMPTY_PASSWORD : whiteList.getPassword(hostname);
                     Password password = new Password(p, null, null);
                     UserIdentity user = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
                     authenticationManager.upgradeUserUnlocked(user, password);
