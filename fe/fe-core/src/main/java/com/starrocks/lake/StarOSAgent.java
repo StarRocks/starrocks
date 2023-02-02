@@ -309,9 +309,17 @@ public class StarOSAgent {
         }
     }
 
+    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
+        return createShards(numShards, replicaNum, pathInfo, cacheInfo, groupId, null);
+    }
+
     public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
             List<Long> matchShardIds)
         throws DdlException {
+        if (matchShardIds != null) {
+            Preconditions.checkState(numShards == matchShardIds.size());
+        }
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
