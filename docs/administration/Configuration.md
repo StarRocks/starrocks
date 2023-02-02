@@ -204,7 +204,7 @@ This section provides an overview of the static parameters that you can configur
 | thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
 | thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
-| thrift_client_timeout_ms             | 0                 | The length of time after which requests from clients time out. Unit: ms. The default value `0` specifies that requests from clients never time out. |
+| thrift_client_timeout_ms             | 5000                 | The length of time after which requests from clients time out. Unit: ms. Default value: 5000. |
 | brpc_idle_wait_max_time              | 10000             | The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms. |
 | query_port                           | 9030              | The port on which the MySQL server in the FE node listens.   |
 | mysql_service_nio_enabled            | TRUE              | Specifies whether asynchronous I/O is enabled for the FE node. |
@@ -443,7 +443,6 @@ BE static parameters are as follows.
 | block_cache_enable  | false | N/A   | Whether to enable block cache.<ul><li>`true`: Block cache is enabled.</li><li>`false`: Block cache is disabled. </li></ul>To enable block cache, set the value of this parameter to `true`. |
 | block_cache_disk_path | N/A | N/A  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
 | block_cache_meta_path | N/A  | N/A   | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_block_size | 1048576  | Bytes | The size of each block. Unit: bytes. The default value is `1048576`, which is 1 MB. |
 | block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | 0 | Bytes | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
 
