@@ -53,9 +53,11 @@ public class PhysicalProjectOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalProjectOperator that = (PhysicalProjectOperator) o;
         return Objects.equal(columnRefMap, that.columnRefMap) &&
                 Objects.equal(commonSubOperatorMap, that.commonSubOperatorMap);

@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
@@ -160,6 +161,30 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalOlapScan(optExpression, context);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+                selectedTabletId);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
+        return selectedIndexId == that.selectedIndexId &&
+                Objects.equals(hashDistributionSpec, that.hashDistributionSpec) &&
+                Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+                Objects.equals(selectedTabletId, that.selectedTabletId);
     }
 
     public HashDistributionSpec getDistributionSpec() {

@@ -79,12 +79,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalCTEAnchorOperator that = (LogicalCTEAnchorOperator) o;
         return Objects.equals(cteId, that.cteId);
     }

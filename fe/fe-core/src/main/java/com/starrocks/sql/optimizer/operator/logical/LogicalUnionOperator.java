@@ -44,6 +44,25 @@ public class LogicalUnionOperator extends LogicalSetOperator {
     }
 
     @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        LogicalUnionOperator that = (LogicalUnionOperator) o;
+        return isUnionAll == that.isUnionAll;
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalUnion(this, context);
     }
