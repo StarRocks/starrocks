@@ -660,6 +660,22 @@ public class ShowExecutorTest {
         Assert.assertEquals("NO", resultSet.getString(3));
         Assert.assertFalse(resultSet.next());
 
+        // show full fields
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full fields from testTbl in testDb",
+                ctx.getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col1", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col2", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertFalse(resultSet.next());
+
         // pattern
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
                 ctx.getSessionVariable().getSqlMode()).get(0);
