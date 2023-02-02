@@ -82,4 +82,13 @@ public class FeConstants {
     public static final int DEFAULT_TABLET_NUMBER = 128;
 
     public static final int AGG_FUNC_VERSION = 3;
+
+    public static final String BACKEND_NODE_NOT_FOUND_ERROR =
+            "Backend node not found. Check if any backend node is down.";
+    public static final String COMPUTE_NODE_NOT_FOUND_ERROR =
+            "Compute node not found. Check if any compute node is down.";
+
+    public static final String getNodeNotFoundError(boolean chooseComputeNode) {
+        return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
+    }
 }
