@@ -399,7 +399,7 @@ struct LeadLagState {
     bool defualt_is_null = false;
 };
 
-template <LogicalType PT, bool ignoreNulls, bool useLag, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<PT>>
 class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -443,9 +443,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
                 return;
             }
             // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
-            // when lead/lag called, the whole partitoin's data already been here, so we can just check to the begining or the end
-            size_t value_index = useLag ? ColumnHelper::last_nonnull(columns[0], peer_group_start, frame_end - 1)
-                                        : ColumnHelper::find_nonnull(columns[0], frame_end, peer_group_end);
+            // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
+            size_t value_index = isLag ? ColumnHelper::last_nonnull(columns[0], peer_group_start, frame_end - 1)
+                                       : ColumnHelper::find_nonnull(columns[0], frame_end, peer_group_end);
             DCHECK_LE(value_index, peer_group_end);
             DCHECK_GE(value_index, peer_group_start);
             if (value_index == peer_group_end || columns[0]->is_null(value_index)) {
