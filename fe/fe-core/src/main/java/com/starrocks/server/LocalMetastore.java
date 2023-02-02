@@ -2465,7 +2465,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.removeTable(tableId, olapTable, false /* isReplay */);
             }
         }
-        if (olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+        if (Config.dynamic_partition_enable && olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
             new Thread(() -> {
                 try {
                     GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
@@ -2474,7 +2474,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     LOG.warn("Some problems were encountered in the process of triggering " +
                             "the execution of dynamic partitioning", ex);
                 }
-            }).start();
+            }, "BackgroundDynamicPartitionThread").start();
         }
     }
 
