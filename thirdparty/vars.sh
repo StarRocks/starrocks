@@ -328,10 +328,10 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230117.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230130.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="9ed7137220d25b6c591966fdcb03208e"
+CACHELIB_MD5SUM="7cc245be5cb10afa6aeea0121ec77e9e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
