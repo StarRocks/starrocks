@@ -18,18 +18,9 @@
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
-<<<<<<< HEAD
   + [使用 Apache Spark™ 批量导入和数据转换](/loading/SparkLoad.md)
   + [使用 INSERT 导入](/loading/InsertInto.md)
   + [通过导入实现数据变更](/loading/PrimaryKeyLoad.md)
-=======
-  + [使用 Apache Spark™ 批量导入](/loading/SparkLoad.md)
-  + [使用 INSERT 语句导入](/loading/InsertInto.md)
-  + [使用 Stream Load 事务接口导入](/loading/stream_load_transaction_interface.md)
-  + [从 MySQL 实时同步](/loading/Flink_cdc_load.md)
-  + [从 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
-  + [通过导入实现数据变更](/loading/Load_to_Primary_Key_tables.md)
->>>>>>> 5670d90 ([Doc] update flink connector unloading (#4302))
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [MySQL 实时同步](/loading/Flink_cdc_load.md)
   + [使用 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
