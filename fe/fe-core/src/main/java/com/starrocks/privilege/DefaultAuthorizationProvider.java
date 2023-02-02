@@ -14,6 +14,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -28,16 +29,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
-    private static final Map<String, Short> TYPE_STRING_TO_ID = new HashMap<>();
-    private static final Map<Short, String> TYPE_ID_TO_STRING = new HashMap<>();
+    private static final Map<Short, ObjectType> ID_TO_OBJECT_TYPE = new HashMap<>();
     private static final Map<Short, Map<String, Action>> TYPE_TO_ACTION_MAP = new HashMap<>();
     private static final Map<String, String> PLURAL_TO_TYPE = new HashMap<>();
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
         for (ObjectType type : ObjectType.values()) {
-            TYPE_STRING_TO_ID.put(type.toString(), (short) type.getId());
-            TYPE_ID_TO_STRING.put((short) type.getId(), type.toString());
+            ID_TO_OBJECT_TYPE.put((short) type.getId(), type);
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
             PLURAL_TO_TYPE.put(type.getPlural(), type.toString());
         }
@@ -54,24 +53,25 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public Set<String> getAllTypes() {
-        return TYPE_STRING_TO_ID.keySet();
+    public Set<ObjectType> getAllPrivObjectTypes() {
+        return Sets.newHashSet(ObjectType.values());
     }
 
     @Override
-    public short getTypeIdByName(String typeStr) throws PrivilegeException {
-        Short ret = TYPE_STRING_TO_ID.getOrDefault(typeStr, (short) -1);
-        if (ret == -1) {
-            throw new PrivilegeException("cannot find type " + typeStr + " in " + TYPE_STRING_TO_ID.keySet());
+    public ObjectType getObjectType(short typeId) throws PrivilegeException {
+        ObjectType privilegeType = ID_TO_OBJECT_TYPE.get(typeId);
+        if (privilegeType == null) {
+            throw new PrivilegeException("cannot find typeId " + typeId + " in " + ID_TO_OBJECT_TYPE.keySet());
+        } else {
+            return privilegeType;
         }
-        return ret;
     }
 
     @Override
     public Collection<Action> getAllActions(short typeId) throws PrivilegeException {
         Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(typeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(typeId) +
+            throw new PrivilegeException("cannot find type " + ID_TO_OBJECT_TYPE.get(typeId) +
                     " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         return actionMap.values();
@@ -81,13 +81,13 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public Action getAction(short objectTypeId, String actionName) throws PrivilegeException {
         Map<String, Action> actionMap = TYPE_TO_ACTION_MAP.get(objectTypeId);
         if (actionMap == null) {
-            throw new PrivilegeException("cannot find type " + TYPE_ID_TO_STRING.get(objectTypeId) +
+            throw new PrivilegeException("cannot find type " + ID_TO_OBJECT_TYPE.get(objectTypeId) +
                     " in " + TYPE_TO_ACTION_MAP.keySet());
         }
         Action action = actionMap.get(actionName);
         if (action == null) {
             throw new PrivilegeException("cannot find action " + actionName + " in " + actionMap.keySet() +
-                    " on object type " + TYPE_ID_TO_STRING.get(objectTypeId).toUpperCase());
+                    " on object type " + ID_TO_OBJECT_TYPE.get(objectTypeId).name().toUpperCase());
         }
         return action;
     }

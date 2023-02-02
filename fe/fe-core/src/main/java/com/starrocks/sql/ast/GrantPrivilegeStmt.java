@@ -37,6 +37,11 @@ public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
                 new GrantRevokePrivilegeObjects());
     }
 
+    public GrantPrivilegeStmt(List<String> privList, String privType, String roleName) {
+        super(privList, privType, new GrantRevokeClause(null, roleName, false),
+                new GrantRevokePrivilegeObjects());
+    }
+
     public void setUserPrivilegeObject(UserIdentity userIdentity) {
         this.objects.setUserPrivilegeObjectList(Arrays.asList(userIdentity));
     }

@@ -192,26 +192,26 @@ statement
     | showTabletStatement
     | showTransactionStatement
     | showTriggersStatement
-    | showUserStatement
     | showUserPropertyStatement
     | showVariablesStatement
     | showWarningStatement
     | helpStatement
 
     // Privilege Statement
-    | grantRoleStatement
-    | revokeRoleStatement
-    | executeAsStatement
-    | alterUserStatement
     | createUserStatement
     | dropUserStatement
+    | alterUserStatement
+    | showUserStatement
     | showAuthenticationStatement
+    | executeAsStatement
     | createRoleStatement
+    | dropRoleStatement
+    | showRolesStatement
+    | grantRoleStatement
+    | revokeRoleStatement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
-    | showRolesStatement
     | showGrantsStatement
-    | dropRoleStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -1171,10 +1171,6 @@ showTriggersStatement
     : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-showUserStatement
-    : SHOW USER
-    ;
-
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
     ;
@@ -1192,11 +1188,6 @@ helpStatement
     ;
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
-
-
-identifierOrStringList
-    : identifierOrString (',' identifierOrString)*
-    ;
 
 // [deprecated] grant select on *
 // [deprecated] grant select on *.*
@@ -1301,21 +1292,17 @@ revokePrivilegeStatement
     ;
 
 grantRoleStatement
-    : GRANT identifierOrString TO user                          #grantRoleToUser
-    | GRANT identifierOrString TO ROLE identifierOrString       #grantRoleToRole
+    : GRANT identifierOrStringList TO user                                                      #grantRoleToUser
+    | GRANT identifierOrStringList TO ROLE identifierOrString                                   #grantRoleToRole
     ;
 
 revokeRoleStatement
-    : REVOKE identifierOrString FROM user                       #revokeRoleFromUser
-    | REVOKE identifierOrString FROM ROLE identifierOrString    #revokeRoleFromRole
+    : REVOKE identifierOrStringList FROM user                                                   #revokeRoleFromUser
+    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                #revokeRoleFromRole
     ;
 
 executeAsStatement
     : EXECUTE AS user (WITH NO REVERT)?
-    ;
-
-alterUserStatement
-    : ALTER USER user authOption
     ;
 
 createUserStatement
@@ -1324,6 +1311,14 @@ createUserStatement
 
 dropUserStatement
     : DROP USER user
+    ;
+
+alterUserStatement
+    : ALTER USER user authOption
+    ;
+
+showUserStatement
+    : SHOW (USER | USERS)
     ;
 
 showAuthenticationStatement
@@ -1335,16 +1330,18 @@ createRoleStatement
     : CREATE ROLE identifierOrString
     ;
 
+dropRoleStatement
+    : DROP ROLE identifierOrString
+    ;
+
 showRolesStatement
     : SHOW ROLES
     ;
 
 showGrantsStatement
-    : SHOW ALL? GRANTS (FOR user)?
-    ;
-
-dropRoleStatement
-    : DROP ROLE identifierOrString
+    : SHOW GRANTS
+    | SHOW GRANTS FOR USER? user
+    | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -2162,6 +2159,10 @@ identifierOrString
     | string
     ;
 
+identifierOrStringList
+    : identifierOrString (',' identifierOrString)*
+    ;
+
 user
     : identifierOrString                                     # userWithoutHost
     | identifierOrString '@' identifierOrString              # userWithHost
@@ -2212,7 +2213,7 @@ nonReserved
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | USERS
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
