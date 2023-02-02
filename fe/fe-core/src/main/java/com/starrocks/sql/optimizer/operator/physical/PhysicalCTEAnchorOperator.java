@@ -44,12 +44,11 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalCTEAnchorOperator that = (PhysicalCTEAnchorOperator) o;
         return Objects.equals(cteId, that.cteId);
     }
