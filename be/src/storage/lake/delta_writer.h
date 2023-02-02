@@ -24,6 +24,7 @@ namespace starrocks {
 class MemTracker;
 class SlotDescriptor;
 class Chunk;
+class TabletSchema;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -93,6 +94,9 @@ public:
     // The total number of rows have been written.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
     int64_t num_rows() const;
+
+    void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
+                                 const std::vector<int32_t>& referenced_column_ids);
 
 private:
     DeltaWriterImpl* _impl;

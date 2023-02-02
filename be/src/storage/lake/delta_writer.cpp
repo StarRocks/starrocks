@@ -124,6 +124,9 @@ public:
 
     Status build_schema_and_writer();
 
+    void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
+                                 const std::vector<int32_t>& referenced_column_ids);
+
 private:
     Status reset_memtable();
 
@@ -151,6 +154,15 @@ private:
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
 };
+
+void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
+                                              const std::vector<int32_t>& referenced_column_ids) {
+    _partial_update_tablet_schema = tschema;
+    _referenced_column_ids = referenced_column_ids;
+    build_schema_and_writer();
+    // recover _tablet_schema with partial update schema
+    _tablet_schema = _partial_update_tablet_schema;
+}
 
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
@@ -400,6 +412,11 @@ int64_t DeltaWriter::data_size() const {
 
 int64_t DeltaWriter::num_rows() const {
     return _impl->num_rows();
+}
+
+void DeltaWriter::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
+                                          const std::vector<int32_t>& referenced_column_ids) {
+    _impl->TEST_set_partial_update(tschema, referenced_column_ids);
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
