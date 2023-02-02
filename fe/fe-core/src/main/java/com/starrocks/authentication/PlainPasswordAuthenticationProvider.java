@@ -104,7 +104,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
             throws AuthenticationException {
         UserAuthenticationInfo ret = new UserAuthenticationInfo();
-        ret.setPassword(password.getPassword());
+        ret.setPassword(password.getPassword() == null ? MysqlPassword.EMPTY_PASSWORD : password.getPassword());
         ret.setAuthPlugin(PLUGIN_NAME);
         ret.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());

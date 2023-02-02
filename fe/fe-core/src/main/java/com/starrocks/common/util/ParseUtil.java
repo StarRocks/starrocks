@@ -21,10 +21,14 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ParseUtil {
+    public static final String HEX_STRING = "0123456789ABCDEF";
+    private static final byte[] HEX_ARRAY = "0123456789ABCDEF".getBytes(StandardCharsets.US_ASCII);
+
     private static ImmutableMap<String, Long> validDataVolumnUnitMultiplier =
             ImmutableMap.<String, Long>builder().put("B", 1L)
                     .put("K", 1024L)
@@ -80,6 +84,33 @@ public class ParseUtil {
             throw new AnalysisException("Replica volumn must larger than 0");
         }
         return replicaNumber;
+    }
+
+
+    private static byte charToByte(char c) {
+        return (byte) HEX_STRING.indexOf(c);
+    }
+
+    public static byte[] hexStrToBytes(String hexStr) {
+        String upperHexStr = hexStr.toUpperCase();
+        int length = upperHexStr.length() / 2;
+        char[] hexChars = upperHexStr.toCharArray();
+        byte[] bytes = new byte[length];
+        for (int i = 0; i < length; i++) {
+            int pos = i * 2;
+            bytes[i] = (byte) (charToByte(hexChars[pos]) << 4 | (0xff & charToByte(hexChars[pos + 1])));
+        }
+        return bytes;
+    }
+
+    public static String bytesToHexStr(byte[] bytes) {
+        byte[] hexChars = new byte[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        }
+        return new String(hexChars, StandardCharsets.UTF_8);
     }
 
 }
