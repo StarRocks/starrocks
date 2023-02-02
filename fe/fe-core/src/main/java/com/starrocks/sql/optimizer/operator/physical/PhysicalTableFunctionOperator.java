@@ -89,9 +89,11 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalTableFunctionOperator that = (PhysicalTableFunctionOperator) o;
         return Objects.equal(fn, that.fn) && Objects.equal(fnResultColumnRefSet, that.fnResultColumnRefSet) &&
                 Objects.equal(outerColumnRefSet, that.outerColumnRefSet) &&
@@ -100,6 +102,6 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnRef);
+        return Objects.hashCode(fn, fnResultColumnRefSet);
     }
 }

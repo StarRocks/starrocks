@@ -115,12 +115,11 @@ public class LogicalWindowOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalWindowOperator that = (LogicalWindowOperator) o;
         return Objects.equals(windowCall, that.windowCall)
                 && Objects.equals(partitionExpressions, that.partitionExpressions)
@@ -130,7 +129,7 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow);
+        return Objects.hash(super.hashCode(), windowCall);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {

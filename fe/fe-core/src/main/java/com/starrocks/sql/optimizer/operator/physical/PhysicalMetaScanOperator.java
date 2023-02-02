@@ -61,12 +61,11 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
     }
