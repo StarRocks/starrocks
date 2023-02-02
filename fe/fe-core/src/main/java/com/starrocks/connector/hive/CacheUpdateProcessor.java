@@ -148,7 +148,8 @@ public class CacheUpdateProcessor {
             List<RemotePathKey> presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive);
             List<Future<?>> futures = Lists.newArrayList();
             presentPathKey.forEach(pathKey -> {
-                if (operator == Operator.UPDATE && existPaths.contains(pathKey.getPath())) {
+                String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
+                if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
                     futures.add(executor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
                 } else {
                     futures.add(executor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
