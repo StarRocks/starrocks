@@ -670,6 +670,7 @@ CONF_mInt32(sys_minidump_limit, "20480");
 // Interval(seconds) for cleaning old minidumps.
 CONF_mInt32(sys_minidump_interval, "600");
 #endif
+CONF_Bool(dump_trace_info, "true");
 
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
