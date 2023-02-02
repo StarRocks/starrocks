@@ -99,18 +99,18 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalTopNOperator)) {
-            return false;
-        }
-
-        PhysicalTopNOperator rhs = (PhysicalTopNOperator) obj;
-        if (this == rhs) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
 
-        return sortPhase.equals(rhs.sortPhase) &&
-                orderSpec.equals(rhs.orderSpec);
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        PhysicalTopNOperator that = (PhysicalTopNOperator) o;
+
+        return sortPhase.equals(that.sortPhase) && orderSpec.equals(that.orderSpec);
     }
 
     @Override
