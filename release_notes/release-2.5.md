@@ -36,7 +36,7 @@
   - 优化了物化视图的刷新效率。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - 支持在建表时自动设置适当的分桶数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - 导入优化
-  - 优化多副本导入性能，支持 single leader replication 模式，表示导入时数据只写入到主副本，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
+  - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
   - 在单 HDFS 或单 Kerberos 环境下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键模型表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
