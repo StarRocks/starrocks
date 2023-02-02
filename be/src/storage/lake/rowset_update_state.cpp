@@ -238,15 +238,18 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
 
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, read_column_ids);
-    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
     size_t num_segments = op_write.rowset().segments_size();
+    // segment id -> column list
+    std::vector<std::vector<std::unique_ptr<Column>>> read_columns;
+    read_columns.resize(num_segments);
     _partial_update_states.resize(num_segments);
     for (size_t i = 0; i < num_segments; i++) {
-        _partial_update_states[i].write_columns.resize(read_columns.size());
+        read_columns[i].resize(read_column_ids.size());
+        _partial_update_states[i].write_columns.resize(read_columns[i].size());
         _partial_update_states[i].src_rss_rowids.resize(_upserts[i]->size());
-        for (uint32_t j = 0; j < read_columns.size(); ++j) {
+        for (uint32_t j = 0; j < read_columns[i].size(); ++j) {
             auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
-            read_columns[j] = column->clone_empty();
+            read_columns[i][j] = column->clone_empty();
             _partial_update_states[i].write_columns[j] = column->clone_empty();
         }
     }
@@ -276,11 +279,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
         total_nondefault_rows += _partial_update_states[i].src_rss_rowids.size() - num_default;
         // get column values by rowid, also get default values if needed
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, tablet_schema, read_column_ids,
-                                                                num_default > 0, rowids_by_rssid, &read_columns));
+                                                                num_default > 0, rowids_by_rssid, &read_columns[i]));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-            _partial_update_states[i].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
-                                                                               idxes.size());
+            _partial_update_states[i].write_columns[col_idx]->append_selective(*read_columns[i][col_idx], idxes.data(),
+                                                                               0, idxes.size());
         }
+        // release read column memory
+        read_columns[i].clear();
     }
     int64_t t_end = MonotonicMillis();
 
