@@ -3320,9 +3320,7 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         if (st.is_end_of_file()) {
             break;
         } else if (st.ok()) {
-            //auto& read_cols = chunk->columns();
             for (auto i = 0; i < chunk->num_rows(); i++) {
-                //EXPECT_EQ(0, read_cols[1]->get(i).get_int16());
                 EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
             }
             count += chunk->num_rows();
