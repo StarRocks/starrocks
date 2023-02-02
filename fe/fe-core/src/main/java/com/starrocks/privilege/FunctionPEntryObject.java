@@ -61,7 +61,7 @@ public class FunctionPEntryObject implements PEntryObject {
 
             Database database = mgr.getDb(restrictName);
             if (database == null) {
-                throw new PrivilegeException("cannot find db: " + restrictName);
+                throw new PrivObjNotFoundException("cannot find db: " + restrictName);
             }
             return new FunctionPEntryObject(database.getId(), ALL_FUNCTIONS_SIG);
         } else if (allTypes.size() == 2) {

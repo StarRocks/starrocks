@@ -31,7 +31,7 @@ public class UserPEntryObject implements PEntryObject {
 
     public static UserPEntryObject generate(GlobalStateMgr mgr, UserIdentity user) throws PrivilegeException {
         if (!mgr.getAuthenticationManager().doesUserExist(user)) {
-            throw new PrivilegeException("cannot find user " + user);
+            throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
     }
