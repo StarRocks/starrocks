@@ -533,7 +533,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
             _check_for_apply();
-            st = _wait_for_version(EditVersion(version, 0), wait_time, ul);
+            if (wait_time > 0) {
+                st = _wait_for_version(EditVersion(version, 0), wait_time, ul);
+            }
         }
     }
     if (!st.ok() && !st.is_time_out()) {
@@ -1098,9 +1100,6 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         return Status::InternalError(msg);
     }
     if (!(_edit_version_infos[_apply_version_idx]->version < version)) {
-        return Status::OK();
-    }
-    if (timeout_ms == 0) {
         return Status::OK();
     }
     int64_t wait_start = MonotonicMillis();
