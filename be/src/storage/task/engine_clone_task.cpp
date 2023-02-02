@@ -327,7 +327,8 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
         } else {
             LOG(INFO) << "clone get tablet info success. tablet_id:" << _clone_req.tablet_id
                       << ", schema_hash:" << _clone_req.schema_hash << ", signature:" << _signature
-                      << ", version:" << tablet_info.version;
+                      << ", version:" << tablet_info.version
+                      << ", min_readable_version:" << tablet_info.min_readable_version;
             _tablet_infos->push_back(tablet_info);
         }
     }
