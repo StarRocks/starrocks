@@ -1,5 +1,20 @@
 # StarRocks version 2.3
 
+## 2.3.8
+
+发布日期： 2023 年 2 月 2 日
+
+## 问题修复
+
+修复了如下问题：
+
+- 在大查询完成后释放资源时，小概率导致其他查询变慢，特别是在开启资源组或大查询异常结束时。[#16454](https://github.com/StarRocks/starrocks/pull/16454) [#16602](https://github.com/StarRocks/starrocks/pull/16602)
+- 针对主键模型的表，如果一个副本的元数据版本比较落后，增量克隆会触发大量版本的元数据积压没有及时 GC，可能会导致 BE 上发生 OOM。 [#15935](https://github.com/StarRocks/starrocks/pull/15935)
+- 如果 FE 向 BE 发送单次偶发的心跳，心跳连接超时，FE 会认为该 BE 不可用，最终导致该 BE 上的事务运行失败。[# 16386](https://github.com/StarRocks/starrocks/pull/16386)
+- 通过 StarRocks 外表功能导入数据时，如果源 StarRocks 集群为低版本，目标 StarRocks 集群为高版本（并且高版本为 2.2.8 ~ 2.2.11，2.3.4 ~ 2.3.7，2.4.1 或 2.4.2)，则数据导入失败。[#16173](https://github.com/StarRocks/starrocks/pull/16173)
+- 当查询高并发并且内存使用率比较高时 BE 崩溃。 [#16047](https://github.com/StarRocks/starrocks/pull/16047)
+- 如果表开启了动态分区，表的部分分区被动态删除，此时执行 TRUNCATE TABLE 会导致报 `NullPointerException` 错误，此时导入数据会导致 FE 崩溃且无法重启。[#16822](https://github.com/StarRocks/starrocks/pull/16822)
+
 ## 2.3.7
 
 发布日期： 2022 年 12 月 30 日
