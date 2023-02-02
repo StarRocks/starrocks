@@ -402,20 +402,7 @@ SWAP WITH table_name;
     SET ("replication_num" = "3");
     ```
 
-<<<<<<< HEAD
-[partition]
-=======
-3. Modify data writing and replication mode among replicas.
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    SET ("replicated_storage" = "false");
-    ```
-
-   This example sets the data writing and replication mode among replicas to "leaderless replication", which means data is written to multiple replicas at the same time without differentiating primary and secondary replicas. For more information, see the `replicated_storage` parameter in [CREATE TABLE](CREATE%20TABLE.md).
-
 ### Partition
->>>>>>> f60c1a03d (Update ALTER TABLE.md (#17268))
 
 1. Add partition. Existing partition [MIN, 2013-01-01), add partition [2013-01-01, 2014-01-01), and use default bucket mode.
 
