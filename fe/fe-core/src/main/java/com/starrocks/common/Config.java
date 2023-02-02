@@ -1652,6 +1652,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
+    @ConfField
+    public static boolean enable_background_refresh_hive_metadata = false;
+
+    @ConfField(mutable = true)
+    public static int background_refresh_hive_metadata_interval_sec = 900;
+
+
     /**
      * size of iceberg worker pool
      */

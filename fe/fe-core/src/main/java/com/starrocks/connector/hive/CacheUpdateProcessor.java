@@ -75,9 +75,9 @@ public class CacheUpdateProcessor {
         }
     }
 
-    public void refreshTable(String dbName, Table table) {
+    public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName());
+        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
         refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl));
         if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
             processSchemaChange(dbName, (HiveTable) table);
@@ -146,6 +146,7 @@ public class CacheUpdateProcessor {
     private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive);
+
             List<Future<?>> futures = Lists.newArrayList();
             presentPathKey.forEach(pathKey -> {
                 if (operator == Operator.UPDATE && existPaths.contains(pathKey.getPath())) {
