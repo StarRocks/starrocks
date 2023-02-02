@@ -71,6 +71,8 @@ DROP PARTITION [IF EXISTS] partition_name [FORCE];
 
 #### 增加临时分区
 
+详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
+
 语法：
 
 ```SQL
@@ -79,10 +81,6 @@ ADD TEMPORARY PARTITION [IF NOT EXISTS] partition_name
 partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
 ```
-
-注意：
-
-详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
 #### 使用临时分区替换原分区
 
@@ -97,10 +95,6 @@ partition_desc ["key"="value"]
 [PROPERTIES ("key"="value", ...)]
 ```
 
-注意：
-
-详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
-
 #### 删除临时分区
 
 语法：
@@ -109,10 +103,6 @@ partition_desc ["key"="value"]
 ALTER TABLE [database.]table
 DROP TEMPORARY PARTITION partition_name;
 ```
-
-注意：
-
-详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
 #### 修改分区属性
 
