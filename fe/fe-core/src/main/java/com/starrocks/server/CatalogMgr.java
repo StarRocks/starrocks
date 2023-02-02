@@ -273,6 +273,10 @@ public class CatalogMgr {
         return catalogs.get(name);
     }
 
+    public Map<String, Catalog> getCatalogs() {
+        return catalogs;
+    }
+
     public boolean checkCatalogExistsById(long id) {
         return catalogs.entrySet().stream().anyMatch(entry -> entry.getValue().getId() == id);
     }
