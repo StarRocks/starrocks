@@ -20,6 +20,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -117,7 +118,7 @@ public class AuthenticationManager {
             throw new RuntimeException("should not happened!", e);
         }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
-        info.setPassword(new byte[0]);
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
     }
