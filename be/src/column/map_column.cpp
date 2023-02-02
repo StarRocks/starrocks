@@ -540,9 +540,10 @@ bool MapColumn::set_null(size_t idx) {
 
 size_t MapColumn::element_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
-    return _keys->element_memory_usage(_offsets->get_data()[from], _offsets->get_data()[from + size]) +
-           _values->element_memory_usage(_offsets->get_data()[from], _offsets->get_data()[from + size]) +
-           _offsets->Column::element_memory_usage(from, size);
+    size_t start_offset = _offsets->get_data()[from];
+    size_t elements_num = _offsets->get_data()[from + size] - start_offset;
+    return _keys->element_memory_usage(start_offset, elements_num) +
+           _values->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
 }
 
 void MapColumn::swap_column(Column& rhs) {
