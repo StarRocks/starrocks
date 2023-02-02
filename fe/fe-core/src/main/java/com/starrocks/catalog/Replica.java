@@ -193,6 +193,13 @@ public class Replica implements Writable {
     public Replica(long replicaId, long backendId, long version, int schemaHash,
                    long dataSize, long rowCount, ReplicaState state,
                    long lastFailedVersion, long lastSuccessVersion) {
+        this(replicaId, backendId, version, schemaHash, dataSize, rowCount, state,
+                lastFailedVersion, lastSuccessVersion, 0);
+    }
+
+    public Replica(long replicaId, long backendId, long version, int schemaHash,
+                   long dataSize, long rowCount, ReplicaState state,
+                   long lastFailedVersion, long lastSuccessVersion, long minReadableVersion) {
         this.id = replicaId;
         this.backendId = backendId;
         this.version = version;
@@ -213,6 +220,7 @@ public class Replica implements Writable {
         } else {
             this.lastSuccessVersion = lastSuccessVersion;
         }
+        this.minReadableVersion = minReadableVersion;
     }
 
     public void setLastWriteFail(boolean lastWriteFail) {
