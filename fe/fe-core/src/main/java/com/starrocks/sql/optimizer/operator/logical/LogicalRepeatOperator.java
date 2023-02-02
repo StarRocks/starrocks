@@ -98,12 +98,11 @@ public class LogicalRepeatOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalRepeatOperator that = (LogicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
                 Objects.equals(repeatColumnRefList, that.repeatColumnRefList);
