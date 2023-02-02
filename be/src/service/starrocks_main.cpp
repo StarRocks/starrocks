@@ -68,6 +68,10 @@
 #include "util/thrift_server.h"
 #include "util/uid_util.h"
 
+#if !_GLIBCXX_USE_CXX11_ABI
+#error _GLIBCXX_USE_CXX11_ABI must be non-zero
+#endif
+
 DECLARE_bool(s2debug);
 
 static void help(const char*);
