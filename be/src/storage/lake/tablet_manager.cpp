@@ -507,20 +507,6 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
 
     RETURN_IF_ERROR(log_applier->init());
-    auto check_st = log_applier->check_meta_version();
-    if (!check_st.ok()) {
-        if (check_st.is_already_exist()) {
-            // return the new tablet meta score
-            auto target_metadata_or = tablet->get_metadata(new_version);
-            if (target_metadata_or.ok()) {
-                return compaction_score(**target_metadata_or);
-            } else {
-                return target_metadata_or.status();
-            }
-        } else {
-            return check_st;
-        }
-    }
 
     // Apply txn logs
     int64_t alter_version = -1;

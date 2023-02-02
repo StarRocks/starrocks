@@ -90,9 +90,8 @@ public:
     // publish failed later, need to clear primary index.
     void remove_primary_index_cache(uint32_t tablet_id);
 
-    // if check_meta_version return true, continue handle publish version request, or just return publish version success,
-    // because this publish version have been processed.
-    bool check_meta_version(const Tablet& tablet, int64_t base_version, int64_t new_version);
+    // if base version != index.data_version, need to clear index cache
+    Status check_meta_version(const Tablet& tablet, int64_t base_version);
 
     // update primary index data version when meta file finalize success.
     void update_primary_index_data_version(const Tablet& tablet, int64_t version);

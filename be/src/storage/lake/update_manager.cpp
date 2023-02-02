@@ -398,31 +398,24 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
     LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
 }
 
-bool UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version, int64_t new_version) {
+Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {
     auto index_entry = _index_cache.get(tablet.id());
     if (index_entry == nullptr) {
-        // if primary index not in cache, check tablet meta directly
-        if (fs::path_exist(tablet.metadata_location(new_version))) {
-            return false;
-        } else {
-            return true;
-        }
+        // if primary index not in cache, just return true, and continue publish
+        return Status::OK();
     } else {
         auto& index = index_entry->value();
-        CheckVersionResult res = index.check_data_version(base_version);
-        if (res == CheckVersionResult::SUCCESS) {
-            // success
-            _index_cache.release(index_entry);
-            return true;
-        } else if (res == CheckVersionResult::ADVANCE) {
-            // advance, remove index and return success
-            _index_cache.remove(index_entry);
-            LOG(WARNING) << "Lake check_meta_version and remove primary index cache, tablet_id: " << tablet.id();
-            return true;
+        if (index.data_version() != base_version) {
+            // clear cache, and continue publish
+            LOG(WARNING) << "Lake check_meta_version and remove primary index cache, tablet_id: " << tablet.id()
+                         << " index_ver: " << index.data_version() << " base_ver: " << base_version;
+            if (!_index_cache.remove(index_entry)) {
+                return Status::InternalError("lake primary index cache ref mismatch");
+            }
         } else {
             _index_cache.release(index_entry);
-            return false;
         }
+        return Status::OK();
     }
 }
 

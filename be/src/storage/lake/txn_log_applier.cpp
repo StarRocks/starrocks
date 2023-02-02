@@ -55,18 +55,15 @@ public:
         auto [iter, ok] = _s_schema_change_set.insert(_tablet.id());
         if (ok) {
             _inited = true;
-            return Status::OK();
+            return check_meta_version();
         } else {
             return Status::InternalError("primary key does not support concurrent log applying");
         }
     }
 
-    Status check_meta_version() override {
+    Status check_meta_version() {
         // check tablet meta
-        if (!_tablet.update_mgr()->check_meta_version(_tablet, _base_version, _new_version)) {
-            LOG(WARNING) << "lake check_meta_version version " << _base_version << " already exist";
-            return Status::AlreadyExist("version already exist");
-        }
+        RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
         _check_meta_version_succ = true;
         return Status::OK();
     }
