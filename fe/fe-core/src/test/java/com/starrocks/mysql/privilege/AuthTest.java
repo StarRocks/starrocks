@@ -1054,7 +1054,7 @@ public class AuthTest {
         auth.grant(grantStmt);
 
         // 4. grant role to user
-        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(Collections.singletonList(selectRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
@@ -1081,7 +1081,7 @@ public class AuthTest {
         auth.grant(grantStmt);
 
         // 7. grant role to user
-        grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
+        grantRoleStmt = new GrantRoleStmt(Collections.singletonList(loadRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
@@ -1092,7 +1092,7 @@ public class AuthTest {
         Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
 
         // 8. revoke load & spark resource usage from user
-        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(Collections.singletonList(loadRoleName), userIdentity);
         com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
         auth.revokeRole(revokeRoleStmt);
 
@@ -1966,7 +1966,7 @@ public class AuthTest {
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 5.3 grant auror to neiville
-        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(auror, neville);
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(Collections.singletonList(auror), neville);
         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
         // 5.4 assert
@@ -1990,7 +1990,7 @@ public class AuthTest {
 
         // 8. revoke role from neville
         // 8.2 revoke
-        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(auror, neville);
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(Collections.singletonList(auror), neville);
         com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
         auth.revokeRole(revokeRoleStmt);
         // 8.2 assert

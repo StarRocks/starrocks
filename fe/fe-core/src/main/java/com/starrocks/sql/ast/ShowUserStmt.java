@@ -20,14 +20,29 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 public class ShowUserStmt extends ShowStmt {
+    private final boolean isAll;
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("User", ScalarType.createVarchar(50)))
                     .build();
 
+    public ShowUserStmt(boolean isAll) {
+        this.isAll = isAll;
+    }
+
+    public boolean isAll() {
+        return isAll;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowUserStatement(this, context);
     }
 }
 

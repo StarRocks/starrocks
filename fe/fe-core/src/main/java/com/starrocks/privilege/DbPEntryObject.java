@@ -23,9 +23,14 @@ import java.util.List;
 import java.util.Objects;
 
 public class DbPEntryObject implements PEntryObject {
-    protected static final long ALL_DATABASE_ID = -2; // -2 represent all
+    public static final long ALL_DATABASE_ID = -2; // -2 represent all
+
     @SerializedName(value = "i")
     private long id;
+
+    public long getId() {
+        return id;
+    }
 
     public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {

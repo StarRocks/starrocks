@@ -119,7 +119,7 @@ public class PrivilegeStmtAnalyzer {
                 throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
             }
             analyseUser(stmt.getUserIdent(), session, true);
-            analyseRoleName(stmt.getGranteeRole(), session, true, "Can not granted/revoke role to user");
+            stmt.getGranteeRole().forEach(role -> analyseRoleName(role, session, true, "Can not granted/revoke role to user"));
             return null;
         }
 
@@ -333,17 +333,11 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getUserIdent() != null) {
-                if (stmt.isAll()) {
-                    throw new SemanticException("Can not specified keyword ALL when specified user");
-                }
                 analyseUser(stmt.getUserIdent(), session, true);
             } else {
-                if (!stmt.isAll()) {
-                    // self
-                    stmt.setUserIdent(session.getCurrentUserIdentity());
-                }
+                stmt.setUserIdent(session.getCurrentUserIdentity());
             }
-            Preconditions.checkState(stmt.isAll() || session.getCurrentUserIdentity() != null);
+            Preconditions.checkState(session.getCurrentUserIdentity() != null);
             return null;
         }
 

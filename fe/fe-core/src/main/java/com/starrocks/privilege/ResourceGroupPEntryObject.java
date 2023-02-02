@@ -23,9 +23,14 @@ import java.util.List;
 import java.util.Objects;
 
 public class ResourceGroupPEntryObject implements PEntryObject {
-    protected static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all
+    public static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all
+
     @SerializedName(value = "i")
     private long id;
+
+    public long getId() {
+        return id;
+    }
 
     public static ResourceGroupPEntryObject generate(GlobalStateMgr mgr,
                                                      List<String> tokens) throws PrivilegeException {

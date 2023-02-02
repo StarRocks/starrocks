@@ -34,7 +34,7 @@ public class PrivilegeCollection {
     @SerializedName("m")
     protected Map<Short, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
-    static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
+    public static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
         @SerializedName(value = "a")
         protected ActionSet actionSet;
         @SerializedName(value = "o")
@@ -56,6 +56,15 @@ public class PrivilegeCollection {
                 this.object = other.object.clone();
             }
             this.isGrant = other.isGrant;
+        }
+
+
+        public ActionSet getActionSet() {
+            return actionSet;
+        }
+
+        public PEntryObject getObject() {
+            return object;
         }
 
         @Override
@@ -304,5 +313,9 @@ public class PrivilegeCollection {
 
     public boolean isEmpty() {
         return typeToPrivilegeEntryList.isEmpty();
+    }
+
+    public Map<Short, List<PrivilegeEntry>> getTypeToPrivilegeEntryList() {
+        return typeToPrivilegeEntryList;
     }
 }

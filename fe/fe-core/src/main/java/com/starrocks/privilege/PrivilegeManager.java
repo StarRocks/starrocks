@@ -143,10 +143,9 @@ public class PrivilegeManager {
             // 1. builtin root role
             RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(ROOT_ROLE_ID, ROOT_ROLE_NAME);
             // GRANT ALL ON ALL
-            for (String typeStr : provider.getAllTypes()) {
-                ObjectType t = ObjectType.valueOf(typeStr);
-                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t,
-                        new ArrayList<>(t.getActionMap().keySet()));
+            for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
+                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
+                        new ArrayList<>(objectType.getActionMap().keySet()));
             }
             rolePrivilegeCollection.disableMutable();  // not mutable
 
@@ -204,14 +203,16 @@ public class PrivilegeManager {
             // GRANT SELECT ON ALL TABLES IN information_schema
             List<PEntryObject> object = Collections.singletonList(new TablePEntryObject(
                     SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-            short tableTypeId = provider.getTypeIdByName(ObjectType.TABLE.name());
+            short tableTypeId = (short) ObjectType.TABLE.getId();
             ActionSet selectAction =
                     analyzeActionSet(tableTypeId, Collections.singletonList(PrivilegeType.SELECT.name()));
             rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
 
             // 6. builtin user root
             UserPrivilegeCollection rootCollection = new UserPrivilegeCollection();
-            rootCollection.grantRole(getRoleIdByNameNoLock(ROOT_ROLE_NAME));
+            RolePrivilegeCollection rootRolePrivCollection =
+                    getRolePrivilegeCollectionUnlocked(getRoleIdByNameNoLock(ROOT_ROLE_NAME), true);
+            rootCollection.merge(rootRolePrivCollection);
             userToPrivilegeCollection.put(UserIdentity.createAnalyzedUserIdentWithIp("root", "%"), rootCollection);
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
@@ -439,9 +440,9 @@ public class PrivilegeManager {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
             if (stmt.getUserIdent() != null) {
-                grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdent());
+                grantRoleToUser(stmt.getGranteeRole().get(0), stmt.getUserIdent());
             } else {
-                grantRoleToRole(stmt.getGranteeRole(), stmt.getRole());
+                grantRoleToRole(stmt.getGranteeRole().get(0), stmt.getRole());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to grant role: " + e.getMessage(), e);
@@ -541,9 +542,9 @@ public class PrivilegeManager {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
             if (stmt.getUserIdent() != null) {
-                revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdent());
+                revokeRoleFromUser(stmt.getGranteeRole().get(0), stmt.getUserIdent());
             } else {
-                revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRole());
+                revokeRoleFromRole(stmt.getGranteeRole().get(0), stmt.getRole());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to revoke role: " + e.getMessage(), e);
@@ -1293,7 +1294,7 @@ public class PrivilegeManager {
         }
     }
 
-    protected UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+    public UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
             throws PrivilegeException {
         UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
         if (userCollection == null) {
@@ -1303,12 +1304,16 @@ public class PrivilegeManager {
         return userCollection;
     }
 
+    public Map<UserIdentity, UserPrivilegeCollection> getUserToPrivilegeCollection() {
+        return userToPrivilegeCollection;
+    }
+
     // return null if not exists
     protected UserPrivilegeCollection getUserPrivilegeCollectionUnlockedAllowNull(UserIdentity userIdentity) {
         return userToPrivilegeCollection.get(userIdentity);
     }
 
-    private RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
+    public RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
             throws PrivilegeException {
         RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
         if (collection == null) {
@@ -1319,6 +1324,10 @@ public class PrivilegeManager {
             }
         }
         return collection;
+    }
+
+    public Map<Long, RolePrivilegeCollection> getRoleIdToPrivilegeCollection() {
+        return roleIdToPrivilegeCollection;
     }
 
     public ActionSet analyzeActionSet(short typeId, List<String> actionNameList) throws PrivilegeException {
@@ -1343,7 +1352,11 @@ public class PrivilegeManager {
     }
 
     public short analyzeType(String typeName) throws PrivilegeException {
-        return provider.getTypeIdByName(typeName);
+        return (short) ObjectType.valueOf(typeName).getId();
+    }
+
+    public ObjectType getObjectType(short typeId) throws PrivilegeException {
+        return provider.getObjectType(typeId);
     }
 
     public void createRole(CreateRoleStmt stmt) throws DdlException {
@@ -1767,6 +1780,13 @@ public class PrivilegeManager {
                     UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
                     UserPrivilegeCollection collection =
                             (UserPrivilegeCollection) reader.readJson(UserPrivilegeCollection.class);
+
+                    if (userIdentity.equals(UserIdentity.ROOT)) {
+                        UserPrivilegeCollection rootUserPrivCollection =
+                                ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                        collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
+                    }
+
                     // upgrade meta to current version
                     ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
                     ret.userToPrivilegeCollection.put(userIdentity, collection);

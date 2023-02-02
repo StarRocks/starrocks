@@ -721,7 +721,7 @@ public class PrivilegeChecker {
         public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext session) {
             // if show all grants, or show other user's grants, need global GRANT priv.
             UserIdentity self = session.getCurrentUserIdentity();
-            if (statement.isAll() || !self.equals(statement.getUserIdent())) {
+            if (!self.equals(statement.getUserIdent())) {
                 if (!GlobalStateMgr.getCurrentState().getAuth()
                         .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
