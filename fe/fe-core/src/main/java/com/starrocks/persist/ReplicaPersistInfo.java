@@ -304,6 +304,10 @@ public class ReplicaPersistInfo implements Writable {
         return lastSuccessVersion;
     }
 
+    public long getMinReadableVersion() {
+        return minReadableVersion;
+    }
+
     public static ReplicaPersistInfo read(DataInput in) throws IOException {
         ReplicaPersistInfo replicaInfo = new ReplicaPersistInfo();
         replicaInfo.readFields(in);

@@ -2936,7 +2936,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 schemaHash, info.getDataSize(), info.getRowCount(),
                 Replica.ReplicaState.NORMAL,
                 info.getLastFailedVersion(),
-                info.getLastSuccessVersion());
+                info.getLastSuccessVersion(),
+                info.getMinReadableVersion());
         tablet.addReplica(replica);
     }
 
@@ -2949,7 +2950,7 @@ public class LocalMetastore implements ConnectorMetadata {
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
         Preconditions.checkNotNull(replica, info);
-        replica.updateRowCount(info.getVersion(), info.getDataSize(), info.getRowCount());
+        replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
         replica.setBad(false);
     }
 
