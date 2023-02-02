@@ -418,8 +418,10 @@ SWAP WITH table_name;
 
     ```sql
     ALTER TABLE example_db.my_table
-    SET ("single_leader_replication" = "false");
+    SET ("replicated_storage" = "false");
     ```
+
+    以上示例表示将多副本的写入和同步方式设置为 leaderless replication，即数据同时写入到多个副本，不区分主从副本。更多信息，参见 [CREATE TABLE](CREATE%20TABLE.md) 的 `replicated_storage` 参数描述。
 
 ### partition
 
