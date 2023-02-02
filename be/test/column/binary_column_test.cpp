@@ -655,4 +655,25 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
+PARALLEL_TEST(BinaryColumnTest, test_element_memory_usage) {
+    auto column = BinaryColumn::create();
+    column->append("");
+    column->append("1");
+    column->append("23");
+    column->append("456");
+
+    ASSERT_EQ(22, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {4, 5, 6, 7};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(0, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
+}
+
 } // namespace starrocks
