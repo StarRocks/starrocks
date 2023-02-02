@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -61,28 +60,6 @@ public class PhysicalFileScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalFileScan(optExpression, context);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalFileScanOperator that = (PhysicalFileScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalFileScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
     @Override

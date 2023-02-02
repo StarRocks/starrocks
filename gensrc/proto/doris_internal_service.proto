@@ -66,4 +66,11 @@ service PBackendService {
 
     // NOTE(murphy) check if it's really necessary
     rpc submit_mv_maintenance_task(starrocks.PMVMaintenanceTaskRequest) returns (starrocks.PMVMaintenanceTaskResult);
+
+    // local tablet reader
+    rpc local_tablet_reader_open(starrocks.PTabletReaderOpenRequest) returns (starrocks.PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(starrocks.PTabletReaderCloseRequest) returns (starrocks.PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(starrocks.PTabletReaderMultiGetRequest) returns (starrocks.PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(starrocks.PTabletReaderScanOpenRequest) returns (starrocks.PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(starrocks.PTabletReaderScanGetNextRequest) returns (starrocks.PTabletReaderScanGetNextResult);
 };

@@ -93,9 +93,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
@@ -109,8 +107,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
-                enforceOrderBy);
+        return Objects.hash(analyticCall);
     }
 
     @Override

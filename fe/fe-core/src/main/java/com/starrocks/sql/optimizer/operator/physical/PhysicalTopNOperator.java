@@ -93,13 +93,16 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     }
 
     @Override
+    public int hashCode() {
+        return Objects.hash(sortPhase, orderSpec);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
@@ -107,11 +110,6 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return offset == that.offset && partitionLimit == that.partitionLimit && isSplit == that.isSplit &&
                 isEnforced == that.isEnforced && Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 sortPhase == that.sortPhase && topNType == that.topNType;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), offset, sortPhase, orderSpec);
     }
 
     @Override
