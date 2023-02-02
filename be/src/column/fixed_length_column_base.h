@@ -178,6 +178,7 @@ public:
 
     size_t container_memory_usage() const override { return _data.capacity() * sizeof(ValueType); }
     size_t shrink_memory_usage() const override { return _data.size() * sizeof(ValueType); }
+    size_t element_memory_usage(size_t from, size_t size) const override { return sizeof(ValueType) * size; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<FixedLengthColumnBase&>(rhs);

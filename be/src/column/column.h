@@ -315,7 +315,7 @@ public:
     virtual size_t shrink_memory_usage() const = 0;
     virtual size_t container_memory_usage() const = 0;
     virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const { return 0; }
+    virtual size_t element_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
