@@ -148,4 +148,14 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     public void testTPCHQ22EnumPlan() {
         runFileUnitTest("enumerate-plan/tpch-q22");
     }
+
+    @Test
+    public void testFullOuterJoinPlan_1() {
+        runFileUnitTest("enumerate-plan/full-outer-join-1");
+    }
+
+    @Test
+    public void testFullOuterJoinPlan_2() {
+        runFileUnitTest("enumerate-plan/full-outer-join-2");
+    }
 }
