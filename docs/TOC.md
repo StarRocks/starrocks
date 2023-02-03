@@ -87,9 +87,7 @@
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
       + [File manager](./administration/filemanager.md)
-  + Data Recovery
-    + [Data recovery](./administration/Data_recovery.md)
-    + [Restore FEs](./administration/Metadata_recovery.md)
+  + [Data recovery](./administration/Data_recovery.md)
   + User Privilege and Authentication
     + [User privilege](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
