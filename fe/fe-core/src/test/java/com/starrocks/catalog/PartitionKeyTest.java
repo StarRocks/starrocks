@@ -170,7 +170,7 @@ public class PartitionKeyTest {
     @Test
     public void testSerialization() throws Exception {
         FakeGlobalStateMgr fakeGlobalStateMgr = new FakeGlobalStateMgr();
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
 
         // 1. Write objects to file
         File file = new File("./keyRangePartition");

@@ -784,7 +784,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
-        String progress = FeConstants.null_string;
+        String progress = FeConstants.NULL_STRING;
         if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
             progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
         }

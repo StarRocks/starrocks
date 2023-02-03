@@ -132,8 +132,8 @@ public class Database extends MetaObject implements Writable {
         this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
-        this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
-        this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
+        this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
+        this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
     }
 
     private String getOwnerInfo(Thread owner) {
@@ -701,7 +701,7 @@ public class Database extends MetaObject implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             replicaQuotaSize = in.readLong();
         } else {
-            replicaQuotaSize = FeConstants.default_db_replica_quota_size;
+            replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
         }
     }
 

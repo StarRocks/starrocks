@@ -57,7 +57,7 @@ public class LakeTableTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentStateJournalVersion() {
-                return FeConstants.meta_version;
+                return FeConstants.META_VERSION;
             }
         };
 

@@ -79,7 +79,7 @@ public class BackendTest {
         fakeEditLog = new FakeEditLog();
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
         FakeGlobalStateMgr.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
 
         backend = new Backend(backendId, host, heartbeatPort);

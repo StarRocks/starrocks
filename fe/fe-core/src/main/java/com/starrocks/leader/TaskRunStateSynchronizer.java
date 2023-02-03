@@ -34,7 +34,7 @@ public class TaskRunStateSynchronizer extends LeaderDaemon {
     private TaskRunManager taskRunManager;
 
     public TaskRunStateSynchronizer() {
-        super("TaskRunStateSynchronizer", FeConstants.sync_task_runs_state_interval);
+        super("TaskRunStateSynchronizer", FeConstants.SYNC_TASK_RUNS_STATE_INTERVAL);
         taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         runningTaskRunProgressMap = new HashMap<>();
         for (Map.Entry<Long, TaskRun> entry : taskRunManager.getRunningTaskRunMap().entrySet()) {

@@ -279,7 +279,7 @@ public class FrontendOptions {
     }
 
     public static String getHostnameByIp(String ip) {
-        String hostName = FeConstants.null_string;
+        String hostName = FeConstants.NULL_STRING;
         try {
             InetAddress address = InetAddress.getByName(ip);
             hostName = address.getHostName();

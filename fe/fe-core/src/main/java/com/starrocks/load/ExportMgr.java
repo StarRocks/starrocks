@@ -258,7 +258,7 @@ public class ExportMgr {
 
                 jobInfo.add(id);
                 // query id
-                jobInfo.add(jobQueryId != null ? jobQueryId.toString() : FeConstants.null_string);
+                jobInfo.add(jobQueryId != null ? jobQueryId.toString() : FeConstants.NULL_STRING);
                 jobInfo.add(state.name());
                 jobInfo.add(job.getProgress() + "%");
 
@@ -294,7 +294,7 @@ public class ExportMgr {
                     ExportFailMsg failMsg = job.getFailMsg();
                     jobInfo.add("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
                 } else {
-                    jobInfo.add(FeConstants.null_string);
+                    jobInfo.add(FeConstants.NULL_STRING);
                 }
 
                 exportJobInfos.add(jobInfo);

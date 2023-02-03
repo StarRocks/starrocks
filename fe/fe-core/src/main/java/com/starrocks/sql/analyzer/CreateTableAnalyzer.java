@@ -149,8 +149,8 @@ public class CreateTableAnalyzer {
                 } else {
                     for (ColumnDef columnDef : columnDefs) {
                         keyLength += columnDef.getType().getIndexSize();
-                        if (keysColumnNames.size() >= FeConstants.shortkey_max_column_count
-                                || keyLength > FeConstants.shortkey_maxsize_bytes) {
+                        if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
+                                || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
                             if (keysColumnNames.size() == 0
                                     && columnDef.getType().getPrimitiveType().isCharFamily()) {
                                 keysColumnNames.add(columnDef.getName());

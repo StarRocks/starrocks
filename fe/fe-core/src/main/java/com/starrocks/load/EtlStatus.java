@@ -63,7 +63,7 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
-    public static final String DEFAULT_TRACKING_URL = FeConstants.null_string;
+    public static final String DEFAULT_TRACKING_URL = FeConstants.NULL_STRING;
 
     private TEtlState state;
     private String trackingUrl;

@@ -854,7 +854,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
 
                 if (oriBfColumns == null) {
-                    bfFpp = FeConstants.default_bloom_filter_fpp;
+                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
                 } else {
                     bfFpp = oriBfFpp;
                 }

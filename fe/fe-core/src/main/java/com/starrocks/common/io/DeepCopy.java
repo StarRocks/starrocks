@@ -60,8 +60,8 @@ public class DeepCopy {
         // Backup the current MetaContext before assigning a new one.
         MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.meta_version);
-        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setMetaVersion(FeConstants.META_VERSION);
+        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -94,8 +94,8 @@ public class DeepCopy {
         // Backup the current MetaContext before assigning a new one.
         MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.meta_version);
-        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setMetaVersion(FeConstants.META_VERSION);
+        metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
         try {
             String origJsonStr = GsonUtils.GSON.toJson(orig);

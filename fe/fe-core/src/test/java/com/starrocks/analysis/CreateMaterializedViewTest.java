@@ -1206,12 +1206,9 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
 
         try {
-            FeConstants.shortkey_max_column_count = 1;
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
-        } finally {
-            FeConstants.shortkey_max_column_count = 3;
         }
     }
 
@@ -1860,12 +1857,9 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
 
         try {
-            FeConstants.shortkey_max_column_count = 0;
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Data type of first column cannot be DATE", e.getMessage());
-        } finally {
-            FeConstants.shortkey_max_column_count = 3;
         }
     }
 

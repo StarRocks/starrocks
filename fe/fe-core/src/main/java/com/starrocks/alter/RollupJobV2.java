@@ -751,7 +751,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState == JobState.RUNNING && rollupBatchTask.getTaskNum() > 0) {
             info.add(rollupBatchTask.getFinishedTaskNum() + "/" + rollupBatchTask.getTaskNum());
         } else {
-            info.add(FeConstants.null_string);
+            info.add(FeConstants.NULL_STRING);
         }
         info.add(timeoutMs / 1000);
         infos.add(info);
