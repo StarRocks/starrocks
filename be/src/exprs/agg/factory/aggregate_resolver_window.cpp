@@ -35,10 +35,16 @@ struct WindowDispatcher {
             // use last_value_in for last_value with ingnore nulls.
             resolver->add_aggregate_mapping_notnull<pt, pt>("last_value_in", true,
                                                             AggregateFactory::MakeLastValueWindowFunction<pt, true>());
-            resolver->add_aggregate_mapping_notnull<pt, pt>("lead", true,
-                                                            AggregateFactory::MakeLeadLagWindowFunction<pt>());
-            resolver->add_aggregate_mapping_notnull<pt, pt>("lag", true,
-                                                            AggregateFactory::MakeLeadLagWindowFunction<pt>());
+            resolver->add_aggregate_mapping_notnull<pt, pt>(
+                    "lead", true, AggregateFactory::MakeLeadLagWindowFunction<pt, false, false>());
+            // use lead_in for lead with ingnore nulls.
+            resolver->add_aggregate_mapping_notnull<pt, pt>(
+                    "lead_in", true, AggregateFactory::MakeLeadLagWindowFunction<pt, true, false>());
+            resolver->add_aggregate_mapping_notnull<pt, pt>(
+                    "lag", true, AggregateFactory::MakeLeadLagWindowFunction<pt, false, true>());
+            // use lag_in for lag with ingnore nulls.
+            resolver->add_aggregate_mapping_notnull<pt, pt>(
+                    "lag_in", true, AggregateFactory::MakeLeadLagWindowFunction<pt, true, true>());
         }
     }
 };
