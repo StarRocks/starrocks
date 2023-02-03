@@ -1112,7 +1112,7 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(0);
         String sql = "select v1, v2 from t0 group by v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0\n" +
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
@@ -1131,7 +1131,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     numNodes=0");
 
         sql = "select v1, sum(v2) from t0";
         plan = getFragmentPlan(sql);
@@ -1812,7 +1812,7 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testSimpleMinMaxAggRewrite() throws Exception {
+    public void testSimpleAggRewrite() throws Exception {
         // normal case
         String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
         String plan = getFragmentPlan(sql);

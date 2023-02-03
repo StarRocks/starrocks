@@ -63,6 +63,8 @@ private:
 
     Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
                          std::vector<SegmentSharedPtr>* segments);
+    
+    Status _fill_result_chunk(Chunk* chunk) override;
 };
 
 } // namespace starrocks

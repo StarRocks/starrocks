@@ -79,34 +79,6 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 bool MetaReader::has_more() {
     return _has_more;
 }
-Status MetaReader::_fill_result_chunk(Chunk* chunk) {
-    for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
-        auto s_id = _collect_context.result_slot_ids[i];
-        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
-        const auto& field = _collect_context.seg_collecter_params.fields[i];
-        if (field == "dict_merge") {
-            TypeDescriptor item_desc;
-            item_desc = slot->type();
-            TypeDescriptor desc;
-            desc.type = TYPE_ARRAY;
-            desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
-            chunk->append_column(std::move(column), slot->id());
-        } else if (field == "count") {
-            TypeDescriptor item_desc;
-            item_desc.type = TYPE_BIGINT;
-            TypeDescriptor desc;
-            desc.type = TYPE_BIGINT;
-            desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
-            chunk->append_column(std::move(column), slot->id());
-        } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
-            chunk->append_column(std::move(column), slot->id());
-        }
-    }
-    return Status::OK();
-}
 
 SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(std::move(segment)) {}
 
