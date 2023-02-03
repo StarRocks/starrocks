@@ -54,20 +54,6 @@ public interface AuthorizationProvider {
     PEntryObject generateUserObject(String type, UserIdentity user, GlobalStateMgr mgr) throws PrivilegeException;
 
     /**
-     * generate PEntryObject by ON/IN ALL statements
-     * e.g. GRANT SELECT ON ALL TABLES IN DATABASE db
-     * grant create_table on all databases to userx
-     * ==> allTypeList: ["databases"], restrictType: null, restrictName: null
-     * grant select on all tables in database db1 to userx
-     * ==> allTypeList: ["tables"], restrictType: database, restrictName: db1
-     * grant select on all tables in all databases to userx
-     * ==> allTypeList: ["tables", "databases"], restrictType: null, restrictName: null
-     **/
-    PEntryObject generateObject(
-            String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
-            throws PrivilegeException;
-
-    /**
      * validate if grant is allowed
      * e.g. To forbid `NODE` privilege being granted, we should put some code here.
      */

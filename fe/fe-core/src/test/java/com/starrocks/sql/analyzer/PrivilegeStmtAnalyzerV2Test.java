@@ -140,7 +140,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have two"));
+            Assert.assertTrue(e.getMessage().contains("No database selected"));
         }
 
         sql = "grant insert on dbx.tblxx to test_user";
@@ -355,7 +355,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for tables"));
+            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
         }
 
         sql = "revoke select on ALL tables IN ALL tables from test_user";
@@ -363,7 +363,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with ALL DATABASES instead of ALL TABLES"));
+            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
         }
 
         sql = "grant create_table on ALL databases in database db1 to test_user";
@@ -371,7 +371,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for databases! only support ON ALL DATABASES"));
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
         }
 
         sql = "grant impersonate on ALL users in all databases to test_user";
@@ -386,13 +386,13 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testGrantRevokeImpersonate() throws Exception {
-        String sql = "grant impersonate on root to test_user";
+        String sql = "grant impersonate on USER root to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant impersonate on root to test_user with grant option";
+        sql = "grant impersonate on USER root to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke impersonate on 'root'@'%' from test_user with grant option";
+        sql = "revoke impersonate on USER 'root'@'%' from test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant impersonate on user 'root'@'%', 'test_user'@'%' to test_user";
@@ -405,7 +405,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         try {
-            UtFrameUtils.parseStmtWithNewParser("grant impersonate on xxx to test_user", ctx);
+            UtFrameUtils.parseStmtWithNewParser("grant impersonate on USER xxx to test_user", ctx);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot find user 'xxx'@'%'"));
@@ -430,7 +430,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             System.err.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for resource! only support ON ALL RESOURCES"));
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one: [*, *]"));
         }
 
         try {
@@ -460,7 +460,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have two"));
+            Assert.assertTrue(e.getMessage().contains("No database selected"));
         }
 
         sql = "grant drop, select on view xxx.xx to test_user";
@@ -492,7 +492,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for views"));
+            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
         }
 
         sql = "revoke select on ALL views IN ALL views from test_user";
@@ -500,7 +500,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with ALL DATABASES instead of ALL VIEWS"));
+            Assert.assertTrue(e.getMessage().contains("You have an error in your SQL syntax"));
         }
     }
 
