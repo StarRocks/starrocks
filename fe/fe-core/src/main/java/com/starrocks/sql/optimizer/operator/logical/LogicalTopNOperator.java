@@ -131,12 +131,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalTopNOperator that = (LogicalTopNOperator) o;
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
@@ -146,9 +145,9 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), partitionByColumns, partitionLimit, orderByElements, offset,
-                sortPhase, topNType, isSplit);
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit);
     }
+
 
     public static Builder builder() {
         return new Builder();
@@ -177,6 +176,8 @@ public class LogicalTopNOperator extends LogicalOperator {
             this.sortPhase = topNOperator.sortPhase;
             this.topNType = topNOperator.topNType;
             this.isSplit = topNOperator.isSplit;
+            this.partitionLimit = topNOperator.partitionLimit;
+            this.partitionByColumns = topNOperator.partitionByColumns;
             return this;
         }
 
