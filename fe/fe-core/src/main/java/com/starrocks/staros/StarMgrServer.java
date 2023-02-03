@@ -136,6 +136,22 @@ public class StarMgrServer {
         com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.starmgr_assume_role_credential_external_id;
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
 
+        // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
+        com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
+
+        // set the following config, in order to provide a customized worker group definition
+        // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
+
+        // use external resource provisioner service to provision/release worker group resource.
+        // Keep this empty if using builtin one for testing
+        // com.staros.util.Config.RESOURCE_PROVISIONER_ADDRESS = "";
+
+        // turn on the following config, in case to use starmgr for internal multi-cluster testing
+        // com.staros.util.Config.ENABLE_BUILTIN_RESOURCE_PROVISIONER_FOR_TEST = true;
+
+        // set the following config, in order to enable the builtin test resource provisioner dump its meta to disk
+        // com.staros.util.Config.BUILTIN_PROVISION_SERVER_DATA_DIR = "./";
+
         com.staros.util.Config.HDFS_URL = Config.hdfs_url;
 
         // start rpc server
