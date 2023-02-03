@@ -575,8 +575,6 @@ public class ConnectContext {
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        // for debug
-        LOG.info("set current warehouse {}", currentWarehouse);
         this.currentWarehouse = currentWarehouse;
     }
 
