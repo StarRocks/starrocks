@@ -933,9 +933,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                     }
                     _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id, &new_deletes);
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-                    i++;
-                    loaded_upsert++;
                 }
+                i++;
+                loaded_upsert++;
                 state.release_upserts(i);
             }
             if (loaded_delfile < delfile_num) {
