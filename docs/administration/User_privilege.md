@@ -192,7 +192,7 @@ If you have lost the password for the user `root`, you can reset it by following
     SET PASSWORD for root = PASSWORD('xxxxxx');
     ```
 
-5. Re-enable authentication by changing the configuration item `enable_auth_check` to `true` in the configuration files **fe/conf/fe.conf** of **all FE nodes**.
+5. Re-enable authentication by configuring the configuration item `enable_auth_check` to `true` in the configuration files **fe/conf/fe.conf** of **all FE nodes**.
 
     ```plain
     enable_auth_check = true
