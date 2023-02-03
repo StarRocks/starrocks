@@ -37,6 +37,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
@@ -471,6 +472,20 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
         // TODO: what if unusedShards deletion is partially successful?
         ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+
+        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            if (table != null) {
+                try {
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table);
+                } catch (DdlException e) {
+                    // log an error if update colocation info failed, schema change already succeeded
+                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+                }
+            } else {
+                LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
+            }
+        }
 
         if (span != null) {
             span.end();
