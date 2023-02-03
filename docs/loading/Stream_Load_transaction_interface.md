@@ -54,18 +54,6 @@ The Stream Load transaction interface brings the following benefits:
 
   If you run a load job by using a program, the Stream Load transaction interface allows you to merge multiple mini-batches of data on demand and then send them all at once within one transaction by calling the `/api/transaction/commit` operation. As such, fewer data versions need to be loaded, and load performance is improved.
 
-## Supported data file formats
-
-The Stream Load transaction interface supports the following data file formats:
-
-- CSV
-
-- JSON
-
-> **NOTE**
->
-> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-
 ## Limits
 
 The Stream Load transaction interface has the following limits:
@@ -386,4 +374,6 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 ## References
 
-For more information about the syntax and parameters of `curl`, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md).
+
+For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
