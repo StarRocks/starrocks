@@ -31,12 +31,12 @@ public class ChildFirstClassLoader extends URLClassLoader {
         ClassLoader.registerAsParallelCapable();
     }
 
-    private ParentClassLoader parent;
+    private ParentClassLoader parentLoader;
     private ArrayList<String> parentFirstClass;
 
     public ChildFirstClassLoader(URL[] urls, ClassLoader parent) {
         super(urls, null);
-        this.parent = new ParentClassLoader(parent);
+        this.parentLoader = new ParentClassLoader(parent);
         // load native method class from parent
         this.parentFirstClass = new ArrayList<>(Collections.singleton("com.starrocks.utils.NativeMethodHelper"));
     }
@@ -44,19 +44,19 @@ public class ChildFirstClassLoader extends URLClassLoader {
     @Override
     public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         if (!parentFirstClass.isEmpty() && parentFirstClass.stream().anyMatch(c -> c.equals(name))) {
-            return parent.loadClass(name, resolve);
+            return parentLoader.loadClass(name, resolve);
         }
         try {
             return super.loadClass(name, resolve);
         } catch (ClassNotFoundException cnf) {
-            return parent.loadClass(name, resolve);
+            return parentLoader.loadClass(name, resolve);
         }
     }
 
     @Override
     public Enumeration<URL> getResources(String name) throws IOException {
         ArrayList<URL> urls = Collections.list(super.getResources(name));
-        urls.addAll(Collections.list(parent.getResources(name)));
+        urls.addAll(Collections.list(parentLoader.getResources(name)));
         return Collections.enumeration(urls);
     }
 
@@ -66,7 +66,7 @@ public class ChildFirstClassLoader extends URLClassLoader {
         if (url != null) {
             return url;
         } else {
-            return parent.getResource(name);
+            return parentLoader.getResource(name);
         }
     }
 }
