@@ -1035,8 +1035,8 @@ public class LowCardinalityTest extends PlanTestBase {
     @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String sql = null;
-        String plan = null;
+        String sql;
+        String plan;
 
         sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
         plan = getFragmentPlan(sql);
@@ -1516,4 +1516,55 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
                         "AND (<place-holder> < 'b'), TRUE, FALSE)])");
     }
+
+
+    @Test
+    public void testComplexScalarOperator_1() throws Exception {
+        String sql = "select case when s_address = 'test' then 'a' " +
+                "when s_phone = 'b' then 'b' " +
+                "when coalesce(s_address, 'c') = 'c' then 'c' " +
+                "else 'a' end from supplier; ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 9> : CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'test']) THEN 'a' " +
+                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
+                "WHEN coalesce(DictExpr(10: S_ADDRESS,[<place-holder>]), 'c') = 'c' THEN 'c' " +
+                "ELSE 'a' END\n" +
+                "  |");
+
+
+        sql = "select case when s_address = 'test' then 'a' " +
+                "when s_phone = 'b' then 'b' " +
+                "when upper(s_address) = 'c' then 'c' " +
+                "else 'a' end from supplier; ";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 9> : CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'test']) THEN 'a' " +
+                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
+                "WHEN DictExpr(10: S_ADDRESS,[upper(<place-holder>)]) = 'c' THEN 'c' " +
+                "ELSE 'a' END\n" +
+                "  |");
+    }
+
+    @Test
+    public void testComplexScalarOperator_2() throws Exception {
+        String sql = "select count(*) from supplier where s_phone = 'a' or coalesce(s_address, 'c') = 'c' " +
+                "or s_address = 'address'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (coalesce(DictExpr(12: S_ADDRESS,[<place-holder>]), 'c') = 'c')) " +
+                "OR (DictExpr(12: S_ADDRESS,[<place-holder> = 'address']))");
+
+        sql = "select count(*) from supplier where s_phone = 'a' or upper(s_address) = 'c' " +
+                "or s_address = 'address'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (DictExpr(12: S_ADDRESS,[upper(<place-holder>)]) = 'c')) " +
+                "OR (DictExpr(12: S_ADDRESS,[<place-holder> = 'address']))");
+    }
+
 }

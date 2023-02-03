@@ -164,7 +164,8 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, RewriterContext context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
+            if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
+                    !predicate.getChild(0).isColumnRef()) {
                 context.hasAppliedOperator = false;
                 context.hasUnsupportedOperator = true;
                 return visit(predicate, context);
