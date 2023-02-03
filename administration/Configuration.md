@@ -201,7 +201,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | thrift_backlog_num                   | 1024              | Thrift 服务器支持的 Backlog 队列长度。                       |
 | thrift_server_type                   | THREAD_POOL       | Thrift 服务器的服务模型。取值范围：`SIMPLE`、`THREADED`、`THREAD_POOL`。 |
 | thrift_server_max_worker_threads     | 4096              | Thrift 服务器支持的最大工作线程数。                          |
-| thrift_client_timeout_ms             | 0                 | Thrift 客户端建立连接的超时时间。单位：ms。默认值 `0` 表示永远不会超时。 |
+| thrift_client_timeout_ms             | 5000              | Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。单位：ms。|
+| thrift_server_queue_size             | 4096              | Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 pending 队列。|
 | brpc_idle_wait_max_time              | 10000             | BRPC 的空闲等待时间。单位：ms。                              |
 | query_port                           | 9030              | FE 节点上 MySQL 服务器的端口。                               |
 | mysql_service_nio_enabled            | TRUE              | 是否开启 MySQL 服务器的异步 I/O 选项。                       |
