@@ -539,7 +539,7 @@ BE static parameters are as follows.
 | meta_threshold_to_manual_compact | 10737418240 | N/A | |
 | metric_late_materialization_ratio | 1000 | N/A | |
 | min_base_compaction_size | 21474836480 | N/A | |
-| min_cmumulative_compaction_failure_interval_sec | 30 | N/A | |
+| min_cumulative_compaction_failure_interval_sec | 30 | N/A | |
 | min_cumulative_compaction_num_singleton_deltas | 5 | N/A | |
 | min_cumulative_compaction_size | 5368709120 | N/A | |
 | mmap_buffers | 0 | N/A | |
