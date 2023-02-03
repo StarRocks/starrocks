@@ -64,6 +64,8 @@ Stream Load 事务接口具有如下优势：
 
 - 支持在单个事务中多次调用数据写入接口 `/api/transaction/load` 来写入数据，但是要求所有 `/api/transaction/load` 操作中的参数设置必须保持一致。
 
+- 导入 CSV 格式的数据时，需要确保每行数据结尾都有行分隔符。
+
 ## 基本操作
 
 ### 开始事务
@@ -369,4 +371,9 @@ curl -H "label:<label_name>" -H "db:<database_name>"
       "Message": ""
   }
   ```
-  
+
+## 相关文档
+
+有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[通过 HTTP PUT 从本地文件系统或流式数据源导入数据](../loading/StreamLoad.md)。
+
+有关创建 Stream Load 作业的语法和参数，参见[STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
