@@ -49,7 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/*
+/**
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
  *
@@ -76,20 +76,34 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     @Override
     public boolean isValidPlan(OptExpression expression) {
-        // TODO: to support grouping set/rollup/cube
+        // TODO: to support grouping sets/rollup/cube
         return MvUtils.isLogicalSPJG(expression);
     }
 
-    // here there may be a projection on LogicalAggregationOperator.
-    // keep in mind that agg rewrite should be based on projection of mv.
-    // pick this mv: group by a, b, sum(c) with projection: a, abs(a), b, length(b), sum(c) for example
-    // consider the following cases:
-    // 1. the following query can be rewritten by mv without rolllup
-    //      query: group by a, b, sum(c) with projection: abs(a), length(b), sum(c)
-    // 2. the following query can be rewritten with rolllup
-    //      query: group by a, sum(c) with projection: a, abs(a), sum(c)
+    // NOTE:
+    // - there may be a projection on LogicalAggregationOperator.
+    // - agg rewrite should be based on projection of mv.
+    // - `rollup`: if mv's group-by keys is subset of query's group by keys,
+    //    need add extra aggregate to compensate.
+    // Example:
+    // mv:
+    //     select a, b,  abs(a) as col1, length(b) as col2, sum(c) as col3
+    //     from t
+    //     group by a, b
+    // 1. query needs no `rolllup`
+    //      query: select abs(a), length(b), sum(c) from t group by a, b
+    //      rewrite: select col1, col2, col3 from mv
+    // 2. query needs `rolllup`
+    //      query: select a, abs(a), sum(c) from t group by a
+    //      rewrite:
+    //      select a, col1, sum(col5)
+    //      (
+    //          select a, b, col1, col2, col3 from mv
+    //      ) t
+    //      group by a
     // 3. the following query can not be rewritten because a + 1 do not reside in mv
-    //      query: group by a, sum(c) with projection: a + 1, abs(a), sum(c)
+    //      query:
+    //      select a+1, abs(a), sum(c) from t group by a
     @Override
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
         LogicalAggregationOperator mvAgg = (LogicalAggregationOperator) rewriteContext.getMvExpression().getOp();

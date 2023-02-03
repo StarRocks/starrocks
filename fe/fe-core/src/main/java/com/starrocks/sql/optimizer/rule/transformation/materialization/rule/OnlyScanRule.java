@@ -19,10 +19,9 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-/*
- *
- * Here is the rule for pattern Scan
- *
+/**
+ * Materialized View Rewrite Rule for pattern:
+ *  - Scan
  */
 public class OnlyScanRule extends SingleTableRewriteBaseRule {
     private static OnlyScanRule INSTANCE = new OnlyScanRule();
