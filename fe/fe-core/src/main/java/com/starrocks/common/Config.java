@@ -1004,7 +1004,7 @@ public class Config extends ConfigBase {
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
-     * By default, this is enabled. If it is turned on, the partitions built by batch creation syntax will
+     * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
      */
     @ConfField(mutable = true)
