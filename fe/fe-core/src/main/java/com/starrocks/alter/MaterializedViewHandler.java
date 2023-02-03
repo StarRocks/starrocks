@@ -618,8 +618,8 @@ public class MaterializedViewHandler extends AlterHandler {
                 for (; theBeginIndexOfValue < rollupSchema.size(); theBeginIndexOfValue++) {
                     Column column = rollupSchema.get(theBeginIndexOfValue);
                     keySizeByte += column.getType().getIndexSize();
-                    if (theBeginIndexOfValue + 1 > FeConstants.shortkey_max_column_count
-                            || keySizeByte > FeConstants.shortkey_maxsize_bytes) {
+                    if (theBeginIndexOfValue + 1 > FeConstants.SHORTKEY_MAX_COLUMN_COUNT
+                            || keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
                         if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
                             column.setIsKey(true);
                             theBeginIndexOfValue++;

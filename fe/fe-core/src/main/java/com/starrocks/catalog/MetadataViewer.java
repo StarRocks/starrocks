@@ -155,8 +155,8 @@ public class MetadataViewer {
                             row.add("-1");
                             row.add("-1");
                             row.add("-1");
-                            row.add(FeConstants.null_string);
-                            row.add(FeConstants.null_string);
+                            row.add(FeConstants.NULL_STRING);
+                            row.add(FeConstants.NULL_STRING);
                             row.add(ReplicaStatus.MISSING.name());
                             result.add(row);
                         }
