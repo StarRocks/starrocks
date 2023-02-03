@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS sr_member (
     reg_date         DATE,
     verified         BOOLEAN
 )
+PARTITION BY RANGE(reg_date)
+(
+    PARTITION p1 VALUES [('2022-03-13'), ('2022-03-14')),
+    PARTITION p2 VALUES [('2022-03-14'), ('2022-03-15')),
+    PARTITION p3 VALUES [('2022-03-15'), ('2022-03-16')),
+    PARTITION p4 VALUES [('2022-03-16'), ('2022-03-17'))
+)
 DISTRIBUTED BY HASH(city_code)
 PROPERTIES(
     "replication_num" = "1"
