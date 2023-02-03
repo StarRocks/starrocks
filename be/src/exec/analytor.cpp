@@ -171,7 +171,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const AggregateFunction* func = nullptr;
             std::string real_fn_name = fn.name.function_name;
             if (fn.ignore_nulls) {
-                DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value");
+                DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value" ||
+                       fn.name.function_name == "lead" || fn.name.function_name == "lag");
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";

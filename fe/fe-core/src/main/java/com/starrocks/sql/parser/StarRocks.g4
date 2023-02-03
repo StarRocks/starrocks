@@ -1878,8 +1878,8 @@ windowFunction
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
     | name = NTILE  '(' expression? ')'
-    | name = LEAD  '(' (expression (',' expression)*)? ')'
-    | name = LAG '(' (expression (',' expression)*)? ')'
+    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')'
     | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
