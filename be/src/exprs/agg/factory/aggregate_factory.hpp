@@ -169,9 +169,9 @@ public:
         return std::make_shared<LastValueWindowFunction<PT, ignoreNulls>>();
     }
 
-    template <PrimitiveType PT>
+    template <PrimitiveType PT, bool ignoreNulls, bool isLag>
     static AggregateFunctionPtr MakeLeadLagWindowFunction() {
-        return std::make_shared<LeadLagWindowFunction<PT>>();
+        return std::make_shared<LeadLagWindowFunction<PT, ignoreNulls, isLag>>();
     }
 
     template <PrimitiveType PT>

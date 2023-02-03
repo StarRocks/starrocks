@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
-
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks::vectorized {
 
@@ -411,7 +411,7 @@ struct LeadLagState {
     bool defualt_is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <PrimitiveType PT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -424,6 +424,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
         if (default_column->is_nullable()) {
             this->data(state).defualt_is_null = true;
         } else {
+            this->data(state).is_null = false;
             this->data(state).default_value = default_column->get(0).get<T>();
         }
     }
@@ -442,15 +443,31 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
             return;
         }
 
-        if (columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = true;
-            return;
+        if (!columns[0]->is_null(frame_end - 1)) {
+            this->data(state).is_null = false;
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+            this->data(state).value = column->get_data()[frame_end - 1];
+        } else {
+            if (!ignoreNulls) {
+                this->data(state).is_null = true;
+                return;
+            }
+            // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
+            // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
+            size_t value_index = isLag ? ColumnHelper::last_nonnull(columns[0], peer_group_start, frame_end - 1)
+                                       : ColumnHelper::find_nonnull(columns[0], frame_end, peer_group_end);
+            DCHECK_LE(value_index, peer_group_end);
+            DCHECK_GE(value_index, peer_group_start);
+            if (value_index == peer_group_end || columns[0]->is_null(value_index)) {
+                this->data(state).is_null = true;
+            } else {
+                const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+                const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+                this->data(state).is_null = false;
+                this->data(state).value = column->get_data()[value_index];
+            }
         }
-
-        this->data(state).is_null = false;
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
-        this->data(state).value = column->get_data()[frame_end - 1];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -552,8 +569,9 @@ struct LeadLagState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {value.data(), value.size()}; }
 };
 
-template <PrimitiveType PT>
-class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
+template <PrimitiveType PT, bool ignoreNulls, bool isLag>
+class LeadLagWindowFunction<PT, ignoreNulls, isLag, Slice, StringPTGuard<PT>> final
+        : public WindowFunction<LeadLagState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value.clear();
         this->data(state).is_null = false;
@@ -579,21 +597,43 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
             if (this->data(state).defualt_is_null) {
                 this->data(state).is_null = true;
             } else {
+                this->data(state).is_null = false;
                 this->data(state).value = this->data(state).default_value;
             }
             return;
         }
 
-        if (columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = true;
-            return;
+        if (!columns[0]->is_null(frame_end - 1)) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const auto* column = down_cast<const BinaryColumn*>(data_column);
+            Slice slice = column->get_slice(frame_end - 1);
+            const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+            this->data(state).is_null = false;
+            this->data(state).value.resize(slice.size);
+            strings::memcpy_inlined(this->data(state).value.data(), slice.data, slice.size);
+        } else {
+            if (!ignoreNulls) {
+                this->data(state).is_null = true;
+                return;
+            }
+            // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
+            // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
+            size_t value_index = isLag ? ColumnHelper::last_nonnull(columns[0], peer_group_start, frame_end - 1)
+                                       : ColumnHelper::find_nonnull(columns[0], frame_end, peer_group_end);
+            DCHECK_LE(value_index, peer_group_end);
+            DCHECK_GE(value_index, peer_group_start);
+            if (value_index == peer_group_end || columns[0]->is_null(value_index)) {
+                this->data(state).is_null = true;
+            } else {
+                const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+                const auto* column = down_cast<const BinaryColumn*>(data_column);
+                Slice slice = column->get_slice(value_index);
+                const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+                this->data(state).is_null = false;
+                this->data(state).value.resize(slice.size);
+                strings::memcpy_inlined(this->data(state).value.data(), slice.data, slice.size);
+            }
         }
-
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
-        Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).value.insert(this->data(state).value.end(), p, p + slice.size);
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
