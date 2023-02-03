@@ -155,7 +155,7 @@ public class Alter {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
             if (table.getType() != TableType.OLAP) {
-                throw new DdlException("Do not support alter non-OLAP table[" + tableName + "]");
+                throw new DdlException("Do not support create materialized view on non-OLAP table[" + tableName + "]");
             }
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
