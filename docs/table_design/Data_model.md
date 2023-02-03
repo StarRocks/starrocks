@@ -385,4 +385,4 @@ PROPERTIES("replication_num" = "3",
 
 ### What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Data import](../loading/Loading_intro.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Overview of data loading](../loading/Loading_intro.md).
