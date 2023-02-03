@@ -1334,7 +1334,7 @@ Status SegmentIterator::_rewrite_predicates() {
     //
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
                                      _predicate_columns, _scan_range);
-    rewriter.rewrite_predicate(&_obj_pool);
+    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool));
 
     // for each delete predicate,
     // If the global dictionary optimization is enabled for the column,
@@ -1349,7 +1349,7 @@ Status SegmentIterator::_rewrite_predicates() {
 
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
         ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
-        crewriter.rewrite_predicate(&_obj_pool);
+        RETURN_IF_ERROR(crewriter.rewrite_predicate(&_obj_pool));
     }
 
     return Status::OK();
