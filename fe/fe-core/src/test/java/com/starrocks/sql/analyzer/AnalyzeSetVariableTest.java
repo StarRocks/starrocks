@@ -228,4 +228,16 @@ public class AnalyzeSetVariableTest {
         sql = "SET resource_group_id = 0";
         analyzeSuccess(sql);
     }
+
+    @Test
+    public void testSetTran() {
+        String sql = "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+    }
 }

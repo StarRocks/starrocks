@@ -16,4 +16,7 @@
 package com.starrocks.sql.ast;
 
 public class SetTransaction extends SetVar {
+    public void analyze() {
+
+    }
 }
