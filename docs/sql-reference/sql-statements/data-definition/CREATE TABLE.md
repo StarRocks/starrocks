@@ -323,7 +323,7 @@ PROPERTIES (
 
 **replication_num**: number of replicas in the specified partition. Default number: 3.
 
-When the table has only one partition, the properties belong to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions by using the ADD PARTITION and MODIFY PARTITION statements.
+If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. You can also specify different properties for different partitions by using ALTER TABLE ADD PARTITION or ALTER TABLE MODIFY PARTITION.
 
 #### Add bloomfilter index for a column
 
