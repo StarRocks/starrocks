@@ -30,6 +30,7 @@ import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.DdlException;
@@ -37,6 +38,8 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -214,7 +217,7 @@ public class StarOSAgentTest {
 
 
     @Test
-    public void testGetBackendByShard() throws StarClientException, UserException {
+    public void testGetBackendByShard(@Mocked LocalSystemInfoService s) throws StarClientException, UserException {
         ReplicaInfo replica1 = ReplicaInfo.newBuilder()
                 .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
@@ -235,11 +238,11 @@ public class StarOSAgentTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public SystemInfoService getCurrentSystemInfo() {
-                return service;
+                return s;
             }
         };
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public long getBackendIdWithStarletPort(String host, int starletPort) {
                 return -1L;

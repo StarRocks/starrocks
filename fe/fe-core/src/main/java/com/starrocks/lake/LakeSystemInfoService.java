@@ -14,10 +14,11 @@
 
 package com.starrocks.lake;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.DiskInfo;
@@ -38,7 +39,6 @@ import com.starrocks.thrift.TStorageMedium;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -49,12 +49,11 @@ import java.util.stream.Collectors;
  * Backend is generated from StarOS worker.
  */
 public class LakeSystemInfoService extends SystemInfoService {
-    private final Map<Long, Long> clusterIdToLastBackendId;
-    private StarOSAgent agent;
+    private final Map<Long, Long> clusterIdToLastBackendId = Maps.newHashMap();
+    private final StarOSAgent agent;
 
-    public LakeSystemInfoService(StarOSAgent starOSAgent) {
-        this.agent = starOSAgent;
-        this.clusterIdToLastBackendId = Maps.newHashMap();
+    public LakeSystemInfoService(StarOSAgent agent) {
+        this.agent = agent;
     }
 
     @Override
@@ -65,7 +64,7 @@ public class LakeSystemInfoService extends SystemInfoService {
     @Override
     public boolean isSingleBackendAndComputeNode(long clusterId) {
         try {
-            return agent.getWorkersByWorkerGroup(Arrays.asList(clusterId)).size() == 1;
+            return agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId)).size() == 1;
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -131,17 +130,8 @@ public class LakeSystemInfoService extends SystemInfoService {
     }
 
     @Override
-    public Boolean checkWorkerHealthy(long workerId) {
-        try {
-            return agent.checkWorkerHealthy(workerId);
-        } catch (UserException e) {
-            throw new SemanticException(e.getMessage());
-        }
-    }
-
-    @Override
     public ComputeNode getComputeNode(long computeNodeId) {
-        throw new SemanticException("not implemented");
+        return null;
     }
 
     @Override
@@ -166,7 +156,7 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
-        throw new SemanticException("not implemented");
+        return null;
     }
 
     @Override
@@ -225,7 +215,7 @@ public class LakeSystemInfoService extends SystemInfoService {
     @Override
     public int getTotalBackendNumber(long clusterId) {
         try {
-            return agent.getWorkersByWorkerGroup(Arrays.asList(clusterId)).size();
+            return agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId)).size();
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -233,12 +223,12 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        throw new SemanticException("not implemented");
+        return null;
     }
 
     @Override
     public List<Long> getComputeNodeIds(boolean needAlive) {
-        throw new SemanticException("not implemented");
+        return Lists.newArrayList();
     }
 
     @Override
@@ -255,7 +245,7 @@ public class LakeSystemInfoService extends SystemInfoService {
     @Override
     public List<Long> getBackendIds(boolean needAlive, long clusterId) {
         try {
-            List<Backend> backends = agent.getWorkersByWorkerGroup(Arrays.asList(clusterId));
+            List<Backend> backends = agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId));
             return backends.stream().filter(b -> needAlive ? b.isAlive() : true).map(b -> b.getId())
                     .collect(Collectors.toList());
         } catch (UserException e) {
@@ -265,7 +255,7 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public List<Long> getDecommissionedBackendIds() {
-        throw new SemanticException("not implemented");
+        return Lists.newArrayList();
     }
 
     @Override
@@ -285,7 +275,7 @@ public class LakeSystemInfoService extends SystemInfoService {
     @Override
     public List<Backend> getBackends(long clusterId) {
         try {
-            return agent.getWorkersByWorkerGroup(Arrays.asList(clusterId));
+            return agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId));
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -312,13 +302,13 @@ public class LakeSystemInfoService extends SystemInfoService {
 
         List<Backend> backends = null;
         try {
-            backends = agent.getWorkersByWorkerGroup(Arrays.asList(clusterId));
+            backends = agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId));
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
 
         // get last backend index
-        long lastBackendId = clusterIdToLastBackendId.get(clusterId);
+        long lastBackendId = clusterIdToLastBackendId.getOrDefault(clusterId, -1L);
         int lastBackendIndex = -1;
         int index = -1;
         for (Backend backend : backends) {
@@ -375,7 +365,7 @@ public class LakeSystemInfoService extends SystemInfoService {
     @Override
     public ImmutableMap<Long, Backend> getIdToBackend(long clusterId) {
         try {
-            List<Backend> backends = agent.getWorkersByWorkerGroup(Arrays.asList(clusterId));
+            List<Backend> backends = agent.getWorkersByWorkerGroup(Lists.newArrayList(clusterId));
             Map<Long, Backend> idToBackend = backends.stream().collect(Collectors.toMap(Backend::getId, b -> b));
             return ImmutableMap.copyOf(idToBackend);
         } catch (UserException e) {
@@ -385,22 +375,22 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-        return ImmutableMap.<Long, ComputeNode>of();
+        return ImmutableMap.of();
     }
 
     @Override
     public ImmutableCollection<ComputeNode> getComputeNodes() {
-        throw new SemanticException("not implemented");
+        return ImmutableList.of();
     }
 
     @Override
     public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
-        throw new SemanticException("not implemented");
+        return ImmutableList.of();
     }
 
     @Override
     public long getBackendReportVersion(long backendId) {
-        throw new SemanticException("not implemented");
+        return -1;
     }
 
     @Override
@@ -429,7 +419,6 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public void clear() {
-        throw new SemanticException("not implemented");
     }
 
     @Override
@@ -454,17 +443,15 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public void updateBackendState(Backend be) {
-
     }
 
     @Override
     public void checkClusterCapacity() throws DdlException {
-        throw new SemanticException("not implemented");
     }
 
     @Override
     public long getBackendIdByHost(String host) {
-        return -1L;
+        return -1;
     }
 
     @Override

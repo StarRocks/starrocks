@@ -17,7 +17,7 @@ package com.starrocks.load;
 import com.starrocks.common.UserException;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.LocalSystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -42,7 +42,7 @@ public class ExportCheckerTest {
 
         Backend be = new Backend();
         
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public Backend getBackend(long backendId) {
                 return be;
@@ -77,7 +77,7 @@ public class ExportCheckerTest {
         cancelled = (boolean) method.invoke(checker, job);
         Assert.assertTrue(!cancelled);
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public Backend getBackend(long backendId) {
                 return null;

@@ -41,7 +41,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropDbStmt;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -260,7 +260,7 @@ public class ColocateTableTest {
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same replication num: 1");
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public List<Long> getAvailableBackendIds() {
                 return Arrays.asList(10001L, 10002L, 10003L);       

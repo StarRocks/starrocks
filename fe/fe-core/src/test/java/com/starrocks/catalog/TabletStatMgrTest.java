@@ -28,6 +28,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
@@ -116,7 +117,7 @@ public class TabletStatMgrTest {
     }
 
     @Test
-    public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
+    public void testUpdateLakeTabletStat(@Mocked LocalSystemInfoService systemInfoService,
                                          @Mocked LakeService lakeService) {
         long dbId = 1L;
         long tableId = 2L;

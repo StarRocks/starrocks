@@ -24,7 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
@@ -146,7 +146,7 @@ public class ReportHandlerTest {
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public Backend getBackend(long id) {
                 if (id == backendId) {

@@ -27,7 +27,7 @@ import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TResourceUsage;
@@ -75,7 +75,7 @@ public class FrontendServiceImplTest {
         long memLimitBytes = 3;
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
-        new MockUp<SystemInfoService>() {
+        new MockUp<LocalSystemInfoService>() {
             @Mock
             public Backend getBackend(long id) {
                 if (id == backendId) {
