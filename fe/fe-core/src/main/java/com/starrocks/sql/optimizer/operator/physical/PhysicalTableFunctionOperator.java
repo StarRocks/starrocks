@@ -72,9 +72,11 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalTableFunctionOperator that = (PhysicalTableFunctionOperator) o;
         return Objects.equal(fn, that.fn) && Objects.equal(fnResultColumnRefSet, that.fnResultColumnRefSet) &&
                 Objects.equal(outerColumnRefSet, that.outerColumnRefSet) &&
@@ -83,6 +85,10 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hashCode(fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnRefSet);
+=======
+        return Objects.hashCode(super.hashCode(), fn, fnResultColumnRefSet);
+>>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
     }
 }

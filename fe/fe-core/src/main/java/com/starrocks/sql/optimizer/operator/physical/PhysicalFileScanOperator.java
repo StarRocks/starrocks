@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -16,16 +16,16 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public class PhysicalHudiScanOperator extends PhysicalScanOperator {
+public class PhysicalFileScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalHudiScanOperator(Table table,
+    public PhysicalFileScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> columnRefMap,
                                     ScanOperatorPredicates predicates,
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
-        super(OperatorType.PHYSICAL_HUDI_SCAN, table, columnRefMap, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_FILE_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
     }
 
@@ -41,44 +41,13 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalHudiScan(this, context);
+        return visitor.visitPhysicalFileScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalHudiScan(optExpression, context);
+        return visitor.visitPhysicalFileScan(optExpression, context);
     }
-
-<<<<<<< HEAD
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalHudiScanOperator that = (PhysicalHudiScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHudiScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) &&
-                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
-                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
-                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
-                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
-                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
-                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
-    }
-=======
->>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
 
     @Override
     public ColumnRefSet getUsedColumns() {

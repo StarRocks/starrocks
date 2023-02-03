@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -61,6 +60,7 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -85,6 +85,8 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     }
 
     @Override
+=======
+>>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
         conjuncts.forEach(d -> refs.union(d.getUsedColumns()));

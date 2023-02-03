@@ -2555,4 +2555,141 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testJoinKeyHasExpr() throws Exception {
+        String sql = "select subq_1.c0 from " +
+                "(select subq_0.c0 as c0, subq_0.c0 as c4, subq_0.c1 as c5, " +
+                "max(cast(subq_0.c0 as INT)) over (partition by ref_1.n_nationkey, subq_0.c0) as c8, ref_1.n_name as c13 " +
+                "from ( select ref_0.C_CUSTKEY as c0, ref_0.C_CUSTKEY as c1 from customer as ref_0 ) as subq_0 " +
+                "inner join nation as ref_1 on (subq_0.c0 = ref_1.n_name) ) as subq_1 where subq_1.c13 = subq_1.c5;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
+                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+    }
+
+    @Test
+    public void testComplexProjectionJoin() throws Exception {
+        connectContext.getSessionVariable().disableDPJoinReorder();
+        connectContext.getSessionVariable().disableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(3);
+
+        String sql = "select * from t4 join (   \n" +
+                "    select abs(xx1) as xxx1 from t3 join (       \n" +
+                "        select abs(x1) as xx1 from t2 join (          \n" +
+                "            select abs(t0.v1) as x1 from t0 join t1 \n" +
+                "            on v1 = t1.v4) y1        \n" +
+                "        on t2.v7 = x1) y2    \n" +
+                "    on t3.v10 = xx1) y3  \n" +
+                "on t4.v13 = xxx1";
+
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().enableDPJoinReorder();
+        connectContext.getSessionVariable().enableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+
+        assertContains(plan, "  13:Project\n" +
+                "  |  <slot 17> : abs(16: abs)\n" +
+                "  |  \n" +
+                "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)");
+    }
+
+    @Test
+    public void testSmallestColInJoin() throws Exception {
+        String sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2 where t.v1 = t1.v4 and t2.v7 = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode");
+        sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "|----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 21> : 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testShuffleAgg() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t6` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL COMMENT \"\",\n" +
+                "  `v4` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        String sql = "select j0.* \n" +
+                "    from t6 j0 join[shuffle] t6 j1 on j0.v2 = j1.v2 and j0.v3 = j1.v3\n" +
+                "               join[shuffle] t6 j2 on j0.v2 = j2.v2 and j0.v3 = j2.v3 and j0.v4 = j2.v4\n" +
+                "               join[shuffle] (select v4,v2,v3 from t6 group by v4,v2,v3) j4 " +
+                "                             on j0.v2 =j4.v2 and j0.v3=j4.v3 and j0.v4 = j4.v4;\n" +
+                "\n";
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        assertContains(plan, "  15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 14: v2\n" +
+                "  |  equal join conjunct: 3: v3 = 15: v3\n" +
+                "  |  equal join conjunct: 4: v4 = 16: v4\n" +
+                "  |  \n" +
+                "  |----14:EXCHANGE\n" +
+                "  |    \n" +
+                "  9:Project");
+        assertContains(plan, "  PARTITION: HASH_PARTITIONED: 14: v2, 15: v3, 16: v4\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 14\n" +
+                "    HASH_PARTITIONED: 14: v2, 15: v3\n" +
+                "\n" +
+                "  13:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 16: v4, 14: v2, 15: v3");
+    }
+                
+    @Test // shouldn't have exception
+    public void testRemoveAggregationFromAggTableRuluWithJoinAssociateRule() throws Exception {
+        String sql = "select t0.v1 from t0 inner join (select a.k1, a.k2 from " +
+                "(select k1, k2, k3 from test_agg group by k1, k2, k3) as a " +
+                "where EXISTS (select a.k2 from " +
+                "(select k1, k2, k3 from test_agg group by k1, k2, k3) as a )) " +
+                "subv0 on t0.v1 = subv0.k1;";
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testTopNGroupMerge() throws Exception {
+        String sql = "with tmp1 as (select * from t0 order by v1 asc), tmp2 as (select v4 from t1 group by v4)" +
+                "select count(*) from t0, tmp2, tmp1, t1 " +
+                "where 1 in (select v4 from t1);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "21:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 19: v4 = CAST(1 AS BIGINT)");
+    }
+>>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
 }
