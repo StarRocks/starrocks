@@ -84,6 +84,8 @@ struct MVMaintenanceTaskInfo {
 struct EpochInfo {
     // transaction id
     int64_t txn_id;
+    // load_id
+    TUniqueId load_id;
     // epoch marker id
     int64_t epoch_id;
     // max binlog duration which this epoch will run
@@ -95,12 +97,7 @@ struct EpochInfo {
 
     static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
-    std::string debug_string() const {
-        std::stringstream ss;
-        ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
-           << ", trigger_mode=" << (int)(trigger_mode);
-        return ss.str();
-    }
+    std::string debug_string() const;
 };
 
 /**
@@ -111,72 +108,21 @@ struct EpochInfo {
  */
 class StreamChunkConverter {
 public:
-    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops) {
-        static std::vector<ChunkExtraColumnsMeta> stream_extra_data_meta = {
-                ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_TINYINT), .is_null = false, .is_const = false}};
-        std::vector<ColumnPtr> stream_extra_data = {ops};
-        auto extra_data = std::make_shared<ChunkExtraColumnsData>(std::move(stream_extra_data_meta),
-                                                                  std::move(stream_extra_data));
-        chunk->set_extra_data(std::move(extra_data));
-        return chunk;
-    }
+    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops);
 
-    static bool has_ops_column(const StreamChunk& chunk) {
-        if (chunk.has_extra_data() && typeid(*chunk.get_extra_data()) == typeid(ChunkExtraColumnsData)) {
-            return true;
-        }
-        return false;
-    }
+    static bool has_ops_column(const StreamChunk& chunk);
+    static bool has_ops_column(const StreamChunkPtr& chunk_ptr);
+    static bool has_ops_column(const StreamChunk* chunk_ptr);
 
-    static bool has_ops_column(const StreamChunkPtr& chunk_ptr) {
-        if (!chunk_ptr) {
-            return false;
-        }
-        return has_ops_column(*chunk_ptr);
-    }
+    static Int8Column* ops_col(const StreamChunk& stream_chunk);
+    static Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr);
+    static Int8Column* ops_col(const StreamChunk* stream_chunk_ptr);
 
-    static bool has_ops_column(StreamChunk* chunk_ptr) {
-        if (!chunk_ptr) {
-            return false;
-        }
-        return has_ops_column(*chunk_ptr);
-    }
+    static const StreamRowOp* ops(const StreamChunk& stream_chunk);
+    static const StreamRowOp* ops(const StreamChunk* stream_chunk);
+    static const StreamRowOp* ops(const StreamChunkPtr& stream_chunk);
 
-    static Int8Column* ops_col(const StreamChunk& stream_chunk) {
-        DCHECK(has_ops_column(stream_chunk));
-        auto extra_column_data = down_cast<ChunkExtraColumnsData*>(stream_chunk.get_extra_data().get());
-        DCHECK(extra_column_data);
-        DCHECK_EQ(extra_column_data->columns().size(), 1);
-        auto* op_col = ColumnHelper::as_raw_column<Int8Column>(extra_column_data->columns()[0]);
-        DCHECK(op_col);
-        DCHECK_EQ(stream_chunk.num_rows(), op_col->size());
-        return op_col;
-    }
-
-    static Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr) {
-        DCHECK(stream_chunk_ptr);
-        return ops_col(*stream_chunk_ptr);
-    }
-
-    static Int8Column* ops_col(StreamChunk* stream_chunk_ptr) {
-        DCHECK(stream_chunk_ptr);
-        return ops_col(*stream_chunk_ptr);
-    }
-
-    static const StreamRowOp* ops(const StreamChunk& stream_chunk) {
-        auto* op_col = ops_col(stream_chunk);
-        return (StreamRowOp*)(op_col->get_data().data());
-    }
-
-    static const StreamRowOp* ops(StreamChunk* stream_chunk) {
-        auto* op_col = ops_col(stream_chunk);
-        return (StreamRowOp*)(op_col->get_data().data());
-    }
-
-    static const StreamRowOp* ops(const StreamChunkPtr& stream_chunk) {
-        auto* op_col = ops_col(stream_chunk);
-        return (StreamRowOp*)(op_col->get_data().data());
-    }
+    static ChunkPtr to_chunk(const StreamChunkPtr& stream_chunk);
 };
 
 } // namespace starrocks
