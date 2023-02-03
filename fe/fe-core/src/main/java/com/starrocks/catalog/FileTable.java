@@ -46,6 +46,7 @@ import java.util.Optional;
 public class FileTable extends Table {
     private static final String JSON_KEY_FILE_PATH = "path";
     private static final String JSON_KEY_FORMAT = "format";
+    private static final String JSON_RECURSIVE_DIRECTORIES = "recursive_directory";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
     private Map<String, String> fileProperties = Maps.newHashMap();
     public FileTable() {
@@ -99,7 +100,8 @@ public class FileTable extends Table {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
+        boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
         try {
             Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
             if (result.isEmpty()) {
