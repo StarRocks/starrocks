@@ -1209,7 +1209,7 @@ void build_persistent_index_from_tablet(size_t N) {
     RowsetSharedPtr rowset = create_rowset(tablet, keys);
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     auto version = 2;
-    auto st = tablet->rowset_commit(version, rowset);
+    auto st = tablet->rowset_commit(version, rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     // Ensure that there is at most one thread doing the version apply job.
     ASSERT_LE(pool->num_threads(), 1);

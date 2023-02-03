@@ -272,7 +272,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
     pvinfo.version = 3;
     publish_version_req.partition_version_infos.push_back(pvinfo);
     // run publish version
-    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs);
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
     // check finish_task_request
     ASSERT_EQ(1, finish_task_request.tablet_versions.size());
     ASSERT_EQ(3, finish_task_request.tablet_versions[0].version);
@@ -338,7 +338,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         pvinfo.version = 3;
         publish_version_req.partition_version_infos.push_back(pvinfo);
         // run publish version
-        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
         // check finish_task_request
         ASSERT_EQ(1, finish_task_request.tablet_versions.size());
         ASSERT_EQ(3, finish_task_request.tablet_versions[0].version);
@@ -360,7 +360,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         pvinfo.version = 3;
         publish_version_req.partition_version_infos.push_back(pvinfo);
         // run publish version
-        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
         // check finish_task_request
         ASSERT_EQ(1, finish_task_request.tablet_versions.size());
         ASSERT_EQ(3, finish_task_request.tablet_versions[0].version);
