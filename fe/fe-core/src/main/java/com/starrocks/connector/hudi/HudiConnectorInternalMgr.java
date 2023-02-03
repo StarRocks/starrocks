@@ -59,7 +59,11 @@ public class HudiConnectorInternalMgr {
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
 
-        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
+        boolean recursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
+        if (properties.containsKey("enable_recursive_listing")) {
+            recursive = Boolean.parseBoolean(properties.get("enable_recursive_listing"));
+        }
+        this.isRecursive = recursive;
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
     }
