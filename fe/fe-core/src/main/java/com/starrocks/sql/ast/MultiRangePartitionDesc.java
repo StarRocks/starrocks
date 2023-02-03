@@ -175,7 +175,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             }
         }
 
-        DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;;
+        DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
         if (firstPartitionColumnType == Type.DATETIME) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
