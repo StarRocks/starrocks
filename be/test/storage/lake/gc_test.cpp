@@ -355,7 +355,7 @@ TEST_F(GCTest, test_delvec_gc) {
         metadata->set_version(1);
         metadata->set_next_rowset_id(1);
         for (int i = 1; i < 5; i++) {
-            metadata->mutable_delvec_meta()->add_delvecs()->mutable_page()->set_version(i);
+            (*metadata->mutable_delvec_meta()->mutable_delvecs())[i].set_version(i);
         }
         ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
     }

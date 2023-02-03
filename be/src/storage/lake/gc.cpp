@@ -249,7 +249,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     auto check_delvecs = [&](int64_t tablet_id, const DelvecMetadataPB& delvec_meta) {
         for (const auto& delvec : delvec_meta.delvecs()) {
-            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.page().version());
+            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.second.version());
             datafiles.erase(delvec_name);
         }
     };
@@ -260,8 +260,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     };
 
-    // record missed tsid range
-    std::vector<TabletSegmentIdRange> missed_tsid_ranges;
     for (const auto& filename : tablet_metadatas) {
         auto location = join_path(metadata_root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
@@ -277,10 +275,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
             check_rowset(rowset);
         }
         check_delvecs(metadata->id(), metadata->delvec_meta());
-        if (is_primary_key(metadata.get())) {
-            // find missed tsid range, only used in pk table
-            find_missed_tsid_range(metadata.get(), missed_tsid_ranges);
-        }
     }
 
     for (const auto& filename : txn_logs) {
