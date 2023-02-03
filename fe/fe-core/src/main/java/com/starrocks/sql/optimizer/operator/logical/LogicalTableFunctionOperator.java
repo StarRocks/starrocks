@@ -93,12 +93,11 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalTableFunctionOperator that = (LogicalTableFunctionOperator) o;
         return Objects.equals(fn, that.fn) && Objects.equals(fnResultColumnRefSet, that.fnResultColumnRefSet)
                 && Objects.equals(outerColumnRefSet, that.outerColumnRefSet)
@@ -107,7 +106,11 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnProjectMap);
+=======
+        return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet);
+>>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
     }
 
     public static class Builder

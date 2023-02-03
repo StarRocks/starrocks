@@ -135,12 +135,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalTopNOperator that = (LogicalTopNOperator) o;
         return offset == that.offset && Objects.equals(orderByElements, that.orderByElements) &&
                 sortPhase == that.sortPhase;
@@ -148,7 +147,16 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
+=======
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit);
+    }
+
+
+    public static Builder builder() {
+        return new Builder();
+>>>>>>> 65e615960 ([BugFix] unify Operator equal method (backport #17199) (#17308))
     }
 
     public static class Builder
@@ -174,6 +182,8 @@ public class LogicalTopNOperator extends LogicalOperator {
             this.sortPhase = topNOperator.sortPhase;
             this.topNType = topNOperator.topNType;
             this.isSplit = topNOperator.isSplit;
+            this.partitionLimit = topNOperator.partitionLimit;
+            this.partitionByColumns = topNOperator.partitionByColumns;
             return this;
         }
 
