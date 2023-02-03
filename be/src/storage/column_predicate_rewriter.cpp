@@ -302,7 +302,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
     const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
-    pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size);
+    RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
