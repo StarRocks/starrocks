@@ -999,6 +999,11 @@ public class EditLog {
                     MVManager.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_CONNECTOR_TABLE_INFO: {
+                    ConnectorTableInfoLog info = (ConnectorTableInfoLog) journal.getData();
+                    globalStateMgr.getConnectorTblPersistInfoMgr().replayConnectorTableInfo(info);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1749,6 +1754,10 @@ public class EditLog {
 
     public void logMVEpochChange(MVEpoch epoch) {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
+    }
+
+    public void logConnectorTablePersistInfo(ConnectorTableInfoLog addConnectorTableInfoLog) {
+        logEdit(OperationType.OP_CONNECTOR_TABLE_INFO, addConnectorTableInfoLog);
     }
 
 }

@@ -79,6 +79,7 @@ import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ConnectorTableInfoLog;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
@@ -818,6 +819,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_MV_EPOCH_UPDATE:
                 data = MVEpoch.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_CONNECTOR_TABLE_INFO:
+                data = ConnectorTableInfoLog.read(in);
                 isRead = true;
                 break;
             default: {

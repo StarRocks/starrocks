@@ -313,4 +313,7 @@ public class OperationType {
     public static final short OP_ALTER_WH_MOD_PROP = 11114;
     public static final short OP_SUSPEND_WH = 11115;
     public static final short OP_RESUME_WH = 11116;
+
+    // connector table persistent info
+    public static final short OP_CONNECTOR_TABLE_INFO = 11150;
 }

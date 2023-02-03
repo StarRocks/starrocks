@@ -41,6 +41,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -132,6 +133,8 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
+import com.starrocks.connector.persist.ConnectorTableInfo;
+import com.starrocks.connector.persist.ConnectorTblPersistInfoMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
@@ -461,6 +464,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
+    private ConnectorTblPersistInfoMgr connectorTblPersistInfoMgr;
+
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
@@ -651,6 +656,8 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.connectorTblPersistInfoMgr = new ConnectorTblPersistInfoMgr();
+
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
@@ -843,6 +850,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+    }
+
+    public ConnectorTblPersistInfoMgr getConnectorTblPersistInfoMgr() {
+        return connectorTblPersistInfoMgr;
     }
 
     @VisibleForTesting
@@ -1229,7 +1240,7 @@ public class GlobalStateMgr {
         esRepository.start();
         starRocksRepository.start();
         // materialized view active checker
-        mvActiveChecker.start();
+        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1359,6 +1370,8 @@ public class GlobalStateMgr {
             loadRBACPrivilege(dis);
             checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadConnectorTblPersistInfoMgr(dis, checksum);
+            remoteChecksum = dis.readLong();
             // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1413,6 +1426,12 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
+                    if (!table.isLocalTable()) {
+                        connectorTblPersistInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                        Sets.newHashSet(mvId)).build());
+                    }
                 }
             }
         }
@@ -1596,6 +1615,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadConnectorTblPersistInfoMgr(DataInputStream in, long checksum) throws IOException {
+        connectorTblPersistInfoMgr = ConnectorTblPersistInfoMgr.loadConnectorTblPersistInfoMgr(in);
+        checksum ^= connectorTblPersistInfoMgr.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1675,6 +1700,8 @@ public class GlobalStateMgr {
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             saveRBACPrivilege(dos);
             checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = connectorTblPersistInfoMgr.saveConnectorTblPersistInfoMgr(dos, checksum);
             dos.writeLong(checksum);
             // ** NOTICE **: always add new code at the end
         }
