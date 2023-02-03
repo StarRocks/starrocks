@@ -14,6 +14,7 @@
 
 #include "storage/lake/update_manager.h"
 
+#include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
@@ -23,10 +24,23 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
+#include "util/pretty_printer.h"
 
 namespace starrocks {
 
 namespace lake {
+
+UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
+        : _index_cache(std::numeric_limits<size_t>::max()),
+          _update_state_cache(std::numeric_limits<size_t>::max()),
+          _location_provider(location_provider) {
+    _update_mem_tracker = mem_tracker;
+    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
+    _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
+
+    _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
+    _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+}
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
@@ -104,7 +118,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
-            RETURN_IF_ERROR(get_latest_del_vec(tsid, base_version, builder, &old_del_vec));
+            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, &old_del_vec));
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata.version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
@@ -139,6 +153,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             "base_ver:$6 new_ver:$7 cost:$8",
             tablet->id(), rowset_id, upserts.size(), state.deletes().size(), new_del, total_del, base_version,
             metadata.version(), cost_str.str());
+    _print_memory_stats();
 
     return Status::OK();
 }
@@ -244,22 +259,6 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     return Status::OK();
 }
 
-Status UpdateManager::get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version,
-                                         const MetaFileBuilder* builder, DelVectorPtr* pdelvec) {
-    // 1. find in meta builder first
-    auto found = builder->find_delvec(tsid, pdelvec);
-    if (!found.ok()) {
-        return found.status();
-    }
-    if (*found) {
-        return Status::OK();
-    }
-    // 2. find in file
-    (*pdelvec).reset(new DelVector());
-    int64_t latest_version = 0;
-    return get_del_vec_in_meta(tsid, base_version, pdelvec->get(), &latest_version);
-}
-
 Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
                                   DelVectorPtr* pdelvec) {
     if (builder != nullptr) {
@@ -273,19 +272,16 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
         }
     }
     (*pdelvec).reset(new DelVector());
-    int64_t latest_version = 0;
     // 2. find in delvec file
-    RETURN_IF_ERROR(get_del_vec_in_meta(tsid, version, pdelvec->get(), &latest_version));
-    return Status::OK();
+    return get_del_vec_in_meta(tsid, version, pdelvec->get());
 }
 
 // get delvec in meta file
-Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec,
-                                          int64_t* latest_version) {
+Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec) {
     std::string filepath = _location_provider->tablet_metadata_location(tsid.tablet_id, meta_ver);
     MetaFileReader reader(filepath, false);
     RETURN_IF_ERROR(reader.load());
-    RETURN_IF_ERROR(reader.get_del_vec(_location_provider, tsid.segment_id, delvec, latest_version));
+    RETURN_IF_ERROR(reader.get_del_vec(_tablet_mgr, tsid.segment_id, delvec));
     return Status::OK();
 }
 
@@ -385,6 +381,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
             tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
             metadata.version(), cost_str.str());
+    _print_memory_stats();
 
     return Status::OK();
 }
@@ -397,6 +394,48 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
         succ = true;
     }
     LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
+}
+
+Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {
+    auto index_entry = _index_cache.get(tablet.id());
+    if (index_entry == nullptr) {
+        // if primary index not in cache, just return true, and continue publish
+        return Status::OK();
+    } else {
+        auto& index = index_entry->value();
+        if (index.data_version() != base_version) {
+            // clear cache, and continue publish
+            LOG(WARNING) << "Lake check_meta_version and remove primary index cache, tablet_id: " << tablet.id()
+                         << " index_ver: " << index.data_version() << " base_ver: " << base_version;
+            if (!_index_cache.remove(index_entry)) {
+                return Status::InternalError("lake primary index cache ref mismatch");
+            }
+        } else {
+            _index_cache.release(index_entry);
+        }
+        return Status::OK();
+    }
+}
+
+void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int64_t version) {
+    auto index_entry = _index_cache.get(tablet.id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        index.update_data_version(version);
+        _index_cache.release(index_entry);
+    }
+}
+
+void UpdateManager::_print_memory_stats() {
+    static std::atomic<int64_t> last_print_ts;
+    if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
+        LOG(INFO) << strings::Substitute("[lake update manager memory]index:$0 update_state:$1 total:$2/$3",
+                                         PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_update_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
+        last_print_ts.store(time(nullptr));
+    }
 }
 
 } // namespace lake

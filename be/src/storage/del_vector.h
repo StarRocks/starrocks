@@ -59,6 +59,8 @@ public:
 
     Roaring* roaring() { return _roaring.get(); }
 
+    void copy_from(const DelVector& delvec);
+
 private:
     void _add_dels(const std::vector<uint32_t>& dels);
 
