@@ -157,7 +157,7 @@ public class TimeUtils {
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
         if (timeStamp <= 0L) {
-            return FeConstants.null_string;
+            return FeConstants.NULL_STRING;
         }
         return dateFormat.format(new Date(timeStamp));
     }

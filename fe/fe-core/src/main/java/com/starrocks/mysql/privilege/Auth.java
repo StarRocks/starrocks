@@ -1700,17 +1700,17 @@ public class Auth implements Writable {
             }
             // AuthPlugin and UserForAuthPlugin
             if (password == null) {
-                userAuthInfo.add(FeConstants.null_string);
-                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.NULL_STRING);
+                userAuthInfo.add(FeConstants.NULL_STRING);
             } else {
                 if (password.getAuthPlugin() == null) {
-                    userAuthInfo.add(FeConstants.null_string);
+                    userAuthInfo.add(FeConstants.NULL_STRING);
                 } else {
                     userAuthInfo.add(password.getAuthPlugin().name());
                 }
 
                 if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
-                    userAuthInfo.add(FeConstants.null_string);
+                    userAuthInfo.add(FeConstants.NULL_STRING);
                 } else {
                     userAuthInfo.add(password.getUserForAuthPlugin());
                 }
@@ -1727,19 +1727,19 @@ public class Auth implements Writable {
                 // This may happen when we grant non global privs to a non exist user via GRANT stmt.
                 LOG.warn("user identity does not have global priv entry: {}", userIdent);
                 userAuthInfo.add(userIdent.toString());
-                userAuthInfo.add(FeConstants.null_string);
-                userAuthInfo.add(FeConstants.null_string);
-                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.NULL_STRING);
+                userAuthInfo.add(FeConstants.NULL_STRING);
+                userAuthInfo.add(FeConstants.NULL_STRING);
             } else {
                 // this is a domain user identity and fall in here, which means this user identity does not
                 // have global priv, we need to check user property to see if it has password.
                 userAuthInfo.add(userIdent.toString());
                 userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
-                userAuthInfo.add(FeConstants.null_string);
-                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.NULL_STRING);
+                userAuthInfo.add(FeConstants.NULL_STRING);
             }
             if (!onlyAuthenticationInfo) {
-                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.NULL_STRING);
             }
         }
     }
@@ -1764,7 +1764,7 @@ public class Auth implements Writable {
             }
             userAuthInfo.add(Joiner.on("; ").join(dbPrivs));
         } else {
-            userAuthInfo.add(FeConstants.null_string);
+            userAuthInfo.add(FeConstants.NULL_STRING);
         }
 
         // tbl
@@ -1779,7 +1779,7 @@ public class Auth implements Writable {
             }
             userAuthInfo.add(Joiner.on("; ").join(tblPrivs));
         } else {
-            userAuthInfo.add(FeConstants.null_string);
+            userAuthInfo.add(FeConstants.NULL_STRING);
         }
 
         // resource
@@ -1793,7 +1793,7 @@ public class Auth implements Writable {
             }
             userAuthInfo.add(Joiner.on("; ").join(resourcePrivs));
         } else {
-            userAuthInfo.add(FeConstants.null_string);
+            userAuthInfo.add(FeConstants.NULL_STRING);
         }
 
         userAuthInfos.add(userAuthInfo);

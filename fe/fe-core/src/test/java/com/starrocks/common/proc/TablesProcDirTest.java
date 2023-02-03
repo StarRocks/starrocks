@@ -128,7 +128,7 @@ public class TablesProcDirTest {
         // Type
         Assert.assertEquals("OLAP", list1.get(6));
         // LastConsistencyCheckTime
-        Assert.assertEquals(FeConstants.null_string, list1.get(7));
+        Assert.assertEquals(FeConstants.NULL_STRING, list1.get(7));
         // ReplicaCount
         Assert.assertEquals("2", list1.get(8));
         // PartitionType
@@ -151,7 +151,7 @@ public class TablesProcDirTest {
         // Type
         Assert.assertEquals("OLAP", list2.get(6));
         // LastConsistencyCheckTime
-        Assert.assertEquals(FeConstants.null_string, list2.get(7));
+        Assert.assertEquals(FeConstants.NULL_STRING, list2.get(7));
         // ReplicaCount
         Assert.assertEquals("2", list2.get(8));
         // PartitionType
@@ -164,17 +164,17 @@ public class TablesProcDirTest {
         // TableName
         Assert.assertEquals("tb3", list3.get(1));
         // IndexNum
-        Assert.assertEquals(FeConstants.null_string, list3.get(2));
+        Assert.assertEquals(FeConstants.NULL_STRING, list3.get(2));
         // PartitionColumnName
-        Assert.assertEquals(FeConstants.null_string, list3.get(3));
+        Assert.assertEquals(FeConstants.NULL_STRING, list3.get(3));
         // PartitionNum
         Assert.assertEquals("1", list3.get(4));
         // State
-        Assert.assertEquals(FeConstants.null_string, list3.get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, list3.get(5));
         // Type
         Assert.assertEquals("HUDI", list3.get(6));
         // LastConsistencyCheckTime
-        Assert.assertEquals(FeConstants.null_string, list3.get(7));
+        Assert.assertEquals(FeConstants.NULL_STRING, list3.get(7));
         // ReplicaCount
         Assert.assertEquals("0", list3.get(8));
         // PartitionType

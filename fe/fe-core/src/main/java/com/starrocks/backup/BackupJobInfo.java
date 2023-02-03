@@ -271,8 +271,8 @@ public class BackupJobInfo implements Writable {
         jobInfo.dbName = dbName;
         jobInfo.dbId = dbId;
         jobInfo.success = true;
-        jobInfo.metaVersion = FeConstants.meta_version;
-        jobInfo.starrocksMetaVersion = FeConstants.starrocks_meta_version;
+        jobInfo.metaVersion = FeConstants.META_VERSION;
+        jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
 
         // tbls
         for (Table tbl : tbls) {
@@ -372,13 +372,13 @@ public class BackupJobInfo implements Writable {
             jobInfo.metaVersion = root.getInt("meta_version");
         } catch (JSONException e) {
             // meta_version does not exist
-            jobInfo.metaVersion = FeConstants.meta_version;
+            jobInfo.metaVersion = FeConstants.META_VERSION;
         }
         try {
             jobInfo.starrocksMetaVersion = root.getInt("starrocks_meta_version");
         } catch (JSONException e) {
             // starrocks_meta_version does not exist
-            jobInfo.starrocksMetaVersion = FeConstants.starrocks_meta_version;
+            jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
         }
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
@@ -477,8 +477,8 @@ public class BackupJobInfo implements Writable {
         root.put("backup_time", backupTime);
         JSONObject backupObj = new JSONObject();
         root.put("backup_objects", backupObj);
-        root.put("meta_version", FeConstants.meta_version);
-        root.put("starrocks_meta_version", FeConstants.starrocks_meta_version);
+        root.put("meta_version", FeConstants.META_VERSION);
+        root.put("starrocks_meta_version", FeConstants.STARROCKS_META_VERSION);
 
         for (BackupTableInfo tblInfo : tables.values()) {
             JSONObject tbl = new JSONObject();

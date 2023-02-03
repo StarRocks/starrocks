@@ -154,7 +154,7 @@ public class RestoreJobTest {
 
                 GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
-                result = FeConstants.meta_version;
+                result = FeConstants.META_VERSION;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;

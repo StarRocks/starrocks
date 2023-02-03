@@ -1504,7 +1504,7 @@ public class AuthTest {
         Assert.assertEquals(1, authInfos.size());
         Assert.assertEquals("No", authInfos.get(0).get(1));
         Assert.assertEquals("AUTHENTICATION_LDAP_SIMPLE", authInfos.get(0).get(2));
-        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
+        Assert.assertEquals(FeConstants.NULL_STRING, authInfos.get(0).get(3));
 
         /*
             mysql_native_password
@@ -1531,7 +1531,7 @@ public class AuthTest {
         Assert.assertEquals(1, authInfos.size());
         Assert.assertEquals("Yes", authInfos.get(0).get(1));
         Assert.assertEquals("MYSQL_NATIVE_PASSWORD", authInfos.get(0).get(2));
-        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
+        Assert.assertEquals(FeConstants.NULL_STRING, authInfos.get(0).get(3));
 
         // alter user lisi identified with mysql_native_password by '654321'
         String sql = "alter user lisi identified with mysql_native_password by '654321'";

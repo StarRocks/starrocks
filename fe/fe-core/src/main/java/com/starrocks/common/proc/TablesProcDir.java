@@ -69,7 +69,7 @@ public class TablesProcDir implements ProcDirInterface {
             .build();
     private static final int PARTITION_NUM_DEFAULT = 1;
     private static final int PARTITION_REPLICA_COUNT_DEFAULT = 0;
-    private static final String NULL_STRING_DEFAULT = FeConstants.null_string;
+    private static final String NULL_STRING_DEFAULT = FeConstants.NULL_STRING;
 
     private Database db;
 

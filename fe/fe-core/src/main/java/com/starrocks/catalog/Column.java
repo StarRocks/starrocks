@@ -532,7 +532,7 @@ public class Column implements Writable {
                 return "CURRENT_TIMESTAMP";
             }
         }
-        return FeConstants.null_string;
+        return FeConstants.NULL_STRING;
     }
 
     public String toSqlWithoutAggregateTypeName() {

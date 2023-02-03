@@ -572,7 +572,7 @@ public class Repository implements Writable {
         info.add(String.valueOf(isReadOnly));
         info.add(location);
         info.add(storage.getBrokerName());
-        info.add(errMsg == null ? FeConstants.null_string : errMsg);
+        info.add(errMsg == null ? FeConstants.NULL_STRING : errMsg);
         return info;
     }
 
@@ -612,7 +612,7 @@ public class Repository implements Writable {
             Status st = storage.list(infoFilePath + "*", results);
             if (!st.ok()) {
                 info.add(snapshotName);
-                info.add(FeConstants.null_string);
+                info.add(FeConstants.NULL_STRING);
                 info.add("ERROR: Failed to get info: " + st.getErrMsg());
             } else {
                 info.add(snapshotName);
@@ -641,8 +641,8 @@ public class Repository implements Writable {
                 if (!st.ok()) {
                     info.add(snapshotName);
                     info.add(timestamp);
-                    info.add(FeConstants.null_string);
-                    info.add(FeConstants.null_string);
+                    info.add(FeConstants.NULL_STRING);
+                    info.add(FeConstants.NULL_STRING);
                     info.add("Failed to get info: " + st.getErrMsg());
                 } else {
                     try {
@@ -655,8 +655,8 @@ public class Repository implements Writable {
                     } catch (IOException e) {
                         info.add(snapshotName);
                         info.add(timestamp);
-                        info.add(FeConstants.null_string);
-                        info.add(FeConstants.null_string);
+                        info.add(FeConstants.NULL_STRING);
+                        info.add(FeConstants.NULL_STRING);
                         info.add("Failed to read info from local file: " + e.getMessage());
                     }
                 }

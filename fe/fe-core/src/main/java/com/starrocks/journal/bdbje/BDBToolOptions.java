@@ -57,9 +57,9 @@ public class BDBToolOptions {
         this.hasFromKey = !Strings.isNullOrEmpty(fromKey);
         this.endKey = endKey;
         this.hasEndKey = !Strings.isNullOrEmpty(endKey);
-        this.metaVersion = metaVersion == 0 ? FeConstants.meta_version : metaVersion;
+        this.metaVersion = metaVersion == 0 ? FeConstants.META_VERSION : metaVersion;
         this.starrocksMetaVersion =
-                starrocksMetaVersion == 0 ? FeConstants.starrocks_meta_version : starrocksMetaVersion;
+                starrocksMetaVersion == 0 ? FeConstants.STARROCKS_META_VERSION : starrocksMetaVersion;
     }
 
     public boolean isListDbs() {

@@ -2152,7 +2152,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
             if (bfColumns != null && bfFpp == 0) {
-                bfFpp = FeConstants.default_bloom_filter_fpp;
+                bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
             } else if (bfColumns == null) {
                 bfFpp = 0;
             }

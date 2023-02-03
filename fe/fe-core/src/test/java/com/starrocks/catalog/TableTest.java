@@ -62,7 +62,7 @@ public class TableTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test

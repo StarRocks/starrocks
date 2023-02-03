@@ -32,7 +32,7 @@ public class ReplicaPersistInfoTest {
     @Test
     public void testSerialization() throws Exception {
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.meta_version);
+        metaContext.setMetaVersion(FeConstants.META_VERSION);
         metaContext.setThreadLocalInfo();
 
         // 1. Write objects to file
