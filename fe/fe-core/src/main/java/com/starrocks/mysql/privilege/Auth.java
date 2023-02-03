@@ -768,7 +768,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), true, false);
         } finally {
             writeUnlock();
         }
@@ -826,7 +826,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), false);
         } finally {
             writeUnlock();
         }
@@ -1836,9 +1836,9 @@ public class Auth implements Writable {
         try {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");
             rootUser.setIsAnalyzed();
-            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */, false);
+            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* isReplay */, false);
         } catch (DdlException e) {
-            LOG.error("should not happend", e);
+            LOG.error("should not happen", e);
         }
     }
 

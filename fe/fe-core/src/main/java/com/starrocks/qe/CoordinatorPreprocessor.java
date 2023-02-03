@@ -25,6 +25,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
@@ -514,9 +515,9 @@ public class CoordinatorPreprocessor {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
                 if (execHostport == null) {
-                    LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("Backend not found. Check if any backend is down or not. "
-                            + backendInfosString(usedComputeNode));
+                    String msg = FeConstants.getNodeNotFoundError(usedComputeNode);
+                    LOG.warn("DataPartition UNPARTITIONED. " + msg);
+                    throw new UserException(msg + backendInfosString(usedComputeNode));
                 }
                 recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -722,8 +723,8 @@ public class CoordinatorPreprocessor {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
                 if (execHostport == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not. "
-                            + backendInfosString(usedComputeNode));
+                    throw new UserException(
+                            FeConstants.getNodeNotFoundError(usedComputeNode) + backendInfosString(usedComputeNode));
                 }
                 this.recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -1017,6 +1018,7 @@ public class CoordinatorPreprocessor {
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
+                                hasComputeNode,
                                 forceScheduleLocal);
                 selector.computeScanRangeAssignment();
             } else {
@@ -1262,7 +1264,7 @@ public class CoordinatorPreprocessor {
             computeNode =
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             }
         }
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
@@ -1834,7 +1836,7 @@ public class CoordinatorPreprocessor {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not. "
+                    throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                             + backendInfosString(false));
                 }
                 recordUsedBackend(execHostPort, backendIdRef.getRef());
@@ -1960,7 +1962,7 @@ public class CoordinatorPreprocessor {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("Backend not found. Check if any backend is down or not. "
+                            throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                                     + backendInfosString(false));
                         }
                         recordUsedBackend(execHostport, backendIdRef.getRef());
@@ -2013,7 +2015,7 @@ public class CoordinatorPreprocessor {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not. "
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                         + backendInfosString(false));
             }
 

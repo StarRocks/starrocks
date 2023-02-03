@@ -32,9 +32,13 @@ import java.util.Objects;
  * don't support create database under external catalog for now.
  */
 public class CatalogPEntryObject implements PEntryObject {
-    protected static final long ALL_CATALOG_ID = -1; // -1 represent all
+    public static final long ALL_CATALOG_ID = -1; // -1 represent all
     @SerializedName(value = "i")
     private long id;
+
+    public long getId() {
+        return id;
+    }
 
     public static CatalogPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {

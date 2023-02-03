@@ -69,16 +69,18 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalProjectOperator)) {
-            return false;
-        }
-        LogicalProjectOperator rhs = (LogicalProjectOperator) obj;
-        if (this == rhs) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
 
-        return columnRefMap.keySet().equals(rhs.columnRefMap.keySet());
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        LogicalProjectOperator that = (LogicalProjectOperator) o;
+
+        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
     }
 
     @Override

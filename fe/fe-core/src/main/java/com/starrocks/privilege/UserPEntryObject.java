@@ -25,13 +25,18 @@ import java.util.Objects;
 public class UserPEntryObject implements PEntryObject {
     @SerializedName(value = "u")
     private UserIdentity userIdentity;  // can be null, means all users
+
     protected UserPEntryObject(UserIdentity userIdentity) {
         this.userIdentity = userIdentity;
     }
 
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
     public static UserPEntryObject generate(GlobalStateMgr mgr, UserIdentity user) throws PrivilegeException {
         if (!mgr.getAuthenticationManager().doesUserExist(user)) {
-            throw new PrivilegeException("cannot find user " + user);
+            throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
     }

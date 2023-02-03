@@ -1281,4 +1281,28 @@ PARALLEL_TEST(MapColumnTest, test_euqals) {
     ASSERT_FALSE(lhs->equals(2, *rhs, 2));
     ASSERT_FALSE(lhs->equals(3, *rhs, 3));
 }
+
+PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
+    auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    UInt32Column::create());
+
+    // {}, {1:2},{3:4,5:6}
+    column->append_datum(DatumMap{});
+    column->append_datum(DatumMap{{1, 2}});
+    column->append_datum(DatumMap{{3, 4}, {5, 6}});
+
+    ASSERT_EQ(42, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {4, 14, 24};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(0, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
+}
 } // namespace starrocks

@@ -60,9 +60,11 @@ public class PhysicalSetOperation extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalSetOperation that = (PhysicalSetOperation) o;
         return Objects.equal(outputColumnRefOp, that.outputColumnRefOp) &&
                 Objects.equal(childOutputColumns, that.childOutputColumns);
@@ -70,6 +72,6 @@ public class PhysicalSetOperation extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(outputColumnRefOp, childOutputColumns);
+        return Objects.hashCode(outputColumnRefOp);
     }
 }

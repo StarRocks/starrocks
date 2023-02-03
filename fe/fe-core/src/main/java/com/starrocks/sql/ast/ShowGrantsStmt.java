@@ -19,6 +19,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 /*
  *  SHOW ALL GRANTS;
@@ -44,20 +45,37 @@ public class ShowGrantsStmt extends ShowStmt {
         META_DATA = builder.build();
     }
 
-    private final boolean isAll;
-    private UserIdentity userIdent;
+    private static final ShowResultSetMetaData META_DATA_V2;
 
-    public ShowGrantsStmt(UserIdentity userIdent, boolean isAll) {
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+
+        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Catalog", ScalarType.createVarchar(400)));
+        builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
+
+        META_DATA_V2 = builder.build();
+    }
+
+    private UserIdentity userIdent;
+    private final String role;
+
+    public ShowGrantsStmt(UserIdentity userIdent) {
         this.userIdent = userIdent;
-        this.isAll = isAll;
+        this.role = null;
+    }
+
+    public ShowGrantsStmt(String role) {
+        this.userIdent = null;
+        this.role = role;
     }
 
     public UserIdentity getUserIdent() {
         return userIdent;
     }
 
-    public boolean isAll() {
-        return isAll;
+    public String getRole() {
+        return role;
     }
 
     public void setUserIdent(UserIdentity userIdent) {
@@ -66,12 +84,15 @@ public class ShowGrantsStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            return META_DATA_V2;
+        } else {
+            return META_DATA;
+        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowGrantsStatement(this, context);
     }
-
 }

@@ -57,7 +57,7 @@ public class ViewPEntryObject extends TablePEntryObject {
 
             Database database = mgr.getDb(restrictName);
             if (database == null) {
-                throw new PrivilegeException("cannot find db: " + restrictName);
+                throw new PrivObjNotFoundException("cannot find db: " + restrictName);
             }
             return new ViewPEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {

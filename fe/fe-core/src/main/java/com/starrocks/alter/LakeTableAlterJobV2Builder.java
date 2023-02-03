@@ -33,6 +33,7 @@ import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     private final LakeTable table;
@@ -70,9 +71,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
+                List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), replicaNum, table.getPartitionFilePathInfo(),
-                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId);
+                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                                     originTabletIds);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -97,9 +100,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                          long groupId)
+                                          long groupId, List<Long> matchShardIds)
         throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, replicaNum, pathInfo, cacheInfo, groupId);
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, replicaNum, pathInfo, cacheInfo, groupId,
+                matchShardIds);
     }
 
 }
