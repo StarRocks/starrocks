@@ -1252,7 +1252,7 @@ public class GlobalStateMgr {
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
             LOG.warn("{} to UNKNOWN, still offer read service", feType.name());
-            // not set canRead here, leave canRead as what is was.
+            // not set canRead here, leave canRead as what it was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
             feType = newType;
@@ -3537,12 +3537,14 @@ public class GlobalStateMgr {
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-        upgrader.replayUpgrade(info.getRoleNameToId());
-        usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationManager);
-        if (!isCheckpointThread()) {
-            this.auth = null;
+        if (GlobalStateMgr.getCurrentState().needUpgradedToNewPrivilege()) {
+            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+            upgrader.replayUpgrade(info.getRoleNameToId());
+            usingNewPrivilege.set(true);
+            domainResolver.setAuthenticationManager(authenticationManager);
+            if (!isCheckpointThread()) {
+                this.auth = null;
+            }
         }
     }
 
