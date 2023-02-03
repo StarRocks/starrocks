@@ -49,7 +49,7 @@
     + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
   + [文件外部表](/data_source/file_external_table.md)
-  + [Block cache](/data_source/Block_cache.md)
+  + [Local Cache](/data_source/Block_cache.md)
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [多表异步刷新物化视图](/using_starrocks/Materialized_view.md)
