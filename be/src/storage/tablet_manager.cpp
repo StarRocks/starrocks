@@ -560,11 +560,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                     }
                 } else {
                     last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
-                    if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+                    if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
                         VLOG(1) << "Too often to schedule failure compaction, skip it."
                                 << "compaction_type=" << compaction_type_str
-                                << ", min_cmumulative_compaction_failure_interval_sec="
-                                << config::min_cmumulative_compaction_failure_interval_sec
+                                << ", min_cumulative_compaction_failure_interval_sec="
+                                << config::min_cumulative_compaction_failure_interval_sec
                                 << ", last_failure_timestamp=" << last_failure_ts / 1000
                                 << ", tablet_id=" << tablet_ptr->tablet_id();
                         continue;
