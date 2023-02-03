@@ -851,8 +851,8 @@ public class LowCardinalityTest extends PlanTestBase {
     @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String sql = null;
-        String plan = null;
+        String sql;
+        String plan;
 
         sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
         plan = getFragmentPlan(sql);
@@ -1204,4 +1204,155 @@ public class LowCardinalityTest extends PlanTestBase {
                 "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testMetaScan3() throws Exception {
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type\n" +
+                "     <id 16> : dict_merge_t1a\n" +
+                "     <id 14> : max_t1c\n" +
+                "     <id 15> : min_t1d");
+    }
+
+    @Test
+    public void testMetaScan4() throws Exception {
+        String sql = "select sum(t1c), min(t1d), t1a from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(3: t1c), min(4: t1d), any_value(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : t1a\n" +
+                "  |  <slot 3> : t1c\n" +
+                "  |  <slot 4> : t1d\n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type");
+        sql = "select sum(t1c) from test_all_type [_META_] group by t1a";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(3: t1c)\n" +
+                "  |  group by: 1: t1a\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : t1a\n" +
+                "  |  <slot 3> : t1c\n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type");
+    }
+
+    @Test
+    public void testHasGlobalDictButNotFound() throws Exception {
+        IDictManager dictManager = IDictManager.getInstance();
+
+        new Expectations(dictManager) {
+            {
+                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
+                result = true;
+                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
+                result = Optional.empty();
+            }
+        };
+
+        String sql = "select S_ADDRESS from supplier group by S_ADDRESS";
+        // Check No Exception
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+    }
+
+    @Test
+    public void testExtractProject() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), max(19: upper), min(19: upper), max(18: S_ADDRESS), sum(15: S_SUPPKEY)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : 1: S_SUPPKEY\n" +
+                "  |  <slot 18> : 18: S_ADDRESS\n" +
+                "  |  <slot 19> : DictExpr(18: S_ADDRESS,[upper(<place-holder>)])");
+    }
+
+    @Test
+    public void testCompoundPredicate() throws Exception {
+        String sql = "select count(*) from supplier group by S_ADDRESS having " +
+                "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan,
+                "DictExpr(10: S_ADDRESS,[if((<place-holder> > 'a') " +
+                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+
+        sql = "select count(*) from supplier group by S_ADDRESS having " +
+                "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
+        plan = getVerboseExplain(sql);
+        assertContains(plan,
+                "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
+                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+    }
+
+
+    @Test
+    public void testComplexScalarOperator_1() throws Exception {
+        String sql = "select case when s_address = 'test' then 'a' " +
+                "when s_phone = 'b' then 'b' " +
+                "when coalesce(s_address, 'c') = 'c' then 'c' " +
+                "else 'a' end from supplier; ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 9> : CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'test']) THEN 'a' " +
+                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
+                "WHEN coalesce(DictExpr(10: S_ADDRESS,[<place-holder>]), 'c') = 'c' THEN 'c' " +
+                "ELSE 'a' END\n" +
+                "  |");
+
+
+        sql = "select case when s_address = 'test' then 'a' " +
+                "when s_phone = 'b' then 'b' " +
+                "when upper(s_address) = 'c' then 'c' " +
+                "else 'a' end from supplier; ";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 9> : CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'test']) THEN 'a' " +
+                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
+                "WHEN DictExpr(10: S_ADDRESS,[upper(<place-holder>)]) = 'c' THEN 'c' " +
+                "ELSE 'a' END\n" +
+                "  |");
+    }
+
+    @Test
+    public void testComplexScalarOperator_2() throws Exception {
+        String sql = "select count(*) from supplier where s_phone = 'a' or coalesce(s_address, 'c') = 'c' " +
+                "or s_address = 'address'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (coalesce(DictExpr(12: S_ADDRESS,[<place-holder>]), 'c') = 'c')) " +
+                "OR (DictExpr(12: S_ADDRESS,[<place-holder> = 'address']))");
+
+        sql = "select count(*) from supplier where s_phone = 'a' or upper(s_address) = 'c' " +
+                "or s_address = 'address'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: supplier\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (DictExpr(12: S_ADDRESS,[upper(<place-holder>)]) = 'c')) " +
+                "OR (DictExpr(12: S_ADDRESS,[<place-holder> = 'address']))");
+    }
+
+>>>>>>> bc1e255f6 ([BugFix] strict the dictmapping check for rewrite scalarOperator (#17318))
 }
