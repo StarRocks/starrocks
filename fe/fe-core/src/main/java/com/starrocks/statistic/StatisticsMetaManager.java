@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
@@ -140,7 +141,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
-                null,
+                EngineType.defaultEngine().name(),
                 new KeysDesc(keysType, KEY_COLUMN_NAMES),
                 null,
                 new HashDistributionDesc(10, KEY_COLUMN_NAMES),
@@ -171,7 +172,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                null,
+                EngineType.defaultEngine().name(),
                 new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
@@ -201,7 +202,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                null,
+                EngineType.defaultEngine().name(),
                 new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
                 null,
                 new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
