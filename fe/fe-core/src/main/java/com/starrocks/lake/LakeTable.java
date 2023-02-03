@@ -50,11 +50,6 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
- * <p>
- * Currently, storage group is table level, which stores all the tablets data and metadata of this table.
- * Format: service storage uri (from StarOS) + table id
- * <p>
- * TODO: support table api like Iceberg
  */
 public class LakeTable extends OlapTable {
 
@@ -199,8 +194,7 @@ public class LakeTable extends OlapTable {
     // used in colocate table index, return an empty list for LakeTable
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
-        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-        return backendsPerBucketSeq;
+        return Lists.newArrayList();
     }
 
     public List<Long> getShardGroupIds() {

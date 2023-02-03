@@ -519,7 +519,7 @@ public class EditLog {
                 case OperationType.OP_META_VERSION: {
                     String versionString = ((Text) journal.getData()).toString();
                     int version = Integer.parseInt(versionString);
-                    if (version > FeConstants.meta_version) {
+                    if (version > FeConstants.META_VERSION) {
                         throw new JournalInconsistentException(
                                 "invalid meta data version found, cat not bigger than FeConstants.meta_version."
                                         + "please update FeConstants.meta_version bigger or equal to " + version +
@@ -530,12 +530,12 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (metaVersion.getCommunityVersion() > FeConstants.meta_version) {
+                    if (metaVersion.getCommunityVersion() > FeConstants.META_VERSION) {
                         throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
                                 + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
                                 + metaVersion.getCommunityVersion() + "and restart.");
                     }
-                    if (metaVersion.getStarRocksVersion() > FeConstants.starrocks_meta_version) {
+                    if (metaVersion.getStarRocksVersion() > FeConstants.STARROCKS_META_VERSION) {
                         throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
                                 + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
                                 + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");

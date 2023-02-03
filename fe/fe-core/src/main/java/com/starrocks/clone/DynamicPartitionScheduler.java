@@ -93,7 +93,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
     public static final String CREATE_PARTITION_MSG = "createPartitionMsg";
     public static final String DROP_PARTITION_MSG = "dropPartitionMsg";
 
-    private static final String DEFAULT_RUNTIME_VALUE = FeConstants.null_string;
+    private static final String DEFAULT_RUNTIME_VALUE = FeConstants.NULL_STRING;
 
     // runtime information for dynamic partitions key -> <tableName -> value>
     private final Map<String, Map<String, String>> runtimeInfos = Maps.newConcurrentMap();
