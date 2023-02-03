@@ -30,12 +30,6 @@
 
 namespace starrocks::lake {
 
-using ChunkChanger = ChunkChanger;
-using ChunkPtr = ChunkPtr;
-using Schema = Schema;
-using SchemaChangeUtils = SchemaChangeUtils;
-using TabletReaderParams = TabletReaderParams;
-
 class SchemaChange {
 public:
     explicit SchemaChange(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
@@ -123,8 +117,8 @@ public:
     Status process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) override;
 
 private:
-    size_t _memory_limitation;
-    size_t _max_buffer_size;
+    size_t _memory_limitation = 0;
+    size_t _max_buffer_size = 0;
     std::unique_ptr<std::vector<uint32_t>> _selective;
 };
 
@@ -380,8 +374,8 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     // copy delete vector files if necessary
     if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
         for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
-            auto src = base_tablet->delvec_location(delvec.page().version());
-            auto dst = new_tablet->delvec_location(delvec.page().version());
+            auto src = base_tablet->delvec_location(delvec.second.version());
+            auto dst = new_tablet->delvec_location(delvec.second.version());
             RETURN_IF_ERROR(fs::copy_file(src, dst));
         }
         op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());

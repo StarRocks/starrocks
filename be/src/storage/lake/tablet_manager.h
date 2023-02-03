@@ -42,6 +42,8 @@ using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
 class TabletManager {
     friend class Tablet;
+    friend class MetaFileBuilder;
+    friend class MetaFileReader;
 
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
@@ -146,7 +148,7 @@ public:
     UpdateManager* update_mgr();
 
 private:
-    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr>;
+    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
@@ -165,6 +167,8 @@ private:
     TabletSchemaPtr lookup_tablet_schema(std::string_view key);
     SegmentPtr lookup_segment(std::string_view key);
     void cache_segment(std::string_view key, SegmentPtr segment);
+    DelVectorPtr lookup_delvec(std::string_view key);
+    void cache_delvec(std::string_view key, DelVectorPtr delvec);
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;

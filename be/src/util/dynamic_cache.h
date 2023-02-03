@@ -156,12 +156,13 @@ public:
     }
 
     // remove an object get/get_or_create'ed earlier
-    void remove(Entry* entry) {
+    bool remove(Entry* entry) {
         std::lock_guard<std::mutex> lg(_lock);
         entry->_ref--;
         if (entry->_ref != 1) {
             LOG(ERROR) << "remove() failed: cache entry ref != 1 " << entry->_value;
             DCHECK(false);
+            return false;
         } else {
             _map.erase(entry->key());
             _list.erase(entry->_handle);
@@ -169,6 +170,7 @@ public:
             _size -= entry->_size;
             if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
+            return true;
         }
     }
 

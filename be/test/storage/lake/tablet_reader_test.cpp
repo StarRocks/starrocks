@@ -45,7 +45,8 @@ class DuplicateTabletReaderTest : public testing::Test {
 public:
     DuplicateTabletReaderTest() {
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), nullptr, 0);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -95,6 +96,7 @@ protected:
 
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
@@ -189,7 +191,8 @@ class AggregateTabletReaderTest : public testing::Test {
 public:
     AggregateTabletReaderTest() {
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), nullptr, 0);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -240,6 +243,7 @@ protected:
 
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
@@ -357,7 +361,8 @@ class DuplicateTabletReaderWithDeleteTest : public testing::Test {
 public:
     DuplicateTabletReaderWithDeleteTest() {
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), nullptr, 0);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -407,6 +412,7 @@ protected:
 
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
+    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;

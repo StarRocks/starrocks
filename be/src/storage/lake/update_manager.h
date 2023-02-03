@@ -48,11 +48,9 @@ private:
 
 class UpdateManager {
 public:
-    UpdateManager(LocationProvider* location_provider)
-            : _index_cache(std::numeric_limits<size_t>::max()),
-              _update_state_cache(std::numeric_limits<size_t>::max()),
-              _location_provider(location_provider) {}
+    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
     ~UpdateManager() {}
+    void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
@@ -75,13 +73,8 @@ public:
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
                        DelVectorPtr* pdelvec);
 
-    // get latest delvec
-    Status get_latest_del_vec(const TabletSegmentId& tsid, int64_t base_version, const MetaFileBuilder* builder,
-                              DelVectorPtr* pdelvec);
-
     // get delvec from tablet meta file
-    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec,
-                               int64_t* latest_version);
+    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec);
     // set delvec cache
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
@@ -97,12 +90,21 @@ public:
     // publish failed later, need to clear primary index.
     void remove_primary_index_cache(uint32_t tablet_id);
 
+    // if base version != index.data_version, need to clear index cache
+    Status check_meta_version(const Tablet& tablet, int64_t base_version);
+
+    // update primary index data version when meta file finalize success.
+    void update_primary_index_data_version(const Tablet& tablet, int64_t version);
+
     void expire_cache();
 
 private:
     Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
                       PrimaryIndex& index, std::int64_t tablet_id, DeletesMap* new_deletes);
+    // print memory tracker state
+    void _print_memory_stats();
 
+    static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
@@ -111,8 +113,14 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
-    std::atomic<int64_t> _last_clear_expired_cache_millis{0};
-    LocationProvider* _location_provider;
+    std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
+    LocationProvider* _location_provider = nullptr;
+    TabletManager* _tablet_mgr = nullptr;
+
+    // memory checkers
+    MemTracker* _update_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _index_cache_mem_tracker;
+    std::unique_ptr<MemTracker> _update_state_mem_tracker;
 };
 
 } // namespace lake

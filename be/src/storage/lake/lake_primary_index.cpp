@@ -106,6 +106,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
         }
     }
     _tablet_id = tablet->id();
+    _data_version = base_version;
     if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     }
