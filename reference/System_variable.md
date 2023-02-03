@@ -2,7 +2,7 @@
 
 ## 变量设置与查看
 
-本文介绍 StarRocks 系统支持的变量（system variables）。可以在 MySQL 客户端通过命令 `SHOW VARIABLES` 查看变量。您可以设置（SET）变量在系统全局 (global) 范围内生效，或者仅在当前会话 (session) 中生效。
+本文介绍 StarRocks 系统支持的变量（system variables）。可以在 MySQL 客户端通过命令 `SHOW VARIABLES` 查看变量。您可以设置（SET）变量在系统全局 (global) 范围内生效，也可以设置变量仅在当前会话 (session) 中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
 
@@ -36,7 +36,7 @@ SET time_zone = "Asia/Shanghai";
 SET GLOBAL exec_mem_limit = 137438953472;
 ```
 
-> 注：只有 admin 用户可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
+> 说明：只有 admin 用户可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
 
 既支持当前会话生效又支持全局生效的变量包括：
 
@@ -70,9 +70,9 @@ SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
 SET forward_to_master = concat('tr', 'u', 'e');
 ```
 
-### 在查询语句中设置变量
+### 在单个查询语句中设置变量
 
-在一些场景中，我们可能需要对某些查询专门设置变量。通过使用 SET_VAR 提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，可能需要对某些查询专门设置变量。通过使用 SET_VAR 提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
 
 ```sql
 SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -105,7 +105,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * default_rowset_type
 
-  用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。全局变量，仅支持全局生效。
+  全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
 
 * disable_colocate_join
 
@@ -130,13 +130,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 true，即开启严格模式。关于该模式的介绍，可以参阅[数据导入](../loading/Loading_intro.md)章节。
 
-* enable_materialized_view_union_rewrite
+* enable_materialized_view_union_rewrite（2.5 及以后）
 
-  是否开启物化视图 Union 改写。默认值：`true`。该变量从 2.5 版本开始支持。
+  是否开启物化视图 Union 改写。默认值：`true`。
 
-* enable_rule_based_materialized_view_rewrite
+* enable_rule_based_materialized_view_rewrite（2.5 及以后）
 
-  是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。该变量从 2.5 版本开始支持。
+  是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
 
 * enable_spilling
 
@@ -224,15 +224,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
 
-* enable_scan_block_cache
+* enable_scan_block_cache（2.5 及以后）
 
-  是否开启 Block Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Block cache](../data_source/Block_cache.md)。
+  是否开启 Local Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Local Cache](../data_source/Block_cache.md)。该特性从 2.5 版本开始支持。
 
-  该特性从 2.5 版本开始支持。
+* enable_populate_block_cache（2.5 及以后）
 
-* enable_populate_block_cache
-
-  StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。该变量从 2.5 版本开始支持。
+  StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。
 
 * language
 
@@ -249,6 +247,42 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
   这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `exec_mem_limit`。否则，INSERT 的查询部分内存限制为 `exec_mem_limit`，而导入部分限制为 l`oad_mem_limit`。
 
   其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `exec_mem_limit`。
+
+* enable_query_cache (2.5 及以后)
+
+  是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。
+
+* query_cache_force_populate (2.5 及以后)
+
+  Query Cache 强制更新开关，指定是否忽略 Query Cache 中已有的计算结果。取值范围：true 和 false。true 表示开启，false 表示关闭，默认值。开启该功能后，StarRocks 在执行查询计算时，会忽略 Query Cache 中已有的计算结果，重新回源读取、计算数据并更新 Query Cache。因此，`query_cache_force_populate=true` 等效于缓存不命中 (Cache Miss)。
+
+* query_cache_entry_max_bytes (2.5 及以后)
+
+  Cache 项的字节数上限，触发 Passthrough 模式的阈值。取值范围：0 ~ 9223372036854775807。默认值：4194304。当一个 Tablet 上产生的计算结果的字节数或者行数超过 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 指定的阈值时，则查询采用 Passthrough 模式执行。当 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 取值为 0 时, 即便 Tablet 产生结果为空，也采用 Passthrough 模式。
+
+* query_cache_entry_max_rows (2.5 及以后)
+
+  Cache 项的行数上限，见 `query_cache_entry_max_bytes` 描述。默认值：409600。
+
+* query_cache_agg_cardinality_limit (2.5 及以后)
+
+  GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行数, 则不启用 cache。默认值：5000000。
+
+* enable_adaptive_sink_dop (2.5 及以后)
+
+  是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
+
+* enable_pipeline_engine
+
+  是否启用 Pipeline 执行引擎。true：启用（默认），false：不启用。
+
+* pipeline_dop
+
+  一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。
+
+* enable_sort_aggregate (2.5 及以后)
+
+  是否开启 sorted streaming 聚合。`true` 表示开启 sorted streaming 聚合功能，对流中的数据进行排序。
 
 * lower_case_table_names
 
