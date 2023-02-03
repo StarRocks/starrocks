@@ -56,15 +56,11 @@ public:
     }
 
     SlotId slot_id() {
-        DCHECK(dict_func_expr == nullptr);
         DCHECK_EQ(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
 
-    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
-        DCHECK(dict_func_expr == nullptr);
-        return get_child(1)->get_slot_ids(slot_ids);
-    }
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override { return get_child(1)->get_slot_ids(slot_ids); }
 
 private:
     std::shared_ptr<std::once_flag> _rewrite_once_flag = std::make_shared<std::once_flag>();
