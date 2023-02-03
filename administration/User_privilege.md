@@ -50,7 +50,7 @@ CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
 
 通过以下命令修改用户登录密码。
 
-> 注意
+> **注意**
 >
 > * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以设置任意用户的密码。
 > * 普通用户可以设置自己对应的 User Identity 的密码。自己对应的 User Identity 可以通过 SELECT CURRENT_USER(); 命令查看。
@@ -72,14 +72,63 @@ SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456')
 SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
 ```
 
-> 说明
+> **说明**
+>
 > 您可以通过 `PASSWORD()` 方法获得暗文密码。
+
+### 修改 root 用户密码
+
+如果您忘记 `root` 用户密码，您可以通过以下步骤重置密码：
+
+1. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中添加以下配置项以关闭 FE 鉴权：
+
+    ```plain
+    enable_auth_check = false
+    ```
+
+2. 重启**所有 FE 节点**。
+
+    ```shell
+    ./fe/bin/stop_fe.sh
+    ./fe/bin/start_fe.sh
+    ```
+
+3. 通过 MySQL 客户端登录 `root` 用户，无需密码。
+
+    ```shell
+    mysql -h <fe_ip> -P<fe_query_port> -uroot
+    ```
+
+4. 修改 `root` 用户密码。
+
+    ```sql
+    SET PASSWORD for root = PASSWORD('xxxxxx');
+    ```
+
+5. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中修改配置项 `enable_auth_check` 为 `true` 以重新开启 FE 鉴权。
+
+    ```plain
+    enable_auth_check = true
+    ```
+
+6. 重启**所有 FE 节点**。
+
+    ```shell
+    ./fe/bin/stop_fe.sh
+    ./fe/bin/start_fe.sh
+    ```
+
+7. 通过 MySQL 客户端登录 `root` 用户验证密码是否修改成功。
+
+    ```shell
+    mysql -h <fe_ip> -P<fe_query_port> -uroot -p<xxxxxx>
+    ```
 
 ## 删除用户
 
 通过以下命令删除 StarRocks 用户。
 
-> 注意
+> **注意**
 >
 > 拥有 ADMIN 权限的用户可以删除用户。
 
