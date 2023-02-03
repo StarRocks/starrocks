@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
