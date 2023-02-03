@@ -44,6 +44,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -1827,6 +1828,9 @@ public class Coordinator {
         }
 
         public boolean isBackendStateHealthy() {
+            if (Config.use_staros) {
+                // get worker state from SystemInfo Service
+            }
             if (backend.getLastMissingHeartbeatTime() > lastMissingHeartbeatTime) {
                 LOG.warn("backend {} is down while joining the coordinator. job id: {}", backend.getId(), jobId);
                 return false;

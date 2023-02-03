@@ -224,9 +224,6 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
-            // for debug
-            LOG.info("enter visitCreateTableStatement");
-            LOG.info("current warehouse is {}", context.getCurrentWarehouse());
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().createTable(stmt);
             });

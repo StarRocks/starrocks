@@ -776,11 +776,6 @@ public class SystemInfoService {
         return ImmutableList.copyOf(backends);
     }
 
-    // for debug
-    public List<Backend> getBackends(long workerGroupId) {
-        return new ArrayList<>();
-    }
-
     public long getBackendReportVersion(long backendId) {
         AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
