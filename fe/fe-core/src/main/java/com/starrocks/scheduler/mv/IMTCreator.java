@@ -232,7 +232,7 @@ class IMTCreator {
             String comment = "IMT for MV StreamAggOperator";
 
             result.add(new CreateTableStmt(false, false, canonicalName, columnDefs,
-                    EngineType.OLAP.name(), keyDesc, partitionDesc, distributionDesc, properties,
+                    EngineType.defaultEngine().name(), keyDesc, partitionDesc, distributionDesc, properties,
                     extProperties, comment));
             return null;
         }
