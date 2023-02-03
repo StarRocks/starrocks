@@ -65,7 +65,7 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, columnRefMap);
+        return Objects.hash(super.hashCode(), opType, columnRefMap);
     }
 
     @Override

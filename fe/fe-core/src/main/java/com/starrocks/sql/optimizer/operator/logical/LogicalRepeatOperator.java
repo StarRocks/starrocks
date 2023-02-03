@@ -105,7 +105,8 @@ public class LogicalRepeatOperator extends LogicalOperator {
 
         LogicalRepeatOperator that = (LogicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
-                Objects.equals(repeatColumnRefList, that.repeatColumnRefList);
+                Objects.equals(repeatColumnRefList, that.repeatColumnRefList) &&
+                Objects.equals(groupingIds, that.groupingIds);
     }
 
     @Override

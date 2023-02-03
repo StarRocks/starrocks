@@ -65,7 +65,7 @@ public class PhysicalProjectOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(columnRefMap, commonSubOperatorMap);
+        return Objects.hashCode(super.hashCode(), columnRefMap, commonSubOperatorMap);
     }
 
     @Override
