@@ -2747,6 +2747,6 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "21:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 19: v4 = 1");
+                "  |  other join predicates: 19: v4 = CAST(1 AS BIGINT)");
     }
 }
