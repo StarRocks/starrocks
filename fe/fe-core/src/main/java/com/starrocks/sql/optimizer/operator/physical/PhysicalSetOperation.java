@@ -72,6 +72,6 @@ public class PhysicalSetOperation extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(outputColumnRefOp);
+        return Objects.hashCode(super.hashCode(), outputColumnRefOp);
     }
 }

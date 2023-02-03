@@ -2736,4 +2736,16 @@ public class JoinTest extends PlanTestBase {
                 "subv0 on t0.v1 = subv0.k1;";
         getFragmentPlan(sql);
     }
+
+    @Test
+    public void testTopNGroupMerge() throws Exception {
+        String sql = "with tmp1 as (select * from t0 order by v1 asc), tmp2 as (select v4 from t1 group by v4)" +
+                "select count(*) from t0, tmp2, tmp1, t1 " +
+                "where 1 in (select v4 from t1);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "21:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 19: v4 = 1");
+    }
 }

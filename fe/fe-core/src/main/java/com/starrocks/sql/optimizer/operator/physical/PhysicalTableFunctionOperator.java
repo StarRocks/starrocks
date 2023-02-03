@@ -102,6 +102,6 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(fn, fnResultColumnRefSet);
+        return Objects.hashCode(super.hashCode(), fn, fnResultColumnRefSet);
     }
 }

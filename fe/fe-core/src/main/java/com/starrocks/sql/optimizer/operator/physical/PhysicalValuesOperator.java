@@ -77,7 +77,7 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(columnRefSet);
+        return Objects.hashCode(super.hashCode(), columnRefSet);
     }
 
     @Override
