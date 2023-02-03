@@ -491,14 +491,19 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     int64_t batch_publish_latency = 0;
 
     while (true) {
+        uint32_t wait_time = config::wait_apply_time;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
+            worker_pool_this->_sleeping_count++;
             worker_pool_this->_worker_thread_condition_variable->wait(l, [&]() {
                 return !priority_tasks.empty() || !worker_pool_this->_tasks.empty() || worker_pool_this->_stopped;
             });
+            worker_pool_this->_sleeping_count--;
             if (worker_pool_this->_stopped) {
                 break;
             }
+            // All thread are running, set wait_timeout = 0 to avoid publish block
+            wait_time = wait_time * worker_pool_this->_sleeping_count / worker_pool_this->_worker_count;
 
             while (!worker_pool_this->_tasks.empty()) {
                 // collect some publish version tasks as a group.
@@ -515,7 +520,8 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(token.get(), publish_version_task.task_req, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_task.task_req, finish_task_request, affected_dirs,
+                                 wait_time);
         finish_task_request.__set_task_type(publish_version_task.task_type);
         finish_task_request.__set_signature(publish_version_task.signature);
 

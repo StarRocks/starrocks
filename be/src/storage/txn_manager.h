@@ -91,7 +91,7 @@ public:
                       const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                       int64_t version, const RowsetSharedPtr& rowset);
+                       int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
 
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
