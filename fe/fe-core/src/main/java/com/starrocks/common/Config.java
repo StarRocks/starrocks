@@ -1727,7 +1727,7 @@ public class Config extends ConfigBase {
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     @ConfField(mutable = true)
-    public static boolean enable_experimental_mv = false;
+    public static boolean enable_experimental_mv = true;
 
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
