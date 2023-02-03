@@ -458,9 +458,6 @@ public class ScalarOperatorToExpr {
                             buildExpr.build(call.getChildren().get(0), context),
                             buildExpr.build(call.getChildren().get(1), context));
                     break;
-                case "cast":
-                    callExpr = new CastExpr(call.getType(), buildExpr.build(call.getChild(0), context));
-                    break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
                 case "database":
                 case "schema":

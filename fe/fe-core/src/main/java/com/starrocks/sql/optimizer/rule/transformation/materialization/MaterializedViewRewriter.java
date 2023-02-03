@@ -705,7 +705,7 @@ public class MaterializedViewRewriter {
             @Override
             public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
                 ScalarOperator tmp = replace(cast);
-                return tmp != null ? tmp : super.visitCall(cast, context);
+                return tmp != null ? tmp : super.visitCastOperator(cast, context);
             }
 
             @Override
