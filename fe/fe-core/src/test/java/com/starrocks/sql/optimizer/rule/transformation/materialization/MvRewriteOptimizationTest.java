@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
@@ -79,15 +78,15 @@ public class MvRewriteOptimizationTest {
         Config.enable_experimental_mv = true;
 
         starRocksAssert.withTable("create table emps (\n" +
-                "    empid int not null,\n" +
-                "    deptno int not null,\n" +
-                "    name varchar(25) not null,\n" +
-                "    salary double\n" +
-                ")\n" +
-                "distributed by hash(`empid`) buckets 10\n" +
-                "properties (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");")
+                        "    empid int not null,\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null,\n" +
+                        "    salary double\n" +
+                        ")\n" +
+                        "distributed by hash(`empid`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("create table depts (\n" +
                         "    deptno int not null,\n" +
                         "    name varchar(25) not null\n" +
@@ -230,6 +229,15 @@ public class MvRewriteOptimizationTest {
                 " (1,3,1),(1,3,2),(1,3,3)\n" +
                 " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
                 " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
+
+        starRocksAssert.withTable("CREATE TABLE `json_tbl` (\n" +
+                "  `p_dt` date NULL COMMENT \"\",\n" +
+                "  `d_user` json NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`p_dt`)\n" +
+                "DISTRIBUTED BY HASH(p_dt) BUCKETS 2\n" +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+        cluster.runSql("test", "insert into json_tbl values('2020-01-01', '{\"a\": 1, \"gender\": \"man\"}') ");
     }
 
     @AfterClass
@@ -333,7 +341,8 @@ public class MvRewriteOptimizationTest {
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertNotContains(plan4, "hive_mv_1");
 
-        String query5 = "select s_suppkey, s_name, s_address, (s_acctbal + 1) * 2 from hive0.tpch.supplier where s_suppkey = 5";
+        String query5 =
+                "select s_suppkey, s_name, s_address, (s_acctbal + 1) * 2 from hive0.tpch.supplier where s_suppkey = 5";
         String plan5 = getFragmentPlan(query5);
         PlanTestBase.assertContains(plan5, "hive_mv_1");
 
@@ -476,12 +485,14 @@ public class MvRewriteOptimizationTest {
         String plan5 = getFragmentPlan(query5);
         PlanTestBase.assertContains(plan5, "hive_mv_1");
 
-        String query6 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey between 3 and 4";
+        String query6 =
+                "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey between 3 and 4";
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertContains(plan6, "hive_mv_1");
 
-        String query7 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5 and " +
-                "s_acctbal > 100.0";
+        String query7 =
+                "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5 and " +
+                        "s_acctbal > 100.0";
         String plan7 = getFragmentPlan(query7);
         PlanTestBase.assertContains(plan7, "hive_mv_1");
 
@@ -492,7 +503,8 @@ public class MvRewriteOptimizationTest {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where name like \"%abc%\" and salary * deptno > 100");
-        String query = "select empid, deptno, name, salary from emps where salary * deptno > 100 and name like \"%abc%\"";
+        String query =
+                "select empid, deptno, name, salary from emps where salary * deptno > 100 and name like \"%abc%\"";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "mv_1");
         dropMv("test", "mv_1");
@@ -768,9 +780,9 @@ public class MvRewriteOptimizationTest {
                 " where emps.name = 'a'");
 
         createAndRefreshMv("test", "join_mv_6", "create materialized view join_mv_6" +
-                        " distributed by hash(empid)" +
-                        " as " +
-                        " select empid, deptno, name2 from join_mv_5 where name2 like \"%abc%\"");
+                " distributed by hash(empid)" +
+                " as " +
+                " select empid, deptno, name2 from join_mv_5 where name2 like \"%abc%\"");
 
         String query19 = "select emps.deptno, depts.name from emps join depts using (deptno)" +
                 " where emps.name = 'a' and depts.name like \"%abc%\"";
@@ -797,7 +809,8 @@ public class MvRewriteOptimizationTest {
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps1.empid, emps2.name from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)");
-        String query21 = "select emps1.name, emps2.empid from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)";
+        String query21 =
+                "select emps1.name, emps2.empid from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)";
         String plan21 = getFragmentPlan(query21);
         PlanTestBase.assertContains(plan21, "join_mv_8");
         dropMv("test", "join_mv_8");
@@ -896,7 +909,6 @@ public class MvRewriteOptimizationTest {
 
         dropMv("test", "hive_join_mv_2");
     }
-
 
     @Test
     public void testAggregateMvRewrite() throws Exception {
@@ -1216,6 +1228,51 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testAggExprRewrite() throws Exception {
+        {
+            // Group by Cast Expr
+            String mvName = "mv_q15";
+            createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_q15`\n" +
+                    "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT \n" +
+                    "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                    "    count(d_user) AS `cnt`\n" +
+                    "FROM `json_tbl`\n" +
+                    "GROUP BY `gender`");
+            String query =
+                    "SELECT \n" +
+                            "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                            "    count(d_user) AS `cnt`\n" +
+                            "FROM `json_tbl`\n" +
+                            "GROUP BY `gender`;";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        }
+
+        {
+            // Agg with Cast Expr
+            String mvName = "mv_q16";
+            createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_q16`\n" +
+                    "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT \n" +
+                    "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                    "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
+                    "FROM `json_tbl`\n" +
+                    "GROUP BY `gender`");
+            String query =
+                    "SELECT \n" +
+                            "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                            "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
+                            "FROM `json_tbl`\n" +
+                            "GROUP BY `gender`;";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        }
+    }
+
+    @Test
     public void testHiveAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
@@ -1332,14 +1389,14 @@ public class MvRewriteOptimizationTest {
 
         // aggregate querys
         createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
-                        " distributed by hash(v1)" +
-                        " as " +
-                        " SELECT t0.v1 as v1, test_all_type.t1d," +
-                        " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
-                        " from t0 join test_all_type" +
-                        " on t0.v1 = test_all_type.t1d" +
-                        " where t0.v1 < 100" +
-                        " group by v1, test_all_type.t1d");
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d");
 
         String query3 = " SELECT t0.v1 as v1, test_all_type.t1d," +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -1427,7 +1484,8 @@ public class MvRewriteOptimizationTest {
                 "FROM `emps`\n" +
                 "WHERE `emps`.`empid` < 5\n" +
                 "GROUP BY `emps`.`deptno`, `emps`.`name`;");
-        String query6 = "SELECT `emps`.`deptno`, `emps`.`name`, sum(salary) as salary FROM `emps` group by deptno, name;";
+        String query6 =
+                "SELECT `emps`.`deptno`, `emps`.`name`, sum(salary) as salary FROM `emps` group by deptno, name;";
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertNotContains(plan6, "mv_agg_1");
         PlanTestBase.assertContains(plan6, "emps");
@@ -1793,6 +1851,7 @@ public class MvRewriteOptimizationTest {
         getScanOperators(root, name, results);
         return results;
     }
+
     private void getScanOperators(OptExpression root, String name, List<PhysicalScanOperator> results) {
         if (root.getOp() instanceof PhysicalScanOperator
                 && ((PhysicalScanOperator) root.getOp()).getTable().getName().equals(name)) {
