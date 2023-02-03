@@ -507,6 +507,7 @@ struct TMasterOpRequest {
     14: optional Types.TUserIdentity current_user_ident
     15: optional i32 stmtIdx  // the idx of the sql in multi statements
     16: optional InternalService.TQueryOptions query_options
+    17: optional string catalog
 
     // Following is added by StarRocks
     // TODO(zc): Should forward all session variables and connection context
