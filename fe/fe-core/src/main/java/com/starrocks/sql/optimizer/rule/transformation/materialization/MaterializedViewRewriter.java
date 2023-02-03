@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -736,6 +737,12 @@ public class MaterializedViewRewriter {
             public ScalarOperator visitCall(CallOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
                 return tmp != null ? tmp : super.visitCall(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
+                ScalarOperator tmp = replace(cast);
+                return tmp != null ? tmp : super.visitCastOperator(cast, context);
             }
 
             @Override
