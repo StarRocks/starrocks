@@ -134,6 +134,13 @@ public class TransactionLoadAction extends RestBaseAction {
             channelIdStr = request.getRequest().headers().get(CHANNEL_ID_STR);
         }
 
+        if (channelNumStr != null && channelIdStr == null) {
+            throw new DdlException("Must provide channel_id when stream load begin.");
+        }
+        if (channelNumStr == null && channelIdStr != null) {
+            throw new DdlException("Must provide channel_num when stream load begin.");
+        }
+
         Long backendID = null;
 
         if (Strings.isNullOrEmpty(dbName)) {
@@ -198,13 +205,10 @@ public class TransactionLoadAction extends RestBaseAction {
             if (timeout != null) {
                 timeoutMillis = Long.parseLong(timeout) * 1000;
             }
-            if (channelNumStr == null) {
-                throw new DdlException("Must provide channel num when stream load begin.");
-            }
             int channelNum = Integer.parseInt(channelNumStr);
             int channelId = Integer.parseInt(channelIdStr);
-            if (channelId >= channelNum) {
-                throw new DdlException("channel id should be less than channel num");
+            if (channelId >= channelNum || channelId < 0) {
+                throw new DdlException("channel id should be between [0, " + String.valueOf(channelNum - 1) + "].");
             }
 
             // context.parseHttpHeader(request.getRequest().headers());
