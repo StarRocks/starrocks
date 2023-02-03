@@ -91,8 +91,7 @@
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
       + [文件管理器](/administration/filemanager.md)
-  + 恢复数据
-    + [数据恢复](/administration/Data_recovery.md)
+  + [数据恢复](/administration/Data_recovery.md)
   + 管理用户权限及认证
     + [用户权限](/administration/User_privilege.md)
     + [认证方式](/administration/Authentication.md)
