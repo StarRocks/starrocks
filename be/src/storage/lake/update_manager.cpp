@@ -87,7 +87,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
     size_t idx = 0;
-    size_t old_total_del = 0;
     size_t new_del = 0;
     size_t total_del = 0;
     for (auto& new_delete : new_deletes) {
@@ -118,7 +117,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                         "v:$6",
                         tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
             }
-            old_total_del += cur_old;
             new_del += cur_add;
             total_del += cur_new;
         }
