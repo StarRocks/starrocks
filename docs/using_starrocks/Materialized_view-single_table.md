@@ -6,7 +6,7 @@ A single-table Materialized Views in StarRocks is a special index for query acce
 
 If there are a considerable number of predictable queries or queries that use a same set of sub-query results repetitively, you can build single-table materialized views to accelerate these queries.
 
-### Preparation
+## Preparation
 
 Before creating the single-table materialized view, check if your data warehouse is eligible for query acceleration through single-table materialized views. For example, check if the queries reuse certain subquery statements.
 
@@ -103,7 +103,7 @@ GROUP BY store_id;
 
 It can be observed that the query takes about 0.02 seconds, and no single-table materialized view is used to accelerate the query because the output of `rollup` section in the query profile is `sales_records`, which is the base table.
 
-### Create a single-table materialized view
+## Create a single-table materialized view
 
 You can create a single-table materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
 
@@ -116,7 +116,7 @@ FROM sales_records
 GROUP BY store_id;
 ```
 
-### Query with the single-table materialized view
+## Query with the single-table materialized view
 
 The single-table materialized view you created contains the complete set of pre-computed results in accordance with the query statement. Subsequent queries will use the data within it. You can run the same query to test the query time as you did in the preparation.
 
@@ -136,7 +136,7 @@ GROUP BY store_id;
 
 It can be observed that the query time is reduced to 0.01 seconds.
 
-### Check if a query hits the single-table materialized view
+## Check if a query hits the single-table materialized view
 
 Run EXPLAIN command again to check if the query hits the single-table materialized view.
 
@@ -196,7 +196,7 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 
 As you can see, now the output of `rollup` section in the query profile is `store_amt`, which is the single-table materialized view you have built. That means this query has hit the single-table materialized view.
 
-### Check the building status of a single-table materialized view
+## Check the building status of a single-table materialized view
 
 Creating a single-table materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the single-table materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command.
 
@@ -220,7 +220,7 @@ RollupIndexName: store_amt
 
 The `RollupIndexName` section indicates the name of the single-table materialized view, and `State` section indicates if the building is completed.
 
-### Check the schema of a single-table materialized view
+## Check the schema of a single-table materialized view
 
 You can use DESC tbl_name ALL command to check the schema of a table and its subordinate single-table materialized views.
 
@@ -241,7 +241,7 @@ MySQL > DESC sales_records ALL;
 8 rows in set (0.00 sec)
 ```
 
-### Drop a single-table materialized view
+## Drop a single-table materialized view
 
 Under the following circumstances, you need to drop a single-table materialized view:
 
@@ -251,7 +251,7 @@ Under the following circumstances, you need to drop a single-table materialized 
 
 - The frequency of the involved queries is low, and you can tolerate a relatively high query latency.
 
-#### Drop an unfinished single-table materialized view
+### Drop an unfinished single-table materialized view
 
 You can drop a single-table materialized view that is being created by canceling the in-progress creation task. First, you need to get the job ID `JobID` of the materialized view creation task by [checking the building status of the materialized view](#check-the-building-status-of-a-single-table-materialized-view). After getting the job ID, you need to cancel the creation task with the CANCEL ALTER command.
 
@@ -259,7 +259,7 @@ You can drop a single-table materialized view that is being created by canceling
 CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 ```
 
-#### Drop an existing single-table materialized view
+### Drop an existing single-table materialized view
 
 You can drop an existing single-table materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
 
@@ -267,9 +267,9 @@ You can drop an existing single-table materialized view with the [DROP MATERIALI
 DROP MATERIALIZED VIEW store_amt;
 ```
 
-### Best practices
+## Best practices
 
-#### Exact count distinct
+### Exact count distinct
 
 The following example is based on an advertisement business analysis table `advertiser_view_record`, which records the date that the ad is viewed `click_time`, the name of the ad `advertiser`, the channel of the ad `channel`, and the ID of the user who viewed the ID `user_id`.
 
@@ -301,7 +301,7 @@ GROUP BY advertiser, channel;
 
 After the single-table materialized view is created, the sub-query `count(distinct user_id)` in the subsequent queries will be automatically rewritten as `bitmap_union_count (to_bitmap(user_id))` so that they can hit the single-table materialized view.
 
-#### Approximate count distinct
+### Approximate count distinct
 
 Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a single-table materialized view based on this table and use the [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) function to pre-aggregate the data.
 
@@ -312,7 +312,7 @@ FROM advertiser_view_record
 GROUP BY advertiser, channel;
 ```
 
-#### Set extra sort keys
+### Set extra sort keys
 
 Suppose that the base table `tableA` contains columns `k1`, `k2` and `k3`, where only `k1` and `k2` are sort keys. If the query including the sub-query `where k3=x` must be accelerated, you can create a single-table materialized view with `k3` as the first column.
 
@@ -322,7 +322,7 @@ SELECT k3, k2, k1
 FROM tableA
 ```
 
-### Correspondence of aggregate functions
+## Correspondence of aggregate functions
 
 When a query is executed with a single-table materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the single-table materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the single-table materialized view. You can select the corresponding aggregate function to build a single-table materialized view according to your business scenario.
 
@@ -335,7 +335,7 @@ When a query is executed with a single-table materialized view, the original que
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
 
-### Caution
+## Caution
 
 - Single-table  materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
 
