@@ -346,6 +346,39 @@ TEST_F(SizeTieredCompactionPolicyTest, test_min_compaction) {
     ASSERT_EQ(0, versions[0].second);
 }
 
+TEST_F(SizeTieredCompactionPolicyTest, test_tablet_not_running) {
+    LOG(INFO) << "test_tablet_not_running";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    for (int i = 0; i < 6; ++i) {
+        write_new_version(tablet_meta);
+    }
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    tablet->set_tablet_state(TABLET_NOTREADY);
+    init_compaction_context(tablet);
+
+    auto res = compact(tablet);
+    ASSERT_FALSE(res.ok());
+
+    tablet->set_tablet_state(TABLET_RUNNING);
+
+    res = compact(tablet);
+    ASSERT_TRUE(res.ok());
+
+    ASSERT_EQ(1, tablet->version_count());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(5, versions[0].second);
+}
+
 TEST_F(SizeTieredCompactionPolicyTest, test_max_compaction) {
     LOG(INFO) << "test_max_cumulative_compaction";
     create_tablet_schema(UNIQUE_KEYS);

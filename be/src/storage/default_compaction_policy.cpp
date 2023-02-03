@@ -24,6 +24,10 @@
 namespace starrocks {
 
 bool DefaultCumulativeBaseCompactionPolicy::need_compaction(double* score, CompactionType* type) {
+    if (_tablet->tablet_state() != TABLET_RUNNING) {
+        return false;
+    }
+
     _tablet->calculate_cumulative_point();
     auto cumu_st = _pick_rowsets_to_cumulative_compact(&_cumulative_rowsets, &_cumulative_score);
     auto base_st = _pick_rowsets_to_base_compact(&_base_rowsets, &_base_score);
