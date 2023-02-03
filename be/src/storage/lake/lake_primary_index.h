@@ -41,9 +41,16 @@ public:
     Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                      const MetaFileBuilder* builder);
 
+    int64_t data_version() const { return _data_version; }
+    void update_data_version(int64_t version) { _data_version = version; }
+
 private:
     Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
+
+private:
+    // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
+    int64_t _data_version = 0;
 };
 
 } // namespace lake

@@ -55,7 +55,9 @@ TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager*
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
           _update_mgr(update_mgr),
-          _gc_checker_tid(INVALID_BTHREAD) {}
+          _gc_checker_tid(INVALID_BTHREAD) {
+    _update_mgr->set_tablet_mgr(this);
+}
 
 TabletManager::~TabletManager() {
     if (_gc_checker_tid != INVALID_BTHREAD) {
@@ -165,6 +167,23 @@ SegmentPtr TabletManager::lookup_segment(std::string_view key) {
 void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
+    (void)fill_metacache(key, value.release(), (int)mem_cost);
+}
+
+DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto value = static_cast<CacheValue*>(_metacache->value(handle));
+    auto delvec = std::get<DelVectorPtr>(*value);
+    _metacache->release(handle);
+    return delvec;
+}
+
+void TabletManager::cache_delvec(std::string_view key, DelVectorPtr delvec) {
+    auto mem_cost = delvec->memory_usage();
+    auto value = std::make_unique<CacheValue>(std::move(delvec));
     (void)fill_metacache(key, value.release(), (int)mem_cost);
 }
 

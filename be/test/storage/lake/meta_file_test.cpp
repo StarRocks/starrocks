@@ -111,7 +111,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(reader.load().ok());
     DelVector after_delvec;
     int64_t latest_version;
-    EXPECT_TRUE(reader.get_del_vec(s_location_provider.get(), segment_id, &after_delvec, &latest_version).ok());
+    EXPECT_TRUE(reader.get_del_vec(s_tablet_manager.get(), segment_id, &after_delvec, &latest_version).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
     EXPECT_EQ(version, latest_version);
     // 4. read meta
@@ -119,9 +119,8 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(reader2.load().ok());
     auto meta_st = reader2.get_meta();
     EXPECT_TRUE(meta_st.ok());
-    DelvecPairPB delvecpb = (*meta_st)->delvec_meta().delvecs(0);
-    EXPECT_EQ(delvecpb.segment_id(), segment_id);
-    EXPECT_EQ(delvecpb.page().version(), version);
+    DelvecPagePB delvec_pagepb = (*meta_st)->delvec_meta().delvecs()[segment_id];
+    EXPECT_EQ(delvec_pagepb.version(), version);
     // 5. update delvec
     metadata->set_version(version2);
     MetaFileBuilder builder2(metadata, s_update_manager.get());
