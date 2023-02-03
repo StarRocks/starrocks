@@ -88,11 +88,11 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-- If two identical records are loaded, the Duplicate Key model considers the two records as one record instead of two.
+- If two identical records are loaded, the Duplicate Key model considers them as two records, instead of one.
 
 ### What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Overview of data loading](../loading/Loading_intro.md).
 
 > Note: When you load data into a table that uses the Duplicate Key model, you can only append data to the table. You cannot modify the existing data in the table.
 
