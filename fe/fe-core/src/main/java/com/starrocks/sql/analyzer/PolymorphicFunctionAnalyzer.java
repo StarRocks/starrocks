@@ -351,6 +351,7 @@ public class PolymorphicFunctionAnalyzer {
                     realTableFnRetTypes.add(typeElement);
                 } else {
                     assert !retType.isPseudoType();
+                    realTableFnRetTypes.add(t);
                 }
             }
 
