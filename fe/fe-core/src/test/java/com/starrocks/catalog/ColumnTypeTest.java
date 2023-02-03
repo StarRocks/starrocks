@@ -53,7 +53,7 @@ public class ColumnTypeTest {
     @Before
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test

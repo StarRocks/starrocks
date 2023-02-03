@@ -203,9 +203,9 @@ public class DbsProcDirTest {
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Arrays.asList(String.valueOf(db1.getId()), db1.getOriginName(), "0", "8388608.000 TB",
-                FeConstants.null_string, "9223372036854775807"));
+                FeConstants.NULL_STRING, "9223372036854775807"));
         rows.add(Arrays.asList(String.valueOf(db2.getId()), db2.getOriginName(), "0", "8388608.000 TB",
-                FeConstants.null_string, "9223372036854775807"));
+                FeConstants.NULL_STRING, "9223372036854775807"));
         Assert.assertEquals(rows, result.getRows());
     }
 

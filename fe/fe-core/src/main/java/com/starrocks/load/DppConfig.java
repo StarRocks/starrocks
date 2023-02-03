@@ -308,7 +308,7 @@ public class DppConfig implements Writable {
     public String getApplicationsPath() {
         return String.format("%s/%d/%s/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(),
                 APPLICATIONS_PATH,
-                FeConstants.dpp_version);
+                FeConstants.DPP_VERSION);
     }
 
     public String getOutputPath() {
