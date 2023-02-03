@@ -88,7 +88,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-- If two identical records are loaded, the Duplicate Key table retains them as two rows rather than one row.
+- If two identical records are loaded, the Duplicate Key model retains them as two records, rather than one.
 
 ### What to do next
 
