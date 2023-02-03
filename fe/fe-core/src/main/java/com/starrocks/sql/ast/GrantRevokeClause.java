@@ -24,9 +24,9 @@ import com.starrocks.analysis.UserIdentity;
  * ;
  */
 public class GrantRevokeClause implements ParseNode {
-    private UserIdentity userIdentity;
-    private String roleName;
-    private boolean withGrantOption;
+    private final UserIdentity userIdentity;
+    private final String roleName;
+    private final boolean withGrantOption;
 
     public GrantRevokeClause(UserIdentity userIdentifier, String roleName, boolean withGrantOption) {
         this.userIdentity = userIdentifier;
