@@ -1,4 +1,11 @@
+The building of Starrocks artifacts and packaging to runtime container images are performed in a hermetic, [multi-stage docker build](https://docs.docker.com/build/building/multi-stage/) environment. This setup enables the reuse of FE/BE artifacts for packaging into container images for different deployment scenarios. The building of artifacts will be executed in parallel leveraging the [BuildKit](https://docs.docker.com/build/buildkit/) for optimal speed.
+
+![img.png](img.png)
+
 # 1. Starrocks Ubuntu dev env image
+This [dev-env-ubuntu.Dockerfile](dev-env-ubuntu.Dockerfile) build the docker image for the dev environment.
+It builds and pre-install all the toolchains, dependence libraries, and maven dependencies that are needed for building Starrocks FE and BE.
+
 ## 1.1 Build Ubuntu dev env image
 ```
 DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/OWNER/starrocks/dev-env-ubuntu:<tag> ../..
@@ -16,7 +23,11 @@ E.g.:
 docker push ghcr.io/dengliu/starrocks/dev-env-ubuntu:latest
 ```
 
-# 2 Starrocks aftifacts image
+# 2 Starrocks artifacts image
+
+Artifact Package Stage packages the artifacts into a Busybox based image. The busybox base image is only 1MB, the packaged artifact image serves as a carrier to pass the Starrocks artifact to the next stage of docker build to package into various types of k8s deployment runtime images.
+
+
 ## 2.1 Build Starrocks aftifacts image for Ubuntu
 Build the Starrocks artifacts fe & be and package them into a busybox basedimage
 
