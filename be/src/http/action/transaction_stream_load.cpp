@@ -250,10 +250,10 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
         ctx->body_bytes += std::stol(http_req->header(HttpHeaders::CONTENT_LENGTH));
         if (ctx->body_bytes > max_body_bytes) {
-            LOG(WARNING) << "body exceed max size." << ctx->brief();
-
             std::stringstream ss;
-            ss << "body exceed max size: " << max_body_bytes << ", limit: " << max_body_bytes;
+            ss << "body size " << ctx->body_bytes << " exceed limit: " << max_body_bytes << ", " << ctx->brief()
+               << ". You can increase the limit by setting streaming_load_max_mb in be.conf.";
+            LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
     } else {
