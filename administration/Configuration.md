@@ -369,6 +369,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
+| be_exit_after_disk_write_hang_second                  | 60          | second | 磁盘挂起后触发 BE 进程退出的等待时间。                       |
+| min_cumulative_compaction_failure_interval_sec       | 30          | second | Cumulative Compaction 失败后的最小重试间隔。                      |
+| size_tiered_level_num                                 | 7           | N/A    | Size-tiered Compaction 策略的 level 数量。每个 level 最多保留一个 rowset，因此稳定状态下最多会有和 level 数相同的 rowset。 |
+| size_tiered_level_multiple                            | 5           | N/A    | Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。 |
+| size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 
 ### 配置 BE 静态参数
 
@@ -444,6 +449,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | block_cache_block_size | 1048576 | 单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。   |
 | block_cache_mem_size   | 2147483648 | 内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 block cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 |
 | block_cache_disk_size  | 0 | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。 |
+| jdbc_connection_pool_size  | 8 | JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。 |
+| jdbc_minimum_idle_connections  | 1 | JDBC 连接池中最少的空闲连接数量。 |
+| jdbc_connection_idle_timeout_ms  | 600000 | JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。 |
+| query_cache_capacity  | 536870912 | BE 的 Query Cache 内存大小上限。单位：Byte。 |
+| enable_event_based_compaction_framework  | TRUE | 是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。 |
+| enable_size_tiered_compaction_strategy  | TRUE | 是否开启 Size-tiered Compaction 策略。`true` 代表开启。`false` 代表关闭。 |
 
 ## 系统参数
 
