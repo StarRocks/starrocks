@@ -48,6 +48,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/sysinfo.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
@@ -216,7 +217,7 @@ void AgentServer::Impl::init_or_die() {
 #define CREATE_AND_START_POOL(pool_name, CLASS_NAME, worker_num)
 #endif // BE_TEST
 
-    CREATE_AND_START_POOL(_publish_version_workers, PublishVersionTaskWorkerPool, 1)
+    CREATE_AND_START_POOL(_publish_version_workers, PublishVersionTaskWorkerPool, base::NumCPUs())
     // Both PUSH and REALTIME_PUSH type use _push_workers
     CREATE_AND_START_POOL(_push_workers, PushTaskWorkerPool,
                           config::push_worker_count_high_priority + config::push_worker_count_normal_priority)

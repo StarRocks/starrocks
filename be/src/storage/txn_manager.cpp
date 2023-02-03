@@ -231,10 +231,10 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 }
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                               int64_t version, const RowsetSharedPtr& rowset) {
+                               int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     if (tablet->updates() != nullptr) {
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
-        auto st = tablet->rowset_commit(version, rowset);
+        auto st = tablet->rowset_commit(version, rowset, wait_time);
         if (!st.ok()) {
             StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;

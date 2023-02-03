@@ -1129,9 +1129,9 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
     new_tablet_meta->init_from_pb(&tablet_meta_pb);
 }
 
-Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     CHECK(_updates) << "updates should exists";
-    return _updates->rowset_commit(version, rowset);
+    return _updates->rowset_commit(version, rowset, wait_time);
 }
 
 void Tablet::on_shutdown() {

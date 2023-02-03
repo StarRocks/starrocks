@@ -82,7 +82,7 @@ public:
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         auto row_set = *writer->build();
-        ASSERT_TRUE(tablet->rowset_commit(version, row_set).ok());
+        ASSERT_TRUE(tablet->rowset_commit(version, row_set, 0).ok());
         ASSERT_EQ(version, tablet->updates()->max_version());
     }
 

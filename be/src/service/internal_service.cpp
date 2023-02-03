@@ -857,7 +857,7 @@ Status PInternalServiceImplBase<T>::_mv_commit_epoch(const pipeline::QueryContex
     publish_version_req.partition_version_infos = commit_epoch_task.partition_version_infos;
     publish_version_req.transaction_id = commit_epoch_task.transaction_id;
 
-    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs);
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
     StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
     return Status::OK();
 }
