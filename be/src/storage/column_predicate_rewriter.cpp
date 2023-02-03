@@ -289,8 +289,13 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     *ptr = nullptr;
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
+<<<<<<< HEAD
     const ColumnExprPredicate* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
     pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size);
+=======
+    const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
+    RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
+>>>>>>> cffac7b61 ([BugFix] Fix unused DCHECK in DictMappingExpr (#17304))
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
