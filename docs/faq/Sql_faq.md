@@ -77,7 +77,7 @@ When you compare the STRING data type and the INTEGER data type, the fields of t
 
 StarRocks does not support the DECODE function of the Oracle database. StarRocks is compatible with MySQL, so you can use the CASE WHEN statement.
 
-## Can the latest data be queried immediately after data is loaded into the primary key model of StarRocks?
+## Can the latest data be queried immediately after data is loaded into the Primary Key table of StarRocks?
 
 Yes. StarRocks merges data in a way that references Google Mesa. In StarRocks, a BE triggers the data merge and it has two kinds of compaction to merge data. If the data merge is not completed, it is finished during your query. Therefore, you can read the latest data after data loading.
 

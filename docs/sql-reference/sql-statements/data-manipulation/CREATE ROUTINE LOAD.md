@@ -152,7 +152,7 @@ For example, a table contains columns `id`, `timestamp` and so on. And you want 
 
 > **NOTE**
 >
-> The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates."
+> The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates."
 
 ```sql
 CREATE ROUTINE LOAD test_db.table5 on table5

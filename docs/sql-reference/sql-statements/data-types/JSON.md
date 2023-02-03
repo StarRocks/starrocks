@@ -42,7 +42,7 @@ PROPERTIES (
 );
 ```
 
-> Only tables that use the Duplicate Key model support JSON columns. Additionally, such JSON columns cannot be defined as sort keys.
+> Only tables that use the Duplicate Key table support JSON columns. Additionally, such JSON columns cannot be defined as sort keys.
 
 ### Load data and store the data as JSON data
 
@@ -241,7 +241,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 - The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 
-- JSON columns are supported only in tables that use the Duplicate Key model. Such JSON columns cannot be defined as sort keys in the tables to which they belong.
+- JSON columns are supported only in tables that use the Duplicate Key table. Such JSON columns cannot be defined as sort keys in the tables to which they belong.
 
 - JSON columns cannot be used as partition keys or bucket keys.
 

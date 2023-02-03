@@ -384,10 +384,10 @@ The support for multi-version caching varies depending on data models and query 
 
 | **Data type**       | **Query** **type**                                           | **Support for multi-version caching**                        |
 | ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Duplicate Key Model | <ul><li>Queries on base tables</li><li>Queries on single-table materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on single-table materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
-| Aggregate Key Model | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
-| Unique Key Model    | N/A                                                          | Not supported. However, the query cache is supported.        |
-| Primary Key Model   | N/A                                                          | Not supported. However, the query cache is supported.        |
+| Duplicate Key table | <ul><li>Queries on base tables</li><li>Queries on single-table materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on single-table materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
+| Aggregate Key table | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
+| Unique Key table    | N/A                                                          | Not supported. However, the query cache is supported.        |
+| Primary Key table   | N/A                                                          | Not supported. However, the query cache is supported.        |
 
 The impact of data update types on multi-version caching is as follows:
 

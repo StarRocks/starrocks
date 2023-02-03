@@ -6,13 +6,13 @@ Additionally, to reduce memory consumption, StarRocks supports creating a prefix
 
 ## Principles
 
-In the Duplicate Key model, sort key columns are defined by using the `DUPLICATE KEY` keyword.
+In the Duplicate Key table, sort key columns are defined by using the `DUPLICATE KEY` keyword.
 
-In the Aggregate Key model, sort key columns are defined by using the `AGGREGATE KEY` keyword.
+In the Aggregate Key table, sort key columns are defined by using the `AGGREGATE KEY` keyword.
 
-In the Unique Key model, sort key columns are defined by using the `UNIQUE KEY` keyword.
+In the Unique Key table, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
-In the Primary Key model, sort key columns are primary key columns, which are defined by using the `PRIMARY KEY` keyword.
+In the Primary Key table, sort key columns are primary key columns, which are defined by using the `PRIMARY KEY` keyword.
 
 When you define sort key columns for a table at table creation, take note of the following points:
 

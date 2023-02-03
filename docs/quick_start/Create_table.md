@@ -54,7 +54,7 @@ PROPERTIES(
 >
 > - To create a table in StarRocks, you MUST specify a bucket key in the `DISTRIBUTED BY HASH` clause to strategize the data distribution plan of the table. By default, the data is distributed to 10 tablets. See [Data Distribution](../table_design/Data_model.md#starrocks-data-distribution) for more information.
 > - You need to specify the table property `replication_num`, which represents the number of data replicas, as `1` because the StarRocks instance you deployed has only one BE node.
-> - If no [data model](../table_design/Data_model.md) is specified, a Duplicate Key model is created by default. See [Duplicate Key model](../table_design/Data_model.md#duplicate-key-model)
+> - If no [data model](../table_design/Data_model.md) is specified, a Duplicate Key table is created by default. See [Duplicate Key table](../table_design/Data_model.md#duplicate-key-model)
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
 > - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_model.md#design-partitioning-and-bucketing-rules) for more instructions.
 

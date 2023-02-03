@@ -2,7 +2,7 @@
 
 Deletes data from a partition of a table based on specified conditions and deletes the data about the materialized views that reference the table.
 
-## DELETE and Duplicate Key model, Aggregate Key model, and Unique Key model
+## DELETE and Duplicate Key table, Aggregate Key table, and Unique Key table
 
 ### Syntax
 
@@ -26,7 +26,7 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 ### Usage notes
 
-- If a table uses any data model except the Duplicate Key model, you can specify only the primary key columns of the table as conditions.
+- If a table uses any data model except the Duplicate Key table, you can specify only the primary key columns of the table as conditions.
 
 - If a primary key column that you specify as a condition for data deletion from a table cannot be found in the associated materialized view, the DELETE statement cannot be executed on the table.
 
@@ -63,7 +63,7 @@ DELETE FROM my_table
 WHERE  k2 in ("abc", "cba");
 ```
 
-## DELETE and Primary Key model
+## DELETE and Primary Key table
 
 ### Syntax
 

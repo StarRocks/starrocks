@@ -75,7 +75,7 @@ SELECT select_expr[, select_expr ...]
   The ORDER BY column of the materialized view.
 
   - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
-  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the AGGREGATE KEY model, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the AGGREGATE KEY model, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
+  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the Aggregate Key table, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the Aggregate Key table, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
 
 **distribution_desc** (**required** when creating async refresh materialized view)
