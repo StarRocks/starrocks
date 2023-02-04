@@ -112,11 +112,6 @@ public class MockJournal implements Journal {
     private static class MockProtocol implements HAProtocol {
 
         @Override
-        public long getEpochNumber() {
-            return 0;
-        }
-
-        @Override
         public boolean fencing() {
             return true;
         }
@@ -134,24 +129,6 @@ public class MockJournal implements Journal {
         @Override
         public InetSocketAddress getLeader() {
             return null;
-        }
-
-        @Override
-        public List<InetSocketAddress> getNoneLeaderNodes() {
-            return Lists.newArrayList();
-        }
-
-        @Override
-        public void transferToMaster() {
-        }
-
-        @Override
-        public void transferToNonMaster() {
-        }
-
-        @Override
-        public boolean isLeader() {
-            return true;
         }
 
         @Override

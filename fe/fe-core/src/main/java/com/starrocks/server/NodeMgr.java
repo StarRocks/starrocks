@@ -657,7 +657,6 @@ public class NodeMgr {
             if (stateMgr.getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) stateMgr.getHaProtocol();
                 if (role == FrontendNodeType.FOLLOWER) {
-                    bdbha.addHelperSocket(host, editLogPort);
                     bdbha.addUnstableNode(host, getFollowerCnt());
                 }
 
@@ -699,7 +698,6 @@ public class NodeMgr {
 
                 BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
                 ha.removeUnstableNode(host, getFollowerCnt());
-                ha.removeHelperSocket(host, port);
             }
             stateMgr.getEditLog().logRemoveFrontend(fe);
         } finally {
@@ -731,12 +729,6 @@ public class NodeMgr {
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
-                // haProtocol is null when loading image.
-                if (!GlobalStateMgr.isCheckpointThread()
-                        && stateMgr.getHaProtocol() != null) {
-                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
-                    ha.addHelperSocket(fe.getHost(), fe.getEditLogPort());
-                }
             }
         } finally {
             unlock();
@@ -753,10 +745,6 @@ public class NodeMgr {
             }
             if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
-                if (!GlobalStateMgr.isCheckpointThread()) {
-                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
-                    ha.removeHelperSocket(removedFe.getHost(), removedFe.getEditLogPort());
-                }
             }
 
             removedFrontends.add(removedFe.getNodeName());
