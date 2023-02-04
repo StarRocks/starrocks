@@ -283,5 +283,4 @@ public class FunctionSetTest {
         Assert.assertEquals(Type.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
         Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
     }
-
 }
