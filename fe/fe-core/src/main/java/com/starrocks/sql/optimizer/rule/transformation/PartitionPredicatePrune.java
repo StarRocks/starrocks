@@ -116,8 +116,9 @@ public class PartitionPredicatePrune extends TransformationRule {
                 continue;
             }
 
-            // None bound predicate can't prune
-            if (null == pcf.lowerBound && null == pcf.upperBound) {
+            // None/Null bound predicate can't prune
+            if ((null == pcf.lowerBound || pcf.lowerBound.isConstantNull()) &&
+                    (null == pcf.upperBound || pcf.upperBound.isConstantNull())) {
                 continue;
             }
 
