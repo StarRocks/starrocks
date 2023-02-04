@@ -242,7 +242,13 @@ set(EXEC_FILES
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/type_descriptor_test.cpp
+<<<<<<< HEAD
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+=======
+        ./runtime/user_function_cache_test.cpp
+        ./runtime/sorted_chunks_merger_test.cpp
+        ./runtime/merge_cascade_test.cpp
+>>>>>>> defeb8ac6 ([BugFix] Fix stream cascade merge may got a wrong result (#17289))
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
