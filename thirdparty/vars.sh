@@ -195,10 +195,10 @@ ROCKSDB_SOURCE=rocksdb-6.22.1
 ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
 
 # librdkafka
-LIBRDKAFKA_DOWNLOAD="https://github.com/edenhill/librdkafka/archive/v1.9.2.tar.gz"
-LIBRDKAFKA_NAME=librdkafka-1.9.2.tar.gz
-LIBRDKAFKA_SOURCE=librdkafka-1.9.2
-LIBRDKAFKA_MD5SUM="fe9624e905abbf8324b0f6be520d9c24"
+LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
+LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
+LIBRDKAFKA_SOURCE=librdkafka-2.0.2
+LIBRDKAFKA_MD5SUM="c0120dc32acc129bfb4656fe17568da1"
 
 # pulsar
 PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.1.tar.gz"
