@@ -98,6 +98,39 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
     return merge_sorted_cursor_two_way();
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/sorting/merge_cascade.cpp
+=======
+bool MergeTwoCursor::move_cursor() {
+    DCHECK(is_data_ready());
+    DCHECK(!is_eos());
+
+    bool eos = _left_run.empty() || _right_run.empty();
+
+    if (_left_run.empty() && !_left_cursor->is_eos()) {
+        auto chunk = _left_cursor->try_get_next();
+        if (chunk.first) {
+            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+    if (_right_run.empty() && !_right_cursor->is_eos()) {
+        auto chunk = _right_cursor->try_get_next();
+        if (chunk.first) {
+            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+
+    // one is eos but the other has data stream
+    // we will passthrough the other data stream
+    if ((_left_cursor->is_eos() && !_right_run.empty()) || (_right_cursor->is_eos() && !_left_run.empty())) {
+        eos = false;
+    }
+
+    return eos;
+}
+
+>>>>>>> defeb8ac6 ([BugFix] Fix stream cascade merge may got a wrong result (#17289)):be/src/exec/sorting/merge_cascade.cpp
 // 1. Find smaller tail
 // 2. Cutoff the chunk based on tail
 // 3. Merge two chunks and output
