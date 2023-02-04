@@ -154,4 +154,36 @@ public:
     }
 };
 
+class TExprBuilder {
+public:
+    TExprBuilder& operator<<(const LogicalType& slot_type) {
+        TExpr expr;
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::SLOT_REF);
+        TTypeDesc tdesc;
+        TTypeNode ttpe;
+        TScalarType scalar_tp;
+        scalar_tp.type = to_thrift(slot_type);
+        scalar_tp.__set_len(200);
+        scalar_tp.__set_precision(27);
+        scalar_tp.__set_scale(9);
+        ttpe.__set_scalar_type(scalar_tp);
+        ttpe.type = TTypeNodeType::SCALAR;
+        tdesc.types.push_back(std::move(ttpe));
+        node.__set_type(tdesc);
+        TSlotRef slot_ref;
+        slot_ref.__set_tuple_id(tuple_id);
+        slot_ref.__set_slot_id(column_id++);
+        node.__set_slot_ref(slot_ref);
+        expr.nodes.push_back(std::move(node));
+        res.push_back(expr);
+        return *this;
+    }
+    std::vector<TExpr> get_res() { return res; }
+
+private:
+    const int tuple_id = 0;
+    int column_id = 0;
+    std::vector<TExpr> res;
+};
 } // namespace starrocks
