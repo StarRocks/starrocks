@@ -215,6 +215,10 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         return this instanceof NullLiteral;
     }
 
+    public boolean isConstantNull() {
+        return this instanceof NullLiteral;
+    }
+
     @Override
     public int compareTo(LiteralExpr o) {
         return compareLiteral(o);

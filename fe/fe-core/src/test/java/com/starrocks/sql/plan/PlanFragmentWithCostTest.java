@@ -1970,4 +1970,25 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     rollup: lineitem_partition\n" +
                 "     tabletRatio=1");
     }
+
+    @Test
+    public void testPruneInvalidPredicate() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        setTableStatistics(table2, 10);
+
+        new MockUp<LocalTablet>() {
+            @Mock
+            public long getRowCount(long version) {
+                return 10;
+            }
+        };
+
+        String sql = "select * from lineitem_partition where L_SHIPDATE > cast(true as date)";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 11: L_SHIPDATE > CAST(TRUE AS DATE)");
+    }
 }
