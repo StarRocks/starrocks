@@ -147,7 +147,6 @@ import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
-import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -1103,17 +1102,6 @@ public class GlobalStateMgr {
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
-
-        // add helper sockets
-        if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
-            for (Frontend fe : nodeMgr.getFrontends().values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                    if (getHaProtocol() instanceof BDBHA) {
-                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
-                    }
-                }
-            }
-        }
 
         if (replayer == null) {
             createReplayer();
