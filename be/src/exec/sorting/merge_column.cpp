@@ -171,9 +171,9 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
-        using Container = typename ColumnType::Container;
-        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
-        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
+        auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
+        auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
