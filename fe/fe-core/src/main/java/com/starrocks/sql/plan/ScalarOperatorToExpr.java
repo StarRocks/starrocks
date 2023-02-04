@@ -138,14 +138,22 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
-            if (context.projectOperatorMap.containsKey(node) && context.colRefToExpr.get(node) == null) {
-                Expr expr = buildExpr.build(context.projectOperatorMap.get(node), context);
+            Expr expr = context.colRefToExpr.get(node);
+            if (context.projectOperatorMap.containsKey(node) && expr == null) {
+                expr = buildExpr.build(context.projectOperatorMap.get(node), context);
+                if (expr.getType().isNull()) {
+                    // NULL_TYPE hack, this can be any legitimate type, for simplicity, we pick boolean.
+                    expr.setType(Type.BOOLEAN);
+                }
                 context.colRefToExpr.put(node, expr);
                 return expr;
             }
 
-            Preconditions.checkState(context.colRefToExpr.containsKey(node));
-            return context.colRefToExpr.get(node);
+            if (expr.getType().isNull()) {
+                // NULL_TYPE hack, this can be any legitimate type, for simplicity, we pick boolean.
+                expr.setType(Type.BOOLEAN);
+            }
+            return expr;
         }
 
         @Override
@@ -155,7 +163,9 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
-            return new ArrayExpr(node.getType(),
+            // NULL_TYPE hack, itemType can be any legitimate type, for simplicity, we pick boolean.
+            Type finalType = Type.ARRAY_NULL.equals(node.getType()) ? Type.ARRAY_BOOLEAN : node.getType();
+            return new ArrayExpr(finalType,
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
         }
 
@@ -180,7 +190,12 @@ public class ScalarOperatorToExpr {
                 Type type = literal.getType();
                 if (literal.isNull()) {
                     NullLiteral nullLiteral = new NullLiteral();
-                    nullLiteral.setType(literal.getType());
+                    if (literal.getType().isNull()) {
+                        // NULL_TYPE hack, this can be any legitimate type, for simplicity, we pick boolean.
+                        nullLiteral.setType(Type.BOOLEAN);
+                    } else {
+                        nullLiteral.setType(literal.getType());
+                    }
                     nullLiteral.setOriginType(Type.NULL);
                     return nullLiteral;
                 }
@@ -534,7 +549,8 @@ public class ScalarOperatorToExpr {
                 arguments.add(slot);
             }
             // construct common sub operator map
-            Map<SlotRef, Expr> commonSubOperatorMap = Maps.newTreeMap(Comparator.comparing(ref -> ref.getSlotId().asInt()));
+            Map<SlotRef, Expr> commonSubOperatorMap =
+                    Maps.newTreeMap(Comparator.comparing(ref -> ref.getSlotId().asInt()));
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operator.getColumnRefMap().entrySet()) {
                 ColumnRefOperator ref = kv.getKey();

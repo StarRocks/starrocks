@@ -56,8 +56,6 @@ import com.starrocks.thrift.TSlotRef;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 public class SlotRef extends Expr {
@@ -240,6 +238,13 @@ public class SlotRef extends Expr {
         this.desc = desc;
     }
 
+    public void setType(Type type) {
+        super.setType(type);
+        if (desc != null) {
+            desc.setType(type);
+        }
+    }
+
     public SlotDescriptor getSlotDescriptorWithoutCheck() {
         return desc;
     }
@@ -333,7 +338,7 @@ public class SlotRef extends Expr {
             }
         } else {
             // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0,0);
+            msg.slot_ref = new TSlotRef(0, 0);
         }
 
         msg.setOutput_column(outputColumn);
