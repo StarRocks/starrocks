@@ -213,6 +213,7 @@ Status HdfsScanner::open_random_access_file() {
     if (_scanner_params.use_block_cache && _compression_type == CompressionTypePB::NO_COMPRESSION) {
         _cache_input_stream = std::make_shared<io::CacheInputStream>(_raw_file->filename(), input_stream);
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_block_cache);
+        _cache_input_stream->set_enable_read_bypass_cache(_scanner_params.enable_read_bypass_block_cache);
         input_stream = _cache_input_stream;
     }
 

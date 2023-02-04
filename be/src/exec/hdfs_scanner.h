@@ -152,6 +152,7 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+    bool enable_read_bypass_block_cache = false;
 };
 
 struct HdfsScannerContext {

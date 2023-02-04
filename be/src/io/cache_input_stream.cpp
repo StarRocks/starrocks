@@ -54,7 +54,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         StatusOr<size_t> res;
 
         DCHECK(size <= BLOCK_SIZE);
-        {
+        if (!_enable_read_bypass_cache) {
             SCOPED_RAW_TIMER(&_stats.read_cache_ns);
             res = cache->read_cache(_cache_key, _offset, size, p);
             if (res.ok()) {

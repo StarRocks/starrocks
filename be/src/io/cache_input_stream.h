@@ -49,6 +49,8 @@ public:
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
+    void set_enable_read_bypass_cache(bool v) { _enable_read_bypass_cache = v; }
+
 private:
     std::string _cache_key;
     std::string _filename;
@@ -58,6 +60,7 @@ private:
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
+    bool _enable_read_bypass_cache = false;
 };
 
 } // namespace starrocks::io
