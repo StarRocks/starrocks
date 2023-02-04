@@ -3,22 +3,23 @@
 ## Description
 
 This function returns a specified length of characters from the right side of a given string. Length unit: utf8 character.
+Note: This function is also named as [strright](strright.md).
 
 ## Syntax
 
-```Haskell
-VARCHAR right(VARCHAR str)
+```SQL
+VARCHAR right(VARCHAR str,INT len)
 ```
 
 ## Examples
 
-```Plain Text
-MySQL > select right("Hello starrocks",5);
-+-------------------------+
-| right('Hello starrocks', 5) |
-+-------------------------+
+```SQL
+MySQL > select right("Hello starrocks",9);
++-----------------------------+
+| right('Hello starrocks', 9) |
++-----------------------------+
 | starrocks                   |
-+-------------------------+
++-----------------------------+
 ```
 
 ## keyword
