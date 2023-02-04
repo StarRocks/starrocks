@@ -1,9 +1,12 @@
 package com.starrocks.ha;
 
+<<<<<<< HEAD
 import java.net.InetSocketAddress;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
+=======
+>>>>>>> d37037248 ([BugFix] Fix the problem of slow `show frontends` when the Kubernetes pod restart (#17341))
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,11 +60,6 @@ public class BDBHATest {
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
-        Set<InetSocketAddress> helperSocketsBefore = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
-        InetSocketAddress targetAddress = new InetSocketAddress("host1", 9010);
-        Assert.assertTrue(helperSocketsBefore.contains(targetAddress));        
-
-
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "host2", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
@@ -72,9 +70,6 @@ public class BDBHATest {
 
         // the other one is dropped
         GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
-
-        Set<InetSocketAddress> helperSocketsAfter = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
-        Assert.assertTrue(!helperSocketsAfter.contains(targetAddress));
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
