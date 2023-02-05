@@ -109,6 +109,11 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
     if (!is_data_ready() || is_eos()) {
         return ChunkUniquePtr();
     }
+    if (!_permutation.empty()) {
+        auto res = acquire_remaining_chunk();
+        _permutation.clear();
+        return res;
+    }
     if (move_cursor()) {
         return ChunkUniquePtr();
     }
@@ -164,48 +169,47 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
         _right_run.reset();
         VLOG_ROW << "merge_sorted_cursor_two_way output right run";
     } else {
-        // Cutoff right by left tail
-        int tail_cmp = CursorAlgo::compare_tail(sort_desc, _left_run, _right_run);
-        if (tail_cmp <= 0) {
-            ASSIGN_OR_RETURN(auto merged, merge_sorted_intersected_cursor(_right_run, _left_run));
-
-            result = std::move(merged);
-        } else {
-            // Cutoff left by right tail
-            ASSIGN_OR_RETURN(auto merged, merge_sorted_intersected_cursor(_left_run, _right_run));
-
-            result = std::move(merged);
-        }
+        ASSIGN_OR_RETURN(auto merged, merge_sorted_intersected_cursor(_right_run, _left_run));
+        result = std::move(merged);
     }
 
-    LOG(WARNING) << "TRACE merged rows:" << result->num_rows();
     return result;
 }
 
 StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2) {
     const auto& sort_desc = _sort_desc;
-    size_t run1_cut = CursorAlgo::chunk_upper_bound(sort_desc, run1, run2);
-    // split run1 to two runs (run1_before, run1_after)
-    // run1 before cut point will be merged with run2
-    SortedRun run1_before(run1, run1.start_index(), run1_cut);
-    SortedRun run1_after(run1, run1_cut, run1.end_index());
-
     // Merge partial chunk
-    Permutation perm;
 
-    RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run2, run1_before, &perm));
-    CursorAlgo::trim_permutation(run2, run1_before, perm);
-    DCHECK_EQ(run2.num_rows() + run1_before.num_rows(), perm);
+    RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run1, run2, &_permutation));
+    DCHECK_EQ(run1.num_rows() + run2.num_rows(), _permutation.size());
 
-    ChunkUniquePtr merged = run2.chunk->clone_empty(perm.size());
+    size_t merged_rows = std::max(run1.num_rows(), run2.num_rows());
+
+    ChunkUniquePtr merged = run2.chunk->clone_empty(merged_rows);
+
+    _merging_left_chunk = std::move(run1.chunk);
+    _merging_right_chunk = std::move(run2.chunk);
+
+    _permutation_view = PermutationView(_permutation.data(), merged_rows);
 
     // TODO: avoid copy the whole chunk, but copy orderby columns only
-    materialize_by_permutation(merged.get(), {run2.chunk, run1_before.chunk}, perm);
+    materialize_by_permutation(merged.get(), {_merging_left_chunk, _merging_right_chunk}, _permutation_view);
 
-    VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output [{}, {})", run1.start_index(), run1.end_index());
-
-    run1 = run1_after;
+    run1.reset();
     run2.reset();
+    return merged;
+}
+
+ChunkUniquePtr MergeTwoCursor::acquire_remaining_chunk() {
+    size_t merged_rows = _permutation.size() - _permutation_view.size();
+    _permutation_view = PermutationView(_permutation.data() + _permutation_view.size(), merged_rows);
+
+    ChunkUniquePtr merged = _merging_left_chunk->clone_empty(merged_rows);
+    materialize_by_permutation(merged.get(), {_merging_left_chunk, _merging_right_chunk}, _permutation_view);
+
+    _merging_left_chunk.reset();
+    _merging_right_chunk.reset();
+
     return merged;
 }
 

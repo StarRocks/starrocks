@@ -15,10 +15,13 @@
 #pragma once
 
 #include <deque>
+#include <memory>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
@@ -129,12 +132,19 @@ private:
 
     bool move_cursor();
 
+    ChunkUniquePtr acquire_remaining_chunk();
+
     SortDescs _sort_desc;
     SortedRun _left_run;
     SortedRun _right_run;
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
+
+    Permutation _permutation;
+    PermutationView _permutation_view = PermutationView(_permutation);
+    ChunkPtr _merging_left_chunk;
+    ChunkPtr _merging_right_chunk;
 };
 
 // Merge multiple cursors in cascade way
