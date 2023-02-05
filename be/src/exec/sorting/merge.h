@@ -124,6 +124,9 @@ public:
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    // merge two runs
+    StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
+
     bool move_cursor();
 
     SortDescs _sort_desc;
