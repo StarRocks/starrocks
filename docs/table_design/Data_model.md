@@ -88,7 +88,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-- If two identical records are loaded, the Duplicate Key model considers the two records as one record instead of two.
+- If two identical records are loaded, the Duplicate Key model retains them as two records, rather than one.
 
 ### What to do next
 
@@ -385,4 +385,4 @@ PROPERTIES("replication_num" = "3",
 
 ### What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Data load into tables of Primary Key model](../loading/Load_to_Primary_Key_tables.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Overview of data loading](../loading/Loading_intro.md).
