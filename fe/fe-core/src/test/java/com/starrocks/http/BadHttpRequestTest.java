@@ -61,6 +61,9 @@ public class BadHttpRequestTest extends StarRocksHttpTestCase {
         Request request = createRequest(Config.http_max_header_size / 2);
         Response response = networkClient.newCall(request).execute();
         Assert.assertEquals(200, response.code());
+        String body = response.body().string();
+        String expectedBody = "{\"status\":\"FAILED\",\"msg\":\"No backend alive.\"}";
+        Assert.assertEquals(expectedBody, body);
     }
 
     @NotNull

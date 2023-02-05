@@ -1999,4 +1999,17 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static boolean enable_auto_tablet_distribution = false;
+
+    /**
+     * Enable use configured be external address to do stream load.
+     * This is useful in kubernetes environment.
+     */
+    @ConfField(mutable = true)
+    public static boolean stream_load_use_be_external_address = false;
+
+    /**
+     * Config be external address to be used for stream load, in the format of `address:port`
+     */
+    @ConfField(mutable = true)
+    public static String stream_load_be_external_address = "";
 }

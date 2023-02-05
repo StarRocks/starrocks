@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -105,7 +106,19 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend alive.");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        TNetworkAddress redirectAddr;
+        if (Config.stream_load_use_be_external_address && !Config.stream_load_be_external_address.isEmpty()) {
+            LOG.info("Use preconfigured BE external address:{} for streaming load:", Config.stream_load_be_external_address);
+            String[] addrInfo = Config.stream_load_be_external_address.split(":");
+            // use :8040 if the port is not included in the configuration.
+            int port = 8040;
+            if (addrInfo.length >= 2) {
+                port = Integer.parseInt(addrInfo[1]);
+            }
+            redirectAddr = new TNetworkAddress(addrInfo[0], port);
+        } else {
+            redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        }
 
         LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
                 redirectAddr.toString(), dbName, tableName, label);
