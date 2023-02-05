@@ -506,7 +506,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Map<String, String> maskedProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : customProperties.entrySet()) {
             if (entry.getKey().contains("password") || entry.getKey().contains("secret")) {
-                maskedProperties.put(entry.getKey(), "xxxxxx");
+                maskedProperties.put(entry.getKey(), "******");
             } else {
                 maskedProperties.put(entry.getKey(), entry.getValue());
             }
