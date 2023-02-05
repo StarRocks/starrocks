@@ -226,14 +226,10 @@ public:
         _tablet_meta_mem_tracker.reset(new MemTracker(-1));
         _mem_pool.reset(new MemPool());
 
-<<<<<<< HEAD
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-=======
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
 
         _rowset_id = 10000;
         _version = 0;
->>>>>>> 1d4e51fa3 ([Enhancement] Support cumulative compaction on the tablet of the missing version (#11641))
     }
 
     void TearDown() override {
