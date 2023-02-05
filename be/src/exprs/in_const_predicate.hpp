@@ -134,6 +134,14 @@ public:
 
         bool use_array = is_use_array();
         for (int i = 1; i < _children.size(); ++i) {
+            if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
+                (_children[0]->type().type == _children[i]->type().type) ||
+                (LogicalType::TYPE_NULL == _children[i]->type().type)) {
+                // pass
+            } else {
+                return Status::InternalError("VectorizedInPredicate type not same");
+            }
+
             ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
             if (!value->is_constant() && !value->only_null()) {
                 return Status::InternalError("VectorizedInPredicate value not const");
