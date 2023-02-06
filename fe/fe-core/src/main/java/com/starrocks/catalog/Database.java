@@ -543,12 +543,13 @@ public class Database extends MetaObject implements Writable {
             } else {
                 idToTable.put(materializedView.getId(), materializedView);
                 nameToTable.put(materializedView.getName(), materializedView);
+                // There are many checks in onCreate. If these checks fail, the log should not be written,
+                // so it should be placed in front of the log
+                materializedView.onCreate();
                 if (!isReplay) {
-                    // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
                 }
-                materializedView.onCreate();
             }
             return true;
         } finally {
