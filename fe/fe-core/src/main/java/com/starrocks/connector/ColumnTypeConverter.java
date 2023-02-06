@@ -41,8 +41,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ColumnTypeConverter {
-    public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
-    public static final String COMPLEX_PATTERN = "([0-9a-z<>(),:_]+)";
+    public static final String DECIMAL_PATTERN = "^decimal\\((\\d+), *(\\d+)\\)";
+    public static final String COMPLEX_PATTERN = "([0-9a-z<>(),:_ ]+)";
     public static final String ARRAY_PATTERN = "^array<" + COMPLEX_PATTERN + ">";
     public static final String MAP_PATTERN = "^map<" + COMPLEX_PATTERN + ">";
     public static final String STRUCT_PATTERN = "^struct<" + COMPLEX_PATTERN + ">";
@@ -304,7 +304,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
+        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
     }
 
     public static String getTypeKeyword(String type) {
@@ -329,8 +329,7 @@ public class ColumnTypeConverter {
 
     // Array string like "Array<Array<int>>"
     public static Type fromHiveTypeToArrayType(String typeStr) {
-        if (!HIVE_UNSUPPORTED_TYPES.stream().filter(typeStr.toUpperCase()::contains).collect(Collectors.toList())
-                .isEmpty()) {
+        if (HIVE_UNSUPPORTED_TYPES.stream().anyMatch(typeStr.toUpperCase()::contains)) {
             return Type.UNKNOWN_TYPE;
         }
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
@@ -339,7 +338,7 @@ public class ColumnTypeConverter {
             if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)), true);
+                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
             }
         } else {
             itemType = fromHiveType(typeStr);
@@ -430,7 +429,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType fromHudiTypeToArrayType(Schema typeSchema) {
-        return new ArrayType(fromHudiType(typeSchema.getElementType()), true);
+        return new ArrayType(fromHudiType(typeSchema.getElementType()));
     }
 
     public static boolean validateHiveColumnType(Type type, Type otherType) {
