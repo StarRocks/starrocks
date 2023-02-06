@@ -148,7 +148,7 @@ public class DynamicPartitionProperty {
         } else if (getTimeUnit().equalsIgnoreCase(TimeUnit.MONTH.toString())) {
             return startOfMonth.toDisplayInfo();
         } else {
-            return FeConstants.null_string;
+            return FeConstants.NULL_STRING;
         }
     }
 

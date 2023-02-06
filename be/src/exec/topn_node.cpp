@@ -243,7 +243,6 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                 _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first, _build_runtime_filters);
     }
 
-    auto rf_hub = context->fragment_context()->runtime_filter_hub();
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     OperatorFactoryPtr sink_operator;
@@ -257,7 +256,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
                 context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
                 _is_null_first, _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types,
-                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, rf_hub);
+                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
     }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);

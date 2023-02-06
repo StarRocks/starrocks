@@ -945,6 +945,9 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
+            if (node.getFnName().getDb() != null) {
+                sb.append("`" + node.getFnName().getDb() + "`.");
+            }
             String functionName = node.getFnName().getFunction();
             sb.append(functionName);
 

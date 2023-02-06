@@ -1465,7 +1465,7 @@ setVar
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
     | userVariable '=' expression                                                               #setVariable
     | systemVariable '=' setExprOrDefault                                                       #setVariable
-    | TRANSACTION transaction_characteristics                                                   #setTransaction
+    | varType? TRANSACTION transaction_characteristics                                          #setTransaction
     ;
 
 transaction_characteristics
@@ -1878,8 +1878,8 @@ windowFunction
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
     | name = NTILE  '(' expression? ')'
-    | name = LEAD  '(' (expression (',' expression)*)? ')'
-    | name = LAG '(' (expression (',' expression)*)? ')'
+    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')'
     | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;

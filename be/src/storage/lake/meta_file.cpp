@@ -28,6 +28,15 @@
 namespace starrocks {
 namespace lake {
 
+static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
+    DelvecCacheKeyPB cache_key_pb;
+    cache_key_pb.set_id(tablet_id);
+    cache_key_pb.mutable_delvec_page()->CopyFrom(page);
+    std::string cache_key;
+    cache_key_pb.SerializeToString(&cache_key);
+    return cache_key;
+}
+
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
         : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
@@ -39,9 +48,8 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
         _buf.insert(_buf.end(), delvec_str.begin(), delvec_str.end());
         const uint64_t size = _buf.size() - offset;
         DCHECK(_delvecs.find(segment_id) == _delvecs.end());
-        _delvecs[segment_id].set_segment_id(segment_id);
-        _delvecs[segment_id].mutable_page()->set_offset(offset);
-        _delvecs[segment_id].mutable_page()->set_size(size);
+        _delvecs[segment_id].set_offset(offset);
+        _delvecs[segment_id].set_size(size);
     }
 }
 
@@ -81,12 +89,14 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     while (delvec_it != _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->end()) {
         bool need_del = false;
         for (const auto& range : delete_delvec_sid_range) {
-            if (delvec_it->segment_id() >= range.first && delvec_it->segment_id() <= range.second) {
+            if (delvec_it->first >= range.first && delvec_it->first <= range.second) {
                 need_del = true;
                 break;
             }
         }
         if (need_del) {
+            // free cache
+            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), delvec_it->second));
             delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->erase(delvec_it);
             delvec_erase_cnt++;
         } else {
@@ -109,23 +119,26 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
 Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     if (!is_primary_key(_tablet_meta.get())) return Status::OK();
-    const size_t delvec_size = _tablet_meta->delvec_meta().delvecs_size();
-    for (size_t i = 0; i < delvec_size; i++) {
-        auto* each_delvec = _tablet_meta->mutable_delvec_meta()->mutable_delvecs(i);
-        auto iter = _delvecs.find(each_delvec->segment_id());
+    // 1. update delvec page in meta
+    for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
+        auto iter = _delvecs.find(each_delvec.first);
         if (iter != _delvecs.end()) {
-            each_delvec->mutable_page()->set_version(version);
-            each_delvec->mutable_page()->set_offset(iter->second.page().offset());
-            each_delvec->mutable_page()->set_size(iter->second.page().size());
+            // erase old version delvec from cache
+            _tablet.tablet_mgr()->erase_metacache(delvec_cache_key(_tablet_meta->id(), each_delvec.second));
+            each_delvec.second.set_version(version);
+            each_delvec.second.set_offset(iter->second.offset());
+            each_delvec.second.set_size(iter->second.size());
             _delvecs.erase(iter);
         }
     }
+
+    // 2. insert new delvec to meta
     for (auto&& each_delvec : _delvecs) {
-        each_delvec.second.mutable_page()->set_version(version);
-        _tablet_meta->mutable_delvec_meta()->add_delvecs()->CopyFrom(each_delvec.second);
+        each_delvec.second.set_version(version);
+        (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
     }
 
-    // write to delvec file
+    // 3. write to delvec file
     if (_buf.size() > 0) {
         MonotonicStopWatch watch;
         watch.start();
@@ -155,6 +168,8 @@ Status MetaFileBuilder::finalize() {
     if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
+    _update_mgr->update_primary_index_data_version(_tablet, version);
+    _has_finalized = true;
     return Status::OK();
 }
 
@@ -163,16 +178,20 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
     if (iter != _delvecs.end()) {
         (*pdelvec) = std::make_shared<DelVector>();
         // read delvec from write buf
-        RETURN_IF_ERROR((*pdelvec)->load(iter->second.page().version(),
-                                         reinterpret_cast<const char*>(_buf.data()) + iter->second.page().offset(),
-                                         iter->second.page().size()));
+        RETURN_IF_ERROR((*pdelvec)->load(iter->second.version(),
+                                         reinterpret_cast<const char*>(_buf.data()) + iter->second.offset(),
+                                         iter->second.size()));
         return true;
     }
     return false;
 }
 
 void MetaFileBuilder::handle_failure() {
-    _update_mgr->remove_primary_index_cache(_tablet_meta->id());
+    if (is_primary_key(_tablet_meta.get()) && !_has_finalized) {
+        // if we meet failures and have not finalized yet, have to clear primary index cache,
+        // then we can retry again.
+        _update_mgr->remove_primary_index_cache(_tablet_meta->id());
+    }
 }
 
 MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {
@@ -216,35 +235,46 @@ Status MetaFileReader::load() {
     return Status::OK();
 }
 
-Status MetaFileReader::get_del_vec(LocationProvider* location_provider, uint32_t segment_id, DelVector* delvec,
-                                   int64_t* latest_version) {
+Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec) {
     if (_access_file == nullptr) return _err_status;
     if (!_load) return Status::InternalError("meta file reader not loaded");
-    for (const auto& each_delvec : _tablet_meta->delvec_meta().delvecs()) {
-        if (each_delvec.segment_id() == segment_id) {
-            MonotonicStopWatch watch;
-            watch.start();
-            VLOG(2) << fmt::format("MetaFileReader get_del_vec {} segid {}",
-                                   _tablet_meta->delvec_meta().ShortDebugString(), segment_id);
-            std::string buf;
-            raw::stl_string_resize_uninitialized(&buf, each_delvec.page().size());
-            // read from delvec file by each_delvec.page().version()
-            const std::string filepath =
-                    location_provider->tablet_delvec_location(_tablet_meta->id(), each_delvec.page().version());
-            RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-            auto rf = fs::new_random_access_file(opts, filepath);
-            if (!rf.ok()) {
-                return rf.status();
-            }
-            RETURN_IF_ERROR((*rf)->read_at_fully(each_delvec.page().offset(), buf.data(), each_delvec.page().size()));
-            // parse delvec
-            RETURN_IF_ERROR(delvec->load(each_delvec.page().version(), buf.data(), each_delvec.page().size()));
-            *latest_version = each_delvec.page().version();
-            if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
-                LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
-            }
+    const LocationProvider* location_provider = tablet_mgr->location_provider();
+    // find delvec by segment id
+    auto iter = _tablet_meta->delvec_meta().delvecs().find(segment_id);
+    if (iter != _tablet_meta->delvec_meta().delvecs().end()) {
+        // found it!
+        MonotonicStopWatch watch;
+        watch.start();
+        VLOG(2) << fmt::format("MetaFileReader get_del_vec {} segid {}", _tablet_meta->delvec_meta().ShortDebugString(),
+                               segment_id);
+        std::string buf;
+        raw::stl_string_resize_uninitialized(&buf, iter->second.size());
+        // read from delvec file by each_delvec.version()
+        const std::string filepath =
+                location_provider->tablet_delvec_location(_tablet_meta->id(), iter->second.version());
+        // find in cache
+        std::string cache_key = delvec_cache_key(_tablet_meta->id(), iter->second);
+        DelVectorPtr delvec_cache_ptr = tablet_mgr->lookup_delvec(cache_key);
+        if (delvec_cache_ptr != nullptr) {
+            delvec->copy_from(*delvec_cache_ptr);
             return Status::OK();
         }
+        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        auto rf = fs::new_random_access_file(opts, filepath);
+        if (!rf.ok()) {
+            return rf.status();
+        }
+        RETURN_IF_ERROR((*rf)->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
+        // parse delvec
+        RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
+        // put in cache
+        delvec_cache_ptr = std::make_shared<DelVector>();
+        delvec_cache_ptr->copy_from(*delvec);
+        tablet_mgr->cache_delvec(cache_key, delvec_cache_ptr);
+        if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+            LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
+        }
+        return Status::OK();
     }
     VLOG(2) << fmt::format("MetaFileReader get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            _tablet_meta->delvec_meta().ShortDebugString());
@@ -269,18 +299,6 @@ void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uin
     for (auto& rs : metadata.rowsets()) {
         for (int i = 0; i < rs.segments_size(); i++) {
             rssid_to_path[rs.id() + i] = rs.segments(i);
-        }
-    }
-}
-
-void find_missed_tsid_range(TabletMetadata* metadata, std::vector<TabletSegmentIdRange>& tsid_ranges) {
-    CHECK(metadata != nullptr);
-    for (int i = 0; i < metadata->rowsets_size(); i++) {
-        uint32_t leftid = (i == 0) ? 1 : metadata->rowsets(i - 1).id() + metadata->rowsets(i - 1).segments_size();
-        uint32_t rightid = metadata->rowsets(i).id() - 1;
-        if (leftid <= rightid) {
-            // found missed tsid range
-            tsid_ranges.emplace_back(metadata->id(), leftid, metadata->id(), rightid);
         }
     }
 }

@@ -35,12 +35,14 @@ class UpdateManager;
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
-
-    //// for PK table
+    // append delvec to builder's buffer
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
+    // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+    // finalize will generate and sync final meta state to storage.
     Status finalize();
+    // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
@@ -53,7 +55,8 @@ private:
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
-    std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
+    std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
+    bool _has_finalized = false;
 };
 
 class MetaFileReader {
@@ -61,8 +64,7 @@ public:
     explicit MetaFileReader(const std::string& filepath, bool fill_cache);
     ~MetaFileReader() {}
     Status load();
-    Status get_del_vec(LocationProvider* location_provider, uint32_t segment_id, DelVector* delvec,
-                       int64_t* latest_version);
+    Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
     StatusOr<TabletMetadataPtr> get_meta();
 
 private:
@@ -77,7 +79,6 @@ bool is_primary_key(const TabletMetadata& metadata);
 
 // TODO(yixin): cache rowset_rssid_to_path
 void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path);
-void find_missed_tsid_range(TabletMetadata* metadata, std::vector<TabletSegmentIdRange>& tsid_ranges);
 
 } // namespace lake
 } // namespace starrocks

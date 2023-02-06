@@ -548,6 +548,18 @@ public class ConnectProcessor {
     }
 
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
+        ctx.setCurrentCatalog(request.catalog);
+        if (ctx.getCurrentCatalog() == null) {
+            // if we upgrade Master FE first, the request from old FE does not set "catalog".
+            // so ctx.getCurrentCatalog() will get null,
+            // return error directly.
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current catalog. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
+        }
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

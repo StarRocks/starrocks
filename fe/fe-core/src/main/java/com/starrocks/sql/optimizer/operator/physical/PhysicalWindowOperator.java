@@ -107,7 +107,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(analyticCall);
+        return Objects.hash(super.hashCode(), analyticCall);
     }
 
     @Override

@@ -310,7 +310,7 @@ CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 // compaction until this interval passes.
 CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
 
-CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
+CONF_mInt64(min_cumulative_compaction_failure_interval_sec, "30"); // 30s
 
 // Too many compaction tasks may run out of memory.
 // This config is to limit the max concurrency of running compaction tasks.
@@ -888,5 +888,6 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=1
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+CONF_mInt64(wait_apply_time, "6000")                                 // 6s
 
 } // namespace starrocks::config

@@ -96,7 +96,7 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
     Status save_meta();
 
