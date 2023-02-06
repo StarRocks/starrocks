@@ -52,9 +52,8 @@ public class StateChangeExecutorTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public FrontendNodeType getFeType() {
-                FrontendNodeType type = execution.getType();
-                LOG.info("{}: get mock fe type {}.", name, type);
-                return type;
+                LOG.info("{}: get mock fe type {}.", name, oldType);
+                return oldType;
             }
         };
 
