@@ -41,7 +41,7 @@ public class MaterializedViewTest extends PlanTestBase {
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
 
-        connectContext= UtFrameUtils.createDefaultCtx();
+        connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
@@ -94,7 +94,7 @@ public class MaterializedViewTest extends PlanTestBase {
     @AfterClass
     public static void afterClass() {
         try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME) ;
+            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
         } catch (Exception e) {
             LOG.warn("drop database failed:", e);
         }
@@ -117,6 +117,7 @@ public class MaterializedViewTest extends PlanTestBase {
         }
         return false;
     }
+
     private void testRewriteOK(String mv, String query) {
         Assert.assertTrue(testRewrite(mv, query));
     }
@@ -186,7 +187,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     public void testSwapOuterJoin() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select count(*) as col1 from " +
                     "emps " + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*)  + 1 from " +
@@ -211,7 +212,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     public void testMultiOuterJoinQueryComplete() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*) from " +
@@ -230,9 +231,10 @@ public class MaterializedViewTest extends PlanTestBase {
                     "and locations.locationid > 10");
         }
     }
+
     @Test
     public void testMultiOuterJoinQueryDelta() {
-        for (String joinType: outerJoinTypes) {
+        for (String joinType : outerJoinTypes) {
             String mv = "select deptno as col1, empid as col2, locations.locationid as col3 from emps " +
                     "" + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*)  from emps " +
