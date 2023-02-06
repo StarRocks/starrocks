@@ -92,6 +92,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         Map<ColumnRefOperator, CallOperator> aggs = agg.getAggregations();
+        ColumnRefOperator countPlaceHolderColumn = null;
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
             ColumnRefOperator usedColumn;
@@ -112,8 +113,18 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 columnType = Type.ARRAY_VARCHAR;
             }
 
-            ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName,
-                    columnType, aggCall.isNullable());
+            ColumnRefOperator metaColumn;
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                if (countPlaceHolderColumn != null) {
+                    metaColumn = countPlaceHolderColumn;
+                } else {
+                    metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+                    countPlaceHolderColumn = metaColumn;
+                }
+            } else {
+                metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+            }
+
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
 

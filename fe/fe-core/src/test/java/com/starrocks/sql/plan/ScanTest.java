@@ -420,9 +420,6 @@ public class ScanTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type\n" +
-                "     <id 16> : count_t1a\n" +
-                "     <id 17> : count_t1a\n" +
-                "     <id 18> : count_t1a\n" +
-                "     <id 19> : count_t1a");
+                "     <id 16> : count_t1a");
     }
 }
