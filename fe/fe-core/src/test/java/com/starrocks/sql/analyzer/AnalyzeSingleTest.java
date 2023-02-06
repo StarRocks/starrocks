@@ -67,6 +67,8 @@ public class AnalyzeSingleTest {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
+
+        analyzeSuccess("select v1 as location from t0");
     }
 
     @Test
