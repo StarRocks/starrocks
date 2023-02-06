@@ -1388,7 +1388,17 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+<<<<<<< HEAD
                     for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+=======
+                    // Table not in NORMAL state is not allowed to do balance,
+                    // because the change of tablet location can cause Schema change or rollup failed
+                    if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
+                        continue;
+                    }
+
+                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+>>>>>>> 39f3a2b5a ([BugFix] Fix balance cause schema change failed bug (#17404))
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
                             lockTotalTime += System.nanoTime() - lockStart;
