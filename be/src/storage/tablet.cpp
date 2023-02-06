@@ -1292,8 +1292,7 @@ bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
         _compaction_context->type = INVALID_COMPACTION;
-        if (_compaction_context != nullptr &&
-            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
+        if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
             // else, return true
             return true;
@@ -1306,8 +1305,7 @@ bool Tablet::force_base_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
         _compaction_context->type = BASE_COMPACTION;
-        if (_compaction_context != nullptr &&
-            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
+        if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
         }
     }

@@ -137,16 +137,22 @@ Status BinlogBuilder::_switch_writer_if_full() {
         RETURN_IF_ERROR(_close_current_writer());
     }
 
+    BinlogFileWriterPtr writer;
     if (!_init_writer && _params->active_file_writer != nullptr) {
         _init_writer = true;
-        _current_writer = _params->active_file_writer;
+        writer = _params->active_file_writer;
         VLOG(3) << "Init and reuse active writer, tablet: " << _tablet_id
                 << ", file path: " << _current_writer->file_path();
     } else {
-        ASSIGN_OR_RETURN(_current_writer, _create_binlog_writer());
+        StatusOr<BinlogFileWriterPtr> status_or = _create_binlog_writer();
+        if (!status_or.ok()) {
+            return status_or.status();
+        }
+        writer = std::move(status_or.value());
         _new_files.push_back(_current_writer->file_path());
         VLOG(3) << "Reuse active writer, tablet: " << _tablet_id << ", file path: " << _current_writer->file_path();
     }
+    _current_writer = std::move(writer);
     RETURN_IF_ERROR(_current_writer->begin(_version, _next_seq_id, _change_event_timestamp));
     return Status::OK();
 }

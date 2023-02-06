@@ -96,7 +96,7 @@ void BinlogBuilderTest::test_write_one_version(ControlParams control_params, Exp
     param->active_file_writer = active_writer;
     param->active_file_meta = active_meta;
 
-    std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(2, 2, param);
+    std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(1, 2, 2, param);
     BinlogBuildResultPtr result = std::make_shared<BinlogBuildResult>();
     int32_t num_entries = 0;
     while (num_entries < control_params.max_num_entries) {
@@ -196,7 +196,7 @@ void BinlogBuilderTest::test_abort_one_version(int32_t num_files, bool start_wit
     param->active_file_writer = active_writer;
     param->active_file_meta = active_meta;
 
-    std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(2, 2, param);
+    std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(1, 2, 2, param);
     BinlogBuildResultPtr result = std::make_shared<BinlogBuildResult>();
     if (num_files == 1) {
         for (int i = 0; i < 10; i++) {
@@ -271,7 +271,7 @@ TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
             }
         }
 
-        std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(version, version, param);
+        std::shared_ptr<BinlogBuilder> builder = std::make_shared<BinlogBuilder>(1, version, version, param);
         bool is_empty = (std::rand() % 50) == 0;
         int32_t num_entries = 0;
         int32_t rows_per_entry = std::rand() % 100 + 1;

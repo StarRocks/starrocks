@@ -27,7 +27,8 @@ RowsetSharedPtr DupKeyRowsetFetcher::get_rowset(int64_t rowset_id) {
 
 BinlogManager::BinlogManager(int64_t _tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                              CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher)
-        : _path(std::move(path)),
+        : _tablet_id(_tablet_id),
+          _path(std::move(path)),
           _max_file_size(max_file_size),
           _max_page_size(max_page_size),
           _compression_type(compression_type),

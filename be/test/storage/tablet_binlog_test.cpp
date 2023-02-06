@@ -139,8 +139,8 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
 TEST_F(TabletBinlogTest, test_publish_out_of_order) {
     std::vector<DupKeyVersionInfo> version_infos;
     for (int32_t version = 2; version < 100; version += 2) {
-        for (int32_t k = 0; k < 2; k++) {
-            int32_t sub_version = version - k;
+        for (int32_t k = 1; k >= 0; k--) {
+            int32_t sub_version = version + k;
             int32_t num_segments = std::rand() % 5;
             int32_t num_rows_per_segment = std::rand() % 100 + 1;
             std::vector<int32_t> segment_rows;
