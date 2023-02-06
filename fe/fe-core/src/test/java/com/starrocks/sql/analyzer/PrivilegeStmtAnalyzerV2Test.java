@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -33,11 +34,14 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+
 public class PrivilegeStmtAnalyzerV2Test {
     static ConnectContext ctx;
 
     @BeforeClass
     public static void setUp() throws Exception {
+        AnalyzeTestUtil.init();
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.setUpForPersistTest();
@@ -48,7 +52,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withDatabase("db1");
-        for (int i = 0; i < 2; ++ i) {
+        for (int i = 0; i < 2; ++i) {
             starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
         }
         ctx.getGlobalStateMgr().getPrivilegeManager().initBuiltinRolesAndUsers();
@@ -225,6 +229,11 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("test_role", createStmt.getQualifiedRole());
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
+        sql = "create role test_role2";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_role2", createStmt.getQualifiedRole());
+        ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
+
         // bad name
         sql = "create role ___";
         try {
@@ -259,6 +268,11 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("[test_role]", grantRoleStmt.getGranteeRole().toString());
         Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
 
+        sql = "grant test_role, test_role2 to test_user";
+        grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("[test_role, test_role2]", grantRoleStmt.getGranteeRole().toString());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+
         sql = "grant ___ to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -270,7 +284,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testSetRole() throws Exception {
-        for (int i = 1; i != 4; ++ i) {
+        for (int i = 1; i != 4; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role role" + i, ctx), ctx);
         }
 
@@ -518,5 +532,18 @@ public class PrivilegeStmtAnalyzerV2Test {
             System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("`EXECUTE AS` must use with `WITH NO REVERT` for now"));
         }
+    }
+
+    @Test
+    public void testGrantMultiObject() {
+        String sql = "grant SELECT on TABLE test.t0 to test_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON TABLE test.t0 TO 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "GRANT SELECT on TABLE test.t0, test.t1 to role public";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON TABLE test.t0, test.t1 TO ROLE 'public'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
     }
 }
