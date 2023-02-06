@@ -209,10 +209,31 @@ StarRocks 2.5 版本中，多表异步刷新物化视图支持 SPJG类型的物�
 
 #### 启用多表物化视图查询改写
 
+- 启用基于 Default catalog 的多表物化视图查询改写
+
 StarRocks 默认开启物化视图查询改写。您可以通过 Session 变量 `enable_materialized_view_rewrite` 开启或关闭该功能。
 
 ```SQL
 SET GLOBAL enable_materialized_view_rewrite = { true | false };
+```
+
+- 启用基于外部数据目录的多表物化视图查询改写
+
+因为不保证结果的强一致性，所以 StarRocks 默认禁用基于外部数据目录的多表物化视图查询改写。您可以通过在创建物化视图时添加 PROPERTY `"force_external_table_query_rewrite" = "true"` 启用该功能。
+
+示例：
+
+```SQL
+CREATE MATERIALIZED VIEW ex_mv_par_tbl
+PARTITION BY emp_date
+DISTRIBUTED BY hash(empid)
+PROPERTIES (
+"force_external_table_query_rewrite" = "true"
+) 
+AS
+select empid, deptno, emp_date
+from `hive_catalog`.`emp_db`.`emps_par_tbl`
+where empid < 5;
 ```
 
 #### 设置多表物化视图查询改写
