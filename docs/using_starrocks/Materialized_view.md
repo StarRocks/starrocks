@@ -218,10 +218,31 @@ Candidate materialized views must meet the following conditions:
 
 #### Enable query rewrite based on async materialized views
 
+- Enable query rewrite based on the default catalog materialized views
+
 StarRocks enables materialized view query rewrite by default. You can enable or disable this feature through the session variable `enable_materialized_view_rewrite`.
 
 ```SQL
 SET GLOBAL enable_materialized_view_rewrite = { true | false };
+```
+
+- Enable query rewrite based on the external catalog materialized views
+
+Because StarRocks does not ensure strong consistency of the results when you query data in external catalogs using materialized views, the query rewrite based on the external catalog materialized views is disabled by default. You can enable this feature for a materialized view by adding the property `"force_external_table_query_rewrite" = "true"` when creating the materialized view.
+
+Example:
+
+```SQL
+CREATE MATERIALIZED VIEW ex_mv_par_tbl
+PARTITION BY emp_date
+DISTRIBUTED BY hash(empid)
+PROPERTIES (
+"force_external_table_query_rewrite" = "true"
+) 
+AS
+select empid, deptno, emp_date
+from `hive_catalog`.`emp_db`.`emps_par_tbl`
+where empid < 5;
 ```
 
 #### Configure query rewrite based on async materialized views
