@@ -432,12 +432,12 @@ public class Database extends MetaObject implements Writable {
                 idToTable.put(table.getId(), table);
                 nameToTable.put(table.getName(), table);
 
+                table.onCreate();
                 if (!isReplay) {
                     // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
                 }
-                table.onCreate();
             }
             return true;
         } finally {
