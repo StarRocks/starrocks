@@ -128,10 +128,8 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
-    bool binlog_enable() {
-        auto config = tablet_meta()->get_binlog_config();
-        return config != nullptr && config->binlog_enable;
-    }
+    bool binlog_enable();
+
     // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
     // prepare_binlog: persist the binlog file before saving the rowset meta in add_inc_rowset()
     //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog

@@ -140,7 +140,7 @@ Status Tablet::_init_once_action() {
 
     if (keys_type() == DUP_KEYS) {
         std::shared_ptr<DupKeyRowsetFetcher> row_fetcher = std::make_shared<DupKeyRowsetFetcher>(*this);
-        _binlog_manager = std::make_unique<BinlogManager>(schema_hash_path(), config::binlog_file_max_size,
+        _binlog_manager = std::make_unique<BinlogManager>(tablet_id(), schema_hash_path(), config::binlog_file_max_size,
                                                           config::binlog_page_max_size,
                                                           tablet_schema().compression_type(), row_fetcher);
     }
@@ -359,6 +359,11 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
     return iter->second;
 }
 
+bool Tablet::binlog_enable() {
+    auto config = _tablet_meta->get_binlog_config();
+    return config != nullptr && config->binlog_enable;
+}
+
 Status Tablet::prepare_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     if (!binlog_enable()) {
         return Status::OK();
@@ -376,7 +381,7 @@ Status Tablet::prepare_binlog(const RowsetSharedPtr& rowset, int64_t version) {
 
     ASSIGN_OR_RETURN(auto params, _binlog_manager->begin_ingestion(version));
     std::shared_ptr<BinlogBuildResult> result = std::make_shared<BinlogBuildResult>();
-    Status status = BinlogBuilder::build_duplicate_key(version, rowset, params, result.get());
+    Status status = BinlogBuilder::build_duplicate_key(tablet_id(), version, rowset, params, result.get());
     if (!st.ok()) {
         _binlog_manager->abort_ingestion(version, result);
         rowset->close();

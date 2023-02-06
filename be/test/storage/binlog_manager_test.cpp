@@ -135,7 +135,7 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
     CompressionTypePB compress_type = LZ4_FRAME;
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
-            _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
+            std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
     LsnMap& lsn_map = binlog_manager->file_metas();
     RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;
@@ -244,7 +244,7 @@ TEST_F(BinlogManagerTest, test_ingestion_abort) {
     CompressionTypePB compress_type = LZ4_FRAME;
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
-            _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
+            std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
     LsnMap& lsn_map = binlog_manager->file_metas();
     RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;
@@ -321,7 +321,7 @@ TEST_F(BinlogManagerTest, test_ingestion_delete) {
     CompressionTypePB compress_type = LZ4_FRAME;
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
     std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
-            _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
+            std::rand(), _binlog_file_dir, max_file_size, max_page_size, compress_type, rowset_fetcher);
     LsnMap& lsn_map = binlog_manager->file_metas();
     RowsetCountMap& rowset_count_map = binlog_manager->rowset_count_map();
     std::map<int64_t, BinlogFileMetaPBPtr> expect_file_metas;

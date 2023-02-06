@@ -93,8 +93,8 @@ private:
 // Manages the binlog metas and files, including generation, deletion and read.
 class BinlogManager : public std::enable_shared_from_this<BinlogManager> {
 public:
-    BinlogManager(std::string path, int64_t max_file_size, int32_t max_page_size, CompressionTypePB compression_type,
-                  std::shared_ptr<RowsetFetcher> rowset_fetcher);
+    BinlogManager(int64_t tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
+                  CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher);
 
     ~BinlogManager();
 
@@ -150,6 +150,7 @@ public:
 private:
     void _apply_build_result(BinlogBuildResult* result);
 
+    int64_t _tablet_id;
     // binlog storage directory
     std::string _path;
     int64_t _max_file_size;

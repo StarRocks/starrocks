@@ -69,7 +69,7 @@ using BinlogBuildResultPtr = std::shared_ptr<BinlogBuildResult>;
 
 class BinlogBuilder {
 public:
-    BinlogBuilder(int64_t version, int64_t change_event_timestamp, BinlogBuilderParamsPtr& params);
+    BinlogBuilder(int64_t tablet_id, int64_t version, int64_t change_event_timestamp, BinlogBuilderParamsPtr& params);
 
     // Those add_xxx methods correspond to that in BinlogFileWriter
     Status add_empty();
@@ -94,7 +94,7 @@ public:
     static BinlogFileWriterPtr discard_binlog_build_result(int64_t version, BinlogBuildResult& result);
 
     // Generate binlog for duplicate key table.
-    static Status build_duplicate_key(int64_t version, const RowsetSharedPtr& rowset,
+    static Status build_duplicate_key(int64_t tablet_id, int64_t version, const RowsetSharedPtr& rowset,
                                       BinlogBuilderParamsPtr& builder_params, BinlogBuildResult* result);
 
     // For testing
@@ -109,6 +109,7 @@ private:
     Status _abort_current_writer();
     Status _close_current_writer();
 
+    int64_t _tablet_id;
     int64_t _version;
     int64_t _change_event_timestamp;
     BinlogBuilderParamsPtr _params;

@@ -25,7 +25,7 @@ RowsetSharedPtr DupKeyRowsetFetcher::get_rowset(int64_t rowset_id) {
     return _tablet.get_inc_rowset_by_version(Version(rowset_id, rowset_id));
 }
 
-BinlogManager::BinlogManager(std::string path, int64_t max_file_size, int32_t max_page_size,
+BinlogManager::BinlogManager(int64_t _tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                              CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher)
         : _path(std::move(path)),
           _max_file_size(max_file_size),
@@ -42,7 +42,7 @@ BinlogManager::~BinlogManager() {
 }
 
 StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version) {
-    VLOG(3) << "Begin ingestion: " << version << ", path: " << _path;
+    VLOG(3) << "Begin ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(-1, _ingestion_version);
 
     std::shared_lock meta_lock(_meta_lock);
@@ -50,8 +50,8 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
         BinlogFileMetaPBPtr file_meta = _binlog_file_metas.rbegin()->second;
         int64_t max_version = file_meta->end_version();
         if (max_version >= version) {
-            std::string msg = fmt::format("Add duplicate version to binlog, max version {}, new version {}",
-                                          max_version, version);
+            std::string msg = fmt::format("Add duplicate version to binlog, tablet {}, max version {}, new version {}",
+                                          _tablet_id, max_version, version);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -72,14 +72,14 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
 }
 
 void BinlogManager::precommit_ingestion(int64_t version, BinlogBuildResultPtr result) {
-    VLOG(3) << "Pre-commit ingestion: " << version << ", path: " << _path;
+    VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
     _build_result = result;
 }
 
 void BinlogManager::abort_ingestion(int64_t version, BinlogBuildResultPtr result) {
-    VLOG(3) << "Abort ingestion: " << version << ", path: " << _path;
+    VLOG(3) << "Abort ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
     _apply_build_result(result.get());
@@ -87,7 +87,7 @@ void BinlogManager::abort_ingestion(int64_t version, BinlogBuildResultPtr result
 }
 
 void BinlogManager::delete_ingestion(int64_t version) {
-    VLOG(3) << "Delete ingestion: " << version << ", path: " << _path;
+    VLOG(3) << "Delete ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result != nullptr);
     int next_file_id = _build_result->next_file_id;
@@ -102,7 +102,7 @@ void BinlogManager::delete_ingestion(int64_t version) {
 }
 
 void BinlogManager::commit_ingestion(int64_t version) {
-    VLOG(3) << "Commit ingestion: " << version << ", path: " << _path;
+    VLOG(3) << "Commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result != nullptr);
     _apply_build_result(_build_result.get());

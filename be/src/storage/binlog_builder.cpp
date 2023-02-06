@@ -20,8 +20,10 @@
 
 namespace starrocks {
 
-BinlogBuilder::BinlogBuilder(int64_t version, int64_t change_event_timestamp, BinlogBuilderParamsPtr& params)
-        : _version(version),
+BinlogBuilder::BinlogBuilder(int64_t tablet_id, int64_t version, int64_t change_event_timestamp,
+                             BinlogBuilderParamsPtr& params)
+        : _tablet_id(tablet_id),
+          _version(version),
           _change_event_timestamp(change_event_timestamp),
           _params(params),
           _next_file_id(params->start_file_id),
@@ -98,8 +100,9 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
             Status status = FileSystemUtil::resize_file(_params->active_file_writer->file_path(),
                                                         _params->active_file_meta->file_size());
             LOG_IF(WARNING, !status.ok())
-                    << "Fail to resize the active file when aborting binlog builder for version: " << _version
-                    << ", the active file: " << _params->active_file_writer->file_path() << ", " << status;
+                    << "Fail to resize the active file when aborting binlog builder, tablet: " << _tablet_id
+                    << ", version: " << _version << ", the active file: " << _params->active_file_writer->file_path()
+                    << ", " << status;
         } else {
             // step 2.2.2
             BinlogFileWriter* old_writer = _params->active_file_writer.get();
@@ -109,7 +112,8 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
             if (status_or.ok()) {
                 result->active_writer = status_or.value();
             } else {
-                LOG(WARNING) << "Fail to reopen the active file when aborting binlog builder for version: " << _version
+                LOG(WARNING) << "Fail to reopen the active file when aborting binlog builder, tablet: " << _tablet_id
+                             << ", version: " << _version
                              << ", the active file: " << _params->active_file_writer->file_path() << ", "
                              << status_or.status();
             }
@@ -136,11 +140,12 @@ Status BinlogBuilder::_switch_writer_if_full() {
     if (!_init_writer && _params->active_file_writer != nullptr) {
         _init_writer = true;
         _current_writer = _params->active_file_writer;
-        VLOG(3) << "Reuse active writer: " << _current_writer->file_path();
+        VLOG(3) << "Init and reuse active writer, tablet: " << _tablet_id
+                << ", file path: " << _current_writer->file_path();
     } else {
         ASSIGN_OR_RETURN(_current_writer, _create_binlog_writer());
         _new_files.push_back(_current_writer->file_path());
-        VLOG(3) << "Reuse active writer: " << _current_writer->file_path();
+        VLOG(3) << "Reuse active writer, tablet: " << _tablet_id << ", file path: " << _current_writer->file_path();
     }
     RETURN_IF_ERROR(_current_writer->begin(_version, _next_seq_id, _change_event_timestamp));
     return Status::OK();
@@ -148,11 +153,12 @@ Status BinlogBuilder::_switch_writer_if_full() {
 
 Status BinlogBuilder::_commit_current_writer(bool end_of_version) {
     DCHECK(_current_writer != nullptr && _current_writer->is_writing());
-    VLOG(3) << "Commit current writer: " << _current_writer->file_path() << ", end_of_version: " << end_of_version;
+    VLOG(3) << "Commit current writer, tablet: " << _tablet_id << ", file path: " << _current_writer->file_path()
+            << ", end_of_version: " << end_of_version;
     Status status = _current_writer->commit(end_of_version);
     if (!status.ok()) {
-        LOG(WARNING) << "Fail to commit binlog writer " << _current_writer->file_path() << ", version " << _version
-                     << ", " << status;
+        LOG(WARNING) << "Fail to commit binlog writer, tablet: " << _tablet_id
+                     << ", file path: " << _current_writer->file_path() << ", version " << _version << ", " << status;
         return status;
     }
     std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
@@ -164,18 +170,19 @@ Status BinlogBuilder::_commit_current_writer(bool end_of_version) {
 
 Status BinlogBuilder::_abort_current_writer() {
     DCHECK(_current_writer != nullptr && _current_writer->is_writing());
-    VLOG(3) << "Abort current writer: " << _current_writer->file_path();
+    VLOG(3) << "Abort current writer, tablet: " << _tablet_id << ", file path: " << _current_writer->file_path();
     Status status = _current_writer->abort();
-    LOG_IF(WARNING, !status.ok()) << "Fail to abort binlog writer " << _current_writer->file_path() << ", " << status;
+    LOG_IF(WARNING, !status.ok()) << "Fail to abort binlog writer, tablet: " << _tablet_id
+                                  << ", file path: " << _current_writer->file_path() << ", " << status;
     return status;
 }
 
 Status BinlogBuilder::_close_current_writer() {
     DCHECK(_current_writer != nullptr);
-    VLOG(3) << "Close current writer: " << _current_writer->file_path();
+    VLOG(3) << "Close current writer, tablet: " << _tablet_id << ", file path: " << _current_writer->file_path();
     Status status = _current_writer->close(true);
-    LOG_IF(WARNING, !status.ok()) << "Fail to close binlog writer after committed " << _current_writer->file_path()
-                                  << ", " << status;
+    LOG_IF(WARNING, !status.ok()) << "Fail to close binlog writer after committed, tablet: " << _tablet_id
+                                  << ", file path: " << _current_writer->file_path() << ", " << status;
     return status;
 }
 
@@ -188,11 +195,11 @@ StatusOr<BinlogFileWriterPtr> BinlogBuilder::_create_binlog_writer() {
     if (status.ok()) {
         return binlog_writer;
     }
-    LOG(WARNING) << "Fail to initialize binlog writer, file id " << file_id << ", file name " << file_path << ", "
+    LOG(WARNING) << "Fail to initialize binlog writer, tablet: " << _tablet_id << ", file path: " << file_path << ", "
                  << status;
     Status st = binlog_writer->close(false);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to close binlog writer, file id " << file_id << ", file name " << file_path << ", "
+        LOG(WARNING) << "Fail to close binlog writer, tablet: " << _tablet_id << ", file path: " << file_path << ", "
                      << status;
     }
 
@@ -200,9 +207,10 @@ StatusOr<BinlogFileWriterPtr> BinlogBuilder::_create_binlog_writer() {
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
     st = fs->delete_file(file_path);
     if (st.ok()) {
-        LOG(INFO) << "Delete binlog file after creating failed " << file_path;
+        LOG(INFO) << "Delete binlog file after creating failed, tablet: " << _tablet_id << ", file path: " << file_path;
     } else {
-        LOG(WARNING) << "Fail to delete binlog file after creating failed " << file_path << ", " << st;
+        LOG(WARNING) << "Fail to delete binlog file after creating failed, tablet: " << _tablet_id
+                     << ", file path: " << file_path << ", " << st;
     }
 
     return status;
@@ -305,10 +313,10 @@ BinlogFileWriterPtr BinlogBuilder::discard_binlog_build_result(int64_t version, 
     return reused_writer;
 }
 
-Status BinlogBuilder::build_duplicate_key(int64_t version, const RowsetSharedPtr& rowset,
+Status BinlogBuilder::build_duplicate_key(int64_t tablet_id, int64_t version, const RowsetSharedPtr& rowset,
                                           BinlogBuilderParamsPtr& builder_params, BinlogBuildResult* result) {
     std::shared_ptr<BinlogBuilder> builder =
-            std::make_shared<BinlogBuilder>(version, rowset->creation_time() * 1000000, builder_params);
+            std::make_shared<BinlogBuilder>(tablet_id, version, rowset->creation_time() * 1000000, builder_params);
     Status status;
     if (rowset->num_rows() == 0) {
         status = builder->add_empty();
@@ -323,9 +331,9 @@ Status BinlogBuilder::build_duplicate_key(int64_t version, const RowsetSharedPtr
             seg_info.seg_index = seg_index;
             status = builder->add_insert_range(seg_info, 0, num_rows);
             if (!status.ok()) {
-                LOG(WARNING) << "Fail to add_insert_range for duplicate key, rowset: " << rowset->rowset_id()
-                             << ", segment index: " << seg_index << ", number of rows " << num_rows
-                             << ", version: " << version << ", " << status;
+                LOG(WARNING) << "Fail to add_insert_range for duplicate key, tablet: " << tablet_id
+                             << ", rowset: " << rowset->rowset_id() << ", segment index: " << seg_index
+                             << ", number of rows " << num_rows << ", version: " << version << ", " << status;
                 break;
             }
         }
@@ -337,7 +345,8 @@ Status BinlogBuilder::build_duplicate_key(int64_t version, const RowsetSharedPtr
 
     if (!status.ok()) {
         builder->abort(result);
-        LOG(WARNING) << "Abort the binlog builder for duplicate key, version: " << version << ", " << status;
+        LOG(WARNING) << "Abort the binlog builder for duplicate key, tablet: " << tablet_id << ", version: " << version
+                     << ", " << status;
     }
 
     return status;
