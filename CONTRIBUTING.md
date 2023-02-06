@@ -4,27 +4,30 @@ StarRocks is built by an open and friendly community. We are dedicated to buildi
 
 ## Table of content
 
-- [How to contribute](#How-to-contribute)
-- [Contributing guideline](#Contributing-guideline)
-  - [Report a bug](#Report-a-bug)
-  - [Contributing code](#Contributing-code)
-    - [General workflow](#General-workflow)
-    - [StarRocks code structure](#StarRocks-code-structure)
-    - [Important directories](#Important-directories)
-    - [Set your development environment](#Set-your-development-environment)
-    - [Coding style](#Coding-style)
-    - [Unit test](#Unit-test)
-    - [Commit message](#Commit-message)
-    - [PR body](#PR-body)
-    - [Contributor License Agreement](#Contributor-License-Agreement)
-    - [Best practices](#Best-practices)
-    - [Important contacts](#Important-contacts)
-  - [Contributing test case](#Contributing-test-case)
-  - [Reviewing code](#Reviewing-code)
-  - [Contributing documentation](#Contributing-documentation)
-  - [Help community members](#Help-community-members)
-  - [Spread our idea](#Spread-our-idea)
-- [Code of conduct](#Code-of-conduct)
+- [Contributing to StarRocks](#contributing-to-starrocks)
+  - [Table of content](#table-of-content)
+  - [How to contribute](#how-to-contribute)
+  - [Contributing guideline](#contributing-guideline)
+    - [Build StarRocks](#build-starrocks)
+    - [Report a bug](#report-a-bug)
+    - [Contributing code](#contributing-code)
+      - [General workflow](#general-workflow)
+      - [StarRocks code structure](#starrocks-code-structure)
+      - [Important directories](#important-directories)
+      - [Set your development environment](#set-your-development-environment)
+      - [Coding style](#coding-style)
+      - [Unit test](#unit-test)
+      - [Commit message](#commit-message)
+      - [PR body](#pr-body)
+      - [Contributor License Agreement](#contributor-license-agreement)
+      - [Best practices](#best-practices)
+      - [Important contacts](#important-contacts)
+    - [Contributing test case](#contributing-test-case)
+    - [Reviewing code](#reviewing-code)
+    - [Contributing documentation](#contributing-documentation)
+    - [Help community members](#help-community-members)
+    - [Spread our idea](#spread-our-idea)
+  - [Code of conduct](#code-of-conduct)
 
 ## How to contribute
 
@@ -43,6 +46,10 @@ Contributions to StarRocks are cordially welcome from everyone. Contributing to 
 ## Contributing guideline
 
 This guide describes how to make various types of contribution to StarRocks community.
+
+### Build StarRocks
+We recommend building StarRocks through docker, the build script ${STARROCKS_HOME}/docker/bin/build_starrocks_for_developer.sh, 
+more information can be seen in https://docs.starrocks.io/zh-cn/latest/administration/Build_in_docker
 
 ### Report a bug
 
