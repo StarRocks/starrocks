@@ -211,7 +211,7 @@
 
         - `database`、`table`：MySQL 中同步对象的库表名，支持正则表达式。
 
-        - `flink.starrocks.*` ：flink-connector-starrocks 的配置信息，更多配置和说明，请参见 [Flink-connector-starrocks](./loading/Flink-connector-starrocks.md#参数说明)。
+        - `flink.starrocks.*` ：flink-connector-starrocks 的配置信息，更多配置和说明，请参见 [Flink-connector-starrocks](./Flink-connector-starrocks.md#参数说明)。
 
     - `[other]` ：其他信息
         - `be_num`： StarRocks 集群的 BE 节点数（后续生成的 StarRocks 建表 SQL 文件会参考该参数，设置合理的分桶数量）。
