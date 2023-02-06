@@ -387,8 +387,11 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {
@@ -398,7 +401,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
+            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_CHAR).get(), &values.back(),
                                               input.get_value(i), mempool));
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
