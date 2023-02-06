@@ -183,6 +183,10 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+
+        // set table state to schema_change, balance should be ignored
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        Assert.assertEquals(0, rebalancer.selectAlternativeTablets().size());
     }
 
     /**
@@ -519,6 +523,10 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+
+        // set table state to schema_change, balance should be ignored
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        Assert.assertEquals(0, rebalancer.selectAlternativeTablets().size());
     }
 
     private Backend genBackend(long beId, String host, long availableCapB, long dataUsedCapB, long totalCapB,
