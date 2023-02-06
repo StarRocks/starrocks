@@ -192,11 +192,7 @@ MySQL > SELECT * FROM order_mv;
 
 StarRocks 2.5 版本中，多表异步刷新物化视图支持 SPJG类型的物化视图查询的自动透明改写。SPJG 类型的物化视图是指在物化视图 Plan 中只包含 Scan、Filter、Project 以及 Aggregate 类型的算子。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。
 
-当查询内部表数据时，StarRocks 通过排除数据与基表不一致的物化视图，来保证改写之后的查询与原始查询结果的强一致性。当物化视图数据过期的时候，不会作为候选的物化视图。
-
-> **注意**
->
-> StarRocks 当前暂不支持基于外部数据目录物化视图的查询改写。
+目前，StarRocks 支持基于 Default catalog、Hive catalog、Hudi catalog 和 Iceberg catalog 的物化视图的查询重写。当查询 Default catalog 数据时，StarRocks 通过排除数据与基表不一致的物化视图，来保证改写之后的查询与原始查询结果的强一致性。当物化视图数据过期时，不会作为[候选物化视图](#候选物化视图)。在查询外部目录数据时，由于 StarRocks 无法感知外部目录分区中的数据变化，因此不保证结果的强一致性。
 
 #### 候选物化视图
 
