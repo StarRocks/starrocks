@@ -40,7 +40,7 @@ StarRocks uses equi-height histograms, which are constructed on several buckets.
 
 **Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types.**
 
-Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `_statistics_.histogram_statistics` table.
+Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database.
 
 ## Collection types and methods
 
@@ -50,8 +50,8 @@ StarRocks supports full and sampled collection, both can be performed automatica
 
 | **Collection type** | **Collection method** | **Description**                                              | **Advantage and disadvantage**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Full collection     | Automatic/manual      | Scans the full table to gather statistics.Statistics are collected partition. If a partition has no data change, data will not be collected from this partition, reducing resource consumption.Full statistics are stored in the `_statistics_.column_statistics` table. | Advantage: The statistics are accurate, which helps the CBO make accurate estimation.Disadvantage: It consumes system resources and is slow. |
-| Sampled collection  | Automatic/manual      | Evenly extracts `N` rows of data from each partition of a table.Statistics are collected by table. Basic statistics of each column are stored as one record. Cardinality information (ndv) of a column is estimated based on the sampled data, which is not accurate.Sampled statistics are stored in the `_statistics_.table_statistic_v1` table. | Advantage: It consumes less system resources and is fast.Disadvantage: The statistics are not complete, which may affect the accuracy of cost estimation. |
+| Full collection     | Automatic/manual      | Scans the full table to gather statistics.Statistics are collected partition. If a partition has no data change, data will not be collected from this partition, reducing resource consumption.Full statistics are stored in the `_statistics_.column_statistics` table. | Advantage: The statistics are accurate, which helps the CBO make accurate estimation.Disadvantage: It consumes system resources and is slow. From 2.5 onwards, StarRocks allows you to specify an automatic collection period, which reduces resource consumption. |
+| Sampled collection  | Automatic/manual      | Evenly extracts `N` rows of data from each partition of a table.Statistics are collected by table. Basic statistics of each column are stored as one record. Cardinality information (ndv) of a column is estimated based on the sampled data, which is not accurate. Sampled statistics are stored in the `_statistics_.table_statistic_v1` table. | Advantage: It consumes less system resources and is fast.Disadvantage: The statistics are not complete, which may affect the accuracy of cost estimation. |
 
 ## Collect statistics
 
@@ -60,6 +60,8 @@ StarRocks offers flexible statistics collection methods. You can choose automati
 ### Automatic full collection
 
 For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection.
+
+From 2.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
 
 Conditions that trigger automatic collection:
 
@@ -70,6 +72,8 @@ Conditions that trigger automatic collection:
 > Formula for calculating statistics health: 1 - Number of added rows since the previous statistics collection/Total number of rows in the smallest partition
 
 - Partition data has been modified. Partitions whose data is not modified will not be collected again.
+
+- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
 
 Automatic full collection is enabled by default and run by the system using the default settings.
 
@@ -82,6 +86,8 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific statistics requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
@@ -398,6 +404,8 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59   | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
