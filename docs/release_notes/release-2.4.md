@@ -4,10 +4,11 @@
 
 Release date: January 19, 2023
 
-### Behavior Change
+### Improvements
 
-- Modified the default backlog of Thrift Listen to `1024`. [#13911](https://github.com/StarRocks/starrocks/pull/13911)
-- Added SQL mode `FORBID_INVALID_DATES`. This SQL mode is disabled by default. When it is enabled, StarRocks verifies the input of the DATE type, and returns an error when the input is invalid. [#14143](https://github.com/StarRocks/starrocks/pull/14143)
+- StarRocks checks whether the corresponding database and table exist during an Analyze to prevent NPE. [#14467](https://github.com/StarRocks/starrocks/pull/14467)
+- Columns with data types that are not supported are not materialized for queries on external tables. [#13305](https://github.com/StarRocks/starrocks/pull/13305)
+- Adds Java version check for the FE start script **start_fe.sh**. [#14333](https://github.com/StarRocks/starrocks/pull/14333)
 
 ### Bug Fixes
 
@@ -25,11 +26,10 @@ The following bugs are fixed:
 - Broker Kerberos tickets timeout during Broker Load. [#16149](https://github.com/StarRocks/starrocks/pull/16149)
 - The `nullable` information is inferred incorrectly in the view of a table. [#15744](https://github.com/StarRocks/starrocks/pull/15744)
 
-### Improvements
+### Behavior Change
 
-- StarRocks checks whether the corresponding database and table exist during an Analyze to prevent NPE. [#14467](https://github.com/StarRocks/starrocks/pull/14467)
-- Columns with data types that are not supported are not materialized for queries on external tables. [#13305](https://github.com/StarRocks/starrocks/pull/13305)
-- Adds Java version check for the FE start script **start_fe.sh**. [#14333](https://github.com/StarRocks/starrocks/pull/14333)
+- Modified the default backlog of Thrift Listen to `1024`. [#13911](https://github.com/StarRocks/starrocks/pull/13911)
+- Added SQL mode `FORBID_INVALID_DATES`. This SQL mode is disabled by default. When it is enabled, StarRocks verifies the input of the DATE type, and returns an error when the input is invalid. [#14143](https://github.com/StarRocks/starrocks/pull/14143)
 
 ## 2.4.2
 
