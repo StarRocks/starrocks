@@ -201,15 +201,11 @@ MySQL > SELECT * FROM order_mv;
 
 In StarRocks v2.5, multi-table async refresh materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
-When querying data in the internal tables, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view data expires, the materialized view will not be used as a candidate materialized view.
-
-> **CAUTION**
->
-> Currently, StarRocks does not support query rewrite based on external catalog materialized views.
+Currently, StarRocks supports rewriting queries on materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a [candidate materialized view](#candidate-materialized-view-for-query-rewrite). When querying data in external catalogs, StarRocks does not ensure strong consistency of the results because StarRocks cannot perceive the data changes in partitions of external catalogs.
 
 #### Candidate materialized view for query rewrite
 
-When rewriting a query, StarRocks will roughly select candidate materialized views that may meet the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
+When rewriting a query, StarRocks roughly selects candidate materialized views that meet the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
 
 Candidate materialized views must meet the following conditions:
 
