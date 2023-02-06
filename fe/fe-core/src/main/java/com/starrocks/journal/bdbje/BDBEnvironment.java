@@ -21,7 +21,6 @@
 
 package com.starrocks.journal.bdbje;
 
-import com.google.common.net.HostAndPort;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.DatabaseNotFoundException;
