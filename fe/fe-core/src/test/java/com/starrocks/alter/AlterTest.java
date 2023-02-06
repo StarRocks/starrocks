@@ -1213,8 +1213,9 @@ public class AlterTest {
     }
 
     @Test
-    public void testCatalogAddPartitionsWeek() throws Exception {
+    public void testCatalogAddPartitionsWeekWithoutCheck() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        Config.enable_create_partial_partition_in_batch = true;
         String createSQL = "CREATE TABLE test.test_partition_week (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
@@ -1250,10 +1251,51 @@ public class AlterTest {
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        Config.enable_create_partial_partition_in_batch = false;
     }
 
     @Test
-    public void testCatalogAddParitionsMonth() throws Exception {
+    public void testCatalogAddPartitionsWeekWithCheck() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition_week (\n" +
+                "      k2 DATE,\n" +
+                "      k3 SMALLINT,\n" +
+                "      v1 VARCHAR(2048),\n" +
+                "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k2, k3)\n" +
+                "PARTITION BY RANGE (k2) (\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+
+        String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
+                "    PARTITIONS START (\"2017-03-20\") END (\"2017-04-10\") EVERY (interval 1 week)";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_week", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
+                .getTable("test_partition_week");
+
+        Assert.assertNotNull(table.getPartition("p2017_12"));
+        Assert.assertNotNull(table.getPartition("p2017_13"));
+        Assert.assertNotNull(table.getPartition("p2017_14"));
+
+        String dropSQL = "drop table test_partition_week";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testCatalogAddPartitionsMonth() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1397,7 +1439,7 @@ public class AlterTest {
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(k2, k3)\n" +
                 "PARTITION BY RANGE (k2) (\n" +
-                "    START (\"20140104\") END (\"20150104\") EVERY (INTERVAL 1 YEAR)\n" +
+                "    START (\"20140101\") END (\"20150101\") EVERY (INTERVAL 1 YEAR)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
@@ -1495,7 +1537,7 @@ public class AlterTest {
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(k2, k3)\n" +
                 "PARTITION BY RANGE (k2) (\n" +
-                "    START (\"20140104\") END (\"20150104\") EVERY (INTERVAL 1 YEAR)\n" +
+                "    START (\"20140101\") END (\"20150101\") EVERY (INTERVAL 1 YEAR)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
@@ -1541,7 +1583,7 @@ public class AlterTest {
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(k2, k3)\n" +
                 "PARTITION BY RANGE (k2) (\n" +
-                "    START (\"20140104\") END (\"20150104\") EVERY (INTERVAL 1 YEAR)\n" +
+                "    START (\"20140101\") END (\"20150101\") EVERY (INTERVAL 1 YEAR)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
@@ -1567,7 +1609,7 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists");
 
-        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(2, table.getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1586,7 +1628,7 @@ public class AlterTest {
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(k2, k3)\n" +
                 "PARTITION BY RANGE (k2) (\n" +
-                "    START (\"20140104\") END (\"20150104\") EVERY (INTERVAL 1 YEAR)\n" +
+                "    START (\"20140101\") END (\"20150101\") EVERY (INTERVAL 1 YEAR)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
@@ -1612,7 +1654,7 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists2");
 
-        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(2, table.getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1631,7 +1673,7 @@ public class AlterTest {
                 "ENGINE=olap\n" +
                 "DUPLICATE KEY(k2, k3)\n" +
                 "PARTITION BY RANGE (k2) (\n" +
-                "    START (\"20140104\") END (\"20150104\") EVERY (INTERVAL 1 YEAR)\n" +
+                "    START (\"20140101\") END (\"20150101\") EVERY (INTERVAL 1 YEAR)\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
                 "PROPERTIES (\n" +

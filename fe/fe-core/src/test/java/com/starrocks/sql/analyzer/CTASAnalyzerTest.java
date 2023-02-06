@@ -236,7 +236,7 @@ public class CTASAnalyzerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String partitionSQL = "create table test2 " +
                 "PARTITION BY RANGE(`k1`)(" +
-                "START (\"2021-03-01\") END (\"2022-03-31\") EVERY (INTERVAL 1 MONTH)\n" +
+                "START (\"2021-03-01\") END (\"2022-04-01\") EVERY (INTERVAL 1 MONTH)\n" +
                 ") AS select k1 from duplicate_table_with_null;";
 
         UtFrameUtils.parseStmtWithNewParser(partitionSQL, ctx);

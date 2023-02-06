@@ -1003,6 +1003,14 @@ public class Config extends ConfigBase {
     public static long dynamic_partition_check_interval_seconds = 600;
 
     /**
+     * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
+     * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
+     * not allow partial creation.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_create_partial_partition_in_batch = false;
+
+    /**
      * The number of query retries.
      * A query may retry if we encounter RPC exception and no result has been sent to user.
      * You may reduce this number to avoid Avalanche disaster.
