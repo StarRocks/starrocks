@@ -4,10 +4,11 @@
 
 发布日期：2023 年 1 月 19 日
 
-### 行为变更
+### 功能优化
 
-- 修改 Thrift Listen 的 Backlog 的默认值为 `1024`。 [#13911](https://github.com/StarRocks/starrocks/pull/13911)
-- 添加 `FORBID_INVALID_DATES` 的 SQL 模式，默认关闭。打开后会校验日期类型的输入，当日期为非法时间时会报错。[#14143](https://github.com/StarRocks/starrocks/pull/14143)
+- 在 Analyze 时，StarRocks 提前检查 Database 和 Table 是否存在以避免 NPE。[#14467](https://github.com/StarRocks/starrocks/pull/14467)
+- 在查询外表时，如果列的数据类型不支持，将不物化该列。[#13305](https://github.com/StarRocks/starrocks/pull/13305)
+- 为 FE 启动脚本 **start_fe.sh** 添加 Java 版本检查。[#14333](https://github.com/StarRocks/starrocks/pull/14333)
 
 ### 问题修复
 
@@ -25,11 +26,10 @@
 - 当 Broker Load 作业持续运行时 Broker Kerberos Ticket 会超时。[#16149](https://github.com/StarRocks/starrocks/pull/16149)
 - 基于表生成视图过程中，列的 `nullable` 信息转化错误。[#15744](https://github.com/StarRocks/starrocks/pull/15744)
 
-### 功能优化
+### 行为变更
 
-- 在 Analyze 时，StarRocks 提前检查 Database 和 Table 是否存在以避免 NPE。[#14467](https://github.com/StarRocks/starrocks/pull/14467)
-- 在查询外表时，如果列的数据类型不支持，将不物化该列。[#13305](https://github.com/StarRocks/starrocks/pull/13305)
-- 为 FE 启动脚本 **start_fe.sh** 添加 Java 版本检查。[#14333](https://github.com/StarRocks/starrocks/pull/14333)
+- 修改 Thrift Listen 的 Backlog 的默认值为 `1024`。 [#13911](https://github.com/StarRocks/starrocks/pull/13911)
+- 添加 `FORBID_INVALID_DATES` 的 SQL 模式，默认关闭。打开后会校验日期类型的输入，当日期为非法时间时会报错。[#14143](https://github.com/StarRocks/starrocks/pull/14143)
 
 ## 2.4.2
 
