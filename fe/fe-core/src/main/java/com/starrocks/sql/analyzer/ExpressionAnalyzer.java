@@ -860,7 +860,7 @@ public class ExpressionAnalyzer {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_CONCAT)) {
                 if (node.getChildren().size() < 2) {
-                    throw new SemanticException(fnName + " should have at least tow inputs");
+                    throw new SemanticException(fnName + " should have at least two inputs");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
