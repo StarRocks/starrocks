@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -50,33 +49,6 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
         return visitor.visitPhysicalHudiScan(optExpression, context);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalHudiScanOperator that = (PhysicalHudiScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHudiScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) &&
-                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
-                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
-                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
-                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
-                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
-                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
-    }
 
     @Override
     public ColumnRefSet getUsedColumns() {
