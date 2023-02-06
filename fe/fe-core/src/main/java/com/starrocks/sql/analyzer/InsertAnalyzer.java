@@ -25,6 +25,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -43,6 +44,10 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class InsertAnalyzer {
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
+        if (Config.use_staros == true && session.getCurrentWarehouse() == null) {
+            throw new SemanticException("No warehouse selected");
+        }
+
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 

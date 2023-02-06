@@ -343,6 +343,10 @@ public class TabletScheduler extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
+        if (Config.use_staros) {
+            return;
+        }
+
         if (!updateWorkingSlots()) {
             return;
         }
