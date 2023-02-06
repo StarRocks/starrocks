@@ -97,7 +97,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_olap_scan_node.key_column_name;
+    cm.key_column_names = &thrift_olap_scan_node.sort_key_column_names;
     cm.runtime_filters = runtime_bloom_filters;
     cm.runtime_state = state;
 

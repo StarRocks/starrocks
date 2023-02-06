@@ -435,6 +435,7 @@ struct TOlapScanNode {
   25: optional bool sorted_by_keys_per_tablet = false
 
   26: optional list<Exprs.TExpr> bucket_exprs
+  27: optional list<string> sort_key_column_names
 }
 
 struct TJDBCScanNode {
@@ -458,6 +459,7 @@ struct TLakeScanNode {
   9: optional map<i32, i32> dict_string_id_to_int_ids
   // which columns only be used to filter data in the stage of scan data
   10: optional list<string> unused_output_column_name
+  11: optional list<string> sort_key_column_names
 }
 
 struct TEqJoinCondition {
