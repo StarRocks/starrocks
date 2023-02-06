@@ -760,7 +760,10 @@ vectorized_functions = [
     [150181, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
     [150182, 'array_slice', 'ARRAY_JSON',      ['ARRAY_JSON', 'BIGINT', 'BIGINT'],      'ArrayFunctions::array_slice_json'],
 
+    [150183, 'array_slice', 'ANY_ARRAY',      ['ANY_ARRAY', 'BIGINT', 'BIGINT'], 'ArrayFunctions::array_slice'],
+
     # NOTE: these will be deleted in the future version, keep these just for compatible
+    # @Deprecated
     [150190, 'array_concat', 'ARRAY_DATE', ['ARRAY_DATE', "..."], 'ArrayFunctions::concat'],
     [150191, 'array_concat', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],  'ArrayFunctions::concat'],
     [150192, 'array_concat', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN', "..."],   'ArrayFunctions::concat'],
