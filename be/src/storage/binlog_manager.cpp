@@ -50,10 +50,9 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
         BinlogFileMetaPBPtr file_meta = _binlog_file_metas.rbegin()->second;
         int64_t max_version = file_meta->end_version();
         if (max_version >= version) {
-            std::string msg = fmt::format("Add duplicate version to binlog, tablet {}, max version {}, new version {}",
-                                          _tablet_id, max_version, version);
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
+            VLOG(3) << "The version already existed in binlog, tablet: " << _tablet_id
+                    << ", max version: " << max_version << ", new version: " << version;
+            return Status::AlreadyExist(fmt::format("Version already exists in binlog"));
         }
     }
 

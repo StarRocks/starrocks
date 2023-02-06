@@ -111,7 +111,16 @@ public:
     //    +-------+                            +--------+
 
     // Begin to ingest binlog for a new version. Return a BinlogBuilderParams to be
-    // used by BinlogBuilder
+    // used by BinlogBuilder. Status::AlreadyExist will be returned if this version
+    // is no less than the current max version, this will happen if multiple ingestion
+    // is published out of order. Note that even *enable_new_publish_mechanism* is
+    // enabled, this still could happen. For example, there are 3 replicas r0, r1, r2,
+    //   1. r0 and r1 publish version 2 successfully, but r3 has not run the publish task
+    //   2. FE decides to publish version 3 because version 2 has two successful replicas
+    ///  3. r3 receives the publish task for version 3, and run it successfully
+    //   4. r3 runs the publish task for version 2 and is successful
+    // As a result, version 2 and 3 are published out of order. We can ignore to generate
+    // binlog for version 2, and can read it on other replicas.
     StatusOr<BinlogBuilderParamsPtr> begin_ingestion(int64_t version);
 
     // Pre-commit the result of BinlogBuilder, and binlog files are guaranteed to be persisted,

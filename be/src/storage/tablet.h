@@ -131,7 +131,7 @@ public:
     bool binlog_enable();
 
     // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
-    // prepare_binlog: persist the binlog file before saving the rowset meta in add_inc_rowset()
+    // prepare_binlog_if_needed: persist the binlog file before saving the rowset meta in add_inc_rowset()
     //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog
     //              is not visible
     // commit_binlog: if successful to save rowset meta in add_inc_rowset(), make the newly binlog
@@ -139,7 +139,11 @@ public:
     //              modifies the in-memory binlog metas
     // abort_binlog: if failed to save rowset meta, clean up the binlog file generated in
     //              prepare_binlog
-    Status prepare_binlog(const RowsetSharedPtr& rowset, int64_t version);
+
+    // Prepare the binlog if needed. Return false if no need to prepare binlog, such as the binlog
+    // is disabled, otherwise will prepare the binlog. true will be returned if prepare successfully,
+    // other status if error happens during preparation.
+    StatusOr<bool> prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
     void commit_binlog(int64_t version);
     void abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
 

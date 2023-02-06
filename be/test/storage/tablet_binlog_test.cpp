@@ -136,4 +136,35 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }
 
+TEST_F(TabletBinlogTest, test_publish_out_of_order) {
+    std::vector<DupKeyVersionInfo> version_infos;
+    for (int32_t version = 2; version < 100; version += 2) {
+        for (int32_t k = 0; k < 2; k++) {
+            int32_t sub_version = version - k;
+            int32_t num_segments = std::rand() % 5;
+            int32_t num_rows_per_segment = std::rand() % 100 + 1;
+            std::vector<int32_t> segment_rows;
+            for (int i = 0; i < num_segments; i++) {
+                segment_rows.push_back(num_rows_per_segment);
+            }
+            RowsetSharedPtr rowset;
+            create_rowset(_tablet, segment_rows, &rowset);
+            ASSERT_OK(_tablet->add_inc_rowset(rowset, sub_version));
+
+            int64_t timestamp = rowset->creation_time() * 1000000;
+            if (k == 0) {
+                version_infos.push_back(DupKeyVersionInfo(sub_version, num_segments, num_rows_per_segment, timestamp));
+            }
+        }
+    }
+
+    BinlogManager* binlog_manager = _tablet->binlog_manager();
+    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::vector<BinlogFileMetaPBPtr> file_metas;
+    for (auto it : lsn_map) {
+        file_metas.push_back(it.second);
+    }
+    verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
+}
+
 } // namespace starrocks

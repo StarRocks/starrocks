@@ -364,9 +364,9 @@ bool Tablet::binlog_enable() {
     return config != nullptr && config->binlog_enable;
 }
 
-Status Tablet::prepare_binlog(const RowsetSharedPtr& rowset, int64_t version) {
+StatusOr<bool> Tablet::prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
     if (!binlog_enable()) {
-        return Status::OK();
+        return false;
     }
 
     // binlog needs to get segment information such as the number of rows in a segment,
@@ -379,9 +379,16 @@ Status Tablet::prepare_binlog(const RowsetSharedPtr& rowset, int64_t version) {
         return Status::InternalError(fmt::format("fail to load rowset for binlog {}", rowset->rowset_id().to_string()));
     }
 
-    ASSIGN_OR_RETURN(auto params, _binlog_manager->begin_ingestion(version));
+    auto status_or = _binlog_manager->begin_ingestion(version);
+    if (!status_or.ok()) {
+        rowset->close();
+        if (status_or.status().is_already_exist()) {
+            return false;
+        }
+        return status_or.status();
+    }
     std::shared_ptr<BinlogBuildResult> result = std::make_shared<BinlogBuildResult>();
-    Status status = BinlogBuilder::build_duplicate_key(tablet_id(), version, rowset, params, result.get());
+    Status status = BinlogBuilder::build_duplicate_key(tablet_id(), version, rowset, status_or.value(), result.get());
     if (!st.ok()) {
         _binlog_manager->abort_ingestion(version, result);
         rowset->close();
@@ -391,7 +398,7 @@ Status Tablet::prepare_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     }
     _binlog_manager->precommit_ingestion(version, result);
 
-    return Status::OK();
+    return true;
 }
 
 void Tablet::commit_binlog(int64_t version) {
@@ -401,10 +408,8 @@ void Tablet::commit_binlog(int64_t version) {
 }
 
 void Tablet::abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
-    if (binlog_enable()) {
-        _binlog_manager->delete_ingestion(version);
-        rowset->close();
-    }
+    _binlog_manager->delete_ingestion(version);
+    rowset->close();
 }
 
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -415,8 +420,9 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     Version rowset_version(version, version);
     // Status::OK() means the full data set does not contain the version
     Status contain_status = _contains_version(rowset_version);
+    bool need_binlog = false;
     if (contain_status.ok()) {
-        RETURN_IF_ERROR(prepare_binlog(rowset, version));
+        ASSIGN_OR_RETURN(need_binlog, prepare_binlog_if_needed(rowset, version));
     }
 
     // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
@@ -429,7 +435,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     // the tablet meta. _clean_unused_rowset_metas only cleans visible rowsets
     auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
     if (!st.ok()) {
-        if (contain_status.ok()) {
+        if (need_binlog) {
             abort_binlog(rowset, version);
         }
 
@@ -448,10 +454,12 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _inc_rs_version_map[rowset->version()] = rowset;
-    // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
-    // look up _inc_rs_version_map for the rowset, so should commit binlog after
-    // _inc_rs_version_map is updated
-    commit_binlog(version);
+    if (need_binlog) {
+        // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
+        // look up _inc_rs_version_map for the rowset, so should commit binlog after
+        // _inc_rs_version_map is updated
+        commit_binlog(version);
+    }
 
     _timestamped_version_tracker.add_version(rowset->version());
     if (config::enable_event_based_compaction_framework) {
