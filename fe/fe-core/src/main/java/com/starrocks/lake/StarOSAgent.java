@@ -266,7 +266,7 @@ public class StarOSAgent {
         }
     }
 
-    // for debug
+    // the final func
     private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
         prepare();
         try {
@@ -278,6 +278,7 @@ public class StarOSAgent {
         }
     }
 
+    // need to delete finally
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
         prepare();
         try {
@@ -297,7 +298,7 @@ public class StarOSAgent {
         }
     }
 
-    // for debug
+    // the final func
     public long getPrimaryBackendIdByShard(long shardId, long workerGroupId) throws UserException {
         // for debug
         LOG.info("enter getPrimaryBackendIdByShard, workerGroupId is {}", workerGroupId);
@@ -314,6 +315,7 @@ public class StarOSAgent {
         throw new UserException("Failed to get primary backend. shard id: " + shardId);
     }
 
+    // need to delete finally
     public long getPrimaryBackendIdByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
