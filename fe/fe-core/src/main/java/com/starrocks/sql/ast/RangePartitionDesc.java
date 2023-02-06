@@ -19,11 +19,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
@@ -107,6 +109,12 @@ public class RangePartitionDesc extends PartitionDesc {
             }
 
             for (MultiRangePartitionDesc multiRangePartitionDesc : multiRangePartitionDescs) {
+                TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
+                        .fromName(multiRangePartitionDesc.getTimeUnit());
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                    throw new AnalysisException("Batch build partition for hour interval only supports " +
+                            "partition column as DATETIME type");
+                }
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
                         convertToSingle(firstPartitionColumn.getType(), otherProperties));
             }
