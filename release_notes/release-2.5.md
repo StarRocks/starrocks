@@ -1,5 +1,29 @@
 # StarRocks version 2.5
 
+## 2.5.1
+
+发布日期： 2023 年 2 月 5 日
+
+### 功能优化
+
+- 外表物化视图支持查询改写。 [#11116](https://github.com/StarRocks/starrocks/issues/11116)[#15791](https://github.com/StarRocks/starrocks/issues/15791)
+- CBO 自动全量采集支持用户设置采集时间段，防止因集中采集而导致的集群性能抖动。 [#14996](https://github.com/StarRocks/starrocks/pull/14996)
+- 增加 Thrift server 队列，避免 INSERT INTO SELECT 时因为 Thrift server 中的请求过于繁忙而失败。 [#14571](https://github.com/StarRocks/starrocks/pull/14571)
+- 建表时如果没有显式指定 `storage_medium` 属性，则系统根据 BE 节点磁盘类型自动推导并设定表的存储类型。参见[CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 中的参数描述。[#14394](https://github.com/StarRocks/starrocks/pull/14394)
+
+### 问题修复
+
+修复了如下问题：
+
+- SET PASSWORD 导致空指针。 [#15247](https://github.com/StarRocks/starrocks/pull/15247)
+- 当 KEY 为空时无法解析 JSON 数据。 [#16852](https://github.com/StarRocks/starrocks/pull/16852)
+- 非法数据类型可以成功转换至 ARRAY 类型。 [#16866](https://github.com/StarRocks/starrocks/pull/16866)
+- 异常场景下 Nested Loop Join 无法中断。  [#16875](https://github.com/StarRocks/starrocks/pull/16875)
+
+### 行为变更
+
+- 取消 FE 参数 `default_storage_medium`，表的存储介质改为系统自动推导。 [#14394](https://github.com/StarRocks/starrocks/pull/14394)
+
 ## 2.5.0
 
 发布日期： 2023 年 1 月 22 日
