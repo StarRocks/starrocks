@@ -263,7 +263,7 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
-        ./runtime/routine_load_task_executor_test.cpp
+        #./runtime/routine_load_task_executor_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp

@@ -409,4 +409,17 @@ public class ScanTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "FROM `ods_order` WHERE (order_no NOT IN ('1', '2', '3'))");
     }
+
+    @Test
+    public void testMetaScanWithCount() throws Exception {
+        String sql = "select count(*),count(),count(t1a),count(t1b),count(t1c) from test_all_type[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(count_t1a), sum(count_t1a), sum(count_t1a), sum(count_t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type\n" +
+                "     <id 16> : count_t1a");
+    }
 }
