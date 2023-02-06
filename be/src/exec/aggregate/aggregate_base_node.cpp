@@ -51,7 +51,11 @@ Status AggregateBaseNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_aggregator != nullptr) {
-        _mem_tracker->set(std::max(_aggregator->hash_map_memory_usage(), _aggregator->hash_set_memory_usage()));
+        if (_aggregator->is_hash_set()) {
+            _mem_tracker->set(_aggregator->hash_set_memory_usage());
+        } else {
+            _mem_tracker->set(_aggregator->hash_map_memory_usage());
+        }
         _num_rows_returned = _aggregator->num_rows_returned();
         _aggregator->close(state);
         _aggregator.reset();
