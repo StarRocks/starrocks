@@ -1465,7 +1465,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
 
         auto* const_tailing = ColumnHelper::as_raw_column<ConstColumn>(columns[1]);
         auto tailing_col = ColumnHelper::cast_to<TYPE_VARCHAR>(const_tailing->data_column());
-        const Slice& slice = tailing_col->get_data()[0];
+        const Slice& slice = tailing_col->get_slice(0);
         if (slice.size != 1) {
             return ColumnHelper::create_const_null_column(columns[0]->size());
         }

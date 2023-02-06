@@ -174,7 +174,7 @@ public:
 
     Status do_visit(BinaryColumn* column) {
         auto col = down_cast<BinaryColumn*>(_column);
-        auto& slices = col->get_data();
+        auto& slices = col->get_proxy_data();
         std::vector<Slice> datas(_sel_mask.size());
         size_t offsets = 0;
 

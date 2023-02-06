@@ -101,7 +101,7 @@ public:
             return lhs.inline_value.compare(rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<Slice>(_permutation, column.get_data());
+        auto inlined = create_inline_permutation<Slice>(_permutation, column.get_proxy_data());
         RETURN_IF_ERROR(
                 sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
         restore_inline_permutation(inlined, _permutation);

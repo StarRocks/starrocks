@@ -37,6 +37,17 @@ public:
 
     using Container = Buffer<Slice>;
 
+    struct BinaryDataProxyContainer {
+        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
+
+        Slice operator[](size_t index) const { return _column.get_slice(index); }
+
+        size_t size() { return _column.size(); }
+
+    private:
+        const BinaryColumnBase& _column;
+    };
+
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase<T>() { _offsets.emplace_back(0); }
@@ -262,6 +273,8 @@ public:
         return _slices;
     }
 
+    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+
     Bytes& get_bytes() { return _bytes; }
 
     const Bytes& get_bytes() const { return _bytes; }
@@ -332,6 +345,7 @@ private:
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
+    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
