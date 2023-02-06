@@ -543,6 +543,10 @@ under the License.
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
