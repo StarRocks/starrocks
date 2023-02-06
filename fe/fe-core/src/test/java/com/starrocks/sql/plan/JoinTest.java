@@ -2632,4 +2632,17 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
     }
+
+    @Test
+    public void testTopNGroupMerge() throws Exception {
+        String sql = "with tmp1 as (select * from t0 order by v1 asc), tmp2 as (select v4 from t1 group by v4)" +
+                "select count(*) from t0, tmp2, tmp1, t1 " +
+                "where 1 in (select v4 from t1 where t0.v1 = t1.v4);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "18:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v1 = 19: v4");
+    }
 }
