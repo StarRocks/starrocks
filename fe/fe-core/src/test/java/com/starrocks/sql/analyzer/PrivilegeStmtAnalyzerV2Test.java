@@ -16,8 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetDefaultRoleExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -26,6 +28,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,6 +36,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
@@ -303,7 +309,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "set role all";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertNull(setRoleStmt.getRoles());
+        Assert.assertTrue(setRoleStmt.getRoles().isEmpty());
         Assert.assertTrue(setRoleStmt.isAll());
 
         sql = "set role all except 'role1'";
@@ -326,6 +332,51 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot set role: cannot find role bad_role"));
+        }
+
+        for (int i = 1; i != 4; ++i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);
+        }
+    }
+
+    @Test
+    public void testSetDefaultRole() throws Exception {
+        for (int i = 1; i != 4; ++i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role role" + i, ctx), ctx);
+        }
+
+        PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
+
+        String sql = "grant role1, role2 to user test_user";
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantRoleStmt, ctx);
+
+        sql = "set default role all to test_user";
+        SetDefaultRoleStmt setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        List<Long> roleId = new ArrayList<>(privilegeManager
+                .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
+        Assert.assertEquals(2, roleId.size());
+
+        sql = "set default role none to test_user";
+        setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        roleId = new ArrayList<>(privilegeManager
+                .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
+        Assert.assertEquals(0, roleId.size());
+
+        sql = "set default role 'role1' to test_user";
+        setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        roleId = new ArrayList<>(privilegeManager
+                .getDefaultRoleIdsByUser(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%")));
+        Assert.assertEquals(1, roleId.size());
+        Assert.assertEquals("role1",
+                privilegeManager.getRolePrivilegeCollectionUnlocked(roleId.get(0), true).getName());
+
+
+        for (int i = 1; i != 4; ++i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);
         }
     }
 
