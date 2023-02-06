@@ -2,11 +2,7 @@
 
 ## Description
 
-<<<<<<< HEAD
-Returns the variance of the expr expression.
-=======
 Returns the variance of an expression.
->>>>>>> eb67faf0f ([Doc] fix doc of variance and toc (#15543))
 
 ## Syntax
 
