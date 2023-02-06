@@ -38,6 +38,7 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -85,6 +86,9 @@ public class QueryAnalyzer {
     private final MetadataMgr metadataMgr;
 
     public QueryAnalyzer(ConnectContext session) {
+        if (Config.use_staros == true && session.getCurrentWarehouse() == null) {
+            throw new SemanticException("No warehouse selected");
+        }
         this.session = session;
         this.metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
