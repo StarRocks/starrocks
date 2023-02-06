@@ -1596,6 +1596,7 @@ public class Coordinator {
         }
 
         long queryAllocatedMemoryUsage = 0;
+        long queryDeallocatedMemoryUsage = 0;
         // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
         // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
         // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
@@ -1606,6 +1607,10 @@ public class Coordinator {
             Counter instanceAllocatedMemoryUsage = fragmentProfile.getCounter("InstanceAllocatedMemoryUsage");
             if (instanceAllocatedMemoryUsage != null) {
                 queryAllocatedMemoryUsage += instanceAllocatedMemoryUsage.getValue();
+            }
+            Counter instanceDeallocatedMemoryUsage = fragmentProfile.getCounter("InstanceDeallocatedMemoryUsage");
+            if (instanceDeallocatedMemoryUsage != null) {
+                queryDeallocatedMemoryUsage += instanceDeallocatedMemoryUsage.getValue();
             }
 
             for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
@@ -1644,6 +1649,9 @@ public class Coordinator {
         Counter queryAllocatedMemoryUsageCounter =
                 queryProfile.addCounter("QueryAllocatedMemoryUsage", TUnit.BYTES, null);
         queryAllocatedMemoryUsageCounter.setValue(queryAllocatedMemoryUsage);
+        Counter queryDeallocatedMemoryUsageCounter =
+                queryProfile.addCounter("QueryDeallocatedMemoryUsage", TUnit.BYTES, null);
+        queryDeallocatedMemoryUsageCounter.setValue(queryDeallocatedMemoryUsage);
         Counter queryCumulativeOperatorTimer =
                 queryProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
         queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);

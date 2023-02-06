@@ -105,8 +105,9 @@ public:
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
-    explicit MemTracker(RuntimeProfile* profile, const std::string& counter_name_prefix = std::string(),
-                        int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr);
+    explicit MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info = {true, true, true},
+                        const std::string& counter_name_prefix = std::string(), int64_t byte_limit = -1,
+                        std::string label = std::string(), MemTracker* parent = nullptr);
 
     ~MemTracker();
 
@@ -122,12 +123,20 @@ public:
     void set(int64_t bytes) {
         _consumption->set(bytes);
         _allocation->set(bytes);
+        _deallocation->set(0L);
     }
 
-    void offset_allocation(int64_t offset_bytes) {
-        if (offset_bytes <= 0) return;
+    void update_allocation(int64_t bytes) {
+        if (bytes <= 0) return;
         for (auto* tracker : _all_trackers) {
-            tracker->_allocation->update(offset_bytes);
+            tracker->_allocation->update(bytes);
+        }
+    }
+
+    void update_deallocation(int64_t bytes) {
+        if (bytes <= 0) return;
+        for (auto* tracker : _all_trackers) {
+            tracker->_deallocation->update(bytes);
         }
     }
 
@@ -147,6 +156,7 @@ public:
         if (bytes != 0) {
             for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
                 _all_trackers[i]->_consumption->add(-bytes);
+                _all_trackers[i]->_deallocation->update(bytes);
             }
         }
     }
@@ -216,6 +226,7 @@ public:
         }
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(-bytes);
+            tracker->_deallocation->update(bytes);
         }
     }
 
@@ -277,6 +288,7 @@ public:
 
     int64_t peak_consumption() const { return _consumption->value(); }
     int64_t allocation() const { return _allocation->value(); }
+    int64_t deallocation() const { return _deallocation->value(); }
 
     MemTracker* parent() const { return _parent; }
 
@@ -286,12 +298,14 @@ public:
 
     static const std::string PEAK_MEMORY_USAGE;
     static const std::string ALLOCATED_MEMORY_USAGE;
+    static const std::string DEALLOCATED_MEMORY_USAGE;
 
     std::string debug_string() {
         std::stringstream msg;
         msg << "limit: " << _limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
             << "allocation: " << _allocation->value() << "; "
+            << "deallocation: " << _deallocation->value() << "; "
             << "label: " << _label << "; "
             << "all tracker size: " << _all_trackers.size() << "; "
             << "limit trackers size: " << _limit_trackers.size() << "; "
@@ -333,8 +347,14 @@ private:
     /// in bytes; not owned. Only record allocation but ignore deallocation
     RuntimeProfile::Counter* _allocation;
 
-    /// holds _cumulative_consumption counter if not tied to a profile
+    /// holds _allocation counter if not tied to a profile
     RuntimeProfile::Counter _local_allocation_counter;
+
+    /// in bytes; not owned. Only record deallocation but ignore allocation
+    RuntimeProfile::Counter* _deallocation;
+
+    /// holds _deallocation counter if not tied to a profile
+    RuntimeProfile::Counter _local_deallocation_counter;
 
     std::vector<MemTracker*> _all_trackers;   // this tracker plus all of its ancestors
     std::vector<MemTracker*> _limit_trackers; // _all_trackers with valid limits

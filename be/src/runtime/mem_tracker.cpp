@@ -48,6 +48,7 @@ namespace starrocks {
 
 const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";
 const std::string MemTracker::ALLOCATED_MEMORY_USAGE = "AllocatedMemoryUsage";
+const std::string MemTracker::DEALLOCATED_MEMORY_USAGE = "DeallocatedMemoryUsage";
 
 MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
         : _limit(byte_limit),
@@ -57,7 +58,9 @@ MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent
           _local_consumption_counter(TUnit::BYTES,
                                      RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
           _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES) {
+          _local_allocation_counter(TUnit::BYTES),
+          _deallocation(&_local_deallocation_counter),
+          _local_deallocation_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
@@ -71,24 +74,36 @@ MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTrac
           _local_consumption_counter(TUnit::BYTES,
                                      RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
           _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES) {
+          _local_allocation_counter(TUnit::BYTES),
+          _deallocation(&_local_deallocation_counter),
+          _local_deallocation_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
-MemTracker::MemTracker(RuntimeProfile* profile, const std::string& counter_name_prefix, int64_t byte_limit,
-                       std::string label, MemTracker* parent)
+MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info,
+                       const std::string& counter_name_prefix, int64_t byte_limit, std::string label,
+                       MemTracker* parent)
         : _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
-          _consumption(profile->AddHighWaterMarkCounter(
-                  counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
-                  RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))),
+          _consumption(std::get<0>(attaching_info)
+                               ? profile->AddHighWaterMarkCounter(
+                                         counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
+                                         RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
+                               : &_local_consumption_counter),
           _local_consumption_counter(TUnit::BYTES,
                                      RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                           RuntimeProfile::Counter::create_strategy(TUnit::BYTES))),
-          _local_allocation_counter(TUnit::BYTES) {
+          _allocation(std::get<1>(attaching_info)
+                              ? profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                                     RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
+                              : &_local_allocation_counter),
+          _local_allocation_counter(TUnit::BYTES),
+          _deallocation(std::get<2>(attaching_info)
+                                ? profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                                       RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
+                                : &_local_deallocation_counter),
+          _local_deallocation_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
