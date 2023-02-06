@@ -90,7 +90,7 @@ protected:
 
     MetaReaderParams _params;
 
-    virtual Status _fill_result_chunk(Chunk* chunk) = 0;
+    virtual Status _fill_result_chunk(Chunk* chunk);
     Status _read(Chunk* chunk, size_t n);
 };
 
