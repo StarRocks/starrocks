@@ -32,18 +32,7 @@ public class ArrayType extends Type {
     private Type itemType;
 
     public ArrayType(Type itemType) {
-        if (itemType != null && itemType.isDecimalV3()) {
-            throw new InternalError("Decimal32/64/128 is not supported in current version");
-        }
         this.itemType = itemType;
-    }
-
-    public ArrayType(Type itemType, boolean fromDlaEnableDecimalV3) {
-        if (!fromDlaEnableDecimalV3 && itemType.isDecimalV3()) {
-            this.itemType = Type.UNKNOWN_TYPE;
-        } else {
-            this.itemType = itemType;
-        }
     }
 
     public Type getItemType() {
