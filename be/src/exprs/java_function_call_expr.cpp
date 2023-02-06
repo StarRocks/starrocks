@@ -113,6 +113,8 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
 }
 
 JavaFunctionCallExpr::~JavaFunctionCallExpr() {
+    // nothing to do if JavaFunctionCallExpr has not been prepared
+    if (_runtime_state == nullptr) return;
     auto promise = call_function_in_pthread(_runtime_state, [this]() {
         this->_func_desc.reset();
         this->_call_helper.reset();
