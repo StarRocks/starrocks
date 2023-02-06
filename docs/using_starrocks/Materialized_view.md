@@ -205,7 +205,7 @@ Currently, StarRocks supports query rewrite based on materialized views on the d
 
 #### Candidate materialized view for query rewrite
 
-When rewriting a query, StarRocks roughly selects candidate materialized views that meets the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
+When rewriting a query, StarRocks roughly selects candidate materialized views that meet the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
 
 Candidate materialized views must meet the following conditions:
 
