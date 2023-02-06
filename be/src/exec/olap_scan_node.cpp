@@ -465,7 +465,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = _tuple_desc;
     cm.obj_pool = _pool;
-    cm.key_column_names = &_olap_scan_node.key_column_name;
+    cm.key_column_names = &_olap_scan_node.sort_key_column_names;
     cm.runtime_filters = &_runtime_filter_collector;
     cm.runtime_state = state;
 
