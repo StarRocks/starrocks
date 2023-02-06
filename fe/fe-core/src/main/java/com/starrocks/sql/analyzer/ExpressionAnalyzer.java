@@ -170,7 +170,7 @@ public class ExpressionAnalyzer {
             } else {
                 funcName = expression.toString();
             }
-            throw new SemanticException(funcName + " can't use Lambda Functions, " +
+            throw new SemanticException(funcName + " can't use lambda functions, " +
                     "as it is not a supported high-order function.");
         }
         int childSize = expression.getChildren().size();
