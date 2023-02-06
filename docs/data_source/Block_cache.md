@@ -8,7 +8,7 @@ To optimize the query performance in these scenarios, StarRocks 2.5 and later ve
 
 ## How it works
 
-For example, if you query a Parquet data file of 128 MB from Amazon S3, StarRocks splits the file into multiple blocks (By default, the size of each block is 1 MB and we recommend you retain the default setting). In this case, StarRocks splits the file into 128 blocks: [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
+For example, if you query a Parquet data file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks (By default, the size of each block is 1 MB and we recommend you retain the default setting). The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
 
 ```Plain
 hash(filename) + filesize + blockId
@@ -81,6 +81,8 @@ Add the following parameters to the **conf/be.conf** file of each BE. Then resta
 Examples of setting these parameters.
 
 ```Plain
+
+# Enable Block Cache.
 block_cache_enable = true  
 
 # The BE machine is equipped with two disks.
@@ -88,13 +90,10 @@ block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_
 
 block_cache_meta_path = /home/disk1/sr/dla_cache_meta/ 
 
-# 1 MB 
-block_cache_block_size = 1048576
-
-# 2 GB
+# Set block_cache_mem_size to 2 GB.
 block_cache_mem_size = 2147483648
 
-# 1.2 TB
+# Set block_cache_disk_size to 1.2 TB.
 block_cache_disk_size = 1288490188800
 ```
 
