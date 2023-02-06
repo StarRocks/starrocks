@@ -44,6 +44,8 @@ public class MaterializedViewSSBTest extends PlanTestBase {
         connectContext= UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(true);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
+        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
