@@ -301,8 +301,10 @@ FIRST_VALUE() returns the **first** value of the window range.
 Syntax:
 
 ~~~SQL
-FIRST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
+FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Example:
 
@@ -415,8 +417,10 @@ LAST_VALUE() returns the **last** value of the window range. It is the opposite 
 Syntax:
 
 ~~~SQL
-LAST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Use the data from the example:
 

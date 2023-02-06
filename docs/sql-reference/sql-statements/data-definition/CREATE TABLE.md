@@ -275,30 +275,34 @@ Syntax:
 DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ```
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
 
-- high cardinality column such as ID
-- column that often used as a filter in queries
+- High cardinality column such as ID
+- Column that is often used as a filter in queries
 
-But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
+If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
 
-- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
-- If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
+- If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+- If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns but three bucketing columns at most. For more information about , pleaese see [choose bucketing columns](../../../table_design/Data_distribution.md).
+If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
 
 **Precautions**:
 
 - **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
 ### PROPERTIES
 
 #### Specify storage medium, storage cooldown time, replica number
 
-- If ENGINE type is olap. Users can specify storage medium, cooldown time, and replica number.
+If the engine type is `olap`, you can specify storage medium, storage cooldown time, and replica number when you create a table.
+
+  > **NOTE**
+  >
+  > `storage_cooldown_time` can be configured only when `storage_medium` is set to `SSD`. If you want to set `storage_medium` to SSD, make sure that your cluster uses SSD disks, that is, `storage_root_path` reported by BEs includes SSD. For more information about `storage_root_path`, see [Configuration](../../../administration/Configuration.md#configure-be-static-parameters).
 
 ```Plain%20Text
 PROPERTIES (
@@ -308,17 +312,18 @@ PROPERTIES (
 )
 ```
 
-storage_medium: SSD or HDD can be specified as the initial storage medium.
+**storage_medium**: the initial storage medium, which can be set to SSD or HDD.
 
-> **Note**
+> **NOTE**
 >
-> When the FE configuration item `enable_strict_storage_medium_check` is `True` and the storage medium is not specified, the statement for creating a table will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
+> - From 2.5.1, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified. Inference mechanism: If `storage_root_path` reported by BEs contain only SSD, the system automatically sets this parameter to SSD. If `storage_root_path` reported by BEs contain only HDD, the system automatically sets this parameter to HDD. If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD.
+> - If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.
 
-storage_cooldown_time: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
+**storage_cooldown_time**: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
 
-replication_num: number of replicas in the specified partition. Default number: 3.
+**replication_num**: number of replicas in the specified partition. Default number: 3.
 
-When the table has only one partition, the properties belongs to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions through ADD ADDITION and MODIFY PARTITION statements.
+If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. You can also specify different properties for different partitions by using ALTER TABLE ADD PARTITION or ALTER TABLE MODIFY PARTITION.
 
 #### Add bloomfilter index for a column
 
@@ -357,14 +362,14 @@ PROPERTIES (
 
 **`PROPERTIES`**
 
-| parameter                   | required | description                                                  |
+| Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
-| dynamic_partition.enable    | No       | enables dynamic partitioning. Valid values are `TRUE` and `FALSE`. The default value is `TRUE`. |
-| dynamic_partition.time_unit | Yes      | the time granularity for dynamically created  partitions. It is a required parameter. Valid values are `DAY`, `WEEK`, and `MONTH`.The time granularity determines the suffix format for dynamically created partitions.<br/>  - If the value is `DAY`,  the suffix format for dynamically created partitions is yyyyMMdd. An example partition name suffix is `20200321`.<br/>  - If the value is `WEEK`, the suffix format for dynamically created partitions is yyyy_ww, for example `2020_13` for the 13th week of 2020.<br/>  - If the value is `MONTH`, the suffix format for dynamically created partitions is yyyyMM, for example `202003`. |
-| dynamic_partition.start     | No       | the starting offset of dynamic partitioning. The value of this parameter must be a negative integer. The partitions before this offset will be deleted based on the current day, week, or month which is determined by the value of the parameter `dynamic_partition.time_unit`. The default value is `Integer.MIN_VALUE`, namely, -2147483648, which means that the history partitions will not be deleted. |
-| dynamic_partition.end       | Yes      | the end offset of dynamic partitioning. The value of this parameter must be a positive integer. The partitions from the current day, week, or month to the end offset will be created in advance. |
-| dynamic_partition.prefix    | No       | the prefix added to the names of dynamic partitions. The default value is `p`. |
-| dynamic_partition.buckets   | No       | the number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word BUCKETS or automatically set by StarRocks. |
+| dynamic_partition.enable    | No       | Whether to enable dynamic partitioning. Valid values: `TRUE` and `FALSE`. Default value: `TRUE`. |
+| dynamic_partition.time_unit | Yes      | The time granularity for dynamically created  partitions. It is a required parameter. Valid values: `DAY`, `WEEK`, and `MONTH`. The time granularity determines the suffix format for dynamically created partitions.<br/>  - If the value is `DAY`, the suffix format for dynamically created partitions is `yyyyMMdd`. An example partition name suffix is `20200321`.<br/>  - If the value is `WEEK`, the suffix format for dynamically created partitions is `yyyy_ww`, for example `2020_13` for the 13th week of 2020.<br/>  - If the value is `MONTH`, the suffix format for dynamically created partitions is `yyyyMM`, for example `202003`. |
+| dynamic_partition.start     | No       | The starting offset of dynamic partitioning. The value of this parameter must be a negative integer. The partitions before this offset will be deleted based on the current day, week, or month which is determined by `dynamic_partition.time_unit`. The default value is `Integer.MIN_VALUE`, namely, -2147483648, which means that historical partitions will not be deleted. |
+| dynamic_partition.end       | Yes      | The end offset of dynamic partitioning. The value of this parameter must be a positive integer. The partitions from the current day, week, or month to the end offset will be created in advance. |
+| dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
+| dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
 #### Set data compression algorithm
 
