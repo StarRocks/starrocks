@@ -50,6 +50,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -1176,6 +1177,13 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
                         DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                    }
+                    if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
+                        String colocateGroup = olapTable.getColocateGroup();
+                        if (colocateGroup != null) {
+                            throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
+                                    "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
+                        }
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
                     return null;
