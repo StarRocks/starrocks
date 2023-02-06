@@ -628,7 +628,7 @@ public class Config extends ConfigBase {
     /**
      * The thrift server max worker threads
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
