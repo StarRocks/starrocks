@@ -1273,6 +1273,7 @@ grantRevokeClause
     : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
     ;
 
+
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON user TO grantRevokeClause                                                     #grantImpersonateBrief
     | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause                   #grantTablePrivBrief
@@ -1292,13 +1293,13 @@ revokePrivilegeStatement
     ;
 
 grantRoleStatement
-    : GRANT identifierOrStringList TO user                                                      #grantRoleToUser
-    | GRANT identifierOrStringList TO ROLE identifierOrString                                   #grantRoleToRole
+    : GRANT identifierOrStringList TO USER? user                                                        #grantRoleToUser
+    | GRANT identifierOrStringList TO ROLE identifierOrString                                           #grantRoleToRole
     ;
 
 revokeRoleStatement
-    : REVOKE identifierOrStringList FROM user                                                   #revokeRoleFromUser
-    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                #revokeRoleFromRole
+    : REVOKE identifierOrStringList FROM USER? user                                                     #revokeRoleFromUser
+    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
     ;
 
 executeAsStatement
