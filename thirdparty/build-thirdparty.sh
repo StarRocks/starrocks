@@ -860,10 +860,11 @@ build_aliyun_jindosdk() {
     cp -r $TP_SOURCE_DIR/$JINDOSDK_SOURCE/lib/*.jar $TP_INSTALL_DIR/jindosdk
 }
 
-build_tencent_cos_jars() {
+build_broker_thirdparty_jars() {
     check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
     mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/*cos* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
 }
 
 build_aws_cpp_sdk() {
@@ -1027,7 +1028,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
-build_tencent_cos_jars
+build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
