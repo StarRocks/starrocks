@@ -28,7 +28,7 @@
 #include "storage/rowset/rowset.h"
 namespace starrocks {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min"};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min", "count"};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -44,7 +44,7 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
             return Status::OK();
         }
     }
-    return Status::InvalidArgument(item);
+    return Status::InvalidArgument("cannot find column: " + item);
 }
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
@@ -78,6 +78,34 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
 bool MetaReader::has_more() {
     return _has_more;
+}
+Status MetaReader::_fill_result_chunk(Chunk* chunk) {
+    for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
+        auto s_id = _collect_context.result_slot_ids[i];
+        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
+        const auto& field = _collect_context.seg_collecter_params.fields[i];
+        if (field == "dict_merge") {
+            TypeDescriptor item_desc;
+            item_desc = slot->type();
+            TypeDescriptor desc;
+            desc.type = TYPE_ARRAY;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            chunk->append_column(std::move(column), slot->id());
+        } else if (field == "count") {
+            TypeDescriptor item_desc;
+            item_desc.type = TYPE_BIGINT;
+            TypeDescriptor desc;
+            desc.type = TYPE_BIGINT;
+            desc.children.emplace_back(item_desc);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            chunk->append_column(std::move(column), slot->id());
+        } else {
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
+            chunk->append_column(std::move(column), slot->id());
+        }
+    }
+    return Status::OK();
 }
 
 SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(std::move(segment)) {}
@@ -135,6 +163,8 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_max(cid, column, type);
     } else if (name == "min") {
         return _collect_min(cid, column, type);
+    } else if (name == "count") {
+        return _collect_count(column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -207,6 +237,12 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
             column->append_datum(max);
         }
     }
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_count(Column* column, LogicalType type) {
+    uint32_t num_rows = _segment->num_rows();
+    column->append_datum(int64_t(num_rows));
     return Status::OK();
 }
 

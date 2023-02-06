@@ -53,8 +53,6 @@ private:
     std::shared_ptr<const TabletSchema> _tablet_schema;
     std::vector<lake::Rowset> _rowsets;
 
-    LakeMetaReaderParams _params;
-
     Status _init_params(const LakeMetaReaderParams& read_params);
 
     Status _build_collect_context(const LakeMetaReaderParams& read_params);
@@ -62,8 +60,6 @@ private:
     Status _init_seg_meta_collecters(const LakeMetaReaderParams& read_params);
 
     Status _get_segments(lake::Tablet tablet, const Version& version, std::vector<SegmentSharedPtr>* segments);
-
-    Status _fill_result_chunk(Chunk* chunk) override;
 };
 
 } // namespace starrocks
