@@ -115,6 +115,7 @@ public abstract class Type implements Cloneable {
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
 
+    public static final Type ARRAY_NULL = new ArrayType(Type.NULL);
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
     public static final Type ARRAY_SMALLINT = new ArrayType(Type.SMALLINT);
