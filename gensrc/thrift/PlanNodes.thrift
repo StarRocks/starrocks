@@ -174,6 +174,7 @@ enum TObjectStoreType {
   OSS,
   COS,
   OBS,
+  TOS,
   UNIVERSAL_FS
 }
 
