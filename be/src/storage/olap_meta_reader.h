@@ -55,13 +55,9 @@ private:
     TabletSharedPtr _tablet;
     std::vector<RowsetSharedPtr> _rowsets;
 
-    OlapMetaReaderParams _params;
-
     Status _init_params(const OlapMetaReaderParams& read_params);
 
     Status _build_collect_context(const OlapMetaReaderParams& read_params);
-
-    Status _fill_result_chunk(Chunk* chunk) override;
 
     Status _init_seg_meta_collecters(const OlapMetaReaderParams& read_params);
 
