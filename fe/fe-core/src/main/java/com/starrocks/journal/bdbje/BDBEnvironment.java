@@ -44,6 +44,7 @@ import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
