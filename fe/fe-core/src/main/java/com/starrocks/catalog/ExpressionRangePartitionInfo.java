@@ -113,7 +113,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
         short replicationNum;
         if (replicationNumStr == null) {
-            replicationNum = FeConstants.default_replication_num;
+            replicationNum = FeConstants.getDefaultReplicationNum();
         } else {
             replicationNum = Short.parseShort(replicationNumStr);
         }

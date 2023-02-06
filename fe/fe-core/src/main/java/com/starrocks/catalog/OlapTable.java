@@ -1684,7 +1684,7 @@ public class OlapTable extends Table {
         if (tableProperty != null) {
             return tableProperty.getReplicationNum();
         }
-        return FeConstants.default_replication_num;
+        return FeConstants.getDefaultReplicationNum();
     }
 
     public Boolean isInMemory() {

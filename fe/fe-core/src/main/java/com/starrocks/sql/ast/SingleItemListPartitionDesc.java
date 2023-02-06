@@ -148,7 +148,7 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
 
         // analyze replication num
         this.replicationNum =
-                PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.default_replication_num);
+                PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.getDefaultReplicationNum());
 
         // analyze version info
         this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(allProperties);

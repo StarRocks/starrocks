@@ -24,7 +24,7 @@ import java.util.Map;
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
-    private int replicationNum = FeConstants.default_replication_num;
+    private int replicationNum = FeConstants.getDefaultReplicationNum();
     private String backupTimestamp = null;
     private int metaVersion = -1;
     private int starrocksMetaVersion = -1;

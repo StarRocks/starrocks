@@ -81,7 +81,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
-    private Short replicationNum = FeConstants.default_replication_num;
+    private Short replicationNum = FeConstants.getDefaultReplicationNum();
 
     // partition time to live number, -1 means no ttl
     private int partitionTTLNumber = INVALID;
@@ -242,7 +242,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildReplicationNum() {
         replicationNum = Short.parseShort(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
-                String.valueOf(FeConstants.default_replication_num)));
+                String.valueOf(FeConstants.getDefaultReplicationNum())));
         return this;
     }
 

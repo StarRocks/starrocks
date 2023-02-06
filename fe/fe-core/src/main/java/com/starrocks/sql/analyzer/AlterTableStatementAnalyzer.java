@@ -400,7 +400,7 @@ public class AlterTableStatementAnalyzer {
 
             // 2. replication num
             short newReplicationNum;
-            newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+            newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.getDefaultReplicationNum());
             Preconditions.checkState(newReplicationNum != (short) -1);
 
             // 3. in memory

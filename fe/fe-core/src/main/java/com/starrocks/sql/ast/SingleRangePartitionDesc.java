@@ -58,7 +58,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.properties = properties;
 
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
-        this.replicationNum = FeConstants.default_replication_num;
+        this.replicationNum = FeConstants.getDefaultReplicationNum();
     }
 
     public boolean isSetIfNotExists() {
@@ -133,7 +133,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num
-        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
+        replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.getDefaultReplicationNum());
         if (replicationNum == null) {
             throw new AnalysisException("Invalid replication number: " + replicationNum);
         }

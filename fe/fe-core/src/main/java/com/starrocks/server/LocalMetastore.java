@@ -2163,7 +2163,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // analyze replication_num
-        short replicationNum = FeConstants.default_replication_num;
+        short replicationNum = FeConstants.getDefaultReplicationNum();
         try {
             boolean isReplicationNumSet =
                     properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
@@ -3377,7 +3377,7 @@ public class LocalMetastore implements ConnectorMetadata {
             properties = Maps.newHashMap();
         }
         // set replication_num
-        short replicationNum = FeConstants.default_replication_num;
+        short replicationNum = FeConstants.getDefaultReplicationNum();
         try {
             boolean isReplicationNumSet = properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
             replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);

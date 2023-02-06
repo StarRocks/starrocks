@@ -176,7 +176,7 @@ public class BackupRestoreAnalyzer {
             Map<String, String> copiedProperties = Maps.newHashMap(properties);
             long timeoutMs = Config.backup_job_default_timeout_ms;
             boolean allowLoad = false;
-            int replicationNum = FeConstants.default_replication_num;
+            int replicationNum = FeConstants.getDefaultReplicationNum();
             String backupTimestamp = null;
             int metaVersion = -1;
             int starrocksMetaVersion = -1;

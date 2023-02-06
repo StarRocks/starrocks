@@ -214,7 +214,7 @@ public class ListPartitionInfo extends PartitionInfo {
         String replicationNumStr = table.getTableProperty()
                 .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
-                FeConstants.default_replication_num : Short.parseShort(replicationNumStr);
+                FeConstants.getDefaultReplicationNum() : Short.parseShort(replicationNumStr);
 
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY LIST(");
