@@ -82,6 +82,8 @@ public class AnalyzeSingleTest {
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
 
         analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\" FORMAT AS CSV");
+
+        analyzeSuccess("select v1 as location from t0");
     }
 
     @Test
