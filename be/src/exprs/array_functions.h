@@ -70,13 +70,7 @@ public:
 
 #undef DEFINE_ARRAY_DIFFERENCE_FN
 
-#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySlice<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
-    DEFINE_ARRAY_SLICE_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_SLICE_FN
+    DEFINE_VECTORIZED_FN(array_slice);
 
 #define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                               \
     static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
