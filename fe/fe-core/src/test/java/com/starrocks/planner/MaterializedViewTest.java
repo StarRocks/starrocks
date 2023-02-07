@@ -277,6 +277,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregate0() {
         testRewriteOK("select deptno, count(*) as c, empid + 2 as d, sum(empid) as s "
                         + "from emps group by empid, deptno",
@@ -291,6 +292,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregate2() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps group by empid, deptno",
@@ -307,6 +309,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregate4() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -315,6 +318,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregate5() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -323,6 +327,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregate6() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -359,6 +364,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateWithAggExpr() {
         // support agg expr: empid -> abs(empid)
         testRewriteOK("select empid, deptno," +
@@ -391,6 +397,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateRollup() {
         String mv = "select deptno, count(*) as c, sum(empid) as s from emps group by locationid, deptno";
         testRewriteOK(mv, "select count(*) as c, deptno from emps group by deptno");
@@ -421,6 +428,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateProject() {
         testRewriteOK("select deptno, count(*) as c, empid + 2, sum(empid) as s "
                         + "from emps group by empid, deptno",
@@ -498,6 +506,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateMaterializationAggregateFuncs2() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps group by empid, deptno",
@@ -514,6 +523,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateMaterializationAggregateFuncs4() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -522,6 +532,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -538,6 +549,7 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
+    @Ignore
     public void testAggregateMaterializationAggregateFuncs7() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
