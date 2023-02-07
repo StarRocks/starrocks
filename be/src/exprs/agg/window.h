@@ -220,6 +220,7 @@ struct FirstValueState {
     T value;
     bool has_value = false;
     bool is_null = false;
+    uint64_t count;
 };
 
 template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
@@ -230,6 +231,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
         this->data(state).value = {};
         this->data(state).has_value = false;
         this->data(state).is_null = false;
+        this->data(state).count = 0;
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -239,7 +241,20 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
             return;
         }
 
+<<<<<<< HEAD
         if (columns[0]->is_null(frame_start)) {
+=======
+        // only calculate once
+        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+            return;
+        }
+
+        this->data(state).count++;
+
+        size_t value_index =
+                !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+>>>>>>> 54d6382ce (Modify first_value for unbounded preceding and current row (#17494))
             this->data(state).is_null = true;
             this->data(state).has_value = true;
             return;
