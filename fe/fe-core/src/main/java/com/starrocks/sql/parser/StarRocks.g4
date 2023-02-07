@@ -1651,8 +1651,8 @@ predicate
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expressionList ')'                                                      #inList
-    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    : NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    | NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
