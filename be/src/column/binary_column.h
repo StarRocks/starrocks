@@ -235,6 +235,10 @@ public:
                _slices.size() * sizeof(_slices[0]);
     }
 
+    size_t element_memory_usage(size_t from, size_t size) const override {
+        return _offsets[from + size] - _offsets[from] + size * sizeof(uint32_t);
+    }
+
     void swap_column(Column& rhs) override {
         auto& r = down_cast<BinaryColumn&>(rhs);
         using std::swap;

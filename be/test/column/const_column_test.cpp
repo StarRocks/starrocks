@@ -299,4 +299,22 @@ PARALLEL_TEST(ConstColumnTest, test_clone_empty) {
     ASSERT_TRUE(c2->data_column().unique());
 }
 
+PARALLEL_TEST(ConstColumnTest, test_element_memory_usage) {
+    auto create_const_column = [](int32_t value, size_t size) {
+        auto c = Int32Column::create();
+        c->append_numbers(&value, sizeof(value));
+        return ConstColumn::create(c, size);
+    };
+
+    auto column = create_const_column(1, 10);
+    ASSERT_EQ(4, column->element_memory_usage());
+
+    for (size_t start = 0; start < column->size(); start++) {
+        ASSERT_EQ(0, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= column->size(); size++) {
+            ASSERT_EQ(4, column->element_memory_usage(start, size));
+        }
+    }
+}
+
 } // namespace starrocks::vectorized
