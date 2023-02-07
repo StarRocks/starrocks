@@ -1014,8 +1014,6 @@ public class CoordinatorPreprocessor {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                     queryOptions.setEnable_populate_block_cache(
                             connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setEnable_read_bypass_block_cache(
-                            connectContext.getSessionVariable().getEnableReadSkipBypassBlockCache());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
