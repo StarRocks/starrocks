@@ -236,17 +236,19 @@ protected:
     }
 
     void _commit_compaction() {
-        std::unique_lock wrlock(_tablet->get_header_lock());
         std::stringstream input_stream_info;
-        for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
-            input_stream_info << _input_rowsets[i]->version() << ";";
+        {
+            std::unique_lock wrlock(_tablet->get_header_lock());
+            for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
+                input_stream_info << _input_rowsets[i]->version() << ";";
+            }
+            if (_input_rowsets.size() > 5) {
+                input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
+            }
+            _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
+            _tablet->save_meta();
+            Rowset::close_rowsets(_input_rowsets);
         }
-        if (_input_rowsets.size() > 5) {
-            input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
-        }
-        _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
-        _tablet->save_meta();
-        Rowset::close_rowsets(_input_rowsets);
         VLOG(1) << "commit compaction. output version:" << _task_info.output_version
                 << ", output rowset version:" << _output_rowset->version()
                 << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
