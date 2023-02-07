@@ -32,7 +32,7 @@ public class LambdaFunctionExpr extends Expr {
     private int commonSubOperatorNum = 0;
 
     public LambdaFunctionExpr(List<Expr> arguments) {
-        this.children.addAll(arguments);
+        this.children.addAll(arguments); // lambda expr, lambda arg1, lambda arg2...
     }
 
     // transformed from operators before pushing down to BE.

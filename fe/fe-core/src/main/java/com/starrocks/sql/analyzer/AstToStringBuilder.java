@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -841,6 +842,19 @@ public class AstToStringBuilder {
             sb.append('[');
             sb.append(visitAstList(node.getChildren()));
             sb.append(']');
+            return sb.toString();
+        }
+
+        public String visitMapExpr(MapExpr node, Void context) {
+            boolean explicitType = node.isExplicitType();
+
+            StringBuilder sb = new StringBuilder();
+            if (explicitType) {
+                sb.append(node.getType().toString());
+            }
+            sb.append('(');
+            sb.append(visitAstList(node.getChildren()));
+            sb.append(')');
             return sb.toString();
         }
 

@@ -55,6 +55,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -166,6 +168,12 @@ public class ScalarOperatorToExpr {
             // NULL_TYPE hack, itemType can be any legitimate type, for simplicity, we pick boolean.
             Type finalType = Type.ARRAY_NULL.equals(node.getType()) ? Type.ARRAY_BOOLEAN : node.getType();
             return new ArrayExpr(finalType,
+                    node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
+        }
+
+        @Override
+        public Expr visitMap(MapOperator node, FormatterContext context) {
+            return new MapExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
         }
 

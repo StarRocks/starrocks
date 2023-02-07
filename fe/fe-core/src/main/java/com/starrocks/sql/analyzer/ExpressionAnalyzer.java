@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
@@ -120,9 +121,8 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    private boolean isHighOrderFunction(Expr expr) {
+    private boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            // expand this in the future.
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
@@ -134,6 +134,19 @@ public class ExpressionAnalyzer {
             }
         }
         return false;
+    }
+
+    private boolean isMapHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isHighOrderFunction(Expr expr) {
+        return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
     private Expr rewriteHighOrderFunction(Expr expr) {
@@ -179,22 +192,45 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
-        // the first child is lambdaFunction, following input arrays
-        for (int i = 1; i < childSize; ++i) {
-            Expr expr = expression.getChild(i);
+        if (isArrayHighOrderFunction(expression)) {
+            // the first child is lambdaFunction, following input arrays
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT); // Let it have item type.
+                }
+                if (!expr.getType().isArrayType()) {
+                    throw new SemanticException("Lambda inputs should be arrays.");
+                }
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
+                    // rather than a common columnRef, so change its type here.
+                    itemType = Type.BOOLEAN;
+                }
+                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            }
+        } else {
+            // map_apply(func, map)
+            Expr expr = expression.getChild(1);
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {
-                expr.setType(Type.ARRAY_INT); // Let it have item type.
+                expr.setType(Type.ANY_MAP); // Let it have item type.
             }
-            if (!expr.getType().isArrayType()) {
-                throw new SemanticException("Lambda inputs should be arrays.");
+            if (!expr.getType().isMapType()) {
+                throw new SemanticException("Lambda inputs should be maps.");
             }
-            Type itemType = ((ArrayType) expr.getType()).getItemType();
-            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
+            Type keyType = ((MapType) expr.getType()).getKeyType();
+            Type valueType = ((MapType) expr.getType()).getValueType();
+            if (keyType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
                 // rather than a common columnRef, so change its type here.
-                itemType = Type.BOOLEAN;
+                keyType = Type.BOOLEAN;
             }
-            scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            if (valueType == Type.NULL) {
+                valueType = Type.BOOLEAN;
+            }
+            scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
+            scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
@@ -322,6 +358,24 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitMapExpr(MapExpr node, Scope scope) {
+            if (!node.getChildren().isEmpty()) {
+                Type keyType = Type.NULL;
+                Type valueType = Type.NULL;
+                if (node.getKeyExpr() != null) {
+                    keyType = node.getKeyExpr().getType();
+                }
+                if (node.getValueExpr() != null) {
+                    valueType = node.getValueExpr().getType();
+                }
+                node.setType(new MapType(keyType, valueType));
+            } else {
+                node.setType(new MapType(Type.NULL, Type.NULL));
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
@@ -382,13 +436,14 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) {
+        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) { // (x,y) -> x+y or (k,v) -> (k1,v1)
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays.");
+                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays/maps.");
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
                 throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
             }
+
             // process lambda arguments
             Set<String> set = new HashSet<>();
             List<LambdaArgument> args = Lists.newArrayList();
