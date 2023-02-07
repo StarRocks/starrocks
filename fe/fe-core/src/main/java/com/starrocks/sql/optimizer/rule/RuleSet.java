@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneRepeatColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
@@ -271,6 +272,7 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
                 new CastToEmptyRule(),
+                new PruneTrueFilterRule(),
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
                 PushDownPredicateScanRule.HIVE_SCAN,
