@@ -425,6 +425,53 @@ public class ExportJob implements Writable {
         LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
     }
 
+    // For olap table, it may have multiple replica, 
+    // rebalance process may schedule tablet from one BE to another BE.
+    // In such case, coord will return 'Not found tablet xxx' error. To solve this, 
+    // we need to find a new replica for that tablet and generate a new coord.
+    // Also, if the version has been compacted in one BE's tablet, coord will return 
+    // 'version already been compacted' error msg, find a new replica may be able to 
+    // alleviate this problem.
+    public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws UserException {
+        Coordinator coord = coordList.get(taskIndex);
+        OlapScanNode olapScanNode = (OlapScanNode) coord.getScanNodes().get(0);
+        List<TScanRangeLocations> locations = olapScanNode.getScanRangeLocations(0);
+        if (locations.size() == 0) {
+            throw new UserException("SubExportTask " + taskIndex + " scan range is empty");
+        }
+
+        OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+        Analyzer tmpAnalyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
+        newOlapScanNode.setColumnFilters(Maps.newHashMap());
+        newOlapScanNode.setIsPreAggregation(false, "This an export operation");
+        newOlapScanNode.setCanTurnOnPreAggr(false);
+        newOlapScanNode.init(tmpAnalyzer);
+        newOlapScanNode.selectBestRollupByRollupSelector();
+        List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations);
+
+        // random select a new location for each TScanRangeLocations
+        for (TScanRangeLocations tablet : newLocations) {
+            List<TScanRangeLocation> tabletLocations = tablet.getLocations();
+            Collections.shuffle(tabletLocations);
+            tablet.setLocations(tabletLocations.subList(0, 1));
+        }
+
+        OlapScanNode newTaskScanNode = genOlapScanNodeByLocation(newLocations);
+        PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
+
+        Coordinator newCoord = new Coordinator(
+                id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
+                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
+        newCoord.setExecMemoryLimit(getMemLimit());
+        this.coordList.set(taskIndex, newCoord);
+        LOG.info("reset coordinator for export job: {}, taskIdx {}", coordList.size(), taskIndex);
+        return newCoord;
+    }
+
+    public boolean needResetCoord() {
+        return exportTable.isOlapTable();
+    }
+
     public void setBeStartTime(long beId, long lastStartTime) {
         this.beLastStartTime.put(beId, lastStartTime);
     }

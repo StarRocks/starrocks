@@ -344,6 +344,10 @@ public class Coordinator {
         return trackingUrl;
     }
 
+    public long getStartTime() {
+        return this.queryGlobals.getTimestamp_ms();
+    }
+
     public void setExecMemoryLimit(long execMemoryLimit) {
         this.queryOptions.setMem_limit(execMemoryLimit);
     }
