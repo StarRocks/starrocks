@@ -160,9 +160,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             return true;
         }
 
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
         if (!super.equals(o)) {
             return false;
         }

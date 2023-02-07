@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.common.Config;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -569,5 +568,15 @@ public class AnalyzeSingleTest {
         String sql = "select * from test.t0 [_META_]";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
         Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+    }
+
+    @Test
+    public void testRemoveComment() {
+        analyzeSuccess("select * from-- comment\n" + "test.t0");
+        analyzeSuccess("select * from/*comment*/test.t0");
+
+        analyzeFail("select * fro-- comment\nm test.t0");
+        analyzeFail("select * fro/*comment*/m test.t0");
+
     }
 }
