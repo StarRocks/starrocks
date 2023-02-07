@@ -466,6 +466,10 @@ under the License.
                     <artifactId>ivy</artifactId>
                     <groupId>org.apache.ivy</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
             </exclusions>
         </dependency>
 
