@@ -4,6 +4,8 @@
 
 根据指定的时间粒度周期，将给定的时间转化为其所在的时间粒度周期的起始或结束时刻。
 
+该函数从 2.3 版本开始支持。从 2.5 版本开始支持转化为结束时刻。
+
 ## 语法
 
 ```Haskell
@@ -18,7 +20,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
   - `N` 是 INT 类型的时间粒度周期的长度。
   - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND。
 
-- `boundary`：可选，用于指定返回时间周期的起始时刻 (`FLOOR`) 还是结束时刻 (`CEIL`)。取值范围：FLOOR，CEIL。如果不指定，默认为 `FLOOR`。
+- `boundary`：可选，用于指定返回时间周期的起始时刻 (`FLOOR`) 还是结束时刻 (`CEIL`)。取值范围：FLOOR，CEIL。如果不指定，默认为 `FLOOR`。该参数从 2.5 版本开始支持。
 
 ## 返回值说明
 
