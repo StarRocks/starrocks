@@ -403,7 +403,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 partitionDiff = SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
+                String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
                 partitionDiff = SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                         granularity, partitionColumn.getPrimitiveType());
             }
