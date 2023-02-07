@@ -64,7 +64,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerListResponse listPath(TBrokerListPathRequest request)
             throws TException {
-        logger.info("receive a delete path request, path: " + request.path);
+        logger.info("receive a list path request, path: " + request.path);
         TBrokerListResponse response = new TBrokerListResponse();
         try {
             boolean fileNameOnly = false;

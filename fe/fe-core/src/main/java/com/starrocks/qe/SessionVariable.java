@@ -1412,6 +1412,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableOptimizerTraceLog;
     }
 
+    public void setEnableOptimizerTraceLog(boolean val) {
+        this.enableOptimizerTraceLog = val;
+    }
+
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }

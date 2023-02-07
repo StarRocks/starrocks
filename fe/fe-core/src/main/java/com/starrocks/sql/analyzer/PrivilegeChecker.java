@@ -672,13 +672,13 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            if (stmt.getRole() != null || stmt.getPrivType().equals("USER")) {
+            if (stmt.getRole() != null || stmt.getObjectTypeUnResolved().equals("USER")) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
                         session, PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
             } else {
-                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
                     TablePattern tblPattern = stmt.getTblPattern();
                     if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()
@@ -1266,7 +1266,8 @@ public class PrivilegeChecker {
                 }
             } catch (Exception e) {
                 if (statement.getTableRefs().size() == 0) {
-                    throw new SemanticException("Table not found.");
+                    String dBName = statement.getDbName();
+                    throw new SemanticException("Database: {} is empty", dBName);
                 } else {
                     throw new SemanticException("BackupStatement failed");
                 }

@@ -316,7 +316,7 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                node.setType(Type.ARRAY_NULL);
             }
             return null;
         }
@@ -628,6 +628,12 @@ public class ExpressionAnalyzer {
         public Void visitInPredicate(InPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
 
+            List<Expr> queryExpressions = Lists.newArrayList();
+            node.collect(arg -> arg instanceof Subquery, queryExpressions);
+            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+                throw new SemanticException("In Predicate only support literal expression list");
+            }
+
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
@@ -864,7 +870,7 @@ public class ExpressionAnalyzer {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_CONCAT)) {
                 if (node.getChildren().size() < 2) {
-                    throw new SemanticException(fnName + " should have at least tow inputs");
+                    throw new SemanticException(fnName + " should have at least two inputs");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {

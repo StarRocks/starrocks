@@ -147,7 +147,7 @@ public class FrontendServiceImplTest {
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
                         "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
-                        "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 year)\n" +
+                        "START (\"2015-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");

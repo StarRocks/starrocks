@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -199,7 +200,8 @@ public class CreateTableWithPartitionTest {
     }
 
     @Test
-    public void testCreateTableBatchPartitionWeek() throws Exception {
+    public void testCreateTableBatchPartitionWeekWithoutCheck() throws Exception {
+        Config.enable_create_partial_partition_in_batch = true;
         ConnectContext ctx = starRocksAssert.getCtx();
         String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeek (\n" +
                 "    k1 DATE,\n" +
@@ -222,12 +224,39 @@ public class CreateTableWithPartitionTest {
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_13 VALUES [('2020-03-25'), ('2020-03-30'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_14 VALUES [('2020-03-30'), ('2020-04-06'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_15 VALUES [('2020-04-06'), ('2020-04-10'))"));
-
+        Config.enable_create_partial_partition_in_batch = false;
     }
 
     @Test
-    public void testCreateTableBatchPartitionWeekThroughYear() throws Exception {
+    public void testCreateTableBatchPartitionWeekWithCheck() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeek (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2020-03-23\") END (\"2020-04-13\") EVERY (INTERVAL 1 WEEK)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_13 VALUES [('2020-03-23'), ('2020-03-30'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_14 VALUES [('2020-03-30'), ('2020-04-06'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_15 VALUES [('2020-04-06'), ('2020-04-13'))"));
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionWeekThroughYearWithoutCheck() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Config.enable_create_partial_partition_in_batch = true;
         String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeekThroughYear (\n" +
                 "    k1 DATE,\n" +
                 "    k2 INT,\n" +
@@ -250,6 +279,34 @@ public class CreateTableWithPartitionTest {
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_53 VALUES [('2020-12-28'), ('2021-01-04'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_02 VALUES [('2021-01-04'), ('2021-01-11'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_03 VALUES [('2021-01-11'), ('2021-01-15'))"));
+        Config.enable_create_partial_partition_in_batch = false;
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionWeekThroughYearWithCheck() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeekThroughYear (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2020-12-21\") END (\"2021-01-18\") EVERY (INTERVAL 1 WEEK)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_52 VALUES [('2020-12-21'), ('2020-12-28'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2020_53 VALUES [('2020-12-28'), ('2021-01-04'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_02 VALUES [('2021-01-04'), ('2021-01-11'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2021_03 VALUES [('2021-01-11'), ('2021-01-18'))"));
     }
 
     @Test
@@ -344,8 +401,9 @@ public class CreateTableWithPartitionTest {
     }
 
     @Test
-    public void testCreateTableBatchPartitionMonthNatural() throws Exception {
+    public void testCreateTableBatchPartitionMonthNaturalWithoutCheck() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        Config.enable_create_partial_partition_in_batch = true;
         String createTableSql = "CREATE TABLE testCreateTableBatchPartitionMonthNatural (\n" +
                 "    k1 DATE,\n" +
                 "    k2 INT,\n" +
@@ -369,7 +427,34 @@ public class CreateTableWithPartitionTest {
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01'))"));
         Assert.assertTrue(partitionDesc.toString().contains("PARTITION p202103 VALUES [('2021-03-01'), ('2021-03-15'))"));
         Assert.assertFalse(partitionDesc.toString().contains("PARTITION p202104 VALUES"));
+        Config.enable_create_partial_partition_in_batch = false;
+    }
 
+    @Test
+    public void testCreateTableBatchPartitionMonthNaturalWithCheck() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionMonthNatural (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2020-12-01\") END (\"2021-03-01\") EVERY (INTERVAL 1 MONTH)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p202012 VALUES [('2020-12-01'), ('2021-01-01'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01'))"));
+        Assert.assertFalse(partitionDesc.toString().contains("PARTITION p202103 VALUES"));
     }
 
     @Test
@@ -618,10 +703,64 @@ public class CreateTableWithPartitionTest {
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
-        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140101 VALUES [('20140101'), ('20140102'))"));
-        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140102 VALUES [('20140102'), ('20140103'))"));
-        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140103 VALUES [('20140103'), ('20140104'))"));
-        Assert.assertFalse(partitionDesc.toString().contains("PARTITION p20140104 VALUES [('20140104'), ('20140105'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140101 VALUES [('2014-01-01'), ('2014-01-02'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140102 VALUES [('2014-01-02'), ('2014-01-03'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p20140103 VALUES [('2014-01-03'), ('2014-01-04'))"));
+        Assert.assertFalse(partitionDesc.toString().contains("PARTITION p20140104 VALUES [('2014-01-04'), ('2014-01-05'))"));
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testCreateTableBatchPartitionHourWithDatePartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionHourWithDatePartition` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` int(11) NULL COMMENT \"\",\n" +
+                "  `k3` smallint(6) NULL COMMENT \"\",\n" +
+                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                "  `v2` datetime NULL DEFAULT \"2014-02-04 15:36:00\" COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(\n" +
+                "START ('2014-01-01') END ('2014-01-02')  EVERY (interval 1 hour)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionHourWithDateTimePartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE `testCreateTableBatchPartitionHourWithDateTimePartition` (\n" +
+                "  `k1` datetime NULL COMMENT \"\",\n" +
+                "  `k2` int(11) NULL COMMENT \"\",\n" +
+                "  `k3` smallint(6) NULL COMMENT \"\",\n" +
+                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                "  `v2` datetime NULL DEFAULT \"2014-02-04 15:36:00\" COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(\n" +
+                "START ('2014-01-01') END ('2014-01-02')  EVERY (interval 1 hour)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2014010100 VALUES [('2014-01-01 00:00:00'), ('2014-01-01 01:00:00'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2014010101 VALUES [('2014-01-01 01:00:00'), ('2014-01-01 02:00:00'))"));
+        Assert.assertTrue(partitionDesc.toString().contains("PARTITION p2014010102 VALUES [('2014-01-01 02:00:00'), ('2014-01-01 03:00:00'))"));
     }
 
     @Test(expected = AnalysisException.class)
