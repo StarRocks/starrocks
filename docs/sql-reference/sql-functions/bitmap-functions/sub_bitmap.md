@@ -4,7 +4,7 @@
 
 Intercepts `len` elements from a BITMAP value `src` starting from the position specified by `offset`. The output elements are a subset of `src`.
 
-This function is mainly used for scenarios such as paginated queries.
+This function is mainly used for scenarios such as paginated queries. It is supported from v2.5.
 
 ## Syntax
 

@@ -2,7 +2,9 @@
 
 ## Description
 
-Converts a given time into the beginning or end of a time interval based on the specified time granularity. This function is supported from v2.3.
+Converts a given time into the beginning or end of a time interval based on the specified time granularity.
+
+This function is supported from v2.3. v2.5 supports converting a given time into the end of a time interval.
 
 ## Syntax
 
@@ -16,7 +18,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 - `INTERVAL N type`: the time granularity, for example, `interval 5 second`.
   - `N` is the length of time interval. It must be an INT value.
   - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND.
-- `boundary`: optional. It is used to specify whether to return the beginning (`FLOOR`) or end (`CEIL`) of the time interval. Valid values: FLOOR, CEIL. If this parameter is not specified, `FLOOR` is the default.
+- `boundary`: optional. It is used to specify whether to return the beginning (`FLOOR`) or end (`CEIL`) of the time interval. Valid values: FLOOR, CEIL. If this parameter is not specified, `FLOOR` is the default. This parameter is supported from v2.5.
 
 ## Return value
 

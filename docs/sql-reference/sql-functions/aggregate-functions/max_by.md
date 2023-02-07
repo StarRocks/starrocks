@@ -2,9 +2,11 @@
 
 ## Description
 
-Returns the value of `x` associated with the maximum value of `y`. 
+Returns the value of `x` associated with the maximum value of `y`.
 
 For example, `SELECT max_by(subject, exam_result) FROM exam;` is to return the subject that has the highest exam score.
+
+This function is supported from v2.5.
 
 ## Syntax
 
