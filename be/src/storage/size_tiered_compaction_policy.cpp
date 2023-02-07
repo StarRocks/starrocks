@@ -109,16 +109,16 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
 
     std::sort(candidate_rowsets.begin(), candidate_rowsets.end(), Rowset::comparator);
 
-    if (time(nullptr) - candidate_rowsets[0]->creation_time() >
-        config::base_compaction_interval_seconds_since_last_operation) {
-        force_base_compaction = true;
-    }
-
     if (!force_base_compaction && candidate_rowsets.size() == 2 && candidate_rowsets[0]->end_version() == 1 &&
         candidate_rowsets[1]->rowset_meta()->get_compaction_score() <= 1) {
         // the tablet is with rowset: [0-1], [2-y]
         // and [0-1] has no data. in this situation, no need to do base compaction.
         return Status::NotFound("compaction no suitable version error.");
+    }
+
+    if (time(nullptr) - candidate_rowsets[0]->creation_time() >
+        config::base_compaction_interval_seconds_since_last_operation) {
+        force_base_compaction = true;
     }
 
     struct SizeTieredLevel {
