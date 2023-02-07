@@ -554,7 +554,7 @@ public class PrivilegeManagerTest {
         Assert.assertEquals(1, grantTableStmt.getObjectList().size());
         TablePEntryObject goodTableObject = (TablePEntryObject) grantTableStmt.getObjectList().get(0);
         // 2. add validate entry: create_table + drop on db to test_user
-        sql = "grant create_table, drop on db to test_user";
+        sql = "grant create_table, drop on DATABASE db to test_user";
         GrantPrivilegeStmt grantDbStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantDbStmt);
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
@@ -571,7 +571,7 @@ public class PrivilegeManagerTest {
         objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASE_ID));
         manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
         // 7. add valid user
-        sql = "grant impersonate on root to test_user";
+        sql = "grant impersonate on USER root to test_user";
         GrantPrivilegeStmt grantUserStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantUserStmt);
         // 8. add invalidate entry: bad impersonate user
@@ -701,7 +701,7 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
 
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                "REVOKE IMPERSONATE ON root FROM test_user", ctx);
+                "REVOKE IMPERSONATE ON USER root FROM test_user", ctx);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         manager.revoke(revokeStmt);
 
@@ -725,7 +725,7 @@ public class PrivilegeManagerTest {
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user user_with_db_priv", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
-        sql = "grant drop on db to user_with_db_priv";
+        sql = "grant drop on DATABASE db to user_with_db_priv";
         grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantTableStmt);
         UserIdentity userWithDbPriv = UserIdentity.createAnalyzedUserIdentWithIp("user_with_db_priv", "%");
@@ -898,7 +898,7 @@ public class PrivilegeManagerTest {
                 "grant role1, role2 to test_role_user;", ctx), ctx);
 
         Assert.assertEquals("[public, role1, role2]", manager.getRoleNamesByUser(
-                        UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1, role2 from test_role_user;", ctx), ctx);
@@ -1448,5 +1448,24 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.DROP));
         Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.SELECT));
         Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, "db", "view1", PrivilegeType.ALTER));
+    }
+
+    @Test
+    public void testGrantBrief() throws Exception {
+        ctx.setDatabase("db");
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user brief_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant drop on tbl0 to brief_user", ctx), ctx);
+        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.DROP));
+
+        try {
+            StatementBase statementBase =
+                    UtFrameUtils.parseStmtWithNewParser("grant drop on db to brief_user", ctx);
+            DDLStmtExecutor.execute(statementBase, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find table db in db db"));
+        }
     }
 }

@@ -1930,7 +1930,7 @@ public class AuthTest {
 
         // 2. grant impersonate on gregory to harry
         // 2.1 grant
-        String sql = "grant impersonate on Gregory to Harry";
+        String sql = "grant impersonate on USER Gregory to Harry";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 2.2 assert
@@ -1939,7 +1939,7 @@ public class AuthTest {
 
         // 3. grant impersonate on albert to harry
         // 3.1 grant
-        sql = "grant impersonate on Albert to Harry";
+        sql = "grant impersonate on USER Albert to Harry";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 3.2 assert
@@ -1948,7 +1948,7 @@ public class AuthTest {
 
         // 4. revoke impersonate on gregory from harry
         // 4.1 revoke
-        sql = "revoke impersonate on Gregory from Harry";
+        sql = "revoke impersonate on USER Gregory from Harry";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.revoke(revokeStmt);
         // 4.2 assert
@@ -1962,7 +1962,7 @@ public class AuthTest {
         CreateRoleStmt roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
         auth.createRole(roleStmt);
         // 5.2 grant impersonate on gregory to role auror
-        sql = "grant impersonate on Gregory to role auror";
+        sql = "grant impersonate on USER Gregory to role auror";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 5.3 grant auror to neiville
@@ -1974,7 +1974,7 @@ public class AuthTest {
 
         // 6. grant impersonate on albert to role auror
         // 6.1 grant
-        sql = "grant impersonate on Albert to role auror";
+        sql = "grant impersonate on USER Albert to role auror";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 6.2 assert
@@ -1982,7 +1982,7 @@ public class AuthTest {
 
         // 7. revert impersonate to gregory from role auror
         // 7.1 revoke
-        sql = "revoke impersonate on Gregory from role auror";
+        sql = "revoke impersonate on USER Gregory from role auror";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.revoke(revokeStmt);
         // 7.2 assert
@@ -2047,7 +2047,7 @@ public class AuthTest {
         resourcePattern.analyze();
         auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
         expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO 'user3'@'%'");
-        String sql = "GRANT IMPERSONATE ON 'user1'@'%' TO 'user3'@'%'";
+        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO 'user3'@'%'";
         auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         expectSQLs.add(sql);
         infos = auth.getGrantsSQLs(manyPrivilegeUser);
@@ -2132,7 +2132,7 @@ public class AuthTest {
         // 2. grant impersonate on gregory to harry
         // 2.1 grant
         Assert.assertFalse(auth.canImpersonate(harry, gregory));
-        String sql = "grant impersonate on Gregory to Harry";
+        String sql = "grant impersonate on USER Gregory to Harry";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.grant(grantStmt);
         // 2.2 check
@@ -2150,7 +2150,7 @@ public class AuthTest {
         Assert.assertEquals(0, infos.size());
 
         // 5. revoke impersonate on greogory from harry
-        sql = "revoke impersonate on Gregory from Harry";
+        sql = "revoke impersonate on USER Gregory from Harry";
         auth.revoke((RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         Assert.assertFalse(auth.canImpersonate(harry, gregory));
 

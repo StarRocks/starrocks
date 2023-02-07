@@ -295,7 +295,7 @@ public class AuthUpgraderTest {
                 "create user selectUser",
                 "GRANT select_priv on db0.tbl0 TO selectUser",
                 "create role impersonateRole",
-                "GRANT impersonate on selectUser TO ROLE impersonateRole");
+                "GRANT impersonate on USER selectUser TO ROLE impersonateRole");
 
         // check upgrade success
         UserIdentity selectUser = UserIdentity.createAnalyzedUserIdentWithIp("selectUser", "%");
@@ -331,9 +331,9 @@ public class AuthUpgraderTest {
                 true,
                 "create user harry",
                 "create user gregory",
-                "GRANT impersonate on gregory TO harry",
+                "GRANT impersonate on USER gregory TO harry",
                 "create role harry",
-                "GRANT impersonate on gregory TO ROLE harry");
+                "GRANT impersonate on USER gregory TO ROLE harry");
 
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++i) {
@@ -357,7 +357,7 @@ public class AuthUpgraderTest {
                 true,
                 "create user testafteruserdropped",
                 "create user gregory1",
-                "GRANT impersonate on gregory1 TO testafteruserdropped",
+                "GRANT impersonate on USER gregory1 TO testafteruserdropped",
                 "drop user gregory1");
 
         // check twice, the second time is as follower

@@ -34,19 +34,14 @@ public class ResourcePEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have one: " + tokens);
         }
         String name = tokens.get(0);
-        if (! mgr.getResourceMgr().containsResource(name)) {
-            throw new PrivObjNotFoundException("cannot find resource: " + tokens.get(0));
+        if (name.equals("*")) {
+            return new ResourcePEntryObject(null);
+        } else {
+            if (!mgr.getResourceMgr().containsResource(name)) {
+                throw new PrivObjNotFoundException("cannot find resource: " + tokens.get(0));
+            }
+            return new ResourcePEntryObject(name);
         }
-        return new ResourcePEntryObject(name);
-    }
-
-    public static ResourcePEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        // only support ON ALL RESOURCES
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException("invalid ALL statement for resource! only support ON ALL RESOURCES");
-        }
-        return new ResourcePEntryObject(null);
     }
 
     protected ResourcePEntryObject(String name) {
@@ -55,7 +50,7 @@ public class ResourcePEntryObject implements PEntryObject {
 
     /**
      * if the current resource matches other resource, including fuzzy matching.
-     *
+     * <p>
      * this(hive0), other(hive0) -> true
      * this(hive0), other(ALL) -> true
      * this(ALL), other(hive0) -> false
