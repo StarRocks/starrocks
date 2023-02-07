@@ -1,10 +1,10 @@
-# Block cache
+# Local Cache
 
-This topic describes the working principles of block cache and how to enable block cache to improve query performance on external data.
+This topic describes the working principles of Local Cache and how to enable Local Cache to improve query performance on external data.
 
 In data lake analytics, StarRocks scans data files stored in external storage systems, such as HDFS and Amazon S3. The I/O overhead of an external storage system is affected by the amount of scanned data. The larger the amount of data scanned, the more I/O overhead it causes. In addition, in some Ad Hoc (instant query) scenarios, locality of reference causes duplicate I/O overhead for an external storage system.
 
-To optimize the query performance in these scenarios, StarRocks 2.5 and later versions provide block cache. This feature accelerates queries and analysis by caching hot data from external storage systems into blocks. Block cache only works when you query data from external storage systems by using external tables (except for external tables for JDBC-compatible databases) or external catalogs. It does not work when you query native tables stored in StarRocks.
+To optimize the query performance in these scenarios, StarRocks 2.5 and later versions provide the Local Cache feature. This feature accelerates queries and analysis by caching hot data from external storage systems into blocks. Local cache only works when you query data from external storage systems by using external tables (except for external tables for JDBC-compatible databases) or external catalogs. It does not work when you query native tables stored in StarRocks.
 
 ## How it works
 
@@ -41,26 +41,26 @@ By default, StarRocks uses the memory of BE machines to cache blocks. It also su
 
 ## Cache replacement policies
 
-In block cache, blocks are the smallest unit that StarRocks uses to cache and discard data. StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
+In Local Cache, blocks are the smallest unit that StarRocks uses to cache and discard data. StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
 
 - StarRocks reads data from memory, and then from disks if the data is not found in memory. Data read from disks is loaded into memory.
 - Data deleted from memory is written into disks. Data removed from disks is discarded.
 
-## Enable block cache
+## Enable Local Cache
 
-Block cache is disabled by default. To enable this feature, configure FEs and BEs in your StarRocks cluster.
+Local cache is disabled by default. To enable this feature, configure FEs and BEs in your StarRocks cluster.
 
 ### Configurations for FEs
 
-You can enable block cache for FEs by using one of the following methods:
+You can enable Local Cache for FEs by using one of the following methods:
 
-- Enable block cache for a given session based on your requirements.
+- Enable Local Cache for a given session based on your requirements.
 
   ```SQL
   SET enable_scan_block_cache = true;
   ```
 
-- Enable block cache for all active sessions.
+- Enable Local Cache for all active sessions.
 
   ```SQL
   SET GLOBAL enable_scan_block_cache = true;
@@ -72,17 +72,17 @@ Add the following parameters to the **conf/be.conf** file of each BE. Then resta
 
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
-| block_cache_enable     | Whether block cache is enabled.<ul><li>`true`: Block cache is enabled.</li><li>`false`: Block cache is disabled. The value of this parameter defaults to `false`.</li></ul>To enable block cache, set the value of this parameter to `true`. |
+| block_cache_enable     | Whether Local Cache is enabled.<ul><li>`true`: Local cache is enabled.</li><li>`false`: Local cache is disabled. The value of this parameter defaults to `false`.</li></ul>To enable Local Cache, set the value of this parameter to `true`. |
 | block_cache_disk_path  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
 | block_cache_meta_path  | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_mem_size   | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
+| block_cache_mem_size   | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Local Cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
 
 Examples of setting these parameters.
 
 ```Plain
 
-# Enable Block Cache.
+# Enable Local Cache.
 block_cache_enable = true  
 
 # The BE machine is equipped with two disks.
@@ -97,15 +97,15 @@ block_cache_mem_size = 2147483648
 block_cache_disk_size = 1288490188800
 ```
 
-## Check whether a query hits block cache
+## Check whether a query hits local cache
 
-You can check whether a query hits block cache by analyzing the following metrics in the query profile:
+You can check whether a query hits local cache by analyzing the following metrics in the query profile:
 
 - `BlockCacheReadBytes`: indicates the amount of data that StarRocks reads directly from the memory and disks.
 - `BlockCacheWriteBytes`: indicates the amount of data loaded from an external storage system to memory and disks.
 - `BytesRead`: indicates the amount of data that StarRocks read from an external storage system.
 
-Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and few data (518.73 MB) from the memory and disks. This means that few block caches were hit.
+Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and few data (518.73 MB) from the memory and disks. This means that few local caches were hit.
 
 ```Plain
  - Table: lineorder
@@ -133,7 +133,7 @@ Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) fro
    - __MIN_OF_BytesRead: 0.00
 ```
 
-Example 2: In this example, the amount of data StarRocks reads directly from the external storage system is 0, which means StarRocks reads data only from block cache.
+Example 2: In this example, the amount of data StarRocks reads directly from the external storage system is 0, which means StarRocks reads data only from local cache.
 
 ```Plain
 - Table: lineorder
