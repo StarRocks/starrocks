@@ -337,6 +337,7 @@ struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
     bool is_null = false;
+    uint64_t count;
 };
 
 template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
@@ -346,6 +347,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
         this->data(state).is_null = false;
+        this->data(state).count = 0;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -358,7 +360,58 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
             return;
         }
 
+<<<<<<< HEAD
         if (columns[0]->is_null(frame_end - 1)) {
+=======
+        // only calculate once
+        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+            return;
+        }
+
+        this->data(state).count++;
+
+        size_t value_index =
+                !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+            this->data(state).is_null = true;
+        } else {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+            this->data(state).is_null = false;
+            AggDataTypeTraits<PT>::assign_value(this->data(state).value,
+                                                AggDataTypeTraits<PT>::get_row_ref(*column, value_index));
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        this->get_values_helper(state, dst, start, end);
+    }
+
+    std::string get_name() const override { return "nullable_first_value"; }
+};
+
+template <LogicalType PT, bool ignoreNulls, typename = guard::Guard>
+struct LastValueState {
+    using T = AggDataValueType<PT>;
+    T value;
+    bool is_null = ignoreNulls;
+};
+
+template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>>
+class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT, ignoreNulls>, T> {
+    using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = ignoreNulls;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if (frame_start >= frame_end) {
+>>>>>>> 54d6382ce (Modify first_value for unbounded preceding and current row (#17494))
             this->data(state).is_null = true;
             return;
         }
