@@ -20,6 +20,7 @@
 // under the License.
 
 #include <gflags/gflags.h>
+#include <sys/stat.h>
 
 #include <fstream>
 #include <iostream>
@@ -109,7 +110,34 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid";
+    ss << "./meta_tool --operation=dump_data --file=";
     return ss.str();
+}
+
+void dump_data(const std::string& path) {
+    /*
+    size_t file_size = std::filesystem::file_size(path);
+    size_t footer_offset = file_size - 12;
+    uint32_t footer_length;
+    uint32_t checksum;
+    uint32_t magic_number;
+
+    std::ifstream fs(path, std::ios::in);
+    if (!fs.is_open()) {
+        std::cout << "open failed: " << path << std::endl;
+        return;
+    }
+
+    char footer_header_buf[12];
+    fs.seekg(static_cast<long>(footer_offset), std::ios::beg);
+    fs.read(footer_header_buf, 12);
+
+    footer_length = UNALIGNED_LOAD32(footer_header_buf);
+    checksum = UNALIGNED_LOAD32(footer_header_buf + 4);
+    magic_number = UNALIGNED_LOAD32(footer_header_buf + 8);
+
+    std::cout<<"RESULT: "<< footer_length <<":"<<checksum<<":"<<magic_number<<std::endl;
+    */
 }
 
 void show_meta() {
@@ -532,7 +560,9 @@ int meta_tool_main(int argc, char** argv) {
     gflags::SetUsageMessage(usage);
     google::ParseCommandLineFlags(&argc, &argv, true);
 
-    if (FLAGS_operation == "show_meta") {
+    if (FLAGS_operation == "dump_data") {
+        dump_data(FLAGS_file);
+    } else if (FLAGS_operation == "show_meta") {
         show_meta();
     } else if (FLAGS_operation == "batch_delete_meta") {
         std::string tablet_file;
