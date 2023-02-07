@@ -41,10 +41,19 @@ StarRocks Supports creating repository in HDFS, AWS S3, and Google GCS.
   - "fs.s3a.secret.key": The Secret Access Key that you can use to access the Amazon S3 bucket.
   - "fs.s3a.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
 
+> **NOTE**
+>
+> - StarRocks supports creating repositories in AWS S3 only according to the S3A protocol. Therefore, when you create repositories in AWS S3, you must replace `s3://` in the S3 URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+
 - For Google GCS:
   - "fs.s3a.access.key": The Access Key that you can use to access the Google GCS bucket.
   - "fs.s3a.secret.key": The Secret Key that you can use to access the Google GCS bucket.
   - "fs.s3a.endpoint": The endpoint that you can use to access the Google GCS bucket.
+
+> **NOTE**
+>
+> StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
 
 ## Examples
 
