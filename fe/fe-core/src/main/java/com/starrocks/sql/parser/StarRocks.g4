@@ -299,6 +299,7 @@ columnDesc
 charsetName
     : CHAR SET identifier
     | CHARSET identifier
+    | CHARACTER SET identifier
     ;
 
 defaultDesc
@@ -1038,7 +1039,7 @@ showBrokerStatement
     ;
 
 showCharsetStatement
-    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCollationStatement
@@ -1383,7 +1384,7 @@ setStatement
     ;
 
 setVar
-    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    : (CHAR SET | CHARSET | CHARACTER SET) (identifierOrString | DEFAULT)                       #setNames
     | NAMES (charset = identifierOrString | DEFAULT)
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword

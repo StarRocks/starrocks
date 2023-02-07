@@ -136,6 +136,10 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "SET CHAR SET 'utf8mb4'";
         analyzeSuccess(sql);
+        sql = "show character set where charset = 'utf8mb4'";
+        analyzeSuccess(sql);
+        sql = "SET CHARACTER SET utf8";
+        analyzeSuccess(sql);
     }
 
     @Test
