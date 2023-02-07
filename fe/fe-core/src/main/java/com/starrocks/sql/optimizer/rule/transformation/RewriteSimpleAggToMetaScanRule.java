@@ -44,7 +44,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-// for a simple min/max aggregation query like 'select min(c1),max(c2) from olap_table',
+// for a simple min/max/count aggregation query like
+// 'select min(c1),max(c2),count(*),count(not-null column) from olap_table',
 // we can use MetaScan directly to avoid reading a large amount of data.
 public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
     public RewriteSimpleAggToMetaScanRule() {

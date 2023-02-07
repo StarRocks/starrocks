@@ -449,7 +449,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
-        if (!planNodeName.equals("EXCHANGE") && !planNodeName.equals("MetaScan")) {
+        if (!planNodeName.equals("EXCHANGE")) {
             expBuilder.append(detailPrefix).append("column statistics: \n").append(getColumnStatistics(detailPrefix));
         }
         // Print the children
