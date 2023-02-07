@@ -28,6 +28,7 @@ import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -99,7 +100,7 @@ public class SubqueryUtils {
     public static LogicalPlan getLogicalPlan(ConnectContext session, CTETransformerContext cteContext,
                                              ColumnRefFactory columnRefFactory, QueryRelation relation,
                                              ExpressionMapping outer) {
-        if (!(relation instanceof SelectRelation)) {
+        if (!(relation instanceof SelectRelation) && !(relation instanceof SubqueryRelation)) {
             throw new SemanticException("Currently only subquery of the Select type are supported");
         }
 
