@@ -271,4 +271,14 @@ public class SelectStmtTest {
             Assert.assertTrue(e.getMessage().contains("Subquery in left-side child of in-predicate is not supported"));
         }
     }
+
+    @Test
+    public void testGroupByAllConstants() throws Exception {
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(1000000000);
+        String sql = "select cast(k1 as int), count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int)";
+        String s = starRocksAssert.query(sql).explainQuery();
+        System.out.println(s);
+        FeConstants.runningUnitTest = false;
+    }
 }

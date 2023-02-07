@@ -362,6 +362,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // that, non-order-by output columns are permuted according to the ordinal column.
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
+    public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
+    public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -908,6 +911,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
     private boolean fullSortLateMaterialization = false;
 
+    @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
+    private int distinctColumnBuckets = 1024;
+
+    @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
+    private boolean enableDistinctColumnBucketization = true;
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -930,6 +939,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isFullSortLateMaterialization() {
         return fullSortLateMaterialization;
+    }
+
+    public void setDistinctColumnBuckets(int buckets) {
+        distinctColumnBuckets = buckets;
+    }
+
+    public int getDistinctColumnBuckets() {
+        return distinctColumnBuckets;
+    }
+
+    public void setEnableDistinctColumnBucketization(boolean flag) {
+        enableDistinctColumnBucketization = flag;
+    }
+
+    public boolean isEnableDistinctColumnBucketization() {
+        return enableDistinctColumnBucketization;
     }
 
     public boolean isActivateAllRolesOnLogin() {

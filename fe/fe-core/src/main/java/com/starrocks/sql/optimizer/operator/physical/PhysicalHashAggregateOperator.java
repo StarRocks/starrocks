@@ -64,6 +64,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean useSortAgg = false;
 
+    private boolean distinctColumnDataSkew = false;
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -138,6 +140,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setUseSortAgg(boolean useSortAgg) {
         this.useSortAgg = useSortAgg;
+    }
+
+    public void setDistinctColumnDataSkew(boolean distinctColumnDataSkew) {
+        this.distinctColumnDataSkew = distinctColumnDataSkew;
+    }
+
+    public boolean isDistinctColumnDataSkew() {
+        return distinctColumnDataSkew;
     }
 
     @Override

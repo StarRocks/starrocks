@@ -53,6 +53,7 @@ import com.starrocks.thrift.TExprNodeType;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -75,6 +76,7 @@ public class FunctionCallExpr extends Expr {
     // The slot SlotDescriptor nullable info will lost or change
     private boolean mergeAggFnHasNullableChild = true;
 
+    private List<String> hints = Collections.emptyList();
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
             new ImmutableSet.Builder<String>().add(FunctionSet.YEAR).build();
@@ -481,5 +483,13 @@ public class FunctionCallExpr extends Expr {
         } else {
             return this;
         }
+    }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
     }
 }
