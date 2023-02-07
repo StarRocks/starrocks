@@ -186,6 +186,125 @@ TEST_P(CSVScannerTest, test_scalar_types) {
     EXPECT_EQ(true, chunk->get(3)[4].is_null());
 }
 
+TEST_P(CSVScannerTest, test_adaptive_nullable_column1) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file20");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '\'', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(true, chunk->get(0)[0].is_null());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(true, chunk->get(2)[0].is_null());
+    EXPECT_EQ(4, chunk->get(3)[0].get_int32());
+
+    EXPECT_EQ(true, chunk->get(0)[1].is_null());
+    EXPECT_EQ(true, chunk->get(1)[1].is_null());
+    EXPECT_EQ(true, chunk->get(2)[1].is_null());
+    EXPECT_EQ("Julia", chunk->get(3)[1].get_slice());
+
+    EXPECT_EQ(true, chunk->get(0)[2].is_null());
+    EXPECT_EQ(true, chunk->get(1)[2].is_null());
+    EXPECT_EQ(25, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_adaptive_nullable_column2) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file21");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '\'', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(true, chunk->get(3)[0].is_null());
+
+    EXPECT_EQ("Julia", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Andy", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("Joke", chunk->get(2)[1].get_slice());
+    EXPECT_EQ(true, chunk->get(3)[1].is_null());
+
+    EXPECT_EQ(20, chunk->get(0)[2].get_int32());
+    EXPECT_EQ(21, chunk->get(1)[2].get_int32());
+    EXPECT_EQ(22, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_adaptive_nullable_column3) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file20");
+    ranges.push_back(range);
+
+    TBrokerRangeDesc range2;
+    range2.__set_num_of_columns_from_file(3);
+    range2.__set_path("./be/test/exec/test_data/csv_scanner/csv_file21");
+    ranges.push_back(range2);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '\'', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(true, chunk->get(0)[0].is_null());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(true, chunk->get(2)[0].is_null());
+    EXPECT_EQ(4, chunk->get(3)[0].get_int32());
+
+    EXPECT_EQ(true, chunk->get(0)[1].is_null());
+    EXPECT_EQ(true, chunk->get(1)[1].is_null());
+    EXPECT_EQ(true, chunk->get(2)[1].is_null());
+    EXPECT_EQ("Julia", chunk->get(3)[1].get_slice());
+
+    EXPECT_EQ(true, chunk->get(0)[2].is_null());
+    EXPECT_EQ(true, chunk->get(1)[2].is_null());
+    EXPECT_EQ(25, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+
+    chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(true, chunk->get(3)[0].is_null());
+
+    EXPECT_EQ("Julia", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Andy", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("Joke", chunk->get(2)[1].get_slice());
+    EXPECT_EQ(true, chunk->get(3)[1].is_null());
+
+    EXPECT_EQ(20, chunk->get(0)[2].get_int32());
+    EXPECT_EQ(21, chunk->get(1)[2].get_int32());
+    EXPECT_EQ(22, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+}
+
 TEST_P(CSVScannerTest, test_multi_seprator) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
