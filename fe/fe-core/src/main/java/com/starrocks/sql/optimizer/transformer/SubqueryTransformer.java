@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -138,7 +139,7 @@ public class SubqueryTransformer {
 
         private LogicalPlan getLogicalPlan(QueryRelation relation, ConnectContext session, ExpressionMapping outer,
                                            CTETransformerContext cteContext) {
-            if (!(relation instanceof SelectRelation)) {
+            if (!(relation instanceof SelectRelation) && !(relation instanceof SubqueryRelation)) {
                 throw new SemanticException("Currently only subquery of the Select type are supported");
             }
 
