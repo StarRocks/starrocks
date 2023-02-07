@@ -119,6 +119,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableRewriteSimpleAggToMetaScan()) {
+            return false;
+        }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
         OlapTable table = (OlapTable) scanOperator.getTable();
