@@ -296,6 +296,13 @@ public class CreateTableAnalyzer {
                 }
             }
             distributionDesc.analyze(columnSet);
+            if (statement.isLakeEngine()) {
+                int bucketNum = distributionDesc.getBuckets();
+                if (bucketNum == 0) {
+                    throw new SemanticException("Create lake table should specify bucket number");
+                }
+            }
+
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
         } else {
