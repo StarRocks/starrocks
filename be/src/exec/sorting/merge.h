@@ -132,6 +132,9 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
+
+    bool _left_is_empty = false;
+    bool _right_is_empty = false;
 };
 
 // Merge multiple cursors in cascade way
