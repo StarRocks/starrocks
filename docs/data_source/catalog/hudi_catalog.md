@@ -9,7 +9,7 @@ A Hudi catalog is an external catalog supported in StarRocks 2.4 and later versi
 - StarRocks supports querying data files of Hudi in the following formats: Parquet and ORC.
 - StarRocks supports querying compressed data files of Hudi in the following formats: gzip, Zstd, LZ4, and Snappy.
 - StarRocks does not support querying data of the ARRAY type from Hudi. Note that errors occur if you query Hudi data of the ARRAY type.
-- StarRocks supports querying Copy On Write and Merge On Read tables. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
+- StarRocks supports querying Copy On Write and Merge On Read tables (MOR tables are supported from v2.5). For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
 - StarRocks supports the following two query types of Hudi: Snapshot Queries and Read Optimized Queries (Hudi only supports performing Read Optimized Queries on Merge On Read tables). Incremental Queries are not supported. For more information about the query types of Hudi, see [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
