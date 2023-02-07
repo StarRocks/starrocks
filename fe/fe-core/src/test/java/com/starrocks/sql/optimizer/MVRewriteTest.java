@@ -155,8 +155,10 @@ public class MVRewriteTest {
         query = "select count(1) from " + EMPS_TABLE_NAME + " group by time;";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         query = "select count(1) from " + EMPS_TABLE_NAME;
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test
@@ -170,8 +172,10 @@ public class MVRewriteTest {
         query = "select count(*) from " + EMPS_TABLE_NAME + " group by time;";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         query = "select count(*) from " + EMPS_TABLE_NAME;
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test
