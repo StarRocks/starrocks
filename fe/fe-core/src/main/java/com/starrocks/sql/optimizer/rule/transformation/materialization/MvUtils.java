@@ -139,10 +139,9 @@ public class MvUtils {
         if (root.getOp() instanceof LogicalJoinOperator) {
             LogicalJoinOperator join = (LogicalJoinOperator) root.getOp();
             joinOperators.add(join.getJoinType());
-        } else {
-            for (OptExpression child : root.getInputs()) {
-                getAllJoinOperators(child, joinOperators);
-            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            getAllJoinOperators(child, joinOperators);
         }
     }
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {

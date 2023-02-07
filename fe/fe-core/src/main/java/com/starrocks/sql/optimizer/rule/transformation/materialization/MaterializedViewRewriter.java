@@ -147,6 +147,8 @@ public class MaterializedViewRewriter {
             // Use traverse order to check whether all joins' order and operator are exactly matched.
             List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
             List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
+            Preconditions.checkState(queryJoinOperators.size() + 1 == queryTables.size());
+            Preconditions.checkState(mvJoinOperators.size() + 1 == mvTables.size());
             return queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators);
         }
     }
