@@ -64,12 +64,25 @@ public class AnalyzeSubqueryTest {
     public void testInPredicate() {
         analyzeSuccess("select v1 from t0 where v2 in (select v3 from t1)");
         analyzeSuccess("select v1 from t0 where v2 in (select v4 from t1 where v3 = v5)");
+        analyzeSuccess("select v1 from t0 where v2 in ((select v4 from t1 where v3 = v5))");
+        analyzeSuccess("select v1 from t0 where v2 in (((select v4 from t1 where v3 = v5)))");
+
+        analyzeSuccess("select v1 from t0 where v2 in (1, 2)");
+        analyzeFail("select v1 from t0 where v2 in ((select v4 from t1 where v3 = v5), 2)",
+                "In Predicate only support literal expression list");
+        analyzeFail("select v1 from t0 where v2 in ((select v4 from t1 where v3 = v5), (select v4 from t1 where v3 = v5))",
+                "In Predicate only support literal expression list");
+
+        analyzeFail("SELECT * FROM T WHERE A IN 1, 2", "You have an error in your SQL syntax");
+        analyzeFail("SELECT * FROM T WHERE A IN 1", "You have an error in your SQL syntax");
     }
 
     @Test
     public void testExistsSubquery() {
         analyzeSuccess("select v1 from t0 where exists (select v3 from t1)");
         analyzeSuccess("select v1 from t0 where exists (select v4 from t1 where v3 = v5)");
+        analyzeSuccess("select v1 from t0 where exists ((select v4 from t1 where v3 = v5))");
+        analyzeSuccess("select v1 from t0 where exists (((select v4 from t1 where v3 = v5)))");
     }
 
     @Test
