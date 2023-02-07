@@ -1266,7 +1266,8 @@ public class PrivilegeChecker {
                 }
             } catch (Exception e) {
                 if (statement.getTableRefs().size() == 0) {
-                    throw new SemanticException("Table not found.");
+                    String dBName = statement.getDbName();
+                    throw new SemanticException("Database: {} is empty", dBName);
                 } else {
                     throw new SemanticException("BackupStatement failed");
                 }
