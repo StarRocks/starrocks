@@ -2041,8 +2041,8 @@ public class PrivilegeCheckerV2Test {
                 "CREATE MATERIALIZED VIEW privilege(s) for this operation";
         verifyGrantRevoke(
                 createSql,
-                "grant create_materialized_view on db1 to test",
-                "revoke create_materialized_view on db1 from test",
+                "grant create_materialized_view on DATABASE db1 to test",
+                "revoke create_materialized_view on DATABASE db1 from test",
                 expectError);
     }
 
@@ -2181,8 +2181,8 @@ public class PrivilegeCheckerV2Test {
                 "CREATE FUNCTION privilege(s) for this operation";
         verifyGrantRevoke(
                 createSql,
-                "grant create_function on db1 to test",
-                "revoke create_function on db1 from test",
+                "grant create_function on DATABASE db1 to test",
+                "revoke create_function on DATABASE db1 from test",
                 expectError);
     }
 
@@ -2289,7 +2289,7 @@ public class PrivilegeCheckerV2Test {
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
-        grantOrRevoke("grant create_materialized_view on db1 to test");
+        grantOrRevoke("grant create_materialized_view on DATABASE db1 to test");
         expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
         try {
@@ -2303,7 +2303,7 @@ public class PrivilegeCheckerV2Test {
         grantOrRevoke("grant select on db1.tbl1 to test");
         PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
-        grantOrRevoke("revoke create_materialized_view on db1 from test");
+        grantOrRevoke("revoke create_materialized_view on DATABASE db1 from test");
         grantOrRevoke("revoke select on db1.tbl1 from test");
     }
 

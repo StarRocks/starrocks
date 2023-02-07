@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
@@ -30,7 +31,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokePrivilegeObjects objects;
 
     protected String role;
-    protected String privType;
+    protected String objectTypeUnResolved;
     protected List<String> privList;
 
     // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
@@ -45,11 +46,11 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public BaseGrantRevokePrivilegeStmt(
             List<String> privList,
-            String privType,
+            String objectTypeUnResolved,
             GrantRevokeClause clause,
             GrantRevokePrivilegeObjects objects) {
         this.privList = privList;
-        this.privType = privType;
+        this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
         this.objects = objects;
         this.role = clause.getRoleName();
@@ -87,17 +88,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     public String getFunctionName() {
         return objects.getFunctionName();
     }
-    public List<String> getAllTypeList() {
-        return objects.getAllTypeList();
-    }
-
-    public String getRestrictType() {
-        return objects.getRestrictType();
-    }
-
-    public String getRestrictName() {
-        return objects.getRestrictName();
-    }
 
     public void setPrivBitSet(PrivBitSet privBitSet) {
         this.privBitSet = privBitSet;
@@ -107,8 +97,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.role = role;
     }
 
-    public void setPrivType(String privType) {
-        this.privType = privType;
+    public void setObjectTypeUnResolved(String objectTypeUnResolved) {
+        this.objectTypeUnResolved = objectTypeUnResolved;
     }
 
     public String getRole() {
@@ -119,8 +109,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return clause.getUserIdentity();
     }
 
-    public String getPrivType() {
-        return privType;
+    public String getObjectTypeUnResolved() {
+        return objectTypeUnResolved;
     }
 
     public List<String> getPrivList() {
@@ -173,6 +163,16 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public boolean hasPrivilegeObject() {
         return this.objects != null;
+    }
+
+    public List<String> getTokens() {
+        if (!objects.isAllDB() && objects.getDbName() == null) {
+            return Lists.newArrayList("*");
+        } else if (objects.getDbName() != null) {
+            return Lists.newArrayList(objects.getDbName(), "*");
+        } else {
+            return Lists.newArrayList("*", "*");
+        }
     }
 
     @Override

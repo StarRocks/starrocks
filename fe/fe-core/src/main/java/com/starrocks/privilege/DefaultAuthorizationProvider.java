@@ -147,47 +147,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
     }
 
-    @Override
-    public PEntryObject generateObject(
-            String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
-            throws PrivilegeException {
-        ObjectType type = ObjectType.valueOf(typeStr);
-        switch (type) {
-            case TABLE:
-                return TablePEntryObject.generate(mgr, allTypes, restrictType, restrictName);
-
-            case DATABASE:
-                return DbPEntryObject.generate(allTypes, restrictType, restrictName);
-
-            case USER:
-                return UserPEntryObject.generate(allTypes, restrictType, restrictName);
-
-            case RESOURCE:
-                return ResourcePEntryObject.generate(allTypes, restrictType, restrictName);
-
-            case VIEW:
-                return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
-
-            case MATERIALIZED_VIEW:
-                return MaterializedViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
-
-            case CATALOG:
-                return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
-
-            case FUNCTION:
-                return FunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
-
-            case RESOURCE_GROUP:
-                return ResourceGroupPEntryObject.generate(allTypes, restrictType, restrictName);
-
-            case GLOBAL_FUNCTION:
-                return GlobalFunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
-
-            default:
-                throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
-        }
-    }
-
     private static final List<String> BAD_SYSTEM_ACTIONS = Arrays.asList("GRANT", "NODE");
 
     @Override

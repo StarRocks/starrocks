@@ -15,7 +15,6 @@
 package com.starrocks.privilege;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Function;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,20 +40,12 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
         if (tokens.get(0).equals(FUNC_NOT_FOUND)) {
             throw new PrivObjNotFoundException("func not found");
         }
-        String funcSig = tokens.get(0);
-        return new GlobalFunctionPEntryObject(funcSig);
-    }
 
-    public static GlobalFunctionPEntryObject generate(
-            GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
-            throws PrivilegeException {
-        if (allTypes.size() == 1) {
-            Preconditions.checkState(allTypes.get(0).equals(ObjectType.GLOBAL_FUNCTION.getPlural()));
-            Preconditions.checkArgument(restrictType == null);
-            Preconditions.checkArgument(restrictName == null);
+        if (tokens.get(0).equals("*")) {
             return new GlobalFunctionPEntryObject(ALL_GLOBAL_FUNCTION_SIGS);
         } else {
-            throw new PrivilegeException("Invalid ALL statement for global functions!");
+            String funcSig = tokens.get(0);
+            return new GlobalFunctionPEntryObject(funcSig);
         }
     }
 
