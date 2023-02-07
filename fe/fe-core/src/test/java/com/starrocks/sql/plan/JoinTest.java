@@ -2123,8 +2123,10 @@ public class JoinTest extends PlanTestBase {
                 "where 66 <= unix_timestamp() \n" +
                 "limit 155;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:Project\n" +
-                "  |  <slot 10> : 1");
+        assertContains(plan, "  7:Project\n" +
+                "  |  <slot 7> : rand()\n" +
+                "  |  <slot 8> : round(rand())\n" +
+                "  |  limit: 126");
     }
 
     @Test
