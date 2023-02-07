@@ -2,37 +2,79 @@
 
 This topic describes how to back up and restore data in StarRocks.
 
-StarRocks supports backing up data as snapshots into a remote storage system, and restoring data from snapshots to any StarRocks clusters.
+StarRocks supports backing up data as snapshots into a remote storage system, and restoring the data to any StarRocks clusters.
 
 > **CAUTION**
 >
 > - Only users with the ADMIN privilege can back up or restore data.
-> - In each database, only one running BACKUP or RESTORE job is allowed each time.
+> - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 
 ## Back up data
 
-StarRocks supports full backup on granular level of database, table, or partition.
+StarRocks supports FULL backup on the granularity level of database, table, or partition.
 
-If you have stored a large quantity of data in a table, we recommend that you back up and restore data by partition to minimize the losses caused by possible job failures. If you need to back up data at a regular interval, you can strategize a partition plan (by a certain time interval, for example) for your table, and back up new partitions each time.
+If you have stored a large quantity of data in a table, we recommend that you back up and restore data by partition in case of possible job failures. If you need to back up data at a regular interval, you can strategize a [dynamic partitioning](../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and only back up new partitions each time.
 
 ### Create a repository
 
 Before backing up data, you need to create a repository to store data in a remote storage system. For detailed instructions, see [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md).
+
+StarRocks supports creating repositories in HDFS, Amazon S3, and Google GCS.
+
+- Create a repository in HDFS
 
 The following example creates a repository named `test_repo` in an Apache™ Hadoop® cluster.
 
 ```SQL
 CREATE REPOSITORY test_repo
 WITH BROKER
-ON LOCATION "hdfs://xxx.xx.xxx.xxxx:xxxx/data/sr_backup"
-PROPERTIES("username" = "xxxx");
+ON LOCATION "hdfs://<hdfs_host>:<hdfs_port>/repo_dir/backup"
+PROPERTIES(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-After restoring data, you can delete the repository using [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP%20REPOSITORY.md).
+- Create a repository in Amazon S3
 
-> **CAUTION**
+The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3`.
+
+```SQL
+CREATE REPOSITORY test_repo
+WITH BROKER
+ON LOCATION "s3a://bucket_s3/backup"
+PROPERTIES(
+    "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
+    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyyyyyy",
+    "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
+);
+```
+
+> **NOTE**
 >
-> Data snapshots backed up in the remote storage system cannot be deleted through StarRocks. You need to delete them manually in the remote storage system.
+> - StarRocks supports creating repositories in AWS S3 only according to the S3A protocol. Therefore, when you create repositories in AWS S3, you must replace `s3://` in the S3 URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+
+- Create a repository in Google GCS
+
+The following example creates a repository named `test_repo` in the Google GCS bucket `bucket_gcs`.
+
+```SQL
+CREATE REPOSITORY test_repo
+WITH BROKER
+ON LOCATION "s3a://bucket_gcs/backup"
+PROPERTIES(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "storage.googleapis.com"
+);
+```
+
+> **NOTE**
+>
+> StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+
+After restoring data, you can delete the repository in StarRocks using [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP%20REPOSITORY.md). However, data snapshots backed up in the remote storage system cannot be deleted through StarRocks. You need to delete them manually in the remote storage system.
 
 ### Back up a data snapshot
 
@@ -58,8 +100,8 @@ You can restore the data snapshot backed up in the remote storage system to the 
 
 > **CAUTION**
 >
-> - Because data are backed up as snapshots, the data loaded after the snapshot is generated is not included in the snapshot. Therefore, if any data is loaded into the old cluster during the period between snapshot generation and RESTORE job completion, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
-> - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase of the recovery job. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless your are sure that the current data is no longer used. The overwrite operation will check metadata consistency between the snapshot and the existing database, table, or partition. If inconsistency is detected, the RESTORE operation cannot be performed.
+> - Because data are backed up as snapshots, the data loaded after the snapshot is generated are not included in the snapshot. Therefore, if you load data into the old cluster after the snapshot is generated and before the RESTORE job is completed, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
+> - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase of the RESTORE job. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless your are sure that the current data is no longer used. The overwrite operation will check metadata consistency between the snapshot and the existing database, table, or partition. If inconsistency is detected, the RESTORE operation cannot be performed.
 
 ### (Optional) Create the repository in the new cluster
 
@@ -69,16 +111,16 @@ To migrate data to another StarRocks cluster, you need to create a repository wi
 
 Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW%20SNAPSHOT.md).
 
-The following example checks the snapshot information in`test_repo`.
+The following example checks the snapshot information in `test_repo`.
 
 ```Plain
 mysql> SHOW SNAPSHOT ON test_repo;
 +------------------+-------------------------+--------+
 | Snapshot         | Timestamp               | Status |
 +------------------+-------------------------+--------+
-| sr_member_backup | 2022-11-21-10-42-26-315 | OK     |
+| sr_member_backup | 2023-02-07-14-45-53-143 | OK     |
 +------------------+-------------------------+--------+
-1 row in set (0.01 sec)
+1 row in set (1.16 sec)
 ```
 
 ### Restore data via the snapshot
@@ -91,7 +133,7 @@ The following example restores the data snapshot `sr_member_backup` in `test_rep
 RESTORE SNAPSHOT sr_hub.sr_member_backup
 FROM test_repo
 ON (sr_member)
-PROPERTIES ("backup_timestamp"="2022-11-21-10-42-26-315");
+PROPERTIES ("backup_timestamp"="2023-02-07-14-45-53-143");
 ```
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md).
