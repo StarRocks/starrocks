@@ -38,23 +38,15 @@ public class ResourceGroupPEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
         String name = tokens.get(0);
-        long id;
-
-        ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
-        if (resourceGroup == null) {
-            throw new PrivObjNotFoundException("cannot find resource group: " + name);
+        if (name.equals("*")) {
+            return new ResourceGroupPEntryObject(ALL_RESOURCE_GROUP_ID);
+        } else {
+            ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
+            if (resourceGroup == null) {
+                throw new PrivObjNotFoundException("cannot find resource group: " + name);
+            }
+            return new ResourceGroupPEntryObject(resourceGroup.getId());
         }
-        id = resourceGroup.getId();
-        return new ResourceGroupPEntryObject(id);
-    }
-
-    public static ResourceGroupPEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException(
-                    "invalid ALL statement for resource groups! only support ON ALL RESOURCE_GROUPS");
-        }
-        return new ResourceGroupPEntryObject(ALL_RESOURCE_GROUP_ID);
     }
 
     protected ResourceGroupPEntryObject(long id) {

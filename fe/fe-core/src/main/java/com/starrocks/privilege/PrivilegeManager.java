@@ -247,14 +247,16 @@ public class PrivilegeManager {
             case FUNCTION:
                 objects.add(provider.generateObject(
                         type.name(),
-                        Arrays.asList(type.getPlural(), ObjectType.DATABASE.getPlural()),
-                        null,
-                        null,
+                        Lists.newArrayList("*", "*"),
                         globalStateMgr));
                 collection.grant(typeId, actionSet, objects, false);
                 break;
 
             case USER:
+                objects.add(provider.generateUserObject(type.name(), null, globalStateMgr));
+                collection.grant(typeId, actionSet, objects, false);
+                break;
+
             case DATABASE:
             case RESOURCE:
             case CATALOG:
@@ -262,9 +264,7 @@ public class PrivilegeManager {
             case GLOBAL_FUNCTION:
                 objects.add(provider.generateObject(
                         type.name(),
-                        Arrays.asList(type.getPlural()),
-                        null,
-                        null,
+                        Lists.newArrayList("*"),
                         globalStateMgr));
                 collection.grant(typeId, actionSet, objects, false);
                 break;
@@ -925,9 +925,7 @@ public class PrivilegeManager {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             PEntryObject allTableInDbObject = manager.provider.generateObject(
                     ObjectType.TABLE.name(),
-                    Arrays.asList(ObjectType.TABLE.getPlural()),
-                    ObjectType.DATABASE.name(),
-                    db,
+                    Lists.newArrayList(db, "*"),
                     manager.globalStateMgr);
             short tableTypeId = manager.analyzeType(ObjectType.TABLE.name());
             if (manager.provider.searchAnyActionOnObject(tableTypeId, allTableInDbObject, collection)) {
@@ -936,9 +934,7 @@ public class PrivilegeManager {
             // 3. check for any action on any view in this db
             PEntryObject allViewInDbObject = manager.provider.generateObject(
                     ObjectType.VIEW.name(),
-                    Arrays.asList(ObjectType.VIEW.getPlural()),
-                    ObjectType.DATABASE.name(),
-                    db,
+                    Lists.newArrayList(db, "*"),
                     manager.globalStateMgr);
             short viewTypeId = manager.analyzeType(ObjectType.VIEW.name());
             if (manager.provider.searchAnyActionOnObject(viewTypeId, allViewInDbObject, collection)) {
@@ -947,9 +943,7 @@ public class PrivilegeManager {
             // 4. check for any action on any mv in this db
             PEntryObject allMvInDbObject = manager.provider.generateObject(
                     ObjectType.MATERIALIZED_VIEW.name(),
-                    Arrays.asList(ObjectType.MATERIALIZED_VIEW.getPlural()),
-                    ObjectType.DATABASE.name(),
-                    db,
+                    Lists.newArrayList(db, "*"),
                     manager.globalStateMgr);
             short mvTypeId = manager.analyzeType(ObjectType.MATERIALIZED_VIEW.name());
             return manager.provider.searchAnyActionOnObject(mvTypeId, allMvInDbObject, collection);
@@ -979,9 +973,7 @@ public class PrivilegeManager {
             if (ObjectType.TABLE.isAvailablePrivType(actionName)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
                         ObjectType.TABLE.name(),
-                        Collections.singletonList(ObjectType.TABLE.getPlural()),
-                        ObjectType.DATABASE.name(),
-                        db,
+                        Lists.newArrayList(db, "*"),
                         manager.globalStateMgr);
                 short tableTypeId = manager.analyzeType(ObjectType.TABLE.name());
                 Action want = manager.provider.getAction(tableTypeId, actionName);
@@ -994,9 +986,7 @@ public class PrivilegeManager {
             if (ObjectType.VIEW.isAvailablePrivType(actionName)) {
                 PEntryObject allViewInDbObject = manager.provider.generateObject(
                         ObjectType.VIEW.name(),
-                        Collections.singletonList(ObjectType.VIEW.getPlural()),
-                        ObjectType.DATABASE.name(),
-                        db,
+                        Lists.newArrayList(db, "*"),
                         manager.globalStateMgr);
                 short viewTypeId = manager.analyzeType(ObjectType.VIEW.name());
                 Action want = manager.provider.getAction(viewTypeId, actionName);
@@ -1009,9 +999,7 @@ public class PrivilegeManager {
             if (ObjectType.MATERIALIZED_VIEW.isAvailablePrivType(actionName)) {
                 PEntryObject allMvInDbObject = manager.provider.generateObject(
                         ObjectType.MATERIALIZED_VIEW.name(),
-                        Collections.singletonList(ObjectType.MATERIALIZED_VIEW.getPlural()),
-                        ObjectType.DATABASE.name(),
-                        db,
+                        Lists.newArrayList(db, "*"),
                         manager.globalStateMgr);
                 short mvTypeId = manager.analyzeType(ObjectType.MATERIALIZED_VIEW.name());
                 Action want = manager.provider.getAction(mvTypeId, actionName);
@@ -1543,11 +1531,6 @@ public class PrivilegeManager {
 
     public PEntryObject analyzeUserObject(String typeName, UserIdentity user) throws PrivilegeException {
         return this.provider.generateUserObject(typeName, user, globalStateMgr);
-    }
-
-    public PEntryObject analyzeObject(String type, List<String> allTypes, String restrictType, String restrictName)
-            throws PrivilegeException {
-        return this.provider.generateObject(type, allTypes, restrictType, restrictName, globalStateMgr);
     }
 
     /**

@@ -137,7 +137,7 @@ public class PrivilegeStmtAnalyzer {
 
             // parse privilege actions to PrivBitSet
             PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
-            String privType = stmt.getPrivType();
+            String privType = stmt.getObjectTypeUnResolved();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
                 if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
                     throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);

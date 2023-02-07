@@ -29,6 +29,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
@@ -207,7 +209,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
                 throws PrivilegeException, AnalysisException {
-            stmt.setObjectType(analyzePrivObjectType(stmt.getPrivType()));
+            stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
             String[] name = stmt.getFunctionName().split("\\.");
             FunctionName functionName;
             if (stmt.getTypeId() == ObjectType.GLOBAL_FUNCTION.getId()) {
@@ -238,11 +240,11 @@ public class PrivilegeStmtAnalyzerV2 {
                         .getFunction(searchDesc);
                 if (function == null) {
                     return privilegeManager.analyzeObject(
-                            stmt.getPrivType(),
+                            stmt.getObjectTypeUnResolved(),
                             Arrays.asList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
                     return privilegeManager.analyzeObject(
-                            stmt.getPrivType(),
+                            stmt.getObjectTypeUnResolved(),
                             Arrays.asList(function.signatureString())
                     );
                 }
@@ -252,17 +254,17 @@ public class PrivilegeStmtAnalyzerV2 {
             Function function = db.getFunction(searchDesc);
             if (null == function) {
                 return privilegeManager.analyzeObject(
-                        stmt.getPrivType(),
+                        stmt.getObjectTypeUnResolved(),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
                 return privilegeManager.analyzeObject(
-                        stmt.getPrivType(),
+                        stmt.getObjectTypeUnResolved(),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
             }
         }
-        
+
         private ObjectType analyzePrivObjectType(String objTypeString) {
             if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, objTypeString)) {
                 throw new SemanticException("cannot find privilege object type " + objTypeString);
@@ -284,16 +286,35 @@ public class PrivilegeStmtAnalyzerV2 {
                     List<PEntryObject> objectList = new ArrayList<>();
                     if (stmt.getUserPrivilegeObjectList() != null) {
                         // objects are user
-                        stmt.setObjectType(analyzePrivObjectType(stmt.getPrivType()));
+                        stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.analyzeUserObject(stmt.getPrivType(), userIdentity));
+                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectTypeUnResolved(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
-                        stmt.setObjectType(analyzePrivObjectType(stmt.getPrivType()));
+                        stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
+                            if (tokens.size() < 1 || tokens.size() > 2) {
+                                throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
+                            }
+
+                            if (tokens.size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
+                                    stmt.getObjectType().equals(ObjectType.VIEW) ||
+                                    stmt.getObjectType().equals(ObjectType.MATERIALIZED_VIEW))) {
+                                List<String> tokensWithDatabase = new ArrayList<>();
+                                if (Strings.isNullOrEmpty(session.getDatabase())) {
+                                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                                } else {
+                                    tokensWithDatabase.add(session.getDatabase());
+                                }
+
+                                tokensWithDatabase.add(tokens.get(0));
+                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectTypeUnResolved(),
+                                        tokensWithDatabase));
+                            } else {
+                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectTypeUnResolved(), tokens));
+                            }
                         }
                     } else if (stmt.getFunctionArgsDef() != null) {
                         FunctionName functionName = parseFunctionName(stmt);
@@ -307,19 +328,34 @@ public class PrivilegeStmtAnalyzerV2 {
                     } else {
                         // all statement
                         // TABLES -> TABLE
-                        stmt.setPrivType(privilegeManager.analyzeTypeInPlural(stmt.getPrivType()));
+                        String objectTypeString = privilegeManager.analyzeTypeInPlural(stmt.getObjectTypeUnResolved());
+
                         // TABLE -> 0/1
-                        stmt.setObjectType(analyzePrivObjectType(stmt.getPrivType()));
-                        objectList.add(privilegeManager.analyzeObject(
-                                stmt.getPrivType(), stmt.getAllTypeList(), stmt.getRestrictType(),
-                                stmt.getRestrictName()));
+                        stmt.setObjectType(analyzePrivObjectType(objectTypeString));
+
+                        if (stmt.getTokens().size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
+                                stmt.getObjectType().equals(ObjectType.VIEW) ||
+                                stmt.getObjectType().equals(ObjectType.MATERIALIZED_VIEW))) {
+                            throw new SemanticException("ALL " + stmt.getObjectTypeUnResolved() +
+                                    " must be restricted with database");
+                        }
+
+                        if (stmt.getObjectType().equals(ObjectType.USER)) {
+                            if (stmt.getTokens().size() != 1) {
+                                throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
+                            } else {
+                                objectList.add(privilegeManager.analyzeUserObject(objectTypeString, null));
+                            }
+                        } else {
+                            objectList.add(privilegeManager.analyzeObject(objectTypeString, stmt.getTokens()));
+                        }
                     }
                     stmt.setObjectList(objectList);
                 } else {
-                    stmt.setObjectType(analyzePrivObjectType(stmt.getPrivType()));
+                    stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
                     stmt.setObjectList(null);
                 }
-                privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
+                privilegeManager.validateGrant(stmt.getObjectTypeUnResolved(), stmt.getPrivList(), stmt.getObjectList());
                 stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
             } catch (PrivilegeException | AnalysisException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
