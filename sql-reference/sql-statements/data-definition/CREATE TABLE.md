@@ -523,7 +523,7 @@ PROPERTIES (
 
 #### 设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `write_quorum` 参数来指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。
+如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `write_quorum` 参数来指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。该属性从 2.5 版本开始支持。
 
 `write_quorum` 的取值及其对应描述如下：
 
@@ -540,7 +540,7 @@ PROPERTIES (
 
 如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `replicated_storage` 参数来指定数据在多副本间的写入和同步方式。
 
-* 设置为 `true` (默认值)表示 single leader replication，即数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。
+* 设置为 `true` (默认值)表示 single leader replication，即数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。该模式从 2.5 版本开始支持。
 * 设置为 `false` 表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。该模式 CPU 成本比较高。
 
 默认配置在绝大部分场景下能获得更好的写入性能，如果要修改已有表的多副本写入和同步方式，可执行 ALTER TABLE 命令，举例：

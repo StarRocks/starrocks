@@ -2,6 +2,8 @@
 
 StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、Elasticsearch、Apache Hive™、StarRocks、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
+从 2.5 版本开始，查询外部数据源时支持 Local Cache，提升对热数据的查询性能。参见[Local Cache](Block_cache.md)。
+
 <br/>
 
 ## MySQL 外部表
@@ -174,7 +176,7 @@ PROPERTIES
 > **说明**
 >
 > * StarRocks 会通过 JSON 相关函数读取嵌套字段。
-> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。
+> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。从 2.5 版本开始，支持查询 Elasticsearch 中的 ARRAY 数据。
 
 ### 谓词下推
 
@@ -938,7 +940,7 @@ select count(*) from iceberg_tbl;
 ### 注意事项
 
 * Hudi 外表只能用于查询操作，不支持写入。
-* 当前支持 Hudi 的表类型为 Copy on Write（下文简称 COW）和 Merge on read（下文简称 MOR）。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
+* 当前支持 Hudi 的表类型为 Copy on Write（下文简称 COW）和 Merge on read（下文简称 MOR，从 2.5 开始支持）。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
 * 当前支持的 Hudi 查询类型有 Snapshot Queries 和 Read Optimized Queries（仅针对 MOR 表），暂不支持 Incremental Queries。有关 Hudi 查询类型的说明，请参见 [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types)。
 * 支持 Hudi 文件的压缩格式为 GZIP（默认值），ZSTD，LZ4 和 SNAPPY。
 * StarRocks 暂不支持同步 Hudi 表结构。如果 Hudi 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
