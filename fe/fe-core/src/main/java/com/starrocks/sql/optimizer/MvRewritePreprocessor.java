@@ -167,7 +167,7 @@ public class MvRewritePreprocessor {
             }
         }
         PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
-        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(mv,
+        return new LogicalOlapScanOperator(mv,
                 colRefToColumnMetaMapBuilder.build(),
                 columnMetaToColRefMap,
                 DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
@@ -178,6 +178,5 @@ public class MvRewritePreprocessor {
                 partitionNames,
                 selectTabletIds,
                 Lists.newArrayList());
-        return scanOperator;
     }
 }
