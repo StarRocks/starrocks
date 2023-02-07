@@ -42,6 +42,7 @@ import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
@@ -168,6 +169,13 @@ public class SelectStmtTest {
         starRocksAssert.query(sql).explainQuery();
         sql = "select localtimestamp";
         starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testDateTruncUpperCase() throws Exception {
+        String sql = "select date_trunc('MONTH', CAST('2020-11-04 11:12:13' AS DATE));";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test

@@ -939,7 +939,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                     granularity, partitionColumn.getPrimitiveType());
         } else {

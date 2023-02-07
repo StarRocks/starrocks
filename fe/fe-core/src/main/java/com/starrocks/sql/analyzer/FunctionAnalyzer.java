@@ -45,18 +45,22 @@ public class FunctionAnalyzer {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant");
             }
-            final StringLiteral fmtLiteral = (StringLiteral) functionCallExpr.getChild(0);
+
+            // The uppercase parameters stored in the metadata are converted to lowercase parameters,
+            // because BE does not support uppercase parameters
+            final String lowerParam = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            functionCallExpr.setChild(0, new StringLiteral(lowerParam));
 
             if (functionCallExpr.getChild(1).getType().isDatetime()) {
 
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day", "hour", "minute", "second")
-                        .contains(fmtLiteral.getStringValue())) {
+                        .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
                             "year|quarter|month|week|day|hour|minute|second");
                 }
             } else if (functionCallExpr.getChild(1).getType().isDate()) {
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day")
-                        .contains(fmtLiteral.getStringValue())) {
+                        .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
                             "year|quarter|month|week|day");
                 }
