@@ -300,10 +300,12 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimal32Count() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: BIGINT";
         Assert.assertTrue(plan.contains(snippet));
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test
@@ -468,9 +470,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimalNullableProperties() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql;
         String plan;
-
         // test decimal count(no-nullable decimal)
         sql = "select count(`dec_18_0`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -488,6 +490,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains(
                 "round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: false; result nullable: true]"));
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
     }
 
     @Test

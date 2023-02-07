@@ -699,11 +699,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "12:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "10:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(11: count)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  11:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 11> : 11: count");
     }
 
@@ -836,10 +836,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCountFunctionColumnStatistics() throws Exception {
         String sql = "select count(S_SUPPKEY) from supplier";
         String plan = getCostExplain(sql);
-        assertContains(plan, "* count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE");
+        assertContains(plan, "* count-->[1.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE");
         sql = "select count(*) from supplier";
         plan = getCostExplain(sql);
-        assertContains(plan, "count-->[0.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE");
+        assertContains(plan, "* count-->[1.0, 1000000.0, 0.0, 8.0, 1.0] ESTIMATE");
     }
 
     @Test

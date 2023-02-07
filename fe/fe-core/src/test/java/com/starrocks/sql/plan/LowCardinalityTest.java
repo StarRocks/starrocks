@@ -232,10 +232,12 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testDecodeNodeRewrite6() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(S_ADDRESS) from supplier";
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("count(10: S_ADDRESS)"));
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
 
         sql = "select count(distinct S_ADDRESS) from supplier";
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
