@@ -59,24 +59,25 @@ public class StatementPlanner {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
         Map<String, Database> dbLocks = null;
 
-        // 1. For all queries, we need db lock when analyze phase
         if (lockDb) {
             dbLocks = dbs;
-            try {
-                lock(dbLocks);
-                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
-                    Analyzer.analyze(stmt, session);
-                }
+        }
 
-                PrivilegeChecker.check(stmt, session);
-                if (stmt instanceof QueryStatement) {
-                    OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
-                }
-
-                session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-            } finally {
-                unLock(dbLocks);
+        // 1. For all queries, we need db lock when analyze phase
+        try {
+            lock(dbLocks);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
+                Analyzer.analyze(stmt, session);
             }
+
+            PrivilegeChecker.check(stmt, session);
+            if (stmt instanceof QueryStatement) {
+                OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+            }
+
+            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        } finally {
+            unLock(dbLocks);
         }
 
         // 2. For only olap table queries, we have snapshot the olap table metadata, so we needn't db lock again
