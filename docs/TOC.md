@@ -23,7 +23,7 @@
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
-  + [Realtime synchronization from MySQL](./loading/Flink_cdc_load.md)
+  + [Synchronize data from MySQL in real time](./loading/Flink_cdc_load.md)
   + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
