@@ -34,8 +34,12 @@
 namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
-                       io::SharedBufferedInputStream* sb_stream)
-        : _chunk_size(chunk_size), _file(file), _file_size(file_size), _sb_stream(sb_stream) {}
+                       io::SharedBufferedInputStream* sb_stream, const std::set<std::int64_t>* _need_skip_rowids)
+        : _chunk_size(chunk_size),
+          _file(file),
+          _file_size(file_size),
+          _sb_stream(sb_stream),
+          _need_skip_rowids(_need_skip_rowids) {}
 
 FileReader::~FileReader() = default;
 
@@ -447,6 +451,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
 
+    int64_t row_group_first_row = 0;
     // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         bool selected = _select_row_group(_file_metadata->t_metadata().row_groups[i]);
@@ -459,7 +464,11 @@ Status FileReader::_init_group_readers() {
                 continue;
             }
 
-            auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i);
+            if (i > 0) {
+                row_group_first_row += _file_metadata->t_metadata().row_groups[i].num_rows;
+            }
+            auto row_group_reader =
+                    std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
             _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
         } else {
