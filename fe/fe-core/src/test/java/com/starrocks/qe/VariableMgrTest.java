@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
@@ -45,8 +46,10 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -121,94 +124,94 @@ public class VariableMgrTest {
         }
 
         // Set global variable
-        SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
-        setVar.analyze();
-        VariableMgr.setVar(var, setVar, false);
+        SystemVariable setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        VariableMgr.setSystemVariable(var, setVar, false);
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
-        SetVar setVar2 = new SetVar(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
-        setVar2.analyze();
-        VariableMgr.setVar(var, setVar2, false);
+        SystemVariable setVar2 = new SystemVariable(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar2)), null);
+        VariableMgr.setSystemVariable(var, setVar2, false);
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
 
-        SetVar setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("Asia/Shanghai"));
-        setVar3.analyze();
-        VariableMgr.setVar(var, setVar3, false);
+        SystemVariable setVar3 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("Asia/Shanghai"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+        VariableMgr.setSystemVariable(var, setVar3, false);
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
 
-        setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("CST"));
-        setVar3.analyze();
-        VariableMgr.setVar(var, setVar3, false);
+        setVar3 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("CST"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+        VariableMgr.setSystemVariable(var, setVar3, false);
         Assert.assertEquals("CST", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals("CST", var.getTimeZone());
 
         // Set session variable
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
-        setVar.analyze();
-        VariableMgr.setVar(var, setVar, false);
+        setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        VariableMgr.setSystemVariable(var, setVar, false);
         Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
         // onlySessionVar
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999935L));
-        setVar.analyze();
-        VariableMgr.setVar(var, setVar, true);
+        setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999935L));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        VariableMgr.setSystemVariable(var, setVar, true);
         Assert.assertEquals(12999935L, var.getMaxExecMemByte());
 
-        setVar3 = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
-        setVar3.analyze();
-        VariableMgr.setVar(var, setVar3, false);
+        setVar3 = new SystemVariable(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar3)), null);
+        VariableMgr.setSystemVariable(var, setVar3, false);
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
 
         // exec_mem_limit in expr style
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20G"));
-        setVar.analyze();
-        VariableMgr.setVar(var, setVar, true);
+        setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20G"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        VariableMgr.setSystemVariable(var, setVar, true);
         Assert.assertEquals(21474836480L, var.getMaxExecMemByte());
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20m"));
-        setVar.analyze();
-        VariableMgr.setVar(var, setVar, true);
+        setVar = new SystemVariable(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20m"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
+        VariableMgr.setSystemVariable(var, setVar, true);
         Assert.assertEquals(20971520L, var.getMaxExecMemByte());
 
         // Get from name
         VariableExpr desc = new VariableExpr("exec_mem_limit");
         Assert.assertEquals(var.getMaxExecMemByte() + "", VariableMgr.getValue(var, desc));
 
-        SetVar setVar4 = new SetVar(SetType.SESSION, "sql_mode", new StringLiteral(
+        SystemVariable setVar4 = new SystemVariable(SetType.SESSION, "sql_mode", new StringLiteral(
                 SqlModeHelper.encode("PIPES_AS_CONCAT").toString()));
-        setVar4.analyze();
-        VariableMgr.setVar(var, setVar4, false);
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar4)), null);
+        VariableMgr.setSystemVariable(var, setVar4, false);
         Assert.assertEquals(2L, var.getSqlMode());
 
         // Test checkTimeZoneValidAndStandardize
-        SetVar setVar5 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("+8:00"));
-        setVar5.analyze();
-        VariableMgr.setVar(var, setVar5, false);
+        SystemVariable setVar5 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("+8:00"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar5)), null);
+        VariableMgr.setSystemVariable(var, setVar5, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
-        SetVar setVar6 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("8:00"));
-        setVar6.analyze();
-        VariableMgr.setVar(var, setVar6, false);
+        SystemVariable setVar6 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("8:00"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar6)), null);
+        VariableMgr.setSystemVariable(var, setVar6, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
-        SetVar setVar7 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("-8:00"));
-        setVar7.analyze();
-        VariableMgr.setVar(var, setVar7, false);
+        SystemVariable setVar7 = new SystemVariable(SetType.GLOBAL, "time_zone", new StringLiteral("-8:00"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar7)), null);
+        VariableMgr.setSystemVariable(var, setVar7, false);
         Assert.assertEquals("-08:00", VariableMgr.newSessionVariable().getTimeZone());
     }
 
     @Test(expected = SemanticException.class)
     public void testInvalidType() {
         // Set global variable
-        SetVar setVar = new SetVar(SetType.SESSION, "exec_mem_limit", new StringLiteral("abc"));
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "exec_mem_limit", new StringLiteral("abc"));
         try {
-            setVar.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
         } catch (Exception e) {
             throw e;
         }
@@ -219,9 +222,9 @@ public class VariableMgrTest {
     public void testInvalidTimeZoneRegion() {
         // Set global variable
         // utc should be upper case (UTC)
-        SetVar setVar = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("utc"));
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "time_zone", new StringLiteral("utc"));
         try {
-            setVar.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
         } catch (Exception e) {
             throw e;
         }
@@ -231,9 +234,9 @@ public class VariableMgrTest {
     @Test(expected = SemanticException.class)
     public void testInvalidTimeZoneOffset() {
         // Set global variable
-        SetVar setVar = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("+15:00"));
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "time_zone", new StringLiteral("+15:00"));
         try {
-            setVar.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
         } catch (Exception e) {
             throw e;
         }
@@ -245,9 +248,9 @@ public class VariableMgrTest {
         // Set global variable
         String[] values = {"2097151", "1k"};
         for (String value : values) {
-            SetVar setVar = new SetVar(SetType.SESSION, "exec_mem_limit", new StringLiteral(value));
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, "exec_mem_limit", new StringLiteral(value));
             try {
-                setVar.analyze();
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), null);
                 Assert.fail("No exception throws.");
             } catch (Exception e) {
                 Assert.assertEquals(e.getMessage(), "exec_mem_limit must be equal or greater than 2097152.");
@@ -261,23 +264,23 @@ public class VariableMgrTest {
         LOG.info(VariableMgr.getValue(null, desc));
 
         // Set global variable
-        SetVar setVar = new SetVar(SetType.SESSION, "version_comment", null);
-        VariableMgr.setVar(null, setVar, false);
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "version_comment", null);
+        VariableMgr.setSystemVariable(null, setVar, false);
         Assert.fail("No exception throws.");
     }
 
     @Test
     public void testDumpInvisible() {
         SessionVariable sv = new SessionVariable();
-        List<List<String>> vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        List<List<String>> vars = VariableMgr.dump(SetType.SESSION, sv, null);
         Assert.assertFalse(vars.toString().contains("enable_show_all_variables"));
         Assert.assertFalse(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
         sv.setEnableShowAllVariables(true);
-        vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        vars = VariableMgr.dump(SetType.SESSION, sv, null);
         Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
-        vars = VariableMgr.dump(SetType.DEFAULT, null, null);
+        vars = VariableMgr.dump(SetType.SESSION, null, null);
         List<List<String>> vars1 = VariableMgr.dump(SetType.GLOBAL, null, null);
         Assert.assertTrue(vars.size() < vars1.size());
 
