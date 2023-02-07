@@ -15,6 +15,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
@@ -596,7 +597,7 @@ public class AuthUpgrader {
                         break;
 
                     case USAGE_PRIV:
-                        if (! db.equals(STAR) || ! table.equals(STAR)) {
+                        if (!db.equals(STAR) || !table.equals(STAR)) {
                             throw new AuthUpgradeUnrecoverableException(privilege + " on " +
                                     pattern + " is not supported!");
                         }
@@ -634,7 +635,7 @@ public class AuthUpgrader {
 
                     case NODE_PRIV:
                     case ADMIN_PRIV:
-                        if (! db.equals(STAR) || ! table.equals(STAR)) {
+                        if (!db.equals(STAR) || !table.equals(STAR)) {
                             throw new AuthUpgradeUnrecoverableException(privilege + " on " +
                                     pattern + " is not supported!");
                         }
@@ -653,7 +654,7 @@ public class AuthUpgrader {
     }
 
     protected void assertGlobalResource(Privilege privilege, String name) throws AuthUpgradeUnrecoverableException {
-        if (! name.equals(STAR)) {
+        if (!name.equals(STAR)) {
             throw new AuthUpgradeUnrecoverableException(privilege + " on " + name + " is not supported!");
         }
     }
@@ -764,11 +765,11 @@ public class AuthUpgrader {
         switch (privilege) {
             case CREATE_PRIV:
                 actionSet = privilegeManager.analyzeActionSet(dbTypeId,
-                    Arrays.asList(
-                            PrivilegeType.CREATE_TABLE.toString(),
-                            PrivilegeType.CREATE_VIEW.toString(),
-                            PrivilegeType.CREATE_MATERIALIZED_VIEW.toString()
-                    ));
+                        Arrays.asList(
+                                PrivilegeType.CREATE_TABLE.toString(),
+                                PrivilegeType.CREATE_VIEW.toString(),
+                                PrivilegeType.CREATE_MATERIALIZED_VIEW.toString()
+                        ));
                 break;
 
             case DROP_PRIV:
@@ -796,8 +797,7 @@ public class AuthUpgrader {
         try {
             if (db.equals(STAR)) {
                 // for *.*
-                objects = Arrays.asList(privilegeManager.analyzeObject(DB_TYPE_STR,
-                        Arrays.asList(ObjectType.DATABASE.getPlural()), null, null));
+                objects = Arrays.asList(privilegeManager.analyzeObject(DB_TYPE_STR, Lists.newArrayList("*")));
                 if (privilege == Privilege.CREATE_PRIV) {
                     // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
                     collection.grant(catalogTypeId,
@@ -854,20 +854,18 @@ public class AuthUpgrader {
                 throw new AuthUpgradeUnrecoverableException("view privilege " + privilege + " hasn't implemented");
         }
         ActionSet actionSet = privilegeManager.analyzeActionSet(
-                        viewTypeId, Arrays.asList(action.toString()));
+                viewTypeId, Arrays.asList(action.toString()));
 
         // object
         List<PEntryObject> objects;
         try {
             if (db.equals(STAR)) {
                 objects = Arrays.asList(privilegeManager.analyzeObject(
-                        viewTypeStr,
-                        Arrays.asList(ObjectType.VIEW.getPlural(), ObjectType.DATABASE.getPlural()),
-                        null, null));
+                        viewTypeStr, Lists.newArrayList("*", "*")));
             } else if (view.equals(STAR)) {
                 // ALL TABLES in db
                 objects = Arrays.asList(privilegeManager.analyzeObject(
-                        viewTypeStr, Arrays.asList(viewTypeStr), DB_TYPE_STR, db));
+                        viewTypeStr, Lists.newArrayList(db, "*")));
             } else {
                 // db.view
                 objects = Arrays.asList(privilegeManager.analyzeObject(
@@ -931,13 +929,11 @@ public class AuthUpgrader {
         try {
             if (db.equals(STAR)) {
                 objects = Arrays.asList(privilegeManager.analyzeObject(
-                        TABLE_TYPE_STR,
-                        Arrays.asList(ObjectType.TABLE.getPlural(), ObjectType.DATABASE.getPlural()),
-                        null, null));
+                        TABLE_TYPE_STR, Lists.newArrayList("*", "*")));
             } else if (table.equals(STAR)) {
                 // ALL TABLES in db
                 objects = Arrays.asList(privilegeManager.analyzeObject(
-                        TABLE_TYPE_STR, Arrays.asList(TABLE_TYPE_STR), DB_TYPE_STR, db));
+                        TABLE_TYPE_STR, Lists.newArrayList(db, "*")));
             } else {
                 // db.table
                 objects = Arrays.asList(privilegeManager.analyzeObject(
@@ -987,7 +983,7 @@ public class AuthUpgrader {
                 break;
             default:
                 throw new AuthUpgradeUnrecoverableException("materialized view privilege "
-                                                            + privilege + " hasn't implemented");
+                        + privilege + " hasn't implemented");
         }
 
         // object
@@ -995,13 +991,11 @@ public class AuthUpgrader {
         try {
             if (db.equals(STAR)) {
                 objects = Collections.singletonList(privilegeManager.analyzeObject(
-                        mvTypeStr,
-                        Arrays.asList(ObjectType.MATERIALIZED_VIEW.getPlural(), ObjectType.DATABASE.getPlural()),
-                        null, null));
+                        mvTypeStr, Lists.newArrayList("*", "*")));
             } else if (mv.equals(STAR)) {
                 // ALL TABLES in db
                 objects = Collections.singletonList(privilegeManager.analyzeObject(
-                        mvTypeStr, Collections.singletonList(mvTypeStr), DB_TYPE_STR, db));
+                        mvTypeStr, Lists.newArrayList(db, "*")));
             } else {
                 // db.mv
                 objects = Collections.singletonList(privilegeManager.analyzeObject(
@@ -1056,7 +1050,7 @@ public class AuthUpgrader {
                 try {
                     if (name.equals(STAR)) {
                         objects = Arrays.asList(privilegeManager.analyzeObject(
-                                RESOURCE_TYPE_STR, Arrays.asList(name), null, null));
+                                RESOURCE_TYPE_STR, Lists.newArrayList("*")));
                     } else {
                         objects = Arrays.asList(privilegeManager.analyzeObject(
                                 RESOURCE_TYPE_STR, Arrays.asList(name)));
