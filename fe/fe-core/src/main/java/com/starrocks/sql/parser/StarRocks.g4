@@ -216,6 +216,7 @@ columnDesc
 charsetName
     : CHAR SET identifier
     | CHARSET identifier
+    | CHARACTER SET identifier
     ;
 
 defaultDesc
@@ -770,10 +771,92 @@ jobProperties
     : properties
     ;
 
+<<<<<<< HEAD
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+=======
+showBackendsStatement
+    : SHOW BACKENDS
+    ;
+
+showBrokerStatement
+    : SHOW BROKER
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showDeleteStatement
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
+showEventsStatement
+    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showEnginesStatement
+    : SHOW ENGINES
+    ;
+
+showFrontendsStatement
+    : SHOW FRONTENDS
+    ;
+
+showPluginsStatement
+    : SHOW PLUGINS
+    ;
+
+showRepositoriesStatement
+    : SHOW REPOSITORIES
+    ;
+
+showOpenTableStatement
+    : SHOW OPEN TABLES
+    ;
+
+showProcedureStatement
+    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
+
+showProcStatement
+    : SHOW PROC path=string
+    ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTabletStatement
+    : SHOW TABLET INTEGER_VALUE
+    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
+showTransactionStatement
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
+    ;
+
+showTriggersStatement
+    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+>>>>>>> f0cfa0992 (Support for CHARACTER reserved words (#17488))
     ;
 
 showVariablesStatement
@@ -818,7 +901,7 @@ setStatement
     ;
 
 setVar
-    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    : (CHAR SET | CHARSET | CHARACTER SET) (identifierOrString | DEFAULT)                       #setNames
     | NAMES (charset = identifierOrString | DEFAULT)
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
