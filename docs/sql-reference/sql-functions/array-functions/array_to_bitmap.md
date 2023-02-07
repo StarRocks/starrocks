@@ -2,7 +2,7 @@
 
 ## Description
 
-Converts an array into BITMAP values.
+Converts an array into BITMAP values. This function is supported from v2.3.
 
 ## Syntax
 
