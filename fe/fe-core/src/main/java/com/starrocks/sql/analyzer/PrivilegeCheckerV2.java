@@ -1532,6 +1532,10 @@ public class PrivilegeCheckerV2 {
         public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
             checkSystemRepository(context);
             List<TableRef> tableRefs = statement.getTableRefs();
+            if (tableRefs.size() == 0) {
+                String dBName = statement.getDbName();
+                throw new SemanticException("Database: {} is empty", dBName);
+            }
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 checkTableAction(context,
