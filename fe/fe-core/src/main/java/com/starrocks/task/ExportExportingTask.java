@@ -115,7 +115,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
         List<ExportExportingSubTask> subTasks = Lists.newArrayList();
         for (int i = 0; i < coordSize; i++) {
             Coordinator coord = coords.get(i);
-            ExportExportingSubTask subTask = new ExportExportingSubTask(coord, i, coordSize);
+            ExportExportingSubTask subTask = new ExportExportingSubTask(coord, i, coordSize, job);
             subTasks.add(subTask);
             subTasksDoneSignal.addMark(i, -1);
         }
@@ -292,14 +292,16 @@ public class ExportExportingTask extends PriorityLeaderTask {
     }
 
     private class ExportExportingSubTask extends PriorityLeaderTask {
-        private final Coordinator coord;
+        private Coordinator coord;
         private final int taskIdx;
         private final int coordSize;
+        private final ExportJob exportJob;
 
-        public ExportExportingSubTask(Coordinator coord, int taskIdx, int coordSize) {
+        public ExportExportingSubTask(Coordinator coord, int taskIdx, int coordSize, ExportJob exportJob) {
             this.coord = coord;
             this.taskIdx = taskIdx;
             this.coordSize = coordSize;
+            this.exportJob = exportJob;
             this.signature = GlobalStateMgr.getCurrentState().getNextId();
         }
 
@@ -338,19 +340,30 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 }
 
                 if (i < RETRY_NUM - 1) {
-                    TUniqueId queryId = coord.getQueryId();
-                    coord.clearExportStatus();
-
+                    TUniqueId oldQueryId = coord.getQueryId();
+                    UUID uuid = UUID.randomUUID();
                     // generate one new queryId here, to avoid being rejected by BE,
                     // because the request is considered as a repeat request.
                     // we make the high part of query id unchanged to facilitate tracing problem by log.
-                    UUID uuid = UUID.randomUUID();
-                    TUniqueId newQueryId = new TUniqueId(queryId.hi, uuid.getLeastSignificantBits());
+                    TUniqueId newQueryId = new TUniqueId(oldQueryId.hi, uuid.getLeastSignificantBits());
+                    if (exportJob.needResetCoord()) {
+                        try {
+                            Coordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
+                            coord = newCoord;
+                        } catch (UserException e) {
+                            // still use old coord if there are any problems when reseting Coord
+                            LOG.warn("fail to reset coord for task idx: {}, task query id: {}, reason: {}", taskIdx, 
+                                    getQueryId(), e.getMessage());
+                            coord.clearExportStatus();
+                        }
+                    } else {
+                        coord.clearExportStatus();
+                    }
                     coord.setQueryId(newQueryId);
                     LOG.warn(
                             "export sub task fail. err: {}. task idx: {}, task query id: {}. retry: {}, new query id: {}",
-                            coord.getExecStatus().getErrorMsg(), taskIdx, DebugUtil.printId(queryId), i,
-                            DebugUtil.printId(newQueryId));
+                            coord.getExecStatus().getErrorMsg(), taskIdx, DebugUtil.printId(oldQueryId), i,
+                            DebugUtil.printId(coord.getQueryId()));
                 }
             }
 
