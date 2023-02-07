@@ -217,9 +217,9 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_scan_block_cache
   
-  Whether to enable the Block Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Block cache](../data_source/Block_cache.md).
+  Whether to enable the Local Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Local Cache](../data_source/Block_cache.md).
 
-  This feature is supported in v2.5.
+  This feature is supported from v2.5.
 
 * enable_populate_block_cache
   
