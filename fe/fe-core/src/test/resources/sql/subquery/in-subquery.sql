@@ -1003,6 +1003,5 @@ select 1 from customer where (C_NATIONKEY, C_NAME) IN (select "aa", 123.45)
 LEFT SEMI JOIN (join-predicate [15: cast = 11: expr AND 2: C_NAME = 16: cast] post-join-predicate [null])
     SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
     EXCHANGE BROADCAST
-        PREDICATE true
-            VALUES (null)
+        VALUES (null)
 [end]
