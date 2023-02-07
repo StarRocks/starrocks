@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the union of a set of bitmap values and returns the cardinality of the union.
+Returns the union of a set of bitmap values and returns the cardinality of the union. This function is supported from v2.3.
 
 ## Syntax
 
