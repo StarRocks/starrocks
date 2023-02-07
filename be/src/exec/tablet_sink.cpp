@@ -47,6 +47,7 @@
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -583,6 +584,8 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+    std::vector<int64_t> tablet_ids;
+    std::vector<int64_t> backend_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -604,7 +607,20 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
+
+        if (tablet_ids.size() < 128) {
+            tablet_ids.emplace_back(commit_info.tabletId);
+            backend_ids.emplace_back(commit_info.backendId);
+        }
     }
+
+    string commit_tablet_id_list_str;
+    JoinInts(tablet_ids, ",", &commit_tablet_id_list_str);
+    string backend_id_list_str;
+    JoinInts(backend_ids, ",", &backend_id_list_str);
+    LOG(INFO) << "OlapTableSink txn_id: " << _parent->_txn_id << " load_id: " << print_id(_parent->_load_id)
+              << " commit " << _tablet_commit_infos.size() << " tablets: " << commit_tablet_id_list_str
+              << " backends: " << backend_id_list_str;
 
     return Status::OK();
 }
