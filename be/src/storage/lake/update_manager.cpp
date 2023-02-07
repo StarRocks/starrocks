@@ -207,6 +207,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
             rowids.push_back(j);
         }
         new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
+        // only support condition update on single column
         std::vector<std::unique_ptr<Column>> new_columns(1);
         auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();

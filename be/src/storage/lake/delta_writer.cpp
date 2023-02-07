@@ -302,21 +302,23 @@ Status DeltaWriterImpl::finish() {
     }
     // handle partial update
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
-    if (rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
-        op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
-        for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
-            const auto& tablet_column = _partial_update_tablet_schema->column(i);
-            op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
-            op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+    if (rowset_txn_meta != nullptr) {
+        if (_partial_update_tablet_schema != nullptr) {
+            op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
+            for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _partial_update_tablet_schema->column(i);
+                op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
+                op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+            }
+            // generate rewrite segment names to avoid gc in rewrite operation
+            for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+                op_write->add_rewrite_segments(random_segment_filename());
+            }
         }
-        // generate rewrite segment names to avoid gc in rewrite operation
-        for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-            op_write->add_rewrite_segments(random_segment_filename());
+        // handle condition update
+        if (_merge_condition != "") {
+            op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
-    }
-    // handle condition update
-    if (_merge_condition != "") {
-        op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
