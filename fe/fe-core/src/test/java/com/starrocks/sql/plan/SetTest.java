@@ -287,10 +287,10 @@ public class SetTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [5, NULL_TYPE, true]\n" +
+                "  |      [5, BOOLEAN, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [2, NULL_TYPE, true]\n" +
-                "  |      [4, NULL_TYPE, true]");
+                "  |      [2, BOOLEAN, true]\n" +
+                "  |      [4, BOOLEAN, true]");
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);

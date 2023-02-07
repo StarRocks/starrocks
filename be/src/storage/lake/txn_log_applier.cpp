@@ -37,7 +37,8 @@ public:
               _base_version(_metadata->version()),
               _new_version(new_version),
               _builder(_tablet, _metadata),
-              _inited(false) {
+              _inited(false),
+              _check_meta_version_succ(false) {
         _metadata->set_version(_new_version);
     }
 
@@ -45,16 +46,26 @@ public:
         if (_inited) {
             _s_schema_change_set.erase(_tablet.id());
         }
+        if (_check_meta_version_succ) {
+            _builder.handle_failure();
+        }
     }
 
     Status init() override {
         auto [iter, ok] = _s_schema_change_set.insert(_tablet.id());
         if (ok) {
             _inited = true;
-            return Status::OK();
+            return check_meta_version();
         } else {
             return Status::InternalError("primary key does not support concurrent log applying");
         }
+    }
+
+    Status check_meta_version() {
+        // check tablet meta
+        RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
+        _check_meta_version_succ = true;
+        return Status::OK();
     }
 
     Status apply(const TxnLogPB& log) override {
@@ -126,6 +137,7 @@ private:
     int64_t _new_version;
     MetaFileBuilder _builder;
     bool _inited;
+    bool _check_meta_version_succ;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {

@@ -51,7 +51,8 @@
   + [Block cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Materialized view](./using_starrocks/Materialized_view.md)
+  + [Multi-table asynchronous refresh materialized view](./using_starrocks/Materialized_view.md)
+  + [Single-table Materialized View](./using_starrocks/Materialized_view-single_table.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -87,9 +88,7 @@
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
       + [File manager](./administration/filemanager.md)
-  + Data Recovery
-    + [Data recovery](./administration/Data_recovery.md)
-    + [Restore FEs](./administration/Metadata_recovery.md)
+  + [Data recovery](./administration/Data_recovery.md)
   + User Privilege and Authentication
     + [User privilege](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)

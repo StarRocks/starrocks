@@ -36,7 +36,6 @@ package com.starrocks.ha;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
@@ -83,11 +82,6 @@ public class BDBHA implements HAProtocol {
     public BDBHA(BDBEnvironment env, String nodeName) {
         this.environment = env;
         this.nodeName = nodeName;
-    }
-
-    @Override
-    public long getEpochNumber() {
-        return 0;
     }
 
     @Override
@@ -140,6 +134,15 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
+    public InetSocketAddress getLeader() {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        String leaderName = replicationGroupAdmin.getMasterNodeName();
+        ReplicationGroup rg = replicationGroupAdmin.getGroup();
+        ReplicationNode rn = rg.getMember(leaderName);
+        return rn.getSocketAddress();
+    }
+
+    @Override
     public List<InetSocketAddress> getObserverNodes() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
@@ -184,46 +187,6 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
-    public InetSocketAddress getLeader() {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        String leaderName = replicationGroupAdmin.getMasterNodeName();
-        ReplicationGroup rg = replicationGroupAdmin.getGroup();
-        ReplicationNode rn = rg.getMember(leaderName);
-        return rn.getSocketAddress();
-    }
-
-    @Override
-    public List<InetSocketAddress> getNoneLeaderNodes() {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        if (replicationGroupAdmin == null) {
-            return null;
-        }
-        List<InetSocketAddress> ret = new ArrayList<InetSocketAddress>();
-        try {
-            ReplicationGroup replicationGroup = replicationGroupAdmin.getGroup();
-            for (ReplicationNode replicationNode : replicationGroup.getSecondaryNodes()) {
-                ret.add(replicationNode.getSocketAddress());
-            }
-            for (ReplicationNode replicationNode : replicationGroup.getElectableNodes()) {
-                if (!replicationNode.getName().equals(replicationGroupAdmin.getMasterNodeName())) {
-                    ret.add(replicationNode.getSocketAddress());
-                }
-            }
-        } catch (UnknownMasterException e) {
-            LOG.warn("Catch UnknownMasterException when calling getNoneLeaderNodes.", e);
-            return null;
-        }
-        return ret;
-    }
-
-    @Override
-    public boolean isLeader() {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        String leaderName = replicationGroupAdmin.getMasterNodeName();
-        return leaderName.equals(nodeName);
-    }
-
-    @Override
     public boolean removeElectableNode(String nodeName) {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
@@ -239,35 +202,6 @@ public class BDBHA implements HAProtocol {
             return false;
         }
         return true;
-    }
-
-    // When new Follower FE is added to the cluster, it should also be added to the helper sockets in
-    // ReplicationGroupAdmin, in order to fix the following case:
-    // 1. A Observer starts with helper of master FE.
-    // 2. Master FE is dead, new Master is elected.
-    // 3. Observer's helper sockets only contains the info of the dead master FE.
-    //    So when you try to get frontends' info from this Observer, it will throw the Exception:
-    //    "Could not determine master from helpers at:[/dead master FE host:port]"
-    public void addHelperSocket(String ip, Integer port) {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        Set<InetSocketAddress> helperSockets = Sets.newHashSet(replicationGroupAdmin.getHelperSockets());
-        InetSocketAddress newHelperSocket = new InetSocketAddress(ip, port);
-        if (!helperSockets.contains(newHelperSocket)) {
-            helperSockets.add(newHelperSocket);
-            environment.setNewReplicationGroupAdmin(helperSockets);
-            LOG.info("add {}:{} to helper sockets", ip, port);
-        }
-    }
-
-    public void removeHelperSocket(String ip, Integer port) {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        Set<InetSocketAddress> helperSockets = Sets.newHashSet(replicationGroupAdmin.getHelperSockets());
-        InetSocketAddress targetAddress = new InetSocketAddress(ip, port);
-        if (helperSockets.contains(targetAddress)) {
-            helperSockets.remove(targetAddress);
-            environment.setNewReplicationGroupAdmin(helperSockets);
-            LOG.info("remove helper socket {}:{} from replicationGroupAdmin", ip, port);
-        }
     }
 
     public void removeNodeIfExist(String host, int port, String excludeNodeName) {

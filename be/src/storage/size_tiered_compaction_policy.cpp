@@ -29,6 +29,10 @@ SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet
 }
 
 bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* type) {
+    if (_tablet->tablet_state() != TABLET_RUNNING) {
+        return false;
+    }
+
     bool force_base_compaction = false;
     if (type && *type == BASE_COMPACTION) {
         force_base_compaction = true;

@@ -119,14 +119,14 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // lst failed time
                     tabletInfo.add(-1); // data size
                     tabletInfo.add(-1); // row count
-                    tabletInfo.add(FeConstants.null_string); // state
+                    tabletInfo.add(FeConstants.NULL_STRING); // state
                     tabletInfo.add(-1); // lst consistency check time
                     tabletInfo.add(-1); // check version
                     tabletInfo.add(0); // check version hash
                     tabletInfo.add(-1); // version count
                     tabletInfo.add(-1); // path hash
-                    tabletInfo.add(FeConstants.null_string); // meta url
-                    tabletInfo.add(FeConstants.null_string); // compaction status
+                    tabletInfo.add(FeConstants.NULL_STRING); // meta url
+                    tabletInfo.add(FeConstants.NULL_STRING); // compaction status
 
                     tabletInfos.add(tabletInfo);
                 } else {

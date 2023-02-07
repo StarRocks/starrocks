@@ -135,7 +135,6 @@ import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
-import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -1074,11 +1073,11 @@ public class GlobalStateMgr {
             // Log meta_version
             int communityMetaVersion = MetaContext.get().getMetaVersion();
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-            if (communityMetaVersion < FeConstants.meta_version ||
-                    starrocksMetaVersion < FeConstants.starrocks_meta_version) {
-                editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
-                MetaContext.get().setMetaVersion(FeConstants.meta_version);
-                MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+            if (communityMetaVersion < FeConstants.META_VERSION ||
+                    starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
+                editLog.logMetaVersion(new MetaVersion(FeConstants.META_VERSION, FeConstants.STARROCKS_META_VERSION));
+                MetaContext.get().setMetaVersion(FeConstants.META_VERSION);
+                MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
             }
 
             // Log the first frontend
@@ -1252,7 +1251,7 @@ public class GlobalStateMgr {
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
             LOG.warn("{} to UNKNOWN, still offer read service", feType.name());
-            // not set canRead here, leave canRead as what is was.
+            // not set canRead here, leave canRead as what it was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
             feType = newType;
@@ -1260,17 +1259,6 @@ public class GlobalStateMgr {
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
-
-        // add helper sockets
-        if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
-            for (Frontend fe : nodeMgr.getFrontends().values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                    if (getHaProtocol() instanceof BDBHA) {
-                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
-                    }
-                }
-            }
-        }
 
         if (replayer == null) {
             createReplayer();
@@ -1429,7 +1417,7 @@ public class GlobalStateMgr {
         long newChecksum = checksum ^ flag;
         if (flag < 0) {
             int communityMetaVersion = dis.readInt();
-            if (communityMetaVersion > FeConstants.meta_version) {
+            if (communityMetaVersion > FeConstants.META_VERSION) {
                 LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
                                 + "please update FeConstants.meta_version bigger or equal to {} and restart.",
                         communityMetaVersion);
@@ -1438,7 +1426,7 @@ public class GlobalStateMgr {
             newChecksum ^= communityMetaVersion;
             MetaContext.get().setMetaVersion(communityMetaVersion);
             int starrocksMetaVersion = dis.readInt();
-            if (starrocksMetaVersion > FeConstants.starrocks_meta_version) {
+            if (starrocksMetaVersion > FeConstants.STARROCKS_META_VERSION) {
                 LOG.error("invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
                                 + "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
                         starrocksMetaVersion);
@@ -1449,7 +1437,7 @@ public class GlobalStateMgr {
         } else {
             // when flag is positive, this is community image structure
             int metaVersion = flag;
-            if (metaVersion > FeConstants.meta_version) {
+            if (metaVersion > FeConstants.META_VERSION) {
                 LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
                                 + "please update FeConstants.meta_version bigger or equal to {} and restart.",
                         metaVersion);
@@ -1689,10 +1677,10 @@ public class GlobalStateMgr {
         // community meta version is a positive integer, so we write -1 to distinguish old image structure
         checksum ^= -1;
         dos.writeInt(-1);
-        checksum ^= FeConstants.meta_version;
-        dos.writeInt(FeConstants.meta_version);
-        checksum ^= FeConstants.starrocks_meta_version;
-        dos.writeInt(FeConstants.starrocks_meta_version);
+        checksum ^= FeConstants.META_VERSION;
+        dos.writeInt(FeConstants.META_VERSION);
+        checksum ^= FeConstants.STARROCKS_META_VERSION;
+        dos.writeInt(FeConstants.STARROCKS_META_VERSION);
 
         // Write replayed journal id
         checksum ^= replayedJournalId;
@@ -2956,11 +2944,11 @@ public class GlobalStateMgr {
              */
             shortKeyColumnCount = 0;
             int shortKeySizeByte = 0;
-            int maxShortKeyColumnCount = Math.min(sortKeyIdxes.size(), FeConstants.shortkey_max_column_count);
+            int maxShortKeyColumnCount = Math.min(sortKeyIdxes.size(), FeConstants.SHORTKEY_MAX_COLUMN_COUNT);
             for (int i = 0; i < maxShortKeyColumnCount; i++) {
                 Column column = indexColumns.get(sortKeyIdxes.get(i));
                 shortKeySizeByte += column.getOlapColumnIndexSize();
-                if (shortKeySizeByte > FeConstants.shortkey_maxsize_bytes) {
+                if (shortKeySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
                     if (column.getPrimitiveType().isCharFamily()) {
                         ++shortKeyColumnCount;
                     }
@@ -3537,12 +3525,14 @@ public class GlobalStateMgr {
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-        upgrader.replayUpgrade(info.getRoleNameToId());
-        usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationManager);
-        if (!isCheckpointThread()) {
-            this.auth = null;
+        if (GlobalStateMgr.getCurrentState().needUpgradedToNewPrivilege()) {
+            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+            upgrader.replayUpgrade(info.getRoleNameToId());
+            usingNewPrivilege.set(true);
+            domainResolver.setAuthenticationManager(authenticationManager);
+            if (!isCheckpointThread()) {
+                this.auth = null;
+            }
         }
     }
 

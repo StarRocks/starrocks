@@ -46,7 +46,7 @@ import java.util.Optional;
 public class FileTable extends Table {
     private static final String JSON_KEY_FILE_PATH = "path";
     private static final String JSON_KEY_FORMAT = "format";
-    private static final String JSON_RECURSIVE_DIRECTORIES = "recursive_directory";
+    private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
     private Map<String, String> fileProperties = Maps.newHashMap();
     public FileTable() {

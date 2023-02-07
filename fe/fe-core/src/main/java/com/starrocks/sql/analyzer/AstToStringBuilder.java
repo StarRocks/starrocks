@@ -61,6 +61,7 @@ import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
@@ -307,16 +308,17 @@ public class AstToStringBuilder {
             }
             return sb.toString();
         }
+        // ------------------------------------------- Privilege Statement ---------------------------------------------
 
         @Override
         public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                StringBuilder sb = new StringBuilder();
-                if (stmt instanceof GrantPrivilegeStmt) {
-                    sb.append("GRANT ");
-                } else {
-                    sb.append("REVOKE ");
-                }
 
                 List<String> privList = new ArrayList<>();
                 for (Map.Entry<String, Action> actionEntry : stmt.getObjectType().getActionMap().entrySet()) {
@@ -342,9 +344,13 @@ public class AstToStringBuilder {
                             } else {
                                 sb.append(stmt.getObjectType().name()).append(" ");
 
-                                Table table = database.getTable(tablePEntryObject.getTableId());
-                                sb.append(table.getName());
-                                sb.append(" IN DATABASE ").append(database.getFullName());
+                                List<String> objectString = new ArrayList<>();
+                                for (PEntryObject pEntryObject : stmt.getObjectList()) {
+                                    TablePEntryObject tp = (TablePEntryObject) pEntryObject;
+                                    Table table = database.getTable(tp.getTableId());
+                                    objectString.add(database.getFullName() + "." + table.getName());
+                                }
+                                sb.append(Joiner.on(", ").join(objectString));
                             }
                         }
                         break;
@@ -457,25 +463,7 @@ public class AstToStringBuilder {
                     }
                 }
 
-                if (stmt instanceof GrantPrivilegeStmt) {
-                    sb.append(" TO ");
-                } else {
-                    sb.append(" FROM ");
-                }
-                if (stmt.getUserIdentity() != null) {
-                    sb.append(stmt.getUserIdentity());
-                } else {
-                    sb.append("ROLE '").append(stmt.getRole()).append("'");
-                }
-
-                return sb.toString();
             } else {
-                StringBuilder sb = new StringBuilder();
-                if (stmt instanceof GrantPrivilegeStmt) {
-                    sb.append("GRANT ");
-                } else {
-                    sb.append("REVOKE ");
-                }
                 boolean firstLine = true;
                 for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
                     if (firstLine) {
@@ -493,19 +481,19 @@ public class AstToStringBuilder {
                 } else {
                     sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
                 }
-                if (stmt instanceof GrantPrivilegeStmt) {
-                    sb.append(" TO ");
-                } else {
-                    sb.append(" FROM ");
-                }
-                if (stmt.getUserIdentity() != null) {
-                    sb.append(stmt.getUserIdentity());
-                } else {
-                    sb.append("ROLE '").append(stmt.getRole()).append("'");
-                }
 
-                return sb.toString();
             }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '").append(stmt.getRole()).append("'");
+            }
+            return sb.toString();
         }
 
         @Override
@@ -946,6 +934,9 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
+            if (node.getFnName().getDb() != null) {
+                sb.append("`" + node.getFnName().getDb() + "`.");
+            }
             String functionName = node.getFnName().getFunction();
             sb.append(functionName);
 

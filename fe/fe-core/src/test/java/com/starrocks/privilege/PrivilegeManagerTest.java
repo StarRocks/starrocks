@@ -894,6 +894,18 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role2 from test_role_user;", ctx), ctx);
 
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant role1, role2 to test_role_user;", ctx), ctx);
+
+        Assert.assertEquals("[public, role1, role2]", manager.getRoleNamesByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke role1, role2 from test_role_user;", ctx), ctx);
+
+        Assert.assertEquals("[public]", manager.getRoleNamesByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+
         // can't drop
         assertDbActionsOnTest(false, false, testUser);
     }
@@ -1448,13 +1460,12 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, "db", "tbl0", PrivilegeType.DROP));
 
         try {
-            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                    "grant drop on db to brief_user", ctx), ctx);
+            StatementBase statementBase =
+                    UtFrameUtils.parseStmtWithNewParser("grant drop on db to brief_user", ctx);
+            DDLStmtExecutor.execute(statementBase, ctx);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot find table db in db db"));
         }
-
-
     }
 }

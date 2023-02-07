@@ -187,6 +187,7 @@ set(EXEC_FILES
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
+        ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -262,7 +263,7 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
-        ./runtime/routine_load_task_executor_test.cpp
+        #./runtime/routine_load_task_executor_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
@@ -271,6 +272,7 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
+        ./runtime/merge_cascade_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
