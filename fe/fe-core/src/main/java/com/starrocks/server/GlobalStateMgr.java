@@ -89,6 +89,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -115,7 +116,6 @@ import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
-import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -451,6 +451,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private ConfigRefreshDaemon configRefreshDaemon;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -511,6 +513,10 @@ public class GlobalStateMgr {
 
     public CompactionManager getCompactionManager() {
         return compactionManager;
+    }
+
+    public ConfigRefreshDaemon getConfigRefreshDaemon() {
+        return configRefreshDaemon;
     }
 
     private static class SingletonHolder {
@@ -615,6 +621,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1185,6 +1192,7 @@ public class GlobalStateMgr {
         if (Config.use_staros) {
             compactionManager.start();
         }
+        configRefreshDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1205,17 +1213,6 @@ public class GlobalStateMgr {
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
-
-        // add helper sockets
-        if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
-            for (Frontend fe : nodeMgr.getFrontends().values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                    if (getHaProtocol() instanceof BDBHA) {
-                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
-                    }
-                }
-            }
-        }
 
         if (replayer == null) {
             createReplayer();

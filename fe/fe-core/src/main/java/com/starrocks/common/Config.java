@@ -628,7 +628,7 @@ public class Config extends ConfigBase {
     /**
      * The thrift server max worker threads
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
@@ -1727,7 +1727,7 @@ public class Config extends ConfigBase {
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     @ConfField(mutable = true)
-    public static boolean enable_experimental_mv = false;
+    public static boolean enable_experimental_mv = true;
 
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
@@ -1823,9 +1823,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
-
-    @ConfField(mutable = true)
-    public static boolean recursive_dir_search_enabled = true;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

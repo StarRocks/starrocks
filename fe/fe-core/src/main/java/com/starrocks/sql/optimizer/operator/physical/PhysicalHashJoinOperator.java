@@ -53,12 +53,11 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
         return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }

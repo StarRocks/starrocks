@@ -1,3 +1,7 @@
+// This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/backup/BackupHandler.java
+
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -15,23 +19,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.ha;
+package com.starrocks.common;
 
-import java.net.InetSocketAddress;
-import java.util.List;
-
-public interface HAProtocol {
-    // increase epoch number by one
-    boolean fencing();
-
-    InetSocketAddress getLeader();
-
-    // get observer nodes in the current group
-    List<InetSocketAddress> getObserverNodes();
-
-    // get replica nodes in the current group
-    List<InetSocketAddress> getElectableNodes(boolean leaderIncluded);
-
-    // remove a node from the group
-    boolean removeElectableNode(String nodeName);
+public interface ConfigRefreshListener {
+    void refresh();
 }

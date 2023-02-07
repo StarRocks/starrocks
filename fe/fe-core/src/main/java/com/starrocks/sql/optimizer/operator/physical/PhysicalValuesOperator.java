@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -48,12 +49,22 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        return this == o;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalValuesOperator that = (PhysicalValuesOperator) o;
+        return Objects.equal(columnRefSet, that.columnRefSet) && Objects.equal(rows, that.rows);
     }
 
     @Override
     public int hashCode() {
-        return System.identityHashCode(this);
+        return Objects.hashCode(super.hashCode(), columnRefSet);
     }
 
     @Override

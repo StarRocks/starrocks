@@ -2,7 +2,6 @@
 
 package com.starrocks.ha;
 
-import com.google.common.collect.Sets;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.server.GlobalStateMgr;
@@ -12,11 +11,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.net.InetSocketAddress;
-import java.util.Set;
-
-
 
 public class BDBHATest {
 
@@ -61,11 +55,6 @@ public class BDBHATest {
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
-        Set<InetSocketAddress> helperSocketsBefore = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
-        InetSocketAddress targetAddress = new InetSocketAddress("host1", 9010);
-        Assert.assertTrue(helperSocketsBefore.contains(targetAddress));        
-
-
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "host2", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
@@ -76,9 +65,6 @@ public class BDBHATest {
 
         // the other one is dropped
         GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
-
-        Set<InetSocketAddress> helperSocketsAfter = Sets.newHashSet(environment.getReplicationGroupAdmin().getHelperSockets());
-        Assert.assertTrue(!helperSocketsAfter.contains(targetAddress));
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
