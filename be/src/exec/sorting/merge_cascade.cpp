@@ -153,14 +153,14 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     const SortDescs& sort_desc = _sort_desc;
     ChunkUniquePtr result;
 
-    {
-        // debug scope
-        DCHECK(!(_left_is_empty && !_left_run.empty()));
-        DCHECK(!(_right_is_empty && !_right_run.empty()));
+#ifndef NDEBUG
+    // debug scope
+    DCHECK(!(_left_is_empty && !_left_run.empty()));
+    DCHECK(!(_right_is_empty && !_right_run.empty()));
 
-        _left_is_empty |= _left_run.empty();
-        _right_is_empty |= _right_run.empty();
-    }
+    _left_is_empty |= _left_run.empty();
+    _right_is_empty |= _right_run.empty();
+#endif
 
     int intersect = _left_run.intersect(sort_desc, _right_run);
     if (intersect < 0) {
