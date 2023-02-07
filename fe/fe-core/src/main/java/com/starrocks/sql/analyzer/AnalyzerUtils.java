@@ -423,6 +423,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
+        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
+        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        return nonOlapTables.isEmpty();
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -443,6 +449,21 @@ public class AnalyzerUtils {
         public Void visitView(ViewRelation node, Void context) {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+    }
+
+    private static class NonOlapTableCollector extends TableCollector {
+        public NonOlapTableCollector(Map<TableName, Table> tables) {
+            super(tables);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (!table.isOlapTable()) {
+                tables.put(node.getResolveTableName(), table);
+            }
             return null;
         }
     }

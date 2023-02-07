@@ -140,6 +140,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     // not serialized field
     // record all materialized views based on this Table
+    @SerializedName(value = "mvs")
     private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
@@ -168,10 +169,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-    }
-
-    public boolean isTypeRead() {
-        return isTypeRead;
     }
 
     public void setTypeRead(boolean isTypeRead) {

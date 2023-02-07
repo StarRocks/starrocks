@@ -306,7 +306,13 @@ public class OptimizerTest {
                 "as select k1, k2, v1  from tbl_with_mv;");
         refreshMaterializedView("test", "mv_5");
         cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        query = (QueryStatement) stmt;
+
         Optimizer optimizer3 = new Optimizer();
+        logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transformWithSelectLimit(query.getQueryRelation());
         OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
         Assert.assertNotNull(expr3);

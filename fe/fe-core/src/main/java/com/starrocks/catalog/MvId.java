@@ -14,10 +14,14 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Objects;
 
 public class MvId {
+    @SerializedName(value = "dbId")
     private final long dbId;
+    @SerializedName(value = "id")
     private final long id;
 
     public MvId(long dbId, long id) {
