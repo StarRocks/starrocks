@@ -33,18 +33,18 @@ PROPERTIES ("key"="value", ...)
 StarRocks Supports creating repository in HDFS, AWS S3, and Google GCS.
 
 - For HDFS:
-  - "username": Username used to log in HDFS.
-  - "password": Password used to log in HDFS.
+  - "username": The username of the account that you want to use to access the NameNode of the HDFS cluster.
+  - "password": The password of the account that you want to use to access the NameNode of the HDFS cluster.
 
 - For AWS S3:
-  - "fs.s3a.access.key": Access Key used to log in S3.
-  - "fs.s3a.secret.key": Secret Key used to log in S3.
-  - "fs.s3a.endpoint": Endpoint of the S3 storage.
+  - "fs.s3a.access.key": The Access Key ID that you can use to access the Amazon S3 bucket.
+  - "fs.s3a.secret.key": The Secret Access Key that you can use to access the Amazon S3 bucket.
+  - "fs.s3a.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
 
 - For Google GCS:
-  - "fs.s3a.access.key": Access Key used to log in S3.
-  - "fs.s3a.secret.key": Secret Key used to log in S3.
-  - "fs.s3a.endpoint": Endpoint of the S3 storage.
+  - "fs.s3a.access.key": The Access Key that you can use to access the Google GCS bucket.
+  - "fs.s3a.secret.key": The Secret Key that you can use to access the Google GCS bucket.
+  - "fs.s3a.endpoint": The endpoint that you can use to access the Google GCS bucket.
 
 ## Examples
 
@@ -53,7 +53,7 @@ Example 1: Create a repository named `hdfs_repo` in an Apache™ Hadoop® cluste
 ```SQL
 CREATE REPOSITORY hdfs_repo
 WITH BROKER
-ON LOCATION "hdfs://<hdfs_host>:<hdfs_port>/repo_dir/backup"
+ON LOCATION "hdfs://x.x.x.x:yyyy/repo_dir/backup"
 PROPERTIES(
     "username" = "xxxxxxxx",
     "password" = "yyyyyyyy"
