@@ -171,7 +171,10 @@ public class SqlParser {
                     inComment = false;
                     i++;
                 }
-
+                // We should replace the comment to a space when we remove it. If not, sql like
+                // "select * from-- comments
+                // t1" will transform to wrong sql like "select * fromt1"
+                sb.append(" ");
                 continue;
             }
 

@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.common.Config;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -562,5 +561,15 @@ public class AnalyzeSingleTest {
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+    }
+
+    @Test
+    public void testRemoveComment() {
+        analyzeSuccess("select * from-- comment\n" + "test.t0");
+        analyzeSuccess("select * from/*comment*/test.t0");
+
+        analyzeFail("select * fro-- comment\nm test.t0");
+        analyzeFail("select * fro/*comment*/m test.t0");
+
     }
 }
