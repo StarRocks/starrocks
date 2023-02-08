@@ -498,11 +498,9 @@ public class OlapTableSink extends DataSink {
 
         // check if disk capacity reach limit
         // this is for load process, so use high water mark to check
-        if (!Config.use_staros) {
-            Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
-            if (!st.ok()) {
-                throw new DdlException(st.getErrorMsg());
-            }
+        Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
+        if (!st.ok()) {
+            throw new DdlException(st.getErrorMsg());
         }
 
         return locationParam;

@@ -87,7 +87,7 @@ public class QueryAnalyzer {
     private final MetadataMgr metadataMgr;
 
     public QueryAnalyzer(ConnectContext session) {
-        if (Config.use_staros == true && session.getCurrentWarehouse() == null) {
+        if (Config.use_staros && session.getCurrentWarehouse() == null) {
             throw new SemanticException("No warehouse selected");
         }
         this.session = session;

@@ -464,12 +464,12 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public long getBackendIdByHost(String host) {
-        throw new SemanticException("not implemented");
+        return -1L;
     }
 
     @Override
     public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
-        throw new SemanticException("not implemented");
+        return Status.OK;
     }
 
     @Override

@@ -44,7 +44,7 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class InsertAnalyzer {
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
-        if (Config.use_staros == true && session.getCurrentWarehouse() == null) {
+        if (Config.use_staros && session.getCurrentWarehouse() == null) {
             throw new SemanticException("No warehouse selected");
         }
 

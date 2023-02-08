@@ -104,7 +104,7 @@ public class CreateTableAnalyzer {
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
 
-        if (Config.use_staros == true && context.getCurrentWarehouse() == null) {
+        if (Config.use_staros && context.getCurrentWarehouse() == null) {
             throw new SemanticException("No warehouse selected");
         }
 
