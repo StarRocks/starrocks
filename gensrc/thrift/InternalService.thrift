@@ -214,6 +214,8 @@ struct TQueryOptions {
   69: optional bool enable_populate_block_cache;
 
   70: optional bool allow_throw_exception = 0;
+
+  71: optional bool hudi_mor_force_jni_reader;
 }
 
 
