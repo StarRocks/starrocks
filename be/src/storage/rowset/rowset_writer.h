@@ -221,7 +221,9 @@ private:
 
     Status _flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr);
 
-    std::string _dump_mixed_segment_delfile_not_supported();
+    std::string _flush_state_to_string();
+
+    std::string _error_msg();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
     std::unique_ptr<VerticalRowsetWriter> _vertical_rowset_writer;
