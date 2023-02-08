@@ -1010,6 +1010,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop;
             }
+            if (maxPipelineDop <= 0) {
+                return BackendCoreStat.getDefaultDOP();
+            }
             return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
