@@ -273,9 +273,7 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     auto* upstream_source_op = context->source_operator(operators_with_sink);
-    source_operator->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
-    source_operator->set_could_local_shuffle(upstream_source_op->could_local_shuffle());
-    source_operator->set_partition_type(upstream_source_op->partition_type());
+    context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
     operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {
         operators_with_source.emplace_back(

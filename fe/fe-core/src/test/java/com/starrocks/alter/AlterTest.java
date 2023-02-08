@@ -61,7 +61,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -82,7 +81,6 @@ import com.starrocks.utframe.UtFrameUtils;
 
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -1026,9 +1024,9 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
 
+        Assert.assertNotNull(table.getPartition("p2017_12"));
         Assert.assertNotNull(table.getPartition("p2017_13"));
         Assert.assertNotNull(table.getPartition("p2017_14"));
-        Assert.assertNotNull(table.getPartition("p2017_15"));
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
