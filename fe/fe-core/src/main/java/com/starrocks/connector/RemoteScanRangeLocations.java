@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 55c0f902b ([Enhancement] add flag `hudi_mor_force_jni_reader` (#17546))
 
 package com.starrocks.connector;
 
@@ -11,6 +27,7 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -184,6 +201,7 @@ public class RemoteScanRangeLocations {
                     || tableInputFormat.equals(HudiTable.MOR_RO_INPUT_FORMAT_LEGACY);
             boolean snapshot = tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT)
                     || tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT_LEGACY);
+            boolean forceJNIReader = ConnectContext.get().getSessionVariable().getHudiMORForceJNIReader();
             for (int i = 0; i < partitions.size(); i++) {
                 descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
@@ -195,8 +213,10 @@ public class RemoteScanRangeLocations {
                     if (morTable && readOptimized && fileDesc.getLength() == -1 && fileDesc.getFileName().equals("")) {
                         continue;
                     }
-                    boolean useJNIReader = (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
-                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, useJNIReader);
+                    boolean useJNIReader =
+                            forceJNIReader || (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
+                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                            useJNIReader);
                 }
             }
         } else {

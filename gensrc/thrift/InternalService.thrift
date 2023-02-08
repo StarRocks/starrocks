@@ -199,6 +199,13 @@ struct TQueryOptions {
   68: optional i32 transmission_encode_level;
   
   69: optional bool enable_populate_block_cache;
+<<<<<<< HEAD
+=======
+
+  70: optional bool allow_throw_exception = 0;
+
+  71: optional bool hudi_mor_force_jni_reader;
+>>>>>>> 55c0f902b ([Enhancement] add flag `hudi_mor_force_jni_reader` (#17546))
 }
 
 
