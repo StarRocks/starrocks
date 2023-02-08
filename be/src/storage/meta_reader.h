@@ -91,6 +91,7 @@ protected:
     MetaReaderParams _params;
 
     virtual Status _fill_result_chunk(Chunk* chunk);
+    void _fill_empty_result(Chunk* chunk);
     Status _read(Chunk* chunk, size_t n);
 };
 
