@@ -78,6 +78,7 @@ import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.IcebergResource;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OdbcCatalogResource;
@@ -172,6 +173,7 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(PartitionInfo.class, "clazz")
                     .registerSubtype(RangePartitionInfo.class, RangePartitionInfo.class.getSimpleName())
+                    .registerSubtype(ListPartitionInfo.class, ListPartitionInfo.class.getSimpleName())
                     .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName())
                     .registerSubtype(ExpressionRangePartitionInfo.class,
                             ExpressionRangePartitionInfo.class.getSimpleName());
