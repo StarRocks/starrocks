@@ -13,7 +13,7 @@ StarRocks supports backing up data as snapshots into a remote storage system, an
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
 
-If you have stored a large quantity of data in a table, we recommend that you back up and restore data by partition in case of possible job failures. If you need to back up data at a regular interval, you can strategize a [dynamic partitioning](../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and only back up new partitions each time.
+If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
 
 ### Create a repository
 
@@ -100,7 +100,7 @@ You can restore the data snapshot backed up in the remote storage system to the 
 
 > **CAUTION**
 >
-> - Because data are backed up as snapshots, the data loaded after the snapshot is generated are not included in the snapshot. Therefore, if you load data into the old cluster after the snapshot is generated and before the RESTORE job is completed, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
+> - Because data is backed up as snapshots, the data loaded upon snapshot generation is not included in the snapshot. Therefore, if you load data into the old cluster after the snapshot is generated and before the RESTORE job is completed, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
 > - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase of the RESTORE job. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless your are sure that the current data is no longer used. The overwrite operation will check metadata consistency between the snapshot and the existing database, table, or partition. If inconsistency is detected, the RESTORE operation cannot be performed.
 
 ### (Optional) Create the repository in the new cluster
