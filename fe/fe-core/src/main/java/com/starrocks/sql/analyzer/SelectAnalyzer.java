@@ -220,7 +220,7 @@ public class SelectAnalyzer {
                     if (item.getTblName() != null) {
                         throw new SemanticException("Unknown table '%s'", item.getTblName());
                     }
-                    if (fromRelation != null) {
+                    if (fromRelation == null) {
                         throw new SemanticException("SELECT * not allowed in queries without FROM clause");
                     }
                     throw new StarRocksPlannerException("SELECT * not allowed from relation that has no columns",
