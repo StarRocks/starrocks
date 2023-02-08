@@ -40,4 +40,4 @@ This change does not affect your download behavior or use of StarRocks. You can 
     gdb -s starrocks_be.debug -e starrocks_be -c `core_file`
     ```
 
-The debuginro file works well with perf and pstack. You can directly use perf and pstack without additional operations.
+The debuginfo file works well with perf and pstack. You can directly use perf and pstack without additional operations.
