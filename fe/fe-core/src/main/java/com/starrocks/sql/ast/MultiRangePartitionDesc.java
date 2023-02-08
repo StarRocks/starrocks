@@ -231,7 +231,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                         " should be a standard unit of time (" + timeUnitType + ") " + extraMsg  + ". suggest range ["
                         + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
                         + "). If you want to create partial partitions in batch, you can turn off this check by " +
-                        "setting the FE config enable_create_partial_partition_in_batch=false.";
+                        "setting the FE config enable_create_partial_partition_in_batch=true.";
                 throw new AnalysisException(msg);
             }
         }
