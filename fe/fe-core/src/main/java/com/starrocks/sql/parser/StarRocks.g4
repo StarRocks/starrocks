@@ -88,7 +88,7 @@ statement
 
     // Materialized View Statement
     | createMaterializedViewStatement
-    | showMaterializedViewStatement
+    | showMaterializedViewsStatement
     | dropMaterializedViewStatement
     | alterMaterializedViewStatement
     | refreshMaterializedViewStatement
@@ -517,8 +517,8 @@ materializedViewDesc
     | properties
     ;
 
-showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+showMaterializedViewsStatement
+    : SHOW MATERIALIZED VIEWS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
