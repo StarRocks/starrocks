@@ -554,8 +554,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 ColumnRefSet usedCols = valueOperator.getUsedColumns();
                 ColumnRefSet encodedCols = ColumnRefSet.createByIds(context.getEncodedStringCols());
                 Preconditions.checkState(!usedCols.isIntersect(encodedCols),
-                        String.format("cols %s have been encoded, but operator [%s] doesn't support encode optimize",
-                                encodedCols, valueOperator));
+                        "cols %s have been encoded, but operator [%s] doesn't support encode optimize",
+                        encodedCols, valueOperator);
                 return;
             }
             // rewrite value operator
