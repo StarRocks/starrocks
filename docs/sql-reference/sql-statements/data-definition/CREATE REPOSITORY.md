@@ -6,7 +6,7 @@ Creates a repository in a remote storage system that is used to store data snaps
 
 > **CAUTION**
 >
-> Only root user and superuser can create a repository.
+> Only users with the ADMIN privilege can create a repository.
 
 For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md).
 
