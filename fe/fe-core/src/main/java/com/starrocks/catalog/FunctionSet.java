@@ -221,6 +221,7 @@ public class FunctionSet {
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+    public static final String UNIQ_COMBINED = "uniq_combined";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
@@ -500,6 +501,7 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .add(FunctionSet.UNIQ_COMBINED)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -812,6 +814,12 @@ public class FunctionSet {
             // alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+
+            //UNIQ_COMBINED
+            //compute approx count distinct use DataSketches HyperLogLog
+            addBuiltin(AggregateFunction.createBuiltin("uniq_combined",
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
 
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
