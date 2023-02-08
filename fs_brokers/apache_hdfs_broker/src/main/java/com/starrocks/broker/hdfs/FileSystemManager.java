@@ -470,9 +470,9 @@ public class FileSystemManager {
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
         String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
-        String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String s3aUgi = accessKey + "," + secretKey;
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, s3aUgi);
         BrokerFileSystem fileSystem = null;
@@ -531,9 +531,9 @@ public class FileSystemManager {
         String secretKey = properties.getOrDefault(FS_KS3_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_KS3_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_KS3_IMPL_DISABLE_CACHE, "true");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
-        String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String ks3aUgi = accessKey + "," + secretKey;
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, ks3aUgi);
         BrokerFileSystem fileSystem = null;
@@ -589,9 +589,9 @@ public class FileSystemManager {
         String endpoint = properties.getOrDefault(FS_OBS_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_OBS_IMPL_DISABLE_CACHE, "true");
 
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
-        String host = OBS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = OBS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String obsUgi = accessKey + "," + secretKey;
 
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, obsUgi);
@@ -709,9 +709,9 @@ public class FileSystemManager {
         String secretKey = properties.getOrDefault(FS_OSS_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_OSS_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
-        String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String ossUgi = accessKey + "," + secretKey;
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, ossUgi);
         BrokerFileSystem fileSystem = null;
@@ -759,9 +759,9 @@ public class FileSystemManager {
         String secretKey = properties.getOrDefault(FS_COS_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_COS_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
-        String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String cosUgi = accessKey + "," + secretKey;
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, cosUgi);
         BrokerFileSystem fileSystem = null;

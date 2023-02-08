@@ -67,6 +67,15 @@ public class WildcardURI {
         return uri;
     }
 
+    public String getUriHost() {
+        String host = uri.getHost();
+        if (host != null) {
+            return host;
+        } else {
+            return "";
+        }
+    }
+
     public String getAuthority() {
         return uri.getAuthority();
     }

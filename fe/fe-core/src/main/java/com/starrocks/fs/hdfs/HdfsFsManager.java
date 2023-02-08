@@ -527,13 +527,13 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.tryBuildForStorage(loadProperties);
         if (cloudConfiguration != null) {
-            String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
+            String host = S3A_SCHEME + "://" + pathUri.getUriHost();
             fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());
         } else {
-            // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+            // endpoint is the server host, pathUri.getUriHost() is the bucket
             // we should use these two params as the host identity, because FileSystem will
             // cache both.
-            String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+            String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
             String s3aUgi = accessKey + "," + secretKey;
             fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
         }
@@ -619,10 +619,10 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_KS3_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_KS3_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_KS3_CONNECTION_SSL_ENABLED, "false");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
-        String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String ks3aUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ks3aUgi);
         HdfsFs fileSystem = null;
@@ -696,10 +696,10 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_OBS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OBS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OBS_CONNECTION_SSL_ENABLED, "false");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
-        String host = OBS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = OBS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String obsUgi = accessKey + "," + secretKey;
 
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, obsUgi);
@@ -857,10 +857,10 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OSS_CONNECTION_SSL_ENABLED, "false");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
-        String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String ossUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ossUgi);
         HdfsFs fileSystem = null;
@@ -930,10 +930,10 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_COS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_COS_CONNECTION_SSL_ENABLED, "false");
-        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // endpoint is the server host, pathUri.getUriHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
-        String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUriHost();
         String cosUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cosUgi);
         HdfsFs fileSystem = null;

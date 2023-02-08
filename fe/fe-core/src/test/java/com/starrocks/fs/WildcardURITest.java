@@ -55,4 +55,18 @@ public class WildcardURITest {
         }
     }
 
+    @Test
+    public void test_get_host() {
+        try {
+            String path = "s3a://buckettest/test.csv";
+            WildcardURI wildcardURI = new WildcardURI(path);
+            Assert.assertEquals("buckettest", wildcardURI.getUriHost());
+
+            path = "s3a://bucket_test/test.csv";
+            wildcardURI = new WildcardURI(path);
+            Assert.assertEquals("", wildcardURI.getUriHost());
+        } catch (UserException e) {
+            Assert.fail(e.getMessage());
+        }
+    }
 }
