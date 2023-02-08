@@ -452,7 +452,7 @@ public class CoordinatorTest extends PlanTestBase {
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
         prepare.computeScanRangeAssignment();
 
-        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeMap =
+        FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
         Assert.assertFalse(scanRangeMap.isEmpty());
@@ -520,7 +520,7 @@ public class CoordinatorTest extends PlanTestBase {
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
         CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
-        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
+        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
         List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());

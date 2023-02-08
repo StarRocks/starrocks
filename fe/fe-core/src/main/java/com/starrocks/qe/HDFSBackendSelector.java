@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
@@ -72,7 +71,7 @@ public class HDFSBackendSelector implements BackendSelector {
     Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
-    private final CoordinatorPreprocessor.FragmentScanRangeAssignment assignment;
+    private final FragmentScanRangeAssignment assignment;
     private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
     private final ImmutableCollection<ComputeNode> computeNodes;
@@ -138,7 +137,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private HdfsScanRangeHasher hdfsScanRangeHasher;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                               CoordinatorPreprocessor.FragmentScanRangeAssignment assignment,
+                               FragmentScanRangeAssignment assignment,
                                Map<TNetworkAddress, Long> addressToBackendId,
                                Set<Long> usedBackendIDs,
                                ImmutableCollection<ComputeNode> computeNodes,
