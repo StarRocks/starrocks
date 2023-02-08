@@ -846,12 +846,7 @@ public class AstToStringBuilder {
         }
 
         public String visitMapExpr(MapExpr node, Void context) {
-            boolean explicitType = node.isExplicitType();
-
             StringBuilder sb = new StringBuilder();
-            if (explicitType) {
-                sb.append(node.getType().toString());
-            }
             sb.append('(');
             sb.append(visitAstList(node.getChildren()));
             sb.append(')');

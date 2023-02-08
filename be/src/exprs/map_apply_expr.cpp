@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/array_map_expr.h"
+#include "exprs/map_apply_expr.h"
 
 #include <fmt/format.h>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
@@ -30,23 +30,15 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
-ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
+MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
-ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
+MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
-// The input array column maybe nullable, so first remove the wrap of nullable property.
-// The result of lambda expressions do not change the offsets of the current array and the null map.
-// NOTE the return column must be of the return type.
-StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    std::vector<ColumnPtr> inputs;
+StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
+    std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
-    std::shared_ptr<ArrayColumn> input_array = nullptr;
-    // for many valid arguments:
-    // if one of them is a null literal, the result is a null literal;
-    // if one of them is only null, then results are null;
-    // unfold const columns.
-    // make sure all inputs have the same offsets.
-    // TODO(fzh): support several arrays with different offsets and set null for non-equal size of arrays.
+    std::shared_ptr<MapColumn> input_map = nullptr;
+    // step 1: get input columns from map(key_col, value_col)
     for (int i = 1; i < _children.size(); ++i) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
@@ -62,7 +54,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             column = nullable->data_column();
             // empty null array with non-zero elements
-            std::dynamic_pointer_cast<ArrayColumn>(column)->empty_null_array(nullable->null_column());
+            // std::dynamic_pointer_cast<MapColumn>(column)->empty_null_array(nullable->null_column());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
@@ -70,23 +62,22 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map = nullable->null_column();
             }
         }
-        DCHECK(column->is_array());
-        auto cur_array = std::dynamic_pointer_cast<ArrayColumn>(column);
+        DCHECK(column->is_map());
+        auto cur_map = std::dynamic_pointer_cast<MapColumn>(column);
 
-        if (input_array == nullptr) {
-            input_array = cur_array;
+        if (input_map == nullptr) {
+            input_map = cur_map;
         } else {
-            if (!ColumnHelper::offsets_equal(cur_array->offsets_column(), input_array->offsets_column())) {
+            if (!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column())) {
                 throw std::runtime_error("Input array element's size is not equal in array_map().");
             }
         }
-        inputs.push_back(cur_array->elements_column());
+        input_columns.push_back(cur_map->keys_column());
+        input_columns.push_back(cur_map->values_column());
     }
-
     ColumnPtr column = nullptr;
-    if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
-        column = ColumnHelper::create_column(type().children[0],
-                                             true); // array->elements must be of return array->elements' type
+    if (input_map->keys_column()->size() == 0) {
+        column = ColumnHelper::create_column(_children[0]->type(), true);
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<Chunk>();
@@ -94,32 +85,33 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
-        DCHECK(argument_num == inputs.size());
+        DCHECK(argument_num == input_columns.size());
         for (int i = 0; i < argument_num; ++i) {
-            cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
+            cur_chunk->append_column(input_columns[i], arguments_ids[i]); // column ref
         }
-        // put captured columns into the new chunk aligning with the first array's offsets
+        // put captured columns into the new chunk aligning with the first map's offsets
         std::vector<SlotId> slot_ids;
         _children[0]->get_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
-            if (captured->size() < input_array->size()) {
-                throw std::runtime_error(fmt::format("The size of the captured column {} is less than array's size.",
+            if (captured->size() < input_map->size()) {
+                throw std::runtime_error(fmt::format("The size of the captured column {} is less than map's size.",
                                                      captured->get_name()));
             }
-            cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
+            cur_chunk->append_column(captured->replicate(input_map->offsets_column()->get_data()), id);
         }
+
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
             column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
-            column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
+            column = ColumnHelper::align_return_type(column, _children[0]->type(), cur_chunk->num_rows(), false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
-                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
+                tmp_col = ColumnHelper::align_return_type(tmp_col, _children[0]->type(), tmp_chunk->num_rows(), false);
                 if (column == nullptr) {
                     column = tmp_col;
                 } else {
@@ -127,21 +119,16 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                 }
             }
         }
-
-        // construct the result array
-        DCHECK(column != nullptr);
-        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(column);
-            nullable == nullptr && !column->is_nullable()) {
-            NullColumnPtr null_col = NullColumn::create(column->size(), 0);
-            column = NullableColumn::create(std::move(column), null_col);
-        }
     }
     // attach offsets
-    auto array_col = std::make_shared<ArrayColumn>(column, input_array->offsets_column());
+    auto map_col = std::dynamic_pointer_cast<MapColumn>(column);
+    auto res_map = std::make_shared<MapColumn>((map_col->keys_column()), (map_col->values_column()),
+                                               input_map->offsets_column());
+    // attach null info
     if (input_null_map != nullptr) {
-        return NullableColumn::create(std::move(array_col), input_null_map);
+        return NullableColumn::create(std::move(res_map), input_null_map);
     }
-    return array_col;
+    return res_map;
 }
 
 } // namespace starrocks
