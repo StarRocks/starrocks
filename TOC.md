@@ -592,6 +592,8 @@
 + 性能测试
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
++ 开发指南
+  + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
 + Release Notes
   + [v2.5](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
