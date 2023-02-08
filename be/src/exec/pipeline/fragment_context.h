@@ -17,6 +17,7 @@
 #include <unordered_map>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -118,6 +119,10 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
+    void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
+    bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
+    AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
+
     size_t next_driver_id() { return _next_driver_id++; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -171,6 +176,9 @@ private:
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
     bool _is_stream_pipeline = false;
+
+    bool _enable_adaptive_dop = false;
+    AdaptiveDopParam _adaptive_dop_param;
 };
 
 class FragmentContextManager {

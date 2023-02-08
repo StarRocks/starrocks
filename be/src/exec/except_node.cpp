@@ -246,7 +246,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
 
-    // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
+    // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
         ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(

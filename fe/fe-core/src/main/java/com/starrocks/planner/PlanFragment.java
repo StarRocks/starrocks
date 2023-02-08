@@ -43,8 +43,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
@@ -154,6 +154,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
 
+    private boolean useRuntimeAdaptiveDop = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -189,6 +191,26 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean canUsePipeline() {
         return getPlanRoot().canUsePipeLine() && getSink().canUsePipeLine();
+    }
+
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getPlanRoot().canUseRuntimeAdaptiveDop() && getSink().canUseRuntimeAdaptiveDop();
+    }
+
+    public void enableAdaptiveDop() {
+        useRuntimeAdaptiveDop = true;
+        // Constrict DOP as the power of two to make the strategy of decrement DOP easy.
+        // After decreasing DOP from old_dop to new_dop, chunks from the i-th input driver is passed
+        // to the j-th output driver, where j=i%new_dop.
+        pipelineDop = Utils.computeMaxLEPower2(pipelineDop);
+    }
+
+    public void disableRuntimeAdaptiveDop() {
+        useRuntimeAdaptiveDop = false;
+    }
+
+    public boolean isUseRuntimeAdaptiveDop() {
+        return useRuntimeAdaptiveDop;
     }
 
     /**

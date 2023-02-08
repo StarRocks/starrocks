@@ -57,11 +57,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TAdaptiveDopParam;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -494,7 +496,7 @@ public class CoordinatorPreprocessor {
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
             boolean dopAdaptionEnabled = usePipeline &&
-                    connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
+                    connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
@@ -681,10 +683,17 @@ public class CoordinatorPreprocessor {
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
                                         ListUtil.splitBySize(scanRangeParams, expectedDop);
                                 instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
+                                if (fragment.isUseRuntimeAdaptiveDop()) {
+                                    instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
+                                }
                                 Map<Integer, List<TScanRangeParams>> scanRangesPerDriverSeq = new HashMap<>();
                                 instanceParam.nodeToPerDriverSeqScanRanges.put(planNodeId, scanRangesPerDriverSeq);
                                 for (int driverSeq = 0; driverSeq < scanRangeParamsPerDriverSeq.size(); ++driverSeq) {
                                     scanRangesPerDriverSeq.put(driverSeq, scanRangeParamsPerDriverSeq.get(driverSeq));
+                                }
+                                for (int driverSeq = scanRangeParamsPerDriverSeq.size();
+                                        driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                                    scanRangesPerDriverSeq.put(driverSeq, Lists.newArrayList());
                                 }
                             }
                             if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
@@ -932,6 +941,9 @@ public class CoordinatorPreprocessor {
 
                 if (assignPerDriverSeq) {
                     instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+                    if (params.fragment.isUseRuntimeAdaptiveDop()) {
+                        instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
+                    }
                 }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
@@ -1526,6 +1538,11 @@ public class CoordinatorPreprocessor {
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
                         commonParams.setWorkgroup(resourceGroup);
+                    }
+                    if (fragment.isUseRuntimeAdaptiveDop()) {
+                        commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
+                        commonParams.adaptive_dop_param.setMax_block_rows_per_driver_seq(
+                                sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
                     }
                 }
             }

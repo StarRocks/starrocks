@@ -417,8 +417,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     copied_driver.set_in_queue(_in_queue);
     copied_driver.set_driver_queue_level(_driver_queue_level);
     DeferOp defer([&copied_driver, &time_spent]() {
-        copied_driver._update_driver_acct(0, 0, time_spent);
-        copied_driver._in_queue->update_statistics(&copied_driver);
+        if (copied_driver._in_queue != nullptr) {
+            copied_driver._update_driver_acct(0, 0, time_spent);
+            copied_driver._in_queue->update_statistics(&copied_driver);
+        }
     });
     SCOPED_RAW_TIMER(&time_spent);
 

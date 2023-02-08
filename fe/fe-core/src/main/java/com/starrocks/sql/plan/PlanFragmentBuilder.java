@@ -311,6 +311,7 @@ public class PlanFragmentBuilder {
             fragment.createDataSink(resultSinkType);
         }
         Collections.reverse(fragments);
+
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -326,7 +327,14 @@ public class PlanFragmentBuilder {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
+        } else if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
+            for (PlanFragment fragment : fragments) {
+                if (fragment.canUseRuntimeAdaptiveDop()) {
+                    fragment.enableAdaptiveDop();
+                }
+            }
         }
+
         return execPlan;
     }
 

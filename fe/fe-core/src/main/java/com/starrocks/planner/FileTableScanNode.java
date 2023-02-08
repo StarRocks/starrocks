@@ -205,4 +205,9 @@ public class FileTableScanNode extends ScanNode {
     public boolean canUsePipeLine() {
         return true;
     }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
 }

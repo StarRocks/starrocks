@@ -241,6 +241,11 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
+    @Override
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {

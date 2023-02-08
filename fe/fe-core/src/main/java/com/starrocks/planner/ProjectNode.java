@@ -128,6 +128,11 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
         if (!(expr instanceof SlotRef)) {
             return Optional.empty();
