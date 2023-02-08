@@ -26,9 +26,28 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.MutableGraph;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ForeignKeyConstraint;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -36,6 +55,7 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -54,6 +74,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -111,35 +132,6 @@ public class MaterializedViewRewriter {
         if (Collections.disjoint(queryTables, mvTables)) {
             return false;
         }
-
-        // Only care MatchMode.COMPLETE here, QUERY_DELTA also can be supported
-        // because optimizer will match MV's pattern which is subset of query opt tree
-        // from top-down iteration.
-        MatchMode matchMode = getMatchMode(queryTables, mvTables);
-        if (matchMode != MatchMode.COMPLETE) {
-            return false;
-        }
-
-        boolean isQueryAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
-        boolean isMVAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
-        if (isQueryAllEqualInnerOrCrossJoin && isMVAllEqualInnerOrCrossJoin) {
-            return true;
-        } else {
-            // If not all join types are InnerJoin, need to check whether MV's join tables' order
-            // matches Query's join tables' order.
-            // eg. MV   : a left join b inner join c
-            //     Query: b left join a inner join c (cannot rewrite)
-            //     Query: a left join b inner join c (can rewrite)
-            //     Query: c inner join a left join b (can rewrite)
-            // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
-            // order for now.
-            // Use traverse order to check whether all joins' order and operator are exactly matched.
-            List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
-            List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
-            Preconditions.checkState(queryJoinOperators.size() + 1 == queryTables.size());
-            Preconditions.checkState(mvJoinOperators.size() + 1 == mvTables.size());
-            return queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators);
-        }
     }
 
     public List<OptExpression> rewrite(ReplaceColumnRefRewriter queryColumnRefRewriter,
@@ -176,6 +168,27 @@ public class MaterializedViewRewriter {
         }
         final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
+        // process match mode
+
+        // Only care MatchMode.COMPLETE here, QUERY_DELTA also can be supported
+        // because optimizer will match MV's pattern which is subset of query opt tree
+        // from top-down iteration.
+        MatchMode matchMode = getMatchMode(queryTables, mvTables);
+        Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
+        if (matchMode == MatchMode.COMPLETE) {
+            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
+                return Lists.newArrayList();
+            }
+        } else if (matchMode == MatchMode.VIEW_DELTA) {
+            ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
+            EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
+            if (!compensateViewDelta(queryTables, mvTables, viewEquivalenceClasses, compensationJoinColumns)) {
+                return Lists.newArrayList();
+            }
+        } else {
+            return Lists.newArrayList();
+        }
+
         Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getQueryRefFactory());
         Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns =
@@ -205,6 +218,202 @@ public class MaterializedViewRewriter {
         }
 
         return results;
+    }
+
+    // check whether query can be rewritten by view even though the view has additional tables.
+    // In order to do that, we should make sure that the additional joins(which exist in view
+    // but not in query) are lossless join.
+    // for inner join:
+    //      1. inner equal join
+    //      2. join on all key columns
+    //      3. foreign key columns are not null
+    //      4. one side is foreign key and the other side is unique/primary key
+    // for outer join:
+    //      1. left outer join
+    //      2. join keys in additional table should be unique/primary key
+    //
+    // return true if it can be rewritten. Further, it will add the missing equi-join predicates to the
+    // compensationJoinColumns. return false if it can not be rewritten.
+    private boolean compensateViewDelta(
+            List<Table> queryTables,
+            List<Table> mvTables,
+            EquivalenceClasses viewEquivalenceClasses,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
+            OptExpression mvExpression,
+            ColumnRefFactory mvRefFactory) {
+        // use directed graph to construct foreign key join graph
+        MutableGraph<Table> graph = GraphBuilder.directed().build();
+        // cases:
+        // mv: a, b, c1, c2
+        // query: a, b
+        //
+        // mv: a, b, c
+        // query: a, b
+        List<Table> extraTables = Lists.newArrayList();
+        Multimap<String, Table> nameToTable = ArrayListMultimap.create();
+        for (Table table : mvTables) {
+            graph.addNode(table);
+            nameToTable.put(table.getName(), table);
+            if (!queryTables.contains(table)) {
+                extraTables.add(table);
+            }
+        }
+
+        List<List<ColumnRefOperator>> extraTableColumns = Lists.newArrayList();
+
+        // add edges to directed graph by FK-UK
+        for (Table table : graph.nodes()) {
+            // now only support OlapTable
+            // TODO: support external table
+            Preconditions.checkState(table instanceof OlapTable);
+            OlapTable childTable = (OlapTable) table;
+            List<ForeignKeyConstraint> foreignKeyConstraints = childTable.getForeignKeyConstraint();
+            if (foreignKeyConstraints == null) {
+                continue;
+            }
+
+            for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
+                Collection<Table> parentTables = nameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
+                for (Table parentTable : parentTables) {
+                    // now only OlapTable is supported
+                    // TODO: support external table
+                    Preconditions.checkState(parentTable instanceof OlapTable);
+                    OlapTable parentOlapTable = (OlapTable) parentTable;
+                    if (!extraTables.contains(parentTable)) {
+                        // if it is not in the extra tables, just ingore it
+                        continue;
+                    }
+                    OptExpression joinExpr = getJoinOperator(mvExpression, parentTable);
+                    if (joinExpr == null) {
+                        continue;
+                    }
+                    LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinExpr.getOp();
+                    if (joinOperator.getJoinType().isInnerJoin()) {
+
+                    } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
+                        // the join keys on parent table should be unique
+                        List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                        // make sure that all join keys are in foreign keys
+                        // the join keys of parent table should be unique
+                        List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
+                        KeysType tableKeyType = getTableKeysType(parentOlapTable);
+                        if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
+                            List<String> tableKeyColumns = parentOlapTable.getKeyColumns()
+                                    .stream().map(column -> column.getName()).collect(Collectors.toList());
+                            if (!parentKeys.equals(tableKeyColumns)) {
+                                break;
+                            }
+                            // tableKeyColumns should be join keys,
+                            // it means that there should be a join between childTable and parentTable
+                            for (Pair<String, String> pair : columnPairs) {
+                                // here should use relation id, but can not get it
+                                ColumnRefOperator childColumn = getColumnRef(pair.first, childTable, mvRefFactory);
+                                ColumnRefOperator parentColumn = getColumnRef(pair.first, parentOlapTable, mvRefFactory);
+                                if (!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
+                                        || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
+                                    // there is no join between childTable and parentTable
+                                    break;
+                                }
+                            }
+                        } else if (tableKeyType == KeysType.DUP_KEYS) {
+
+                        } else {
+                            // impossible to be here
+                            break;
+                        }
+                    }
+                    // add edge to graph
+                    if (!graph.successors(childTable).contains(parentTable)) {
+                        graph.putEdge(childTable, parentTable);
+                    }
+                }
+            }
+        }
+
+        // should add new tables/columnRefs into query ColumnRefFactory if pass test
+        // should collect additional tables and the related columns
+        return true;
+    }
+
+    private ColumnRefOperator getColumnRef(String columnName, Table table, ColumnRefFactory refFactory) {
+        for (Map.Entry<ColumnRefOperator, Table> entry : refFactory.getColumnRefToTable().entrySet()) {
+            if (entry.getKey().getName().equals(columnName) && entry.getValue() == table) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private KeysType getTableKeysType(OlapTable olapTable) {
+        return olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId()).getKeysType();
+    }
+
+    private boolean isLeftInput(OptExpression joinExpr, Table table) {
+        boolean isLeftScan = joinExpr.inputAt(0).getOp() instanceof LogicalScanOperator;
+        if (!isLeftScan) {
+            return false;
+        }
+        LogicalScanOperator leftScan = (LogicalScanOperator) joinExpr.inputAt(0).getOp();
+        return leftScan.getTable() == table;
+    }
+
+    private OptExpression getJoinOperator(OptExpression mvExpression, Table table) {
+        OptExpressionVisitor joinFinder = new OptExpressionVisitor<OptExpression, Void>() {
+            @Override
+            public OptExpression visit(OptExpression optExpression, Void context) {
+                for (OptExpression child : optExpression.getInputs()) {
+                    OptExpression ret = child.getOp().accept(this, child, null);
+                    if (ret != null) {
+                        return ret;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
+                for (OptExpression child : mvExpression.getInputs()) {
+                    if (child.getOp() instanceof LogicalScanOperator) {
+                        LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
+                        if (scanOperator.getTable() == table) {
+                            return mvExpression;
+                        }
+                    } else {
+                        OptExpression ret = child.getOp().accept(this, child, null);
+                        if (ret != null) {
+                            return ret;
+                        }
+                    }
+                }
+                return null;
+            }
+        };
+
+        return mvExpression.getOp().<LogicalJoinOperator, Void>accept(joinFinder, mvExpression, null);
+    }
+
+    private boolean isJoinMatch(OptExpression queryExpression,
+                                OptExpression mvExpression,
+                                List<Table> queryTables,
+                                List<Table> mvTables) {
+        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(queryExpression);
+        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(mvExpression);
+        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+            return true;
+        } else {
+            // If not all join types are InnerJoin, need to check whether MV's join tables' order
+            // matches Query's join tables' order.
+            // eg. MV   : a left join b inner join c
+            //     Query: b left join a inner join c (cannot rewrite)
+            //     Query: a left join b inner join c (can rewrite)
+            //     Query: c inner join a left join b (can rewrite)
+            // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
+            // order for now.
+            // Use traverse order to check whether all joins' order and operator are exactly matched.
+            List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
+            List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
+            return queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators);
+        }
     }
 
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {

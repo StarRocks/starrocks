@@ -670,6 +670,9 @@ public class Alter {
                     if (!isSuccess) {
                         throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                     }
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
                 } else {
                     throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }

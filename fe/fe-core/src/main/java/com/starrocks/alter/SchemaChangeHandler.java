@@ -51,6 +51,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -65,8 +66,10 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1659,6 +1662,74 @@ public class SchemaChangeHandler extends AlterHandler {
                 LOG.warn(errMsg);
                 throw new DdlException(errMsg);
             }
+        }
+    }
+
+    public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
+            throws DdlException {
+        if (!db.readLockAndCheckExist()) {
+            throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
+        }
+        TableProperty tableProperty;
+        OlapTable olapTable;
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException(String.format("table:%s does not exist", tableName));
+            }
+            olapTable = (OlapTable) table;
+            tableProperty = olapTable.getTableProperty();
+        } finally {
+            db.readUnlock();
+        }
+
+        boolean hasChanged = false;
+        if (tableProperty != null) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                try {
+                    // TODO:
+                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+                    List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
+                    if (originalUniqueConstraints == null
+                            || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {
+                        hasChanged = true;
+                    } else {
+                        LOG.warn("unique constraint is the same as origin");
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(
+                            String.format("analyze table unique constraint:%s failed",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)), e);
+                }
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                try {
+                    // TODO: 判断更新
+                    List<ForeignKeyConstraint> newForeignKeyConstraint =
+                            PropertyAnalyzer.analyzeForeignKeyConstraint(properties, olapTable);
+                    List<ForeignKeyConstraint> originalForeignKeyConstraint = tableProperty.getForeignKeyConstraints();
+                    if (originalForeignKeyConstraint == null
+                            || !newForeignKeyConstraint.toString().equals(originalForeignKeyConstraint.toString())) {
+                        hasChanged = true;
+                    } else {
+                        LOG.warn("foreign constraint is the same as origin");
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(
+                            String.format("analyze table foreign key constraint:%s failed",
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)), e);
+                }
+            }
+        }
+
+        if (!hasChanged) {
+            return;
+        }
+        db.writeLock();
+        try {
+            GlobalStateMgr.getCurrentState().modifyTableConstraint(db, tableName, properties);
+        } finally {
+            db.writeUnlock();
         }
     }
 

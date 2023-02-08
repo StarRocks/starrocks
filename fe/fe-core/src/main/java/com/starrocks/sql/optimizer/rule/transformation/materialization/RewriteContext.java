@@ -45,6 +45,7 @@ public class RewriteContext {
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
+    private MaterializedViewRewriter.MatchMode matchMode;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,

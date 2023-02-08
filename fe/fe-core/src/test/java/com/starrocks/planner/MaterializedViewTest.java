@@ -106,6 +106,44 @@ public class MaterializedViewTest extends PlanTestBase {
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
                 .withTable(deptsTable);
+        starRocksAssert.withTable("CREATE TABLE `fifa_internal_poc` (\n" +
+                "  `experiment_id` bigint(20) NULL COMMENT \"\",\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `hour` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `event_key` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `metric_name` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `player_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `player_id_type` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `game_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `game_id_type` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `variant_id` bigint(20) NULL COMMENT \"\",\n" +
+                "  `platform` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `country` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `additional_tracking_dimensions` json NULL COMMENT \"\",\n" +
+                "  `session_days_ltd` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `ut_session_days_ltd` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `is_active_eax_subscriber` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `favorite_team` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `preferred_game_mode` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `is_underage` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `metric_value` float NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`experiment_id`, `dt`, `hour`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p202207 VALUES [(\"2022-07-01\"), (\"2022-08-01\")),\n" +
+                "PARTITION p202208 VALUES [(\"2022-08-01\"), (\"2022-09-01\")),\n" +
+                "PARTITION p202209 VALUES [(\"2022-09-01\"), (\"2022-10-01\")),\n" +
+                "PARTITION p202210 VALUES [(\"2022-10-01\"), (\"2022-11-01\")))\n" +
+                "DISTRIBUTED BY HASH(`player_id`) BUCKETS 144\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"g8\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
     }
 
     @AfterClass
@@ -1239,5 +1277,13 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "from emps\n"
                         + "group by deptno, salary) t\n"
                         + "group by deptno");
+    }
+
+    @Test
+    public void testLimit() {
+        String mv = "SELECT dt as col1, count(DISTINCT player_id) as uv from fifa_internal_poc group by dt";
+        String query = "SELECT dt, count(DISTINCT player_id) from fifa_internal_poc" +
+                " where dt >= '2022-07-01' and dt <= '2022-10-01' group by dt limit 10";
+        testRewriteOK(mv, query);
     }
 }

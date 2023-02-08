@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
@@ -56,7 +57,7 @@ public class MVActiveChecker extends LeaderDaemon {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null && mv.isActive()) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
