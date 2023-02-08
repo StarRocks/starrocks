@@ -305,6 +305,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+    public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -769,6 +770,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
+    @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
+    private boolean hudiMORForceJNIReader = false;
+
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
@@ -839,6 +843,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
+    }
+
+    public boolean getHudiMORForceJNIReader() {
+        return hudiMORForceJNIReader;
     }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
