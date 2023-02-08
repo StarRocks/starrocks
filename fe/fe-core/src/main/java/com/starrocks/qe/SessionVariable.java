@@ -771,7 +771,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePopulateBlockCache = true;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
-    private boolean hudiMORForceJNIReader = true;
+    private boolean hudiMORForceJNIReader = false;
 
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
