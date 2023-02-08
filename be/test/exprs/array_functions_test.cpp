@@ -3451,7 +3451,7 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6}, dest_column->get(0).get_array());
