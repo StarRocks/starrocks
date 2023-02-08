@@ -11,6 +11,7 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -184,6 +185,7 @@ public class RemoteScanRangeLocations {
                     || tableInputFormat.equals(HudiTable.MOR_RO_INPUT_FORMAT_LEGACY);
             boolean snapshot = tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT)
                     || tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT_LEGACY);
+            boolean forceJNIReader = ConnectContext.get().getSessionVariable().getHudiMORForceJNIReader();
             for (int i = 0; i < partitions.size(); i++) {
                 descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
@@ -195,8 +197,10 @@ public class RemoteScanRangeLocations {
                     if (morTable && readOptimized && fileDesc.getLength() == -1 && fileDesc.getFileName().equals("")) {
                         continue;
                     }
-                    boolean useJNIReader = (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
-                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, useJNIReader);
+                    boolean useJNIReader =
+                            forceJNIReader || (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
+                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                            useJNIReader);
                 }
             }
         } else {
