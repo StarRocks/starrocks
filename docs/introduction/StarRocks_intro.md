@@ -47,7 +47,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
 - [Bulk load using Apache Spark™](../loading/SparkLoad.md)
 - [Load data using INSERT](../loading/InsertInto.md)
-- [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
+- [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md)
 - [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 
 </NavBoxPartItem>
