@@ -86,6 +86,11 @@ public class TableFunctionNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalTableFunctionNode tableFunctionNode = new TNormalTableFunctionNode();
         tableFunctionNode.setTable_function(tableFunction.toThrift());
