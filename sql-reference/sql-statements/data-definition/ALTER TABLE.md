@@ -29,7 +29,7 @@ alter_clause1[, alter_clause2, ...]
 
 ### 操作 partition 相关语法
 
-#### 增加分区
+#### 增加分区 (ADD PARTITION)
 
 语法：
 
@@ -50,7 +50,7 @@ partition_desc ["key"="value"]
 4. 如指定分桶方式，只能修改分桶数，不可修改分桶方式或分桶列。
 5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](../data-definition/CREATE%20TABLE.md)
 
-#### 删除分区
+#### 删除分区 (DROP PARTITION)
 
 语法：
 
@@ -66,10 +66,10 @@ DROP PARTITION [IF EXISTS] partition_name [FORCE];
 注意：
 
 1. 使用分区方式的表至少要保留一个分区。
-2. 执行 `DROP PARTITION` 一段时间内，可以通过 RECOVER 语句恢复被删除的分区。详见 RECOVER 语句
-3. 如果执行 `DROP PARTITION FORCE`，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作
+2. 执行 DROP PARTITION 一段时间内，可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-statements/data-definition/RECOVER) 语句。
+3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
 
-#### 增加临时分区
+#### 增加临时分区 (ADD TEMPORARY PARTITION)
 
 详细使用信息，请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
@@ -95,7 +95,7 @@ partition_desc ["key"="value"]
 [PROPERTIES ("key"="value", ...)]
 ```
 
-#### 删除临时分区
+#### 删除临时分区 (DROP TEMPORARY PARTITION)
 
 语法：
 
@@ -104,7 +104,7 @@ ALTER TABLE [database.]table
 DROP TEMPORARY PARTITION partition_name;
 ```
 
-#### 修改分区属性
+#### 修改分区属性 (MODIFY PARTITION)
 
 语法：
 
@@ -125,7 +125,7 @@ MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...);
 
 ### 操作 rollup 相关语法
 
-#### 创建 rollup index
+#### 创建 rollup index (ADD ROLLUP)
 
 **RollUp 表索引**: shortkey index 可加速数据查找，但 shortkey index 依赖维度列排列次序。如果使用非前缀的维度列构造查找谓词，用户可以为数据表创建若干 RollUp 表索引。 RollUp 表索引的数据组织和存储和数据表相同，但 RollUp 表拥有自身的 shortkey index。用户创建 RollUp 表索引时，可选择聚合的粒度，列的数量，维度列的次序。使频繁使用的查询条件能够命中相应的 RollUp 表索引。
 
@@ -171,7 +171,7 @@ ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 2. rollup 表中的列必须是 from_index 中已有的列。
 3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE%20TABLE.md) 章节。
 
-#### 删除 rollup index
+#### 删除 rollup index (DROP ROLLUP)
 
 语法：
 
@@ -207,9 +207,11 @@ ALTER TABLE [database.]table DROP ROLLUP r1, r2;
 
 ### schema change
 
-此处下文中的 index 为物化索引。建表成功后表为 base 表(base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index) 。base index 和 rollup index 都是物化索引。下方语句在编写时如果没有指定 `rollup_index_name`，默认操作基表。
+下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
-#### 向指定 index 的指定位置添加一列
+base index 和 rollup index 都是物化索引。下方语句在编写时如果没有指定 `rollup_index_name`，默认操作基表。
+
+#### 向指定 index 的指定位置添加一列 (ADD COLUMN)
 
 语法：
 
@@ -246,7 +248,7 @@ ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", .
 2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
-#### 从指定 index 中删除一列
+#### 从指定 index 中删除一列 (DROP COLUMN)
 
 语法：
 
@@ -261,7 +263,7 @@ DROP COLUMN column_name
 1. 不能删除分区列
 2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除
 
-#### 修改指定 index 的列类型以及列位置
+#### 修改指定 index 的列类型以及列位置 (MODIFY COLUMN)
 
 语法：
 
@@ -332,7 +334,7 @@ PROPERTIES ("key"="value")
 ALTER TABLE table_name RENAME new_table_name;
 ```
 
-#### 修改 rollup index 名称
+#### 修改 rollup index 名称 (RENAME ROLLUP)
 
 语法：
 
@@ -341,7 +343,7 @@ ALTER TABLE [database.]table
 RENAME ROLLUP old_rollup_name new_rollup_name;
 ```
 
-#### 修改 partition 名称
+#### 修改 partition 名称 (RENAME PARTITION)
 
 语法：
 
@@ -352,7 +354,7 @@ RENAME PARTITION old_partition_name new_partition_name;
 
 ### bitmap index 修改
 
-#### 创建 bitmap 索引
+#### 创建 bitmap 索引 (ADD INDEX)
 
 语法：
 
@@ -368,7 +370,7 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 2. BITMAP 索引仅在单列上创建
 ```
 
-#### 删除索引
+#### 删除索引 (DROP INDEX)
 
 语法：
 

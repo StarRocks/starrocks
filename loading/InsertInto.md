@@ -35,7 +35,17 @@ CREATE TABLE insert_wiki_edit
     added INT SUM DEFAULT '0',
     deleted INT SUM DEFAULT '0'
 )
-AGGREGATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+AGGREGATE KEY
+(
+    event_time,
+    channel,
+    user,
+    is_anonymous,
+    is_minor,
+    is_new,
+    is_robot,
+    is_unpatrolled
+)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
@@ -59,7 +69,17 @@ CREATE TABLE source_wiki_edit
     added INT SUM DEFAULT '0',
     deleted INT SUM DEFAULT '0'
 )
-AGGREGATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+AGGREGATE KEY
+(
+    event_time,
+    channel,
+    user,
+    is_anonymous,
+    is_minor,
+    is_new,
+    is_robot,
+    is_unpatrolled
+)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),

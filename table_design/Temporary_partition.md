@@ -17,7 +17,7 @@
 
 ## 创建临时分区
 
-您可以通过以下命令创建临时分区。
+您可以通过 ALTER TABLE 命令创建临时分区。
 
 ```sql
 ALTER TABLE table_name ADD TEMPORARY PARTITION partition_name;

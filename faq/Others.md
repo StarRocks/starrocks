@@ -180,15 +180,15 @@ MySQL 5.7 版本默认的认证方式为 mysql_native_password，如使用 MySQL
 
 执行 DROP TABLE 语句删表后需等待磁盘空间释放。如果想要快速释放磁盘空间可以使用 DROP TABLE FORCE 语句。执行 DROP TABLE FORCE 语句删除表时不会检查该表是否存在未完成的事务，而是直接将表删除。建议谨慎使用 DROP TABLE FORCE 语句，因为使用该语句删除的表不能恢复。
 
-## 如何查看StarRocks的版本？
+## 如何查看 StarRocks 的版本？
 
-执行`select current_version();`命令或者CLI`sh bin/show_fe_version.sh`命令查看版本。
+执行 `select current_version();` 命令或者CLI `sh bin/show_fe_version.sh` 命令查看版本。
 
-## 如何设置FE的内存大小？
+## 如何设置 FE 的内存大小？
 
 元数据信息都保存在 FE 的内存中。可以参考 Tablet 的数量来设置 FE 的内存大小。一千万个 Tablet 内存使用在 20 GB左右。FE 的内存最多可设置为 20 GB。
 
-## StarRocks如何计算查询时间?
+## StarRocks 如何计算查询时间?
 
 StarRocks 是多线程计算，查询时间即为查询最慢的线程所用的时间。
 
