@@ -49,6 +49,7 @@ public class ExportCheckerTest {
             }
         };
 
+        Mockit.setStrict(false);
         new MockUp<Backend>() {
             @Mock
             public boolean isAvailable() {
@@ -71,6 +72,7 @@ public class ExportCheckerTest {
         boolean cancelled = (boolean) method.invoke(checker, job);
         Assert.assertTrue(cancelled);
 
+        Mockit.setStrict(false);
         new MockUp<Backend>() {
             @Mock
             public boolean isAlive() {
