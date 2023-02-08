@@ -161,7 +161,7 @@ SHOW CREATE TABLE detailDemo;
 
 StarRocks 支持多种 DDL 操作。
 
-您可以通过 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+您可以通过 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
 
 ### 增加列
 
