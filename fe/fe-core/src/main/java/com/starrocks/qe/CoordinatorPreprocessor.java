@@ -1038,6 +1038,9 @@ public class CoordinatorPreprocessor {
                     selector.computeScanRangeAssignment();
                 }
             }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(assignment.toDebugString());
+            }
         }
     }
 
@@ -1422,14 +1425,6 @@ public class CoordinatorPreprocessor {
         public TUniqueId getInstanceId() {
             return instanceId;
         }
-    }
-
-    /**
-     * map from an impalad host address to the per-node assigned scan ranges;
-     * records scan range assignment for a single fragment
-     */
-    static class FragmentScanRangeAssignment extends
-            HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
     }
 
     static class BucketSeqToScanRange
