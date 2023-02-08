@@ -51,7 +51,7 @@
 - INSERT INTO 可能导致 BE 崩溃。[#14818](https://github.com/StarRocks/starrocks/pull/14818)
 - JAVA UDF 可能导致 BE 崩溃。[#13947](https://github.com/StarRocks/starrocks/pull/13947)
 - Partial Update 时副本 Clone 可能导致 BE 崩溃且无法重启。[#13683](https://github.com/StarRocks/starrocks/pull/13683)
-- Colocated Join 可能不生效。[#13561](https://github.com/StarRocks/starrocks/pull/13561)
+- Colocate Join 可能不生效。[#13561](https://github.com/StarRocks/starrocks/pull/13561)
 
 ### 行为变更
 
