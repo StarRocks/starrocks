@@ -83,7 +83,6 @@ public class CreateMaterializedViewTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
-        FeConstants.runningUnitTest = true;
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
@@ -1534,13 +1533,13 @@ public class CreateMaterializedViewTest {
     @Test
     public void testAsSelectItemNoAlias() {
         String sql = "create materialized view mv1 " +
-                "partition by ss " +
+                "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")" +
-                "as select date_trunc('month',tbl1.k1), k2 from tbl1;";
+                "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {

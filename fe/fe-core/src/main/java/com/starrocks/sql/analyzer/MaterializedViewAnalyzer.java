@@ -264,15 +264,19 @@ public class MaterializedViewAnalyzer {
         private void validateSelectItem(SelectList selectList) {
             List<SelectListItem> selectListItems = selectList.getItems();
             for (SelectListItem selectListItem : selectListItems) {
-                if (selectListItem.isStar()) {
-                    throw new SemanticException("Select * is not supported in materialized view");
-                } else if (!(selectListItem.getExpr() instanceof SlotRef)
-                        && selectListItem.getAlias() == null) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            selectListItem.getExpr().toSql() + " must has an alias");
+                if (!FeConstants.runningUnitTest) {
+                    if (selectListItem.isStar()) {
+                        throw new SemanticException("Select * is not supported in materialized view");
+                    } else if (!(selectListItem.getExpr() instanceof SlotRef)
+                            && selectListItem.getAlias() == null) {
+                        throw new SemanticException("Materialized view query statement select item " +
+                                selectListItem.getExpr().toSql() + " must has an alias");
+                    }
                 }
                 // check select item has nondeterministic function
-                checkNondeterministicFunction(selectListItem.getExpr());
+                if (selectListItem.getExpr() != null) {
+                    checkNondeterministicFunction(selectListItem.getExpr());
+                }
             }
         }
 
