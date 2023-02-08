@@ -202,6 +202,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         THudiTable tHudiTable = new THudiTable();
         tHudiTable.setLocation(getTableLocation());
 
+        String loc = tHudiTable.getLocation();
+        loc = loc.replace("emr-header-1.cluster-49091:9000", "mycluster");
+        tHudiTable.setLocation(loc);
+
         // columns and partition columns
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
