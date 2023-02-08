@@ -111,13 +111,13 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
-- 从 Kafka 导入数据的时候，如果导入过程中有复杂的多表关联和 ETL 预处理，可以先使用 Apache Flink® 对数据进行处理，然后再通过 Stream Load 把数据导入到 StarRocks 中。StarRocks 提供标准的 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 插件，可以帮助您把 Flink 中的数据导入到 StarRocks。
+- 从 Kafka 导入数据时，推荐使用 [Routine Load](../loading/RoutineLoad.md) 实现导入。如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
 
-- 如果要导入 Hive 文件，除了可以使用 [Spark Load](../loading/SparkLoad.md) 和 [Broker Load](../loading/BrokerLoad.md) 以外，推荐使用 [Hive 外部表](../data_source/External_table.md#hive-外表)的方式实现导入。
+- 从 Hive 导入数据时，推荐创建 [Hive 外部表](../data_source/External_table#hive-外表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
 
-- 如果要导入 MySQL 数据，除了可以使用 [starrockswriter](../loading/DataX-starrocks-writer.md) 以外，推荐通过 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)的方式，使用 INSERT INTO SELECT 语句实现导入。
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
 
-- 对于 Oracle、PostgreSQL 等数据源，推荐使用 [starrockswriter](../loading/DataX-starrocks-writer.md) 实现导入。
+- 从 Oracle、PostgreSQL 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
