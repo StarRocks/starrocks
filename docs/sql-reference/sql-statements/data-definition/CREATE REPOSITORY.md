@@ -2,7 +2,7 @@
 
 ## Description
 
-Creates a repository in a remote storage system that is used to store data snapshots for [Backup and restore data](../../../administration/Backup_and_restore.md).
+Creates a repository in a remote storage system that is used to store data snapshots for [backing up and restoring data](../../../administration/Backup_and_restore.md).
 
 > **CAUTION**
 >
