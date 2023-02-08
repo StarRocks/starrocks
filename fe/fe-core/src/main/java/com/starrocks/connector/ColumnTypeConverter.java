@@ -514,18 +514,7 @@ public class ColumnTypeConverter {
             return false;
         }
 
-        if (base.getStrLen() != other.getStrLen()) {
-            return false;
-        }
-
-        if (base.getPrecision() != other.getPrecision()) {
-            return false;
-        }
-
-        if (base.getScale() != other.getScale()) {
-            return false;
-        }
-
         return true;
     }
 }
+
