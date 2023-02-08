@@ -157,4 +157,9 @@ public class SchemaScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
 }

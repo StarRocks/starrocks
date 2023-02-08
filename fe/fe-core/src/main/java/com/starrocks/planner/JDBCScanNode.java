@@ -136,6 +136,11 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
+    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.JDBC_SCAN_NODE;
         msg.jdbc_scan_node = new TJDBCScanNode();

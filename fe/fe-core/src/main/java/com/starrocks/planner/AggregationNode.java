@@ -345,6 +345,11 @@ public class AggregationNode extends PlanNode {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
     private void disableCacheIfHighCardinalityGroupBy(FragmentNormalizer normalizer) {
         if (ConnectContext.get() == null || getCardinality() == -1) {
             return;

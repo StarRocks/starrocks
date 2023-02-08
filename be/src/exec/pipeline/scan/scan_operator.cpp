@@ -539,6 +539,8 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
     }
 
+    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), ops);
+
     return ops;
 }
 } // namespace starrocks::pipeline

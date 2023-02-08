@@ -259,6 +259,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
                     .append(variables.getEnableAdaptiveSinkDop())
                     .append(",");
+            sb.append(SessionVariable.ENABLE_RUNTIME_ADAPTIVE_DOP).append("=")
+                    .append(variables.isEnableRuntimeAdaptiveDop())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");

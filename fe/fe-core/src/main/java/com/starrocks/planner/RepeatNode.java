@@ -167,6 +167,11 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
         // note(yan): repeat node may generate null values, and if runtime filter does not accept null value
         // we have opportunity to filter those values out.

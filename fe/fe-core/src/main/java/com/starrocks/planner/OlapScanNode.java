@@ -818,6 +818,11 @@ public class OlapScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+
     /**
      * Below function is added by new analyzer
      */

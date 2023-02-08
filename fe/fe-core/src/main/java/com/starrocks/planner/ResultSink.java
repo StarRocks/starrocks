@@ -129,4 +129,10 @@ public class ResultSink extends DataSink {
     public boolean canUsePipeLine() {
         return true;
     }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC ||
+                sinkType == TResultSinkType.VARIABLE;
+    }
 }

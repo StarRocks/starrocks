@@ -133,6 +133,7 @@ set(EXEC_FILES
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
+    pipeline/source_operator.cpp
     pipeline/limit_operator.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
@@ -211,6 +212,11 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    pipeline/adaptive/collect_stats_sink_operator.cpp
+    pipeline/adaptive/collect_stats_source_operator.cpp
+    pipeline/adaptive/collect_stats_context.cpp
+    pipeline/adaptive/lazy_instantiate_drivers_operator.cpp
+    pipeline/adaptive/utils.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
     workgroup/work_group.cpp

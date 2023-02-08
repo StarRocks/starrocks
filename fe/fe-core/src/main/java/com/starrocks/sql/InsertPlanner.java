@@ -210,6 +210,7 @@ public class InsertPlanner {
                 sinkFragment.setHasOlapTableSink();
                 sinkFragment.setForceSetTableSinkDop();
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                sinkFragment.disableRuntimeAdaptiveDop();
             }
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);

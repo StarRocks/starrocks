@@ -99,4 +99,8 @@ public abstract class DataSink {
     public boolean canUsePipeLine() {
         return false;
     }
+
+    public boolean canUseRuntimeAdaptiveDop() {
+        return false;
+    }
 }
