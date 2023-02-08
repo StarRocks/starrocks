@@ -1997,7 +1997,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql;
         String plan;
 
-        // Partition columns include aggregation grouping columns, so need exchange between PartitionTopN and Analytic.
+        // Partition columns include aggregation grouping columns, so needdn't exchange between PartitionTopN and Analytic.
         {
             sql = "with " +
                     "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
