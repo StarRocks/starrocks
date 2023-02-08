@@ -300,8 +300,6 @@ public class StarOSAgent {
 
     // the final func
     public long getPrimaryBackendIdByShard(long shardId, long workerGroupId) throws UserException {
-        // for debug
-        LOG.info("enter getPrimaryBackendIdByShard, workerGroupId is {}", workerGroupId);
         List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
@@ -435,7 +433,11 @@ public class StarOSAgent {
         int beBrpcPort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_brpc_port"));
 
         Backend backend = new Backend(workerInfo.getWorkerId(), pair[0], heartbeatPort);
-        backend.setIsAlive(true);
+        if (workerInfo.getWorkerState() == WorkerState.OFF) {
+            backend.setIsAlive(false);
+        } else {
+            backend.setIsAlive(true);
+        }
         backend.setBePort(bePort);
         backend.setHttpPort(beHttpPort);
         backend.setBrpcPort(beBrpcPort);

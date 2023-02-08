@@ -459,7 +459,7 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public void checkClusterCapacity() throws DdlException {
-        throw new SemanticException("not implemented");
+
     }
 
     @Override
