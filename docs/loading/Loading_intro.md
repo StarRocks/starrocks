@@ -112,7 +112,7 @@ You can determine the loading method of your choice based on your business scena
 
 - When you load data from Kafka, we recommend that you use [Routine Load](../loading/RoutineLoad.md). If the data requires multi-table joins and extract, transform and load (ETL) operations, we recommend that you use Apache Flink® to read and pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in developed by StarRocks to load the pre-processed data into StarRocks.
 
-- When you load data from Hive, we recommend that you create a [Hive catalog](../data_source/catalog/hive_catalog.md) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can run a [Broker Load](../loading/BrokerLoad.md) job to load the data.
+- When you load data from Hive, we recommend that you create a [Hive external table](../data_source/External_table.md#hive-external-table) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can run a [Broker Load](../loading/BrokerLoad.md) job to load the data.
 
 - When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#mysql-external-table) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can use [DataX](../loading/DataX-starrocks-writer.md) to load the data. If you want to load data in real time, we recommend that you follow the instructions provided in [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md).
 
