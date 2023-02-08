@@ -113,7 +113,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - 从 Kafka 导入数据时，推荐使用 [Routine Load](../loading/RoutineLoad.md) 实现导入。如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
 
-- 从 Hive 导入数据时，推荐创建 [Hive 外部表](../data_source/External_table#hive-外表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
+- 从 Hive 导入数据时，推荐创建 [Hive catalog](../data_source/catalog/hive_catalog.md)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
 
 - 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
 
