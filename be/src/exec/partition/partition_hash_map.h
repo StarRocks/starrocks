@@ -362,6 +362,10 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
               buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
 
     bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+        if (is_downgrade) {
+            return is_downgrade;
+        }
+
         size_t num_rows = chunk->num_rows();
         slice_sizes.assign(num_rows, 0);
 
@@ -424,6 +428,10 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase 
 
     bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         DCHECK(fixed_byte_size != -1);
+
+        if (is_downgrade) {
+            return is_downgrade;
+        }
 
         size_t num_rows = chunk->num_rows();
         slice_sizes.assign(num_rows, 0);
