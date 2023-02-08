@@ -10,7 +10,7 @@ StarRocks 采用 MPP (Massively Parallel Processing) 分布式执行框架。在
 
 ![MPP1](../assets/1.2-4.png)
 
-与很多数据分析系统采用的 Scatter-Gather 分布式执行框架不同，MPP分布式执行框架可以利用更多的资源处理查询请求**。**在 Scatter-Gather 框架中，只有 Gather 节点能处理最后一级的汇总计算。**而在 MPP 框架中，数据会被 Shuffle 到多个节点，并且由多个节点来完成最后的汇总计算**。在复杂计算时（比如高基数 Group By，大表 Join 等操作），StarRocks 的 MPP 框架相对于     Scatter-Gather 模式的产品有明显的性能优势。
+与很多数据分析系统采用的 Scatter-Gather 分布式执行框架不同，MPP分布式执行框架可以利用更多的资源处理查询请求**。**在 Scatter-Gather 框架中，只有 Gather 节点能处理最后一级的汇总计算。**而在 MPP 框架中，数据会被 Shuffle 到多个节点，并且由多个节点来完成最后的汇总计算**。在复杂计算时（比如高基数 Group By，大表 Join 等操作），StarRocks 的 MPP 框架相对于 Scatter-Gather 模式的产品有明显的性能优势。
 
 ## 全面向量化执行引擎
 
