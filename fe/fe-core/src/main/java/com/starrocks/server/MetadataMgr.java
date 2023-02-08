@@ -139,7 +139,13 @@ public class MetadataMgr {
 
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        if (connectorTable != null) {
+            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
+            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().setTableInfoForConnectorTable(catalogName,
+                    dbName, connectorTable);
+        }
+        return connectorTable;
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
