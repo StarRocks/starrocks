@@ -13,12 +13,12 @@ public class ConnectorTableId extends Id<ConnectorTableId> {
     public static IdGenerator<ConnectorTableId> createGenerator() {
         return new IdGenerator<ConnectorTableId>() {
             @Override
-            public ConnectorTableId getNextId() {
+            public synchronized ConnectorTableId getNextId() {
                 return new ConnectorTableId(nextId++);
             }
 
             @Override
-            public ConnectorTableId getMaxId() {
+            public synchronized ConnectorTableId getMaxId() {
                 return new ConnectorTableId(nextId - 1);
             }
         };
