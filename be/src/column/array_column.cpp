@@ -34,7 +34,9 @@ void ArrayColumn::check_or_die() const {
 }
 
 ArrayColumn::ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offsets)
-        : _elements(std::move(elements)), _offsets(std::move(offsets)) {
+        : _elements(elements->is_nullable() ? std::move(elements)
+                                            : NullableColumn::create(std::move(elements), NullColumn::create())),
+          _offsets(std::move(offsets)) {
     if (_offsets->empty()) {
         _offsets->append(0);
     }
