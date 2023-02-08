@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HudiScannerUtils {
     private static final DateTimeFormatter DATETIME_FORMATTER;
-    public static final Map<String, String> MARK_TYPE_VALUE_MAPPING = new HashMap<>();
+    public static final Map<String, String> HIVE_TYPE_MAPPING = new HashMap<>();
     public static Map<ColumnType.TypeValue, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
 
     static {
@@ -37,8 +37,8 @@ public class HudiScannerUtils {
         builder.append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         DATETIME_FORMATTER = builder.toFormatter();
 
-        MARK_TYPE_VALUE_MAPPING.put("TimestampMicros", "timestamp");
-        MARK_TYPE_VALUE_MAPPING.put("TimestampMillis", "timestamp");
+        HIVE_TYPE_MAPPING.put("TimestampMicros", "timestamp");
+        HIVE_TYPE_MAPPING.put("TimestampMillis", "timestamp");
 
         TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MICROS, TimeUnit.MICROSECONDS);
         TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MILLIS, TimeUnit.MILLISECONDS);
