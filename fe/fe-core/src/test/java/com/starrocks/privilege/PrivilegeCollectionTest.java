@@ -29,7 +29,7 @@ public class PrivilegeCollectionTest {
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
         PrivilegeType delete = PrivilegeType.DELETE;
-        TablePEntryObject table1 = new TablePEntryObject(1, 2);
+        TablePEntryObject table1 = new TablePEntryObject("1", "2");
         ObjectType system = ObjectType.SYSTEM;
 
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -90,7 +90,7 @@ public class PrivilegeCollectionTest {
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
         PrivilegeType delete = PrivilegeType.DELETE;
-        TablePEntryObject table1 = new TablePEntryObject(1, 2);
+        TablePEntryObject table1 = new TablePEntryObject("1", "2");
 
         // grant select on table1 with grant option
         collection.grant(table, Arrays.asList(select), Arrays.asList(table1), true);
@@ -145,10 +145,10 @@ public class PrivilegeCollectionTest {
         ObjectType table = ObjectType.TABLE;
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
-        TablePEntryObject table1 = new TablePEntryObject(1, 2);
-        TablePEntryObject allTablesInDb = new TablePEntryObject(1, TablePEntryObject.ALL_TABLES_ID);
+        TablePEntryObject table1 = new TablePEntryObject("1", "2");
+        TablePEntryObject allTablesInDb = new TablePEntryObject("1", TablePEntryObject.ALL_TABLES_UUID);
         TablePEntryObject allTablesInALLDb = new TablePEntryObject(
-                TablePEntryObject.ALL_DATABASE_ID, TablePEntryObject.ALL_TABLES_ID);
+                TablePEntryObject.ALL_DATABASE_UUID, TablePEntryObject.ALL_TABLES_UUID);
 
         // grant select,insert on db1.table1
         collection.grant(table, Arrays.asList(select, insert), Arrays.asList(table1), false);
@@ -192,10 +192,10 @@ public class PrivilegeCollectionTest {
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
 
-        TablePEntryObject table1 = new TablePEntryObject(111, 222);
+        TablePEntryObject table1 = new TablePEntryObject("111", "222");
         ObjectType db = ObjectType.DATABASE;
         PrivilegeType drop = PrivilegeType.DROP;
-        DbPEntryObject db1 = new DbPEntryObject(333);
+        DbPEntryObject db1 = new DbPEntryObject("333");
 
         PrivilegeCollection collection = new PrivilegeCollection();
         PrivilegeCollection selectTable = new PrivilegeCollection();
@@ -245,7 +245,7 @@ public class PrivilegeCollectionTest {
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
         PrivilegeType delete = PrivilegeType.DELETE;
-        TablePEntryObject table1 = new TablePEntryObject(111, 222);
+        TablePEntryObject table1 = new TablePEntryObject("111", "222");
         PrivilegeCollection.PrivilegeEntry entry = new PrivilegeCollection.PrivilegeEntry(
                 new ActionSet(Arrays.asList(select, insert)),
                 table1,
