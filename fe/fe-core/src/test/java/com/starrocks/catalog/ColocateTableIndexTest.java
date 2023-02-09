@@ -278,7 +278,7 @@ public class ColocateTableIndexTest {
                 100, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
         Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
 
-        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
+        Assert.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
         Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10001)));
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);

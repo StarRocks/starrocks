@@ -481,6 +481,7 @@ public class StarOSAgent {
             } else {
                 QuitMetaGroupInfo quitInfo = QuitMetaGroupInfo.newBuilder()
                         .setMetaGroupId(metaGroupId)
+                        .setDeleteMetaGroupIfEmpty(true)
                         .build();
                 builder.setQuitInfo(quitInfo);
             }
@@ -491,6 +492,17 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new DdlException("Failed to update meta group. error: " + e.getMessage());
         }
+    }
+
+    public boolean queryMetaGroupStable(long metaGroupId) {
+        prepare();
+
+        try {
+            return client.queryMetaGroupStable(serviceId, metaGroupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
+        }
+        return false; // return false if any error happens
     }
 
     // Mocked
