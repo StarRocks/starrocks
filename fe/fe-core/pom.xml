@@ -1003,6 +1003,39 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- package starrocks-fe.jar and sqlcheck.jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.starrocks.StarRocksFE</mainClass>
+                            <addClasspath>true</addClasspath>
+                            <!--  <classpathPrefix>lib/</classpathPrefix>  -->
+                        </manifest>
+                    </archive>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>sqlcheck-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>sqlcheck</finalName>
+                            <archive>
+                                <manifest>
+                                    <addClasspath>true</addClasspath>
+                                    <mainClass>com.starrocks.sql.parser.SQLChecker</mainClass>
+                                </manifest>
+                            </archive>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
 
         <pluginManagement>

@@ -25,7 +25,7 @@ class ErrorHandler extends BaseErrorListener {
                             String message, RecognitionException e) {
         String errorMessage = String.format("You have an error in your SQL syntax; " +
                 "check the manual that corresponds to your MySQL server version for the right syntax to use " +
-                "near '%s' at line %d", ((Token) offendingSymbol).getText(), line);
+                "near '%s' at line %d:%d", ((Token) offendingSymbol).getText(), line, charPositionInLine);
         throw new ParsingException(errorMessage);
     }
 }
