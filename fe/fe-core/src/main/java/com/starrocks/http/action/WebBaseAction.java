@@ -199,6 +199,8 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setCurrentRoleIds(currentUser);
+
             ctx.setThreadLocalInfo();
 
             return true;
@@ -244,6 +246,8 @@ public class WebBaseAction extends BaseAction {
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                ctx.setCurrentRoleIds(sessionValue.currentUser);
+
                 ctx.setThreadLocalInfo();
                 return true;
             }

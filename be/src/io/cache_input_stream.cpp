@@ -26,8 +26,8 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream)
-        : _filename(std::move(filename)), _stream(std::move(stream)), _offset(0) {
+CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
+        : _filename(filename), _stream(std::move(stream)), _offset(0) {
     _size = _stream->get_size().value();
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;

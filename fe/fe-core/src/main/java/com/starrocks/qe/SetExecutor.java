@@ -121,7 +121,7 @@ public class SetExecutor {
     private void deriveUserVariableExpressionResult(UserVariable userVariable) {
         QueryStatement queryStatement = ((Subquery) userVariable.getUnevaluatedExpression()).getQueryStatement();
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
-                ConnectContext.get(), true, TResultSinkType.VARIABLE);
+                ConnectContext.get(), TResultSinkType.VARIABLE);
         StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {

@@ -12,31 +12,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // set role all -> roles = null, all = true
 // set role all except role1, role2 -> roles = [role1, role2], all = true
 // set role role1, role2 -> roles = [role1, role2], all = false;
 public class SetRoleStmt extends StatementBase {
-    private List<String> roles;
-    private boolean all;
+    private enum SetRoleType {
+        ALL,
+        DEFAULT,
+        NONE,
+        ROLE
+    }
 
-    public SetRoleStmt(List<String> roles, boolean all) {
-        this.roles = roles;
-        this.all = all;
+    private final List<String> roles = new ArrayList<>();
+    private SetRoleType setRoleType;
+
+    public SetRoleStmt(List<String> roles) {
+        this.roles.addAll(roles);
+        this.setRoleType = SetRoleType.ROLE;
     }
 
     public List<String> getRoles() {
         return roles;
     }
 
+    public void setTypeAll() {
+        setRoleType = SetRoleType.ALL;
+    }
+
     public boolean isAll() {
-        return all;
+        return setRoleType.equals(SetRoleType.ALL);
+    }
+
+    public void setTypeDefault() {
+        setRoleType = SetRoleType.DEFAULT;
+    }
+
+    public boolean isDefault() {
+        return setRoleType.equals(SetRoleType.DEFAULT);
+    }
+
+    public void setTypeNone() {
+        setRoleType = SetRoleType.NONE;
+    }
+
+    public boolean isNone() {
+        return setRoleType.equals(SetRoleType.NONE);
     }
 
     @Override

@@ -158,7 +158,7 @@ public:
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
-    Status add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas);
     void modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                          const std::vector<RowsetMetaSharedPtr>& to_delete);
@@ -167,7 +167,7 @@ public:
     void revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
     const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
     const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
-    Status add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    void add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);

@@ -830,6 +830,35 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testCrossJoin() throws Exception {
+        createAndRefreshMv("test", "cross_join_mv1", "create materialized view cross_join_mv1" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                " from t0 join test_all_type" +
+                " where t0.v1 < 100");
+
+        String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+        String plan1 = getFragmentPlan(query1);
+        System.out.println(plan1);
+        PlanTestBase.assertContains(plan1, "cross_join_mv1");
+        dropMv("test", "cross_join_mv1");
+
+        createAndRefreshMv("test", "cross_join_mv2", "create materialized view cross_join_mv2" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps1.empid, emps2.name as name1, depts.name as name2 from emps emps1 join depts" +
+                " join emps emps2 on (emps1.empid = emps2.empid)");
+        String query22 = "select depts.name as name2" +
+                " from emps emps2 join depts" +
+                " join emps emps1 on (emps1.empid = emps2.empid)";
+        String plan22 = getFragmentPlan(query22);
+        PlanTestBase.assertContains(plan22, "cross_join_mv2");
+        dropMv("test", "cross_join_mv2");
+    }
+
+    @Test
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +

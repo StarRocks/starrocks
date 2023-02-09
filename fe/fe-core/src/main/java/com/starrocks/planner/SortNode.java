@@ -337,6 +337,11 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
     public boolean canPushDownRuntimeFilter() {
         return !useTopN;
     }

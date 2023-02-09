@@ -24,6 +24,7 @@
 namespace starrocks {
 
 SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet(tablet) {
+    _compaction_type = INVALID_COMPACTION;
     _max_level_size =
             config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
 }
@@ -50,7 +51,9 @@ bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* 
         _compaction_type = INVALID_COMPACTION;
         *score = 0;
     }
-    *type = _compaction_type;
+    if (type) {
+        *type = _compaction_type;
+    }
 
     return _compaction_type != INVALID_COMPACTION;
 }
@@ -217,8 +220,7 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
                     order_levels.emplace_back(std::move(level));
                 }
 
-                if (transient_rowsets.empty() ||
-                    (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0)) {
+                if (transient_rowsets.empty() || transient_rowsets[0]->start_version() != 0) {
                     segment_num = 0;
                     transient_rowsets.clear();
                     level_size = -1;

@@ -273,7 +273,6 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         source_operator = std::make_shared<LocalMergeSortSourceOperatorFactory>(context->next_operator_id(), id(),
                                                                                 sort_context_factory);
     }
-    // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));

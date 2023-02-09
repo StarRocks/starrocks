@@ -116,6 +116,7 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowStmt;
@@ -258,6 +259,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
             sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
                     .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
+            sb.append(SessionVariable.ENABLE_RUNTIME_ADAPTIVE_DOP).append("=")
+                    .append(variables.isEnableRuntimeAdaptiveDop())
                     .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
@@ -523,6 +527,8 @@ public class StmtExecutor {
                 handleExecAsStmt();
             } else if (parsedStmt instanceof SetRoleStmt) {
                 handleSetRole();
+            } else if (parsedStmt instanceof SetDefaultRoleStmt) {
+                handleSetDefaultRole();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -956,12 +962,16 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() {
+    private void handleExecAsStmt() throws PrivilegeException, UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
     private void handleSetRole() throws PrivilegeException, UserException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
+    }
+
+    private void handleSetDefaultRole() throws PrivilegeException, UserException {
+        SetDefaultRoleExecutor.execute((SetDefaultRoleStmt) parsedStmt, context);
     }
 
     private void handleUnsupportedStmt() {
