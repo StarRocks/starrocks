@@ -155,7 +155,7 @@ public class AnalyzerUtils {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             // check SELECT action on any object(table/view/mv) in db
-            if (!PrivilegeManager.checkActionInDb(session, dbName, "SELECT")) {
+            if (!PrivilegeManager.checkActionInDb(session, dbName, PrivilegeType.SELECT)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                                 "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
                         fnName, dbName), ErrorType.USER_ERROR);

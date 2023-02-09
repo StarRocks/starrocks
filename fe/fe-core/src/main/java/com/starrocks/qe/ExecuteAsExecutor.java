@@ -39,5 +39,6 @@ public class ExecuteAsExecutor {
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
         ctx.setCurrentUserIdentity(stmt.getToUser());
+        ctx.setCurrentRoleIds(stmt.getToUser());
     }
 }

@@ -111,7 +111,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.Action;
+import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeCollection;
@@ -352,7 +352,7 @@ public class ShowExecutor {
             handleShowComputeNodes();
         } else if (stmt instanceof ShowAuthenticationStmt) {
             handleShowAuthentication();
-        }  else if (stmt instanceof ShowCreateExternalCatalogStmt) {
+        } else if (stmt instanceof ShowCreateExternalCatalogStmt) {
             handleShowCreateExternalCatalog();
         } else {
             handleEmtpy();
@@ -439,8 +439,8 @@ public class ShowExecutor {
                         // TODO: external table should check table action after PrivilegeManager support it.
                         if (baseTable != null && baseTable.isLocalTable() && !PrivilegeManager.
                                 checkTableAction(connectContext, baseTableInfo.getDbName(),
-                                baseTableInfo.getTableName(),
-                                PrivilegeType.SELECT)) {
+                                        baseTableInfo.getTableName(),
+                                        PrivilegeType.SELECT)) {
                             baseTableHasPrivilege.set(false);
                         }
                     });
@@ -867,7 +867,7 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType())  {
+        switch (column.getType().getPrimitiveType()) {
             case TINYINT:
                 sb.append("tinyint(4)");
                 break;
@@ -903,7 +903,7 @@ public class ShowExecutor {
                 sb.append("binary(1048576)");
         }
         sb.append(" DEFAULT NULL");
-        return  sb.toString();
+        return sb.toString();
     }
 
     private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
@@ -1884,16 +1884,17 @@ public class ShowExecutor {
                         infos.add(info);
                     }
 
-                    Map<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
                             rolePrivilegeCollection.getTypeToPrivilegeEntryList();
-                    for (Map.Entry<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+
+                    for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
                             : typeToPrivilegeEntryList.entrySet()) {
                         for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
                             List<String> info = new ArrayList<>();
                             String roleName = showStmt.getRole();
                             info.add(roleName);
 
-                            ObjectType objectType = privilegeManager.getObjectType(typeToPrivilegeEntry.getKey());
+                            ObjectType objectType = typeToPrivilegeEntry.getKey();
                             if (objectType.equals(ObjectType.CATALOG)) {
                                 CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                                 if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
@@ -1917,7 +1918,11 @@ public class ShowExecutor {
                             GrantPrivilegeStmt grantPrivilegeStmt =
                                     new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), roleName);
                             grantPrivilegeStmt.setObjectType(objectType);
-                            grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
+
+                            ActionSet actionSet = privilegeEntry.getActionSet();
+                            List<PrivilegeType> privList = privilegeManager.analyzeActionSet(objectType, actionSet);
+                            grantPrivilegeStmt.setPrivilegeTypes(privList);
+
                             grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
                             info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
 
@@ -1945,15 +1950,15 @@ public class ShowExecutor {
                                 }).collect(Collectors.toList()), userIdentity))));
                     }
 
-                    Map<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
                             userPrivilegeCollection.getTypeToPrivilegeEntryList();
-                    for (Map.Entry<Short, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+                    for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
                             : typeToPrivilegeEntryList.entrySet()) {
                         for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
                             List<String> info = new ArrayList<>();
                             info.add(userIdentity.toString());
 
-                            ObjectType objectType = privilegeManager.getObjectType(typeToPrivilegeEntry.getKey());
+                            ObjectType objectType = typeToPrivilegeEntry.getKey();
                             if (objectType.equals(ObjectType.CATALOG)) {
                                 CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                                 if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
@@ -1969,17 +1974,6 @@ public class ShowExecutor {
                                     }
                                     Catalog catalog = catalogOptional.get();
                                     info.add(catalog.getName());
-
-                                    List<String> privList = new ArrayList<>();
-                                    for (Map.Entry<String, Action> actionEntry
-                                            : ObjectType.CATALOG.getActionMap().entrySet()) {
-                                        if (privilegeEntry.getActionSet().contains(actionEntry.getValue())) {
-                                            privList.add(actionEntry.getValue().getName());
-                                        }
-                                    }
-                                    GrantPrivilegeStmt grantPrivilegeStmt =
-                                            new GrantPrivilegeStmt(privList, ObjectType.CATALOG.name(), userIdentity);
-                                    info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
                                 }
                             } else {
                                 info.add("default");
@@ -1988,7 +1982,11 @@ public class ShowExecutor {
                             GrantPrivilegeStmt grantPrivilegeStmt =
                                     new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), userIdentity);
                             grantPrivilegeStmt.setObjectType(objectType);
-                            grantPrivilegeStmt.setActionList(privilegeEntry.getActionSet());
+
+                            ActionSet actionSet = privilegeEntry.getActionSet();
+                            List<PrivilegeType> privList = privilegeManager.analyzeActionSet(objectType, actionSet);
+                            grantPrivilegeStmt.setPrivilegeTypes(privList);
+
                             grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
                             info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
 
@@ -2358,7 +2356,7 @@ public class ShowExecutor {
     private void handleShowCreateExternalCatalog() {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog =  connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);

@@ -114,7 +114,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant select,insert,delete on db1.tbl1 to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant select,insert_priv,delete on table db1.tbl1 to test_user";
+        sql = "grant select,insert,delete on table db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "revoke create_table on database db1 from test_user";
@@ -142,7 +142,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find action SELECT in"));
+            Assert.assertTrue(e.getMessage().contains("Cant grant SELECT to object DATABASE"));
         }
 
         sql = "grant insert on table dbx to test_user";

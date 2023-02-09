@@ -23,17 +23,18 @@ import java.util.Arrays;
 import java.util.List;
 
 public class ActionSetTest {
-    private static final Action SELECT = new Action((short) 1, "SELECT");
-    private static final Action INSERT = new Action((short) 2, "INSERT");
-    private static final Action DELETE = new Action((short) 3, "DELETE");
+    private static final PrivilegeType SELECT = PrivilegeType.SELECT;
+    private static final PrivilegeType INSERT = PrivilegeType.INSERT;
+    private static final PrivilegeType DELETE = PrivilegeType.DELETE;
+
     @Test
     public void testBasic() {
-        List<Action> l = new ArrayList<>();
+        List<PrivilegeType> l = new ArrayList<>();
 
         // only have select
         l.add(SELECT);
         ActionSet s = new ActionSet(l);
-        Assert.assertEquals(2, s.bitSet);
+        Assert.assertEquals(128, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
         Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT))));
         Assert.assertFalse(s.contains(INSERT));
@@ -44,10 +45,10 @@ public class ActionSetTest {
 
         // add select + insert
         l.clear();
-        l.add(SELECT);
-        l.add(INSERT);
+        l.add(PrivilegeType.SELECT);
+        l.add(PrivilegeType.INSERT);
         s.add(new ActionSet(l));
-        Assert.assertEquals(2 + 4, s.bitSet);
+        Assert.assertEquals(192, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
         Assert.assertTrue(s.contains(INSERT));
         Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
@@ -59,7 +60,7 @@ public class ActionSetTest {
         l.clear();
         l.add(DELETE);
         s.remove(new ActionSet(l));
-        Assert.assertEquals(2 + 4, s.bitSet);
+        Assert.assertEquals(192, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
         Assert.assertTrue(s.contains(INSERT));
         Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
@@ -87,11 +88,11 @@ public class ActionSetTest {
                 new ActionSet(Arrays.asList(INSERT, DELETE)));
         System.out.println(res.bitSet);
         Assert.assertTrue(res.contains(DELETE));
-        Assert.assertEquals(8L, res.bitSet);
+        Assert.assertEquals(16, res.bitSet);
 
         res = new ActionSet(Arrays.asList(INSERT)).difference(new ActionSet(Arrays.asList(INSERT, DELETE)));
         Assert.assertTrue(res.contains(DELETE));
-        Assert.assertEquals(8L, res.bitSet);
+        Assert.assertEquals(16, res.bitSet);
 
         res = new ActionSet(Arrays.asList(INSERT, DELETE)).difference(new ActionSet(Arrays.asList(INSERT)));
         Assert.assertTrue(res.isEmpty());
@@ -103,10 +104,10 @@ public class ActionSetTest {
         ActionSet set1 = new ActionSet(Arrays.asList(SELECT, INSERT));
         ActionSet set2 = new ActionSet(set1);
         set2.add(new ActionSet(Arrays.asList(DELETE)));
-        Assert.assertEquals(6, set1.bitSet);
-        Assert.assertEquals(14, set2.bitSet);
+        Assert.assertEquals(192, set1.bitSet);
+        Assert.assertEquals(208, set2.bitSet);
         set1.remove(new ActionSet(Arrays.asList(INSERT)));
-        Assert.assertEquals(2, set1.bitSet);
-        Assert.assertEquals(14, set2.bitSet);
+        Assert.assertEquals(128, set1.bitSet);
+        Assert.assertEquals(208, set2.bitSet);
     }
 }
