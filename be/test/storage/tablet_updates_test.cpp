@@ -3193,4 +3193,143 @@ TEST_F(TabletUpdatesTest, load_snapshot_primary) {
     test_load_snapshot_primary(7, {3, 5, 7});
 }
 
+TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
+    _tablet = create_tablet(rand(), rand());
+
+    RowsetWriterContext writer_context;
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.rowset_id = rowset_id;
+    writer_context.tablet_id = _tablet->tablet_id();
+    writer_context.tablet_schema_hash = _tablet->schema_hash();
+    writer_context.partition_id = 0;
+    writer_context.rowset_path_prefix = _tablet->schema_hash_path();
+    writer_context.rowset_state = COMMITTED;
+    writer_context.tablet_schema = &_tablet->tablet_schema();
+    writer_context.version.first = 0;
+    writer_context.version.second = 0;
+    writer_context.segments_overlap = NONOVERLAPPING;
+    std::unique_ptr<RowsetWriter> writer;
+    EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+
+    // 1. upsert [0, 1, 2 ... 100)
+    {
+        std::vector<int64_t> keys;
+        for (int i = 0; i < 100; i++) {
+            keys.emplace_back(i);
+        }
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+    }
+    // 2. delete [0, 1, 2 ... 50)
+    {
+        Int64Column deletes;
+        for (int64_t i = 0; i < 50; i++) {
+            deletes.append_datum(Datum(i));
+        }
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, 0);
+        CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
+    }
+    // 3. upsert [0, 1, 2 ... 50)
+    {
+        std::vector<int64_t> keys;
+        for (int i = 0; i < 50; i++) {
+            keys.emplace_back(i);
+        }
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 2)));
+            cols[2]->append_datum(Datum((int32_t)(key % 100 + 3)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+    }
+
+    // 4. upsert [100, 102, 103 ... 200) and delete [50, 51, 52 ... 100)
+    {
+        std::vector<int64_t> keys;
+        for (int i = 100; i < 200; i++) {
+            keys.emplace_back(i);
+        }
+        Int64Column deletes;
+        for (int64_t i = 50; i < 100; i++) {
+            deletes.append_datum(Datum(i));
+        }
+
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+        }
+        CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
+    }
+    // 5. delete [150, 151, 152 ... 200)
+    {
+        Int64Column deletes;
+        for (int64_t i = 150; i < 200; i++) {
+            deletes.append_datum(Datum(i));
+        }
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, 0);
+        CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
+    }
+    RowsetSharedPtr rowset = *writer->build();
+    ASSERT_TRUE(_tablet->rowset_commit(2, rowset).ok());
+
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    TabletReader reader(_tablet, Version(0, 2), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    ASSERT_TRUE(iter != nullptr);
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 50; i++) {
+        keys.emplace_back(i);
+    }
+    for (int i = 100; i < 150; i++) {
+        keys.emplace_back(i);
+    }
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
+    auto& cols = full_chunk->columns();
+    for (int i = 0; i < 50; i++) {
+        cols[0]->append_datum(Datum(keys[i]));
+        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
+        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
+    }
+
+    for (int i = 50; i < 100; i++) {
+        cols[0]->append_datum(Datum(keys[i]));
+        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
+    }
+
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            ASSERT_TRUE(false);
+        }
+    }
+    ASSERT_TRUE(count == keys.size());
+}
+
 } // namespace starrocks
