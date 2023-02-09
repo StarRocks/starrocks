@@ -24,56 +24,56 @@ import java.util.List;
 import java.util.Objects;
 
 public class TablePEntryObject implements PEntryObject {
-    public static final long ALL_DATABASE_ID = -2; // -2 represent all databases
-    public static final long ALL_TABLES_ID = -3; // -3 represent all tables
+    public static final String ALL_DATABASE_UUID = "ALL_DATABASES_UUID"; // represent all databases
+    public static final String ALL_TABLES_UUID = "ALL_TABLES_UUID"; // represent all tables
 
     @SerializedName(value = "d")
-    protected long databaseId;
+    protected String databaseUUID;
     @SerializedName(value = "t")
-    protected long tableId;
+    protected String tableUUID;
 
-    public long getDatabaseId() {
-        return databaseId;
+    public String getDatabaseUUID() {
+        return databaseUUID;
     }
 
-    public long getTableId() {
-        return tableId;
+    public String getTableUUID() {
+        return tableUUID;
     }
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
         }
-        long dbId;
-        long tableId;
+        String dbUUID;
+        String tblUUID;
 
         if (tokens.get(0).equals("*")) {
-            dbId = ALL_DATABASE_ID;
-            tableId = ALL_TABLES_ID;
+            dbUUID = ALL_DATABASE_UUID;
+            tblUUID = ALL_TABLES_UUID;
         } else {
             Database database = mgr.getDb(tokens.get(0));
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
             }
-            dbId = database.getId();
+            dbUUID = database.getUUID();
 
             if (tokens.get(1).equals("*")) {
-                tableId = ALL_TABLES_ID;
+                tblUUID = ALL_TABLES_UUID;
             } else {
                 Table table = database.getTable(tokens.get(1));
                 if (table == null) {
                     throw new PrivObjNotFoundException("cannot find table " + tokens.get(1) + " in db " + tokens.get(0));
                 }
-                tableId = table.getId();
+                tblUUID = table.getUUID();
             }
         }
 
-        return new TablePEntryObject(dbId, tableId);
+        return new TablePEntryObject(dbUUID, tblUUID);
     }
 
-    protected TablePEntryObject(long databaseId, long tableId) {
-        this.tableId = tableId;
-        this.databaseId = databaseId;
+    protected TablePEntryObject(String databaseUUID, String tableUUID) {
+        this.tableUUID = tableUUID;
+        this.databaseUUID = databaseUUID;
     }
 
     /**
@@ -89,28 +89,29 @@ public class TablePEntryObject implements PEntryObject {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
-        if (other.databaseId == ALL_DATABASE_ID) {
+        if (Objects.equals(other.databaseUUID, ALL_DATABASE_UUID)) {
             return true;
         }
-        if (other.tableId == ALL_TABLES_ID) {
-            return databaseId == other.databaseId;
+        if (Objects.equals(other.tableUUID, ALL_TABLES_UUID)) {
+            return Objects.equals(databaseUUID, other.databaseUUID);
         }
-        return other.databaseId == databaseId && other.tableId == tableId;
+        return Objects.equals(other.databaseUUID, databaseUUID) && Objects.equals(other.tableUUID, tableUUID);
     }
 
     @Override
     public boolean isFuzzyMatching() {
-        return databaseId == ALL_DATABASE_ID || tableId == ALL_TABLES_ID;
+        return Objects.equals(databaseUUID, ALL_DATABASE_UUID) || Objects.equals(tableUUID, ALL_TABLES_UUID);
     }
 
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
+        // TODO(yiming): change validation method for external catalog
+        Database db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
         if (db == null) {
             return false;
         }
-        return globalStateMgr.getTableIncludeRecycleBin(db, this.tableId) != null;
+        return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
     }
 
     @Override
@@ -118,14 +119,26 @@ public class TablePEntryObject implements PEntryObject {
         if (!(obj instanceof TablePEntryObject)) {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
-        TablePEntryObject o = (TablePEntryObject) obj;
 
-        if (this.databaseId > o.databaseId) {
-            return 1;
-        } else if (this.databaseId < o.databaseId) {
+        TablePEntryObject o = (TablePEntryObject) obj;
+        // Always put the fuzzy matching object at the front of the privilege entry list
+        // when sorting in ascendant order.
+        if (Objects.equals(this.databaseUUID, o.databaseUUID)) {
+            if (Objects.equals(this.tableUUID, o.tableUUID)) {
+                return 0;
+            } else if (Objects.equals(this.tableUUID, ALL_TABLES_UUID)) {
+                return -1;
+            } else if (Objects.equals(o.tableUUID, ALL_TABLES_UUID)) {
+                return 1;
+            } else {
+                return this.tableUUID.compareTo(o.tableUUID);
+            }
+        } else if (Objects.equals(this.databaseUUID, ALL_DATABASE_UUID)) {
             return -1;
+        } else if (Objects.equals(o.databaseUUID, ALL_DATABASE_UUID)) {
+            return 1;
         } else {
-            return Long.compare(this.tableId, o.tableId);
+            return this.databaseUUID.compareTo(o.databaseUUID);
         }
     }
 
@@ -138,16 +151,16 @@ public class TablePEntryObject implements PEntryObject {
             return false;
         }
         TablePEntryObject that = (TablePEntryObject) o;
-        return databaseId == that.databaseId && tableId == that.tableId;
+        return Objects.equals(databaseUUID, that.databaseUUID) && Objects.equals(tableUUID, that.tableUUID);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseId, tableId);
+        return Objects.hash(databaseUUID, tableUUID);
     }
 
     @Override
     public PEntryObject clone() {
-        return new TablePEntryObject(databaseId, tableId);
+        return new TablePEntryObject(databaseUUID, tableUUID);
     }
 }

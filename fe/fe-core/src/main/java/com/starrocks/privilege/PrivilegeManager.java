@@ -200,8 +200,9 @@ public class PrivilegeManager {
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PUBLIC_ROLE_ID, publicRoleName);
             // GRANT SELECT ON ALL TABLES IN information_schema
             List<PEntryObject> object = Collections.singletonList(new TablePEntryObject(
-                    SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-            rolePrivilegeCollection.grant(ObjectType.TABLE, Collections.singletonList(PrivilegeType.SELECT), object, false);
+                    Long.toString(SystemId.INFORMATION_SCHEMA_DB_ID), TablePEntryObject.ALL_TABLES_UUID));
+            rolePrivilegeCollection.grant(ObjectType.TABLE, Collections.singletonList(PrivilegeType.SELECT), object,
+                    false);
 
             // 6. builtin user root
             UserPrivilegeCollection rootCollection = new UserPrivilegeCollection();

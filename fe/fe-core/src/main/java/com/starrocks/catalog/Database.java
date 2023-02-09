@@ -300,6 +300,17 @@ public class Database extends MetaObject implements Writable {
         return id;
     }
 
+    /**
+     * Get the unique id of database in string format, since we already ensure
+     * the uniqueness of id for internal database, we just convert it to string
+     * and return, for external database it's up to the implementation of connector.
+     *
+     * @return unique id of database in string format
+     */
+    public String getUUID() {
+        return Long.toString(id);
+    }
+
     public String getOriginName() {
         return fullQualifiedName;
     }
