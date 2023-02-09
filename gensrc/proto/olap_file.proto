@@ -147,6 +147,8 @@ message RowsetMetaPB {
     optional int64 total_row_size = 54;
     // some txn semantic information bind to this rowset
     optional RowsetTxnMetaPB txn_meta = 55;
+    // delete file index
+    repeated uint32 delfile_idxes = 56;
 }
 
 enum DataFileType {
