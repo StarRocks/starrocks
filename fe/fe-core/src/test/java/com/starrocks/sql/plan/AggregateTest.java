@@ -200,7 +200,7 @@ public class AggregateTest extends PlanTestBase {
         int originPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         try {
             int cpuCores = 8;
-            int expectedTotalDop = cpuCores / 2;
+            int expectedTotalDop = cpuCores;
             {
                 BackendCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
