@@ -71,8 +71,9 @@ public class TableProperty implements Writable {
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
     //    After checkpoint, we relay TableProperty::write to persist.
+    @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
-
+    @SerializedName(value = "hasForbitGlobalDict")
     private boolean hasForbitGlobalDict = false;
 
     public TableProperty(Map<String, String> properties) {
