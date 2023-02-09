@@ -262,4 +262,51 @@ a       b       c       d       e
         params.put("nested_fields", "e.c.b.b,e.c.a.$0");
         runScanOnParams(params);
     }
+
+    /*
+
+```
+CREATE TABLE `test_hudi_mor5` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` timestamp)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+```
+```
+insert into test_hudi_mor5 values('AA1', 20, 1, "1", cast(date_format("2021-01-01 00:00:00", "yyyy-MM-dd HH:mm:ss") as timestamp));
+```
+     */
+
+    Map<String, String> case5CreateScanTestParams() {
+        Map<String, String> params = new HashMap<>();
+        URL resource = TestHudiSliceScanner.class.getResource("/test_hudi_mor5");
+        String basePath = resource.getPath().toString();
+        params.put("base_path", basePath);
+        params.put("data_file_path",
+                basePath + "/07eeba07-b04d-42b5-9e31-35b1a22ea31d-0_0-89-83_20230208203804485.parquet");
+        params.put("delta_file_paths", "");
+        params.put("hive_column_names",
+                "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_name,uuid,ts,a,b,c");
+        params.put("hive_column_types",
+                "string#string#string#string#string#string#int#int#string#TimestampMicros");
+        params.put("instant_time", "20230208203804485");
+        params.put("data_file_length", "435028");
+        params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+        params.put("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+        params.put("required_fields", "a,b,c");
+        return params;
+    }
+
+    @Test
+    public void c5DoScanTestOnTimestamp() throws IOException {
+        Map<String, String> params = case5CreateScanTestParams();
+        runScanOnParams(params);
+    }
 }

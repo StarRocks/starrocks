@@ -82,7 +82,7 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
         // INT64 timestamp type
-        if (HudiScannerUtils.isInt64Timestamp(type)) {
+        if (HudiScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
             long datetime = ((LongWritable) fieldData).get();
             TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
             LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(datetime, timeUnit, true);
