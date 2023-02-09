@@ -1,0 +1,37 @@
+{
+  "partitionToWriteStats" : {
+    "" : [ {
+      "fileId" : "0df0196b-f46f-43f5-8cf0-06fad7143af3-0",
+      "path" : "0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet",
+      "prevCommit" : "null",
+      "numWrites" : 3,
+      "numDeletes" : 0,
+      "numUpdateWrites" : 0,
+      "numInserts" : 3,
+      "totalWriteBytes" : 438311,
+      "totalWriteErrors" : 0,
+      "tempPath" : null,
+      "partitionPath" : "",
+      "totalLogRecords" : 0,
+      "totalLogFilesCompacted" : 0,
+      "totalLogSizeCompacted" : 0,
+      "totalUpdatedRecordsCompacted" : 0,
+      "totalLogBlocks" : 0,
+      "totalCorruptLogBlock" : 0,
+      "totalRollbackBlocks" : 0,
+      "fileSizeInBytes" : 438311,
+      "minEventTime" : null,
+      "maxEventTime" : null,
+      "runtimeStats" : {
+        "totalScanTime" : 0,
+        "totalUpsertTime" : 0,
+        "totalCreateTime" : 634
+      }
+    } ]
+  },
+  "compacted" : false,
+  "extraMetadata" : {
+    "schema" : "{\"type\":\"record\",\"name\":\"test_hudi_mor2_record\",\"namespace\":\"hoodie.test_hudi_mor2\",\"fields\":[{\"name\":\"uuid\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"int\"},{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"c\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[{\"type\":\"array\",\"items\":[\"int\",\"null\"]},\"null\"]}],\"default\":null},{\"name\":\"d\",\"type\":[\"null\",{\"type\":\"map\",\"values\":[{\"type\":\"array\",\"items\":[\"int\",\"null\"]},\"null\"]}],\"default\":null},{\"name\":\"e\",\"type\":{\"type\":\"record\",\"name\":\"e\",\"namespace\":\"hoodie.test_hudi_mor2.test_hudi_mor2_record\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[\"int\",\"null\"]}],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",{\"type\":\"map\",\"values\":[\"int\",\"null\"]}],\"default\":null},{\"name\":\"c\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"c\",\"namespace\":\"hoodie.test_hudi_mor2.test_hudi_mor2_record.e\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[\"int\",\"null\"]}],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"b\",\"namespace\":\"hoodie.test_hudi_mor2.test_hudi_mor2_record.e.c\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"int\"],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null}]}],\"default\":null}]}],\"default\":null}]}}]}"
+  },
+  "operationType" : "UPSERT"
+}
