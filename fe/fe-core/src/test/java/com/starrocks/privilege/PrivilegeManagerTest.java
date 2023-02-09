@@ -162,9 +162,9 @@ public class PrivilegeManagerTest {
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "SELECT"));
-        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "DROP"));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, "db3", "ALTER"));
+        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
+        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
+        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, "db3", PrivilegeType.ALTER));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
@@ -238,8 +238,8 @@ public class PrivilegeManagerTest {
 
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "ALTER"));
-        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "SELECT"));
+        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.ALTER));
+        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
 
         // revoke view
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -560,54 +560,54 @@ public class PrivilegeManagerTest {
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
         // 3. add invalidate entry: select on invalidatedb.table
         objects = Arrays.asList(new TablePEntryObject(-1, goodTableObject.tableId));
-        manager.grantToUser(grantTableStmt.getTypeId(), grantTableStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
         // 4. add invalidate entry: select on db.invalidatetable
         objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseId, -1));
-        manager.grantToUser(grantTableStmt.getTypeId(), grantTableStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
         // 5. add invalidate entry: create_table, drop on invalidatedb
         objects = Arrays.asList(new DbPEntryObject(-1));
-        manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 6. add valid entry: ALL databases
         objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASE_ID));
-        manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 7. add valid user
         sql = "grant impersonate on USER root to test_user";
         GrantPrivilegeStmt grantUserStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantUserStmt);
         // 8. add invalidate entry: bad impersonate user
         objects = Arrays.asList(new UserPEntryObject(UserIdentity.createAnalyzedUserIdentWithIp("bad", "%")));
-        manager.grantToUser(grantUserStmt.getTypeId(), grantUserStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantUserStmt.getObjectType(), grantUserStmt.getPrivilegeTypes(), objects, false, testUser);
         // 9. add valid resource
         sql = "grant usage on resource 'hive0' to test_user";
         GrantPrivilegeStmt grantResourceStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantResourceStmt);
         // 10. add invalidate entry: bad resource name
         objects = Arrays.asList(new ResourcePEntryObject("bad_resource"));
-        manager.grantToUser(grantResourceStmt.getTypeId(), grantResourceStmt.getActionList(), objects, false, testUser);
+        manager.grantToUser(grantResourceStmt.getObjectType(), grantResourceStmt.getPrivilegeTypes(), objects, false, testUser);
 
         // check before clean up:
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
         int numTablePEntries = manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantTableStmt.getTypeId()).size();
+                typeToPrivilegeEntryList.get(grantTableStmt.getObjectType()).size();
         int numDbPEntires = manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size();
+                typeToPrivilegeEntryList.get(grantDbStmt.getObjectType()).size();
         int numUserPEntires = manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size();
+                typeToPrivilegeEntryList.get(grantUserStmt.getObjectType()).size();
         int numResourcePEntires = manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantResourceStmt.getTypeId()).size();
+                typeToPrivilegeEntryList.get(grantResourceStmt.getObjectType()).size();
 
         manager.removeInvalidObject();
 
         // check after clean up
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
         Assert.assertEquals(numTablePEntries - 2, manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantTableStmt.getTypeId()).size());
+                typeToPrivilegeEntryList.get(grantTableStmt.getObjectType()).size());
         Assert.assertEquals(numDbPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size());
+                typeToPrivilegeEntryList.get(grantDbStmt.getObjectType()).size());
         Assert.assertEquals(numUserPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size());
+                typeToPrivilegeEntryList.get(grantUserStmt.getObjectType()).size());
         Assert.assertEquals(numResourcePEntires - 1, manager.userToPrivilegeCollection.get(testUser).
-                typeToPrivilegeEntryList.get(grantResourceStmt.getTypeId()).size());
+                typeToPrivilegeEntryList.get(grantResourceStmt.getObjectType()).size());
     }
 
     @Test
@@ -898,7 +898,7 @@ public class PrivilegeManagerTest {
                 "grant role1, role2 to test_role_user;", ctx), ctx);
 
         Assert.assertEquals("[role1, role2]", manager.getRoleNamesByUser(
-                        UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1, role2 from test_role_user;", ctx), ctx);
