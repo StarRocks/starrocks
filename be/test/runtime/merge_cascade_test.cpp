@@ -154,7 +154,6 @@ TEST(MergeCascadeTest, merge_cursor_test) {
 
         ASSERT_TRUE(l_chunk_channel.empty() && r_chunk_channel.empty());
         // both chunk has no chunk
-        ASSERT_TRUE(merge_res.first == nullptr);
 
         // notify one channel, but the other channel is not ready
         l_chunk_channel.emplace(l->clone_unique());

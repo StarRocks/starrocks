@@ -143,8 +143,6 @@ private:
 
     Permutation _permutation;
     PermutationView _permutation_view = PermutationView(_permutation);
-    ChunkPtr _merging_left_chunk;
-    ChunkPtr _merging_right_chunk;
 
 #ifndef NDEBUG
     bool _left_is_empty = false;
