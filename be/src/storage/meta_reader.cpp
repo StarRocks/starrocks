@@ -209,8 +209,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
-    ArrayColumn* array_column = nullptr;
-    array_column = down_cast<ArrayColumn*>(column);
+    NullableColumn* nullable_column = down_cast<NullableColumn*>(column);
+
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
 
     auto* offsets = array_column->offsets_column().get();
     auto& data = offsets->get_data();
@@ -221,6 +222,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     // add elements
     auto dst = array_column->elements_column().get();
     CHECK(dst->append_strings(words));
+
+    nullable_column->null_column_data().emplace_back(0);
+
 
     return Status::OK();
 }

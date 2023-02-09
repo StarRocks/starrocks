@@ -126,7 +126,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             }
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
-            newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
+            Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
+            // for empty table, meta scan may return NULL result, so we force set usedColumn to nullable.
+            c.setIsAllowNull(true);
+            newScanColumnRefs.put(metaColumn, c);
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
@@ -145,7 +148,6 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 newAggFnName = FunctionSet.SUM;
                 newAggReturnType = Type.BIGINT;
             }
-
             CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
