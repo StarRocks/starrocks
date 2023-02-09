@@ -25,10 +25,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class EquivalenceClasses {
-    private final Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
+    private Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
 
     public EquivalenceClasses() {
         columnToEquivalenceClass = Maps.newHashMap();
+    }
+
+    public EquivalenceClasses(EquivalenceClasses other) {
+        columnToEquivalenceClass = Maps.newHashMap();
+        columnToEquivalenceClass.putAll(other.columnToEquivalenceClass);
     }
 
     public void addEquivalence(ColumnRefOperator left, ColumnRefOperator right) {

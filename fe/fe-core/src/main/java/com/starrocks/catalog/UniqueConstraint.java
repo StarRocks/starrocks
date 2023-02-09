@@ -41,16 +41,21 @@ public class UniqueConstraint {
         return Joiner.on(",").join(uniqueColumns);
     }
 
-    public static List<UniqueConstraint> parse(String constraintStr) {
-        if (Strings.isNullOrEmpty(constraintStr)) {
+    public static List<UniqueConstraint> parse(String constraintDescs) {
+        if (Strings.isNullOrEmpty(constraintDescs)) {
             return null;
         }
-        String[] uniqueColumns = constraintStr.trim().split(",");
-        List<String> columnNames =
-                Arrays.asList(uniqueColumns).stream().map(columnName -> columnName.trim()).collect(Collectors.toList());
-        // TODO: convert to list
+        String[] constraintArray = constraintDescs.split(";");
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
-        uniqueConstraints.add(new UniqueConstraint(columnNames));
+        for (String constraintDesc : constraintArray) {
+            if (Strings.isNullOrEmpty(constraintDesc)) {
+                continue;
+            }
+            String[] uniqueColumns = constraintDesc.split(",");
+            List<String> columnNames =
+                    Arrays.asList(uniqueColumns).stream().map(columnName -> columnName.trim()).collect(Collectors.toList());
+            uniqueConstraints.add(new UniqueConstraint(columnNames));
+        }
         return uniqueConstraints;
     }
 }

@@ -31,7 +31,6 @@ import com.google.common.graph.MutableGraph;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
@@ -40,6 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -182,7 +182,9 @@ public class MaterializedViewRewriter {
         } else if (matchMode == MatchMode.VIEW_DELTA) {
             ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
             EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
-            if (!compensateViewDelta(queryTables, mvTables, viewEquivalenceClasses, compensationJoinColumns)) {
+            if (!compensateViewDelta(
+                    queryTables, mvTables, viewEquivalenceClasses, compensationJoinColumns, mvExpression,
+                    materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory())) {
                 return Lists.newArrayList();
             }
         } else {
@@ -205,11 +207,23 @@ public class MaterializedViewRewriter {
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
                 queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
-                materializationContext.getOutputMapping(), queryColumnSet);
+                materializationContext.getOutputMapping(), queryColumnSet, matchMode, compensationJoinColumns);
 
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
+            // for view delta, should add compensation join columns to query ec
+            if (matchMode == MatchMode.VIEW_DELTA) {
+                EquivalenceClasses newQueryEc = new EquivalenceClasses(queryEc);
+                ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+                for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
+                    ColumnRefOperator newKey = (ColumnRefOperator) columnRewriter.rewriteViewToQuery(entry.getKey());
+                    ColumnRefOperator newValue = (ColumnRefOperator) columnRewriter.rewriteViewToQuery(entry.getValue());
+                    newQueryEc.addEquivalence(newKey, newValue);
+                }
+                rewriteContext.setQueryEquivalenceClasses(newQueryEc);
+            }
+
             OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext);
             if (rewrittenExpression == null) {
                 continue;
@@ -224,7 +238,6 @@ public class MaterializedViewRewriter {
     // In order to do that, we should make sure that the additional joins(which exist in view
     // but not in query) are lossless join.
     // for inner join:
-    //      1. inner equal join
     //      2. join on all key columns
     //      3. foreign key columns are not null
     //      4. one side is foreign key and the other side is unique/primary key
@@ -240,6 +253,7 @@ public class MaterializedViewRewriter {
             EquivalenceClasses viewEquivalenceClasses,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
             OptExpression mvExpression,
+            ColumnRefFactory queryRefFactory,
             ColumnRefFactory mvRefFactory) {
         // use directed graph to construct foreign key join graph
         MutableGraph<Table> graph = GraphBuilder.directed().build();
@@ -259,8 +273,9 @@ public class MaterializedViewRewriter {
             }
         }
 
-        List<List<ColumnRefOperator>> extraTableColumns = Lists.newArrayList();
+        Map<Table, List<ColumnRefOperator>> extraTableColumns = Maps.newHashMap();
 
+        Multimap<ColumnRefOperator, ColumnRefOperator> mvCompensationJoinColumns = ArrayListMultimap.create();
         // add edges to directed graph by FK-UK
         for (Table table : graph.nodes()) {
             // now only support OlapTable
@@ -274,6 +289,9 @@ public class MaterializedViewRewriter {
 
             for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
                 Collection<Table> parentTables = nameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                List<String> childKeys = columnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
+                List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
                 for (Table parentTable : parentTables) {
                     // now only OlapTable is supported
                     // TODO: support external table
@@ -288,40 +306,45 @@ public class MaterializedViewRewriter {
                         continue;
                     }
                     LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinExpr.getOp();
+
                     if (joinOperator.getJoinType().isInnerJoin()) {
-
-                    } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
-                        // the join keys on parent table should be unique
-                        List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
-                        // make sure that all join keys are in foreign keys
-                        // the join keys of parent table should be unique
-                        List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
-                        KeysType tableKeyType = getTableKeysType(parentOlapTable);
-                        if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
-                            List<String> tableKeyColumns = parentOlapTable.getKeyColumns()
-                                    .stream().map(column -> column.getName()).collect(Collectors.toList());
-                            if (!parentKeys.equals(tableKeyColumns)) {
-                                break;
-                            }
-                            // tableKeyColumns should be join keys,
-                            // it means that there should be a join between childTable and parentTable
-                            for (Pair<String, String> pair : columnPairs) {
-                                // here should use relation id, but can not get it
-                                ColumnRefOperator childColumn = getColumnRef(pair.first, childTable, mvRefFactory);
-                                ColumnRefOperator parentColumn = getColumnRef(pair.first, parentOlapTable, mvRefFactory);
-                                if (!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
-                                        || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
-                                    // there is no join between childTable and parentTable
-                                    break;
-                                }
-                            }
-                        } else if (tableKeyType == KeysType.DUP_KEYS) {
-
-                        } else {
-                            // impossible to be here
+                        // to check:
+                        // 1. childKeys should be foreign key
+                        // 2. childKeys should be not null
+                        // 3. parentKeys should be unique
+                        if (!isUniqueKeys(parentOlapTable, parentKeys)) {
                             break;
                         }
+                        // foreign keys are not null
+                        if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull())) {
+                            break;
+                        }
+                    } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
+                        // make sure that all join keys are in foreign keys
+                        // the join keys of parent table should be unique
+                        if (!isUniqueKeys(parentOlapTable, parentKeys)) {
+                            break;
+                        }
+                    } else {
+                        // other joins are not support to rewrite
+                        break;
                     }
+                    // tableKeyColumns should be join keys,
+                    // it means that there should be a join between childTable and parentTable
+                    List<ColumnRefOperator> extraColumns = Lists.newArrayList();
+                    for (Pair<String, String> pair : columnPairs) {
+                        // here should use relation id, but can not get it
+                        ColumnRefOperator childColumn = getColumnRef(pair.first, childTable, mvRefFactory);
+                        ColumnRefOperator parentColumn = getColumnRef(pair.first, parentOlapTable, mvRefFactory);
+                        if (!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
+                                || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
+                            // there is no join between childTable and parentTable
+                            break;
+                        }
+                        extraColumns.add(parentColumn);
+                        mvCompensationJoinColumns.put(childColumn, parentColumn);
+                    }
+                    extraTableColumns.put(parentTable, extraColumns);
                     // add edge to graph
                     if (!graph.successors(childTable).contains(parentTable)) {
                         graph.putEdge(childTable, parentTable);
@@ -329,9 +352,66 @@ public class MaterializedViewRewriter {
                 }
             }
         }
+        // remove one in-degree and zero out-degree's node from graph repeatedly
+        boolean done;
+        do {
+            List<Table> nodesToRemove = Lists.newArrayList();
+            for (Table node : graph.nodes()) {
+                if (graph.predecessors(node).size() == 1 && graph.successors(node).size() == 0) {
+                    nodesToRemove.add(node);
+                }
+            }
+            done = nodesToRemove.isEmpty();
+            nodesToRemove.stream().forEach(node -> graph.removeNode(node));
+        } while (!done);
+
+        if (!Collections.disjoint(graph.nodes(), extraTables)) {
+            return false;
+        }
 
         // should add new tables/columnRefs into query ColumnRefFactory if pass test
         // should collect additional tables and the related columns
+        for (Map.Entry<Table, List<ColumnRefOperator>> entry : extraTableColumns.entrySet()) {
+            int relationId = queryRefFactory.getNextRelationId();
+            for (ColumnRefOperator columnRef : entry.getValue()) {
+                OlapTable olapTable = (OlapTable) entry.getKey();
+                Column column = olapTable.getColumn(columnRef.getName());
+                ColumnRefOperator newColumn =
+                        queryRefFactory.create(columnRef.getName(), columnRef.getType(), columnRef.isNullable());
+                queryRefFactory.updateColumnToRelationIds(newColumn.getId(), relationId);
+                queryRefFactory.updateColumnRefToColumns(newColumn, column, olapTable);
+            }
+        }
+        // convert mv's columns into query's after we get relationId mapping
+        compensationJoinColumns.putAll(mvCompensationJoinColumns);
+        return true;
+    }
+
+    private boolean isUniqueKeys(OlapTable table, List<String> keys) {
+        KeysType tableKeyType = getTableKeysType(table);
+        if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
+            List<String> tableKeyColumns = table.getKeyColumns()
+                    .stream().map(column -> column.getName()).collect(Collectors.toList());
+            if (!keys.equals(tableKeyColumns)) {
+                return false;
+            }
+        } else if (tableKeyType == KeysType.DUP_KEYS) {
+            List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraint();
+            boolean isUnique = false;
+            for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
+                if (uniqueConstraint.getUniqueColumns().equals(keys)) {
+                    isUnique = true;
+                    break;
+                }
+            }
+            if (!isUnique) {
+                // if parentKeys is not unique keys, can not be rewritten
+                return false;
+            }
+        } else {
+            // impossible to be here
+            return false;
+        }
         return true;
     }
 
@@ -389,7 +469,7 @@ public class MaterializedViewRewriter {
             }
         };
 
-        return mvExpression.getOp().<LogicalJoinOperator, Void>accept(joinFinder, mvExpression, null);
+        return mvExpression.getOp().<OptExpression, Void>accept(joinFinder, mvExpression, null);
     }
 
     private boolean isJoinMatch(OptExpression queryExpression,

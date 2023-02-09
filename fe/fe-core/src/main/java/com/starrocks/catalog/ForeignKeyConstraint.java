@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import org.spark_project.guava.base.Strings;
 
 import java.util.List;
 import java.util.regex.Matcher;
@@ -27,8 +28,9 @@ import java.util.stream.Collectors;
 // FOREIGN KEY: (column1, column2) REFERENCES catalog.database.table(column1', column2')
 // if catalog or database is not provided, use current catalog or current database instead.
 public class ForeignKeyConstraint {
-    private static final String FOREIGN_KEY_REGEX = "^\\(([a-zA-Z]\\w{0,63}|_[a-zA-Z0-9]\\w{0,62})" +
-            "(,(\\s*[a-zA-Z]\\w{0,63}\\s*)|,(\\s*_[a-zA-Z0-9]\\w{0,62}\\s*))*\\)$";
+    // private static final String FOREIGN_KEY_REGEX = "^\\(([a-zA-Z]\\w{0,63}|_[a-zA-Z0-9]\\w{0,62})" +
+    //        "(,(\\s*[a-zA-Z]\\w{0,63}\\s*)|,(\\s*_[a-zA-Z0-9]\\w{0,62}\\s*))*\\)$";
+    private static final String FOREIGN_KEY_REGEX = "";
     public static final Pattern FOREIGN_KEY_PATTERN = Pattern.compile(FOREIGN_KEY_REGEX);
     // table with primary key or unique key
     // if parent table is dropped, the foreign key is not dropped cascade now.
@@ -83,12 +85,18 @@ public class ForeignKeyConstraint {
 
     // for default catalog, the format is: (column1, column2) REFERENCES default_catalog.dbid.tableid(column1', column2')
     // for other catalog, the format is: (column1, column2) REFERENCES default_catalog.dbname.tablename(column1', column2')
-    public static List<ForeignKeyConstraint> parse(String foreignKeyConstraintStr) {
+    public static List<ForeignKeyConstraint> parse(String foreignKeyConstraintDescs) {
         // TODO: use regex to parse the infos
-        Matcher foreignKeyMatcher = FOREIGN_KEY_PATTERN.matcher(foreignKeyConstraintStr);
+        if (Strings.isNullOrEmpty(foreignKeyConstraintDescs)) {
+            return null;
+        }
+        String[] constraintArray = foreignKeyConstraintDescs.split(";");
+        Matcher foreignKeyMatcher = FOREIGN_KEY_PATTERN.matcher(foreignKeyConstraintDescs);
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
-        List<String> splits = Lists.newArrayList();
-        for (String split : splits) {
+        for (String constraintDesc : constraintArray) {
+            if (Strings.isNullOrEmpty(constraintDesc)) {
+                continue;
+            }
             String catalogName = "";
             String db = "";
             String table = "";
