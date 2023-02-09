@@ -224,13 +224,13 @@ struct ColumnPtrBuilder {
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = field.sub_field(0).create_column();
+            auto elements = nullable(field.sub_field(0).create_column());
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
             auto array = ArrayColumn::create(std::move(elements), offsets);
             return nullable(array);
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = field.sub_field(0).create_column();
-            auto values = field.sub_field(1).create_column();
+            auto keys = nullable(field.sub_field(0).create_column());
+            auto values = nullable(field.sub_field(1).create_column());
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
             auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
             return nullable(map);

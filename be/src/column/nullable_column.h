@@ -272,7 +272,7 @@ public:
     }
 
     std::string debug_item(size_t idx) const override {
-        DCHECK(_null_column->size() == _data_column->size());
+        DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
         if (_null_column->get_data()[idx]) {
             ss << "NULL";
@@ -283,7 +283,7 @@ public:
     }
 
     std::string debug_string() const override {
-        DCHECK(_null_column->size() == _data_column->size());
+        DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
         ss << "[";
         size_t size = _data_column->size();

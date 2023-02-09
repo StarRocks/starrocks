@@ -39,6 +39,10 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
     } else {
         casted_key_column = map_column->keys_column()->clone_shared();
     }
+    if (!casted_key_column->is_nullable()) {
+        NullColumnPtr null_column = NullColumn::create(casted_key_column->size(), 0);
+        casted_key_column = NullableColumn::create(casted_key_column, null_column);
+    }
 
     // cast value column
     if (_value_cast != nullptr) {
@@ -47,6 +51,10 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         ASSIGN_OR_RETURN(casted_value_column, _value_cast->evaluate_checked(context, &field_chunk));
     } else {
         casted_value_column = map_column->values_column()->clone_shared();
+    }
+    if (!casted_value_column->is_nullable()) {
+        NullColumnPtr null_column = NullColumn::create(casted_value_column->size(), 0);
+        casted_value_column = NullableColumn::create(casted_value_column, null_column);
     }
     auto casted_map =
             MapColumn::create(std::move(casted_key_column), std::move(casted_value_column),
@@ -108,6 +116,10 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
         ASSIGN_OR_RETURN(casted_element_column, _element_cast->evaluate_checked(context, &field_chunk));
     } else {
         casted_element_column = array_column->elements_column()->clone_shared();
+    }
+    if (!casted_element_column->is_nullable()) {
+        NullColumnPtr null_column = NullColumn::create(casted_element_column->size(), 0);
+        casted_element_column = NullableColumn::create(casted_element_column, null_column);
     }
 
     auto casted_array =

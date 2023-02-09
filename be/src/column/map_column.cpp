@@ -39,6 +39,8 @@ void MapColumn::check_or_die() const {
 
 MapColumn::MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets)
         : _keys(std::move(keys)), _values(std::move(values)), _offsets(std::move(offsets)) {
+    DCHECK(_keys->is_nullable());
+    DCHECK(_values->is_nullable());
     if (_offsets->empty()) {
         _offsets->append(0);
     }
