@@ -78,11 +78,9 @@ public class PartitionPruneRule extends TransformationRule {
         List<Long> selectedPartitionIds = null;
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
-            selectedPartitionIds =
-                    rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
+            selectedPartitionIds = rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
-            selectedPartitionIds =
-                    listPartitionPrune((ListPartitionInfo) partitionInfo, olapScanOperator);
+            selectedPartitionIds = listPartitionPrune(table, (ListPartitionInfo) partitionInfo, olapScanOperator);
         }
 
         if (selectedPartitionIds == null) {
@@ -121,22 +119,48 @@ public class PartitionPruneRule extends TransformationRule {
         partitionValueToIds.put(value, partitionIdSet);
     }
 
-    private List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo,
-                                          LogicalOlapScanOperator olapScanOperator) {
+    private List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
+                                          LogicalOlapScanOperator operator) {
 
         Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
 
+        // Currently queries either specify a temporary partition, or do not. There is no situation
+        // where two partitions are checked at the same time
+        boolean isTemporaryPartitionPrune = false;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
+        List<Long> partitionIds = Lists.newArrayList();
+        if (operator.getPartitionNames() != null) {
+            for (String partName : operator.getPartitionNames().getPartitionNames()) {
+                boolean isTemp = operator.getPartitionNames().isTemp();
+                if (isTemp) {
+                    isTemporaryPartitionPrune = true;
+                }
+                Partition part = olapTable.getPartition(partName, isTemp);
+                if (part == null) {
+                    continue;
+                }
+                partitionIds.add(part.getId());
+            }
+        } else {
+            partitionIds = listPartitionInfo.getPartitionIds(false);
+        }
+
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
             TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
-            literalExprValuesMap.forEach((partitionId, values) ->
-                    values.forEach(value ->
-                            putValueMapItem(partitionValueToIds, partitionId, value)));
+            for (Map.Entry<Long, List<LiteralExpr>> entry : literalExprValuesMap.entrySet()) {
+                Long partitionId = entry.getKey();
+                if (!partitionIds.contains(partitionId)) {
+                    continue;
+                }
+                List<LiteralExpr> values = entry.getValue();
+                values.forEach(value ->
+                        putValueMapItem(partitionValueToIds, partitionId, value));
+            }
             // single item list partition has only one column
             Column column = listPartitionInfo.getPartitionColumns().get(0);
-            ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
+            ColumnRefOperator columnRefOperator = operator.getColumnReference(column);
             columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
             columnToNullPartitions.put(columnRefOperator, new HashSet<>());
         }
@@ -149,6 +173,9 @@ public class PartitionPruneRule extends TransformationRule {
                 TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
+                    if (!partitionIds.contains(partitionId)) {
+                        continue;
+                    }
                     List<List<LiteralExpr>> multiValues = entry.getValue();
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
@@ -156,17 +183,22 @@ public class PartitionPruneRule extends TransformationRule {
                     }
                 }
                 Column column = columnList.get(i);
-                ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
+                ColumnRefOperator columnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
                 columnToNullPartitions.put(columnRefOperator, new HashSet<>());
             }
         }
 
-        List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(olapScanOperator.getPredicate());
+        List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
                 columnToNullPartitions, scalarOperatorList);
         try {
-            return partitionPruner.prune();
+            List<Long> prune = partitionPruner.prune();
+            if (prune == null && isTemporaryPartitionPrune)  {
+                return partitionIds;
+            } else {
+                return prune;
+            }
         } catch (AnalysisException e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
