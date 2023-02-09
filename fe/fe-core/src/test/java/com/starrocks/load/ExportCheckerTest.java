@@ -49,13 +49,6 @@ public class ExportCheckerTest {
             }
         };
 
-        new MockUp<Backend>() {
-            @Mock
-            public boolean isAvailable() {
-                return false;
-            }
-        };
-
         ExportChecker.init(1000L);
         Field field = ExportChecker.class.getDeclaredField("checkers");
         field.setAccessible(true);
@@ -71,12 +64,8 @@ public class ExportCheckerTest {
         boolean cancelled = (boolean) method.invoke(checker, job);
         Assert.assertTrue(cancelled);
 
-        new MockUp<Backend>() {
-            @Mock
-            public boolean isAlive() {
-                return true;
-            }
-        };
+        be.setAlive(true);
+        be.setIsDecommissioned(true);
 
         be.setLastStartTime(1001L);
 
