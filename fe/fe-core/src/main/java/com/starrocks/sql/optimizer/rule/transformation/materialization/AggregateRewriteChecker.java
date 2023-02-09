@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import java.util.List;
 
 public class AggregateRewriteChecker {
-    private List<ScalarOperator> targetAggregates;
+    private final List<ScalarOperator> targetAggregates;
     private boolean distinct;
 
     public AggregateRewriteChecker(List<ScalarOperator> targetAggregates) {
