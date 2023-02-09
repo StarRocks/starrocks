@@ -109,11 +109,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
     if (!is_data_ready() || is_eos()) {
         return ChunkUniquePtr();
     }
-    if (!_permutation.empty()) {
-        auto res = acquire_remaining_chunk();
-        _permutation.clear();
-        return res;
-    }
+
     if (move_cursor()) {
         return ChunkUniquePtr();
     }
@@ -123,6 +119,8 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
 bool MergeTwoCursor::move_cursor() {
     DCHECK(is_data_ready());
     DCHECK(!is_eos());
+
+    acquire_remaining_chunk();
 
     bool eos = _left_run.empty() || _right_run.empty();
 
@@ -189,8 +187,10 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
 
 StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2) {
     const auto& sort_desc = _sort_desc;
-    // Merge partial chunk
 
+    _tail_cmp = CursorAlgo::compare_tail(sort_desc, run1, run2);
+
+    // Merge partial chunk
     RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run1, run2, &_permutation));
     DCHECK_EQ(run1.num_rows() + run2.num_rows(), _permutation.size());
 
@@ -206,7 +206,11 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
     return merged;
 }
 
-ChunkUniquePtr MergeTwoCursor::acquire_remaining_chunk() {
+void MergeTwoCursor::acquire_remaining_chunk() {
+    if (_permutation.empty()) {
+        return;
+    }
+
     size_t merged_rows = _permutation.size() - _permutation_view.size();
     _permutation_view = PermutationView(_permutation.data() + _permutation_view.size(), merged_rows);
 
@@ -216,7 +220,13 @@ ChunkUniquePtr MergeTwoCursor::acquire_remaining_chunk() {
     _left_run.reset();
     _right_run.reset();
 
-    return merged;
+    if (_tail_cmp <= 0) {
+        _right_run = SortedRun(std::move(merged), _left_cursor->get_sort_exprs());
+    } else {
+        _left_run = SortedRun(std::move(merged), _left_cursor->get_sort_exprs());
+    }
+
+    _permutation.clear();
 }
 
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only

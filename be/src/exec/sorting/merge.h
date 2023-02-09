@@ -132,7 +132,7 @@ private:
 
     bool move_cursor();
 
-    ChunkUniquePtr acquire_remaining_chunk();
+    void acquire_remaining_chunk();
 
     SortDescs _sort_desc;
     SortedRun _left_run;
@@ -143,6 +143,7 @@ private:
 
     Permutation _permutation;
     PermutationView _permutation_view = PermutationView(_permutation);
+    int _tail_cmp;
 
 #ifndef NDEBUG
     bool _left_is_empty = false;
