@@ -23,7 +23,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class SetDefaultRoleExecutor {
-    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName)
+    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName,
+                                       UserIdentity userIdentity)
             throws UserException {
         Long id = manager.getRoleIdByNameAllowNull(roleName);
         if (id == null) {
@@ -31,7 +32,7 @@ public class SetDefaultRoleExecutor {
         }
 
         if (!roleIdsForUser.contains(id)) {
-            throw new UserException("Role " + roleName + " is not granted");
+            throw new UserException("Role " + roleName + " is not granted to " + userIdentity.toString());
         }
         return id;
     }
@@ -51,7 +52,7 @@ public class SetDefaultRoleExecutor {
             // set role 'role1', 'role2'
             roleIds = new HashSet<>();
             for (String roleName : stmt.getRoles()) {
-                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName));
+                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName, stmt.getUserIdentifier()));
             }
         }
 

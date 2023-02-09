@@ -31,7 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -59,6 +58,7 @@ import org.apache.commons.lang3.EnumUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -103,15 +103,8 @@ public class PrivilegeStmtAnalyzerV2 {
          * check if role name valid and get full role name
          */
         private void validRoleName(String roleName, String errMsg, boolean checkExist) {
-            try {
-                // always set to true, we can validate if it's allowed to operation on admin later
-                FeNameFormat.checkRoleName(roleName, true, errMsg);
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            // always set to true, we can validate if it's allowed to operation on admin later
+            FeNameFormat.checkRoleName(roleName, true, errMsg);
             // check if role exists
             if (checkExist && !privilegeManager.checkRoleExists(roleName)) {
                 throw new SemanticException(errMsg + ": cannot find role " + roleName + "!");
@@ -137,10 +130,10 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         @Override
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
-            String authPluginUsing = null;
+            String authPluginUsing;
             if (stmt.getAuthPlugin() == null) {
                 authPluginUsing = authenticationManager.getDefaultPlugin();
                 stmt.setScramblePassword(
@@ -177,10 +170,6 @@ public class PrivilegeStmtAnalyzerV2 {
                 exception.initCause(e);
                 throw exception;
             }
-
-            if (stmt.hasRole()) {
-                throw new SemanticException("role not supported!");
-            }
             return null;
         }
 
@@ -208,14 +197,13 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
-        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
-                throws PrivilegeException, AnalysisException {
+        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt) throws PrivilegeException {
             stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
             String[] name = stmt.getFunctionName().split("\\.");
             FunctionName functionName;
             if (stmt.getTypeId() == ObjectType.GLOBAL_FUNCTION.getId()) {
                 if (name.length != 1) {
-                    throw new AnalysisException("global function has no database");
+                    throw new SemanticException("global function has no database");
                 }
                 functionName = new FunctionName(name[0]);
                 functionName.setAsGlobalFunction();
@@ -225,7 +213,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 } else {
                     String dbName = ConnectContext.get().getDatabase();
                     if (dbName.equals("")) {
-                        throw new AnalysisException("database not selected");
+                        throw new SemanticException("database not selected");
                     }
                     functionName = new FunctionName(dbName, name[0]);
                 }
@@ -242,11 +230,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 if (function == null) {
                     return privilegeManager.analyzeObject(
                             stmt.getObjectTypeUnResolved(),
-                            Arrays.asList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
+                            Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
                     return privilegeManager.analyzeObject(
                             stmt.getObjectTypeUnResolved(),
-                            Arrays.asList(function.signatureString())
+                            Collections.singletonList(function.signatureString())
                     );
                 }
             }
@@ -376,6 +364,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdentifier(), true);
             for (String roleName : stmt.getRoles()) {
                 validRoleName(roleName, "Cannot set role", true);
             }

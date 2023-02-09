@@ -21,20 +21,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SetDefaultRoleStmt extends StatementBase {
-    private enum SetRoleType {
-        ALL,
-        NONE,
-        ROLE
-    }
 
     private final UserIdentity userIdentity;
     private final List<String> roles = new ArrayList<>();
-    private SetDefaultRoleStmt.SetRoleType setRoleType;
+    private SetRoleType setRoleType;
 
     public SetDefaultRoleStmt(UserIdentity userIdentity, List<String> roles) {
         this.userIdentity = userIdentity;
         this.roles.addAll(roles);
-        this.setRoleType = SetDefaultRoleStmt.SetRoleType.ROLE;
+        this.setRoleType = SetRoleType.ROLE;
     }
 
     public UserIdentity getUserIdentifier() {
@@ -46,19 +41,19 @@ public class SetDefaultRoleStmt extends StatementBase {
     }
 
     public void setTypeAll() {
-        setRoleType = SetDefaultRoleStmt.SetRoleType.ALL;
+        setRoleType = SetRoleType.ALL;
     }
 
     public boolean isAll() {
-        return setRoleType.equals(SetDefaultRoleStmt.SetRoleType.ALL);
+        return setRoleType.equals(SetRoleType.ALL);
     }
 
     public void setTypeNone() {
-        setRoleType = SetDefaultRoleStmt.SetRoleType.NONE;
+        setRoleType = SetRoleType.NONE;
     }
 
     public boolean isNone() {
-        return setRoleType.equals(SetDefaultRoleStmt.SetRoleType.NONE);
+        return setRoleType.equals(SetRoleType.NONE);
     }
 
     @Override

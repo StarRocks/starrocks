@@ -270,6 +270,7 @@ import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.SetType;
@@ -3945,8 +3946,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     authOption.isPasswordPlain());
         }
         boolean ifNotExists = context.IF() != null;
-        String userRole = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
-        return new CreateUserStmt(ifNotExists, userDesc, userRole);
+
+        List<String> roles = new ArrayList<>();
+        if (context.roleList() != null) {
+            roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
+                    s -> ((Identifier) s).getValue()).collect(toList()));
+        }
+
+        return new CreateUserStmt(ifNotExists, userDesc, roles);
     }
 
     @Override

@@ -34,6 +34,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.sql.analyzer.FeNameFormat;
 import org.junit.Test;
 
 import java.util.Random;

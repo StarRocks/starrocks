@@ -23,12 +23,6 @@ import java.util.List;
 // set role all except role1, role2 -> roles = [role1, role2], all = true
 // set role role1, role2 -> roles = [role1, role2], all = false;
 public class SetRoleStmt extends StatementBase {
-    private enum SetRoleType {
-        ALL,
-        DEFAULT,
-        NONE,
-        ROLE
-    }
 
     private final List<String> roles = new ArrayList<>();
     private SetRoleType setRoleType;

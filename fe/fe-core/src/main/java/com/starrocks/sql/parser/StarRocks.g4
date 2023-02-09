@@ -1193,7 +1193,7 @@ helpStatement
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)?
     ;
 
 dropUserStatement
@@ -1219,11 +1219,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE identifierOrString
+    : CREATE ROLE roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE identifierOrString
+    : DROP ROLE roleList
     ;
 
 showRolesStatement
