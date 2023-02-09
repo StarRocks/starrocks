@@ -533,8 +533,9 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             throw e;
         } catch (UserException e) {
+            String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
-            LOG.info("execute Exception. {}", e.getMessage());
+            LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
             context.getState().setError(e.getMessage());
             context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
