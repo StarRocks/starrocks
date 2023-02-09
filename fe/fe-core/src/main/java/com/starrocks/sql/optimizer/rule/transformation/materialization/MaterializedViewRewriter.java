@@ -90,6 +90,52 @@ public class MaterializedViewRewriter {
         return MvUtils.isLogicalSPJ(expression);
     }
 
+<<<<<<< HEAD
+=======
+    private boolean isMVApplicable(OptExpression queryExpression,
+                                   OptExpression mvExpression,
+                                   List<Table> queryTables,
+                                   List<Table> mvTables) {
+        if (!isValidPlan(mvExpression)) {
+            return false;
+        }
+
+        // If table lists do not intersect, can not be rewritten
+        if (Collections.disjoint(queryTables, mvTables)) {
+            return false;
+        }
+
+        // Only care MatchMode.COMPLETE here, QUERY_DELTA also can be supported
+        // because optimizer will match MV's pattern which is subset of query opt tree
+        // from top-down iteration.
+        MatchMode matchMode = getMatchMode(queryTables, mvTables);
+        if (matchMode != MatchMode.COMPLETE) {
+            return false;
+        }
+
+        boolean isQueryAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+        boolean isMVAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+        if (isQueryAllEqualInnerOrCrossJoin && isMVAllEqualInnerOrCrossJoin) {
+            return true;
+        } else {
+            // If not all join types are InnerJoin, need to check whether MV's join tables' order
+            // matches Query's join tables' order.
+            // eg. MV   : a left join b inner join c
+            //     Query: b left join a inner join c (cannot rewrite)
+            //     Query: a left join b inner join c (can rewrite)
+            //     Query: c inner join a left join b (can rewrite)
+            // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
+            // order for now.
+            // Use traverse order to check whether all joins' order and operator are exactly matched.
+            List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
+            List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
+            Preconditions.checkState(queryJoinOperators.size() + 1 == queryTables.size());
+            Preconditions.checkState(mvJoinOperators.size() + 1 == mvTables.size());
+            return queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators);
+        }
+    }
+
+>>>>>>> b40dded57 ([Enhancement] Materialized view query rewrite support cross join (#16650))
     public List<OptExpression> rewrite() {
         if (!isValidPlan(materializationContext.getMvExpression())) {
             return Lists.newArrayList();
