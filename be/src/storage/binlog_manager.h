@@ -207,7 +207,7 @@ private:
     int64_t _total_rowset_disk_size = 0;
 
     // Allocate an id for each binlog reader. Protected by _meta_lock
-    int64_t _next_reader_id;
+    int64_t _next_reader_id = 0;
     // Mapping from the reader id to the readers. Protected by _meta_lock
     std::unordered_map<int64_t, BinlogReaderSharedPtr> _binlog_readers;
 };

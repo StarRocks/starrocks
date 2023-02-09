@@ -20,10 +20,8 @@
 #include "gen_cpp/PlanNodes_constants.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_file_reader.h"
-#include "storage/binlog_manager.h"
 #include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset.h"
-#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -39,6 +37,9 @@ const std::string BINLOG_OP = "_binlog_op";
 const std::string BINLOG_VERSION = "_binlog_version";
 const std::string BINLOG_SEQ_ID = "_binlog_seq_id";
 const std::string BINLOG_TIMESTAMP = "_binlog_timestamp";
+
+class Tablet;
+class BinlogManager;
 
 // Read binlog in a tablet. Binlog can be treated as a table with schema. The schema includes the
 // data columns of base table and meta columns of binlog. The name and SQL data type of meta columns
@@ -75,7 +76,7 @@ const std::string BINLOG_TIMESTAMP = "_binlog_timestamp";
 //  binlog_reader->next_seq_id()
 class BinlogReader : public std::enable_shared_from_this<BinlogReader> {
 public:
-    BinlogReader(TabletSharedPtr tablet, BinlogReaderParams reader_params);
+    BinlogReader(std::shared_ptr<Tablet> tablet, BinlogReaderParams reader_params);
 
     Status init();
 
@@ -113,10 +114,10 @@ private:
     void _append_meta_column(Chunk* output_chunk, int32_t num_rows, int64_t version, int64_t timestamp,
                              int64_t start_seq_id);
 
-    TabletSharedPtr _tablet;
+    std::shared_ptr<Tablet> _tablet;
     BinlogReaderParams _reader_params;
-    BinlogManager* _binlog_manager;
-    int64_t _reader_id;
+    BinlogManager* _binlog_manager = nullptr;
+    int64_t _reader_id = -1;
     // Schema for data columns, used to read data from segments
     Schema _data_schema;
     // Index of each _data_schema column in the _reader_params#output_schema
@@ -132,7 +133,7 @@ private:
     BinlogFileMetaPBPtr _file_meta;
     std::shared_ptr<BinlogFileReader> _binlog_file_reader;
     // owned by _binlog_file_reader
-    LogEntryInfo* _log_entry_info;
+    LogEntryInfo* _log_entry_info = nullptr;
     int64_t _next_version = -1;
     int64_t _next_seq_id = -1;
 

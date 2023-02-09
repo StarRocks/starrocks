@@ -20,6 +20,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
