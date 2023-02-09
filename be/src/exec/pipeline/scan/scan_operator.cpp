@@ -128,7 +128,7 @@ bool ScanOperator::has_output() const {
     //   2.1 Buffer full: return true if has any chunk, else false
     //   2.2 Enough running io-tasks: wait some time for more chunks, so return false
     //   2.3 Not enough running io-tasks: submit io tasks, so return true
-    //   2.4 No more tasks: pull_chunk, so return true
+    //   2.4 All tasks are finished: pull_chunk, so return true
 
     size_t chunk_number = num_buffered_chunks();
     if (_unpluging) {
