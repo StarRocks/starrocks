@@ -229,14 +229,15 @@ public class AuthenticationManager {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
             // init user privilege
-            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
+            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getQualifiedRole());
+
             short pluginId = privilegeManager.getProviderPluginId();
             short pluginVersion = privilegeManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
         } catch (AuthenticationException | PrivilegeException e) {
-            throw new DdlException("failed to create user " + userIdentity, e);
+            throw new DdlException("failed to create user " + userIdentity + " : " + e.getMessage(), e);
         } finally {
             writeUnlock();
         }

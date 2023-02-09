@@ -342,6 +342,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
+    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -849,6 +851,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
+    private String activateAllRolesOnLogin = "OFF";
+
+    public boolean isActivateAllRolesOnLogin() {
+        if (activateAllRolesOnLogin.equals("ON")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;

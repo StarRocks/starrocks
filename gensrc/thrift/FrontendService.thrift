@@ -514,6 +514,7 @@ struct TMasterOpRequest {
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
+    33: optional Types.TUserRoles user_roles
 }
 
 struct TColumnDefinition {

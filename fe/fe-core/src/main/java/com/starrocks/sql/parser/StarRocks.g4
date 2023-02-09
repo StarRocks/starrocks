@@ -209,6 +209,8 @@ statement
     | showRolesStatement
     | grantRoleStatement
     | revokeRoleStatement
+    | setRoleStatement
+    | setDefaultRoleStatement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
     | showGrantsStatement
@@ -1200,6 +1202,7 @@ dropUserStatement
 
 alterUserStatement
     : ALTER USER user authOption
+    | ALTER USER user DEFAULT ROLE (NONE| ALL | roleList)
     ;
 
 showUserStatement
@@ -1236,6 +1239,16 @@ revokeRoleStatement
     : REVOKE identifierOrStringList FROM USER? user                                                     #revokeRoleFromUser
     | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
     ;
+
+setRoleStatement
+    : SET ROLE DEFAULT
+    | SET ROLE NONE
+    | SET ROLE ALL (EXCEPT roleList)?
+    | SET ROLE roleList
+    ;
+
+setDefaultRoleStatement
+    : SET DEFAULT ROLE (NONE | ALL | roleList) TO user;
 
 grantRevokeClause
     : (USER? user | ROLE identifierOrString) (WITH GRANT OPTION)?
@@ -1458,12 +1471,7 @@ setUserPropertyStatement
     ;
 
 roleList
-    : string (',' string)*
-    ;
-
-setRoleStatement
-    : SET ROLE roleList                #setRole
-    | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
+    : identifierOrString (',' identifierOrString)*
     ;
 
 unsupportedStatement
@@ -1793,6 +1801,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
+    | name = CURRENT_ROLE '(' ')'
     ;
 
 specialDateTimeExpression
@@ -2158,7 +2167,7 @@ nonReserved
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
-    | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
+    | NAME | NAMES | NEGATIVE | NO | NODE | NONE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY

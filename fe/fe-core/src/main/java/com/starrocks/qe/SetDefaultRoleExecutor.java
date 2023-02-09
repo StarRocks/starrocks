@@ -11,58 +11,50 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.qe;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.UserException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
-import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 
 import java.util.HashSet;
 import java.util.Set;
 
-public class SetRoleExecutor {
-
-    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName,
-                                       UserIdentity userIdentity) throws UserException {
+public class SetDefaultRoleExecutor {
+    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName)
+            throws UserException {
         Long id = manager.getRoleIdByNameAllowNull(roleName);
         if (id == null) {
             throw new UserException("Cannot find role " + roleName);
         }
 
         if (!roleIdsForUser.contains(id)) {
-            throw new UserException("Role " + roleName + " is not granted to " + userIdentity.toString());
+            throw new UserException("Role " + roleName + " is not granted");
         }
         return id;
     }
 
-    public static void execute(SetRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
+
+    public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
-        UserIdentity user = context.getCurrentUserIdentity();
+        UserIdentity user = stmt.getUserIdentifier();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;
 
         if (stmt.isNone()) {
             roleIds = new HashSet<>();
-        } else if (stmt.isDefault()) {
-            roleIds = manager.getDefaultRoleIdsByUser(user);
         } else if (stmt.isAll()) {
             roleIds = roleIdsForUser;
-
-            // SET ROLE ALL EXCEPT
-            for (String roleName : stmt.getRoles()) {
-                roleIds.remove(getValidRoleId(manager, roleIdsForUser, roleName, user));
-            }
         } else {
             // set role 'role1', 'role2'
             roleIds = new HashSet<>();
             for (String roleName : stmt.getRoles()) {
-                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName, user));
+                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName));
             }
         }
-        context.setCurrentRoleIds(roleIds);
+
+        manager.setUserDefaultRole(roleIds, user);
     }
 }

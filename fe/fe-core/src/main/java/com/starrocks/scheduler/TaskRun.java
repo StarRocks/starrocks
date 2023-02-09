@@ -105,6 +105,7 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
         runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();

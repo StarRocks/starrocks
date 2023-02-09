@@ -15,27 +15,30 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
 
-// set role all -> roles = null, all = true
-// set role all except role1, role2 -> roles = [role1, role2], all = true
-// set role role1, role2 -> roles = [role1, role2], all = false;
-public class SetRoleStmt extends StatementBase {
+public class SetDefaultRoleStmt extends StatementBase {
     private enum SetRoleType {
         ALL,
-        DEFAULT,
         NONE,
         ROLE
     }
 
+    private final UserIdentity userIdentity;
     private final List<String> roles = new ArrayList<>();
-    private SetRoleType setRoleType;
+    private SetDefaultRoleStmt.SetRoleType setRoleType;
 
-    public SetRoleStmt(List<String> roles) {
+    public SetDefaultRoleStmt(UserIdentity userIdentity, List<String> roles) {
+        this.userIdentity = userIdentity;
         this.roles.addAll(roles);
-        this.setRoleType = SetRoleType.ROLE;
+        this.setRoleType = SetDefaultRoleStmt.SetRoleType.ROLE;
+    }
+
+    public UserIdentity getUserIdentifier() {
+        return userIdentity;
     }
 
     public List<String> getRoles() {
@@ -43,36 +46,28 @@ public class SetRoleStmt extends StatementBase {
     }
 
     public void setTypeAll() {
-        setRoleType = SetRoleType.ALL;
+        setRoleType = SetDefaultRoleStmt.SetRoleType.ALL;
     }
 
     public boolean isAll() {
-        return setRoleType.equals(SetRoleType.ALL);
-    }
-
-    public void setTypeDefault() {
-        setRoleType = SetRoleType.DEFAULT;
-    }
-
-    public boolean isDefault() {
-        return setRoleType.equals(SetRoleType.DEFAULT);
+        return setRoleType.equals(SetDefaultRoleStmt.SetRoleType.ALL);
     }
 
     public void setTypeNone() {
-        setRoleType = SetRoleType.NONE;
+        setRoleType = SetDefaultRoleStmt.SetRoleType.NONE;
     }
 
     public boolean isNone() {
-        return setRoleType.equals(SetRoleType.NONE);
+        return setRoleType.equals(SetDefaultRoleStmt.SetRoleType.NONE);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitSetDefaultRoleStatement(this, context);
     }
 
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetRoleStatement(this, context);
     }
 }
