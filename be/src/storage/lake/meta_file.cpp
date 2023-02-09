@@ -64,7 +64,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
     // delete input rowsets
     std::stringstream del_range_ss;
-    std::vector<std::pair<uint32_t, uint32_t> > delete_delvec_sid_range;
+    std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
     struct Finder {
         uint32_t id;
         bool operator()(const uint32_t rowid) const { return rowid == id; }
@@ -83,6 +83,8 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             it++;
         }
     }
+    // record the number of delvec files, to decide if need to compact delvec later.
+    std::unordered_set<int64_t> delvec_versions;
     // delete delvec by input rowsets
     int delvec_erase_cnt = 0;
     auto delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->begin();
@@ -100,6 +102,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
             delvec_it = _tablet_meta->mutable_delvec_meta()->mutable_delvecs()->erase(delvec_it);
             delvec_erase_cnt++;
         } else {
+            delvec_versions.insert(delvec_it->second.version());
             delvec_it++;
         }
     }
@@ -110,6 +113,15 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+    }
+
+    // compact delvecs
+    if (delvec_versions.size() >= config::lake_delvec_compact_threshold) {
+        auto st = _compact_delvec();
+        if (!st.ok()) {
+            // print error log, but continue handle compaction txn
+            LOG(ERROR) << "lake primary table compact multi delvecs failed: " << st;
+        }
     }
 
     LOG(INFO) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
@@ -154,6 +166,46 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
             LOG(INFO) << "MetaFileBuilder sync delvec cost(ms): " << watch.elapsed_time() / 1000000;
         }
     }
+
+    return Status::OK();
+}
+
+Status MetaFileBuilder::_compact_delvec() {
+    MonotonicStopWatch watch;
+    watch.start();
+    std::vector<std::pair<DelVectorPtr, uint32_t>> ready_to_add;
+    // read each delvec from old files and write to buffer
+    for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
+        // 1. find in cache
+        std::string cache_key = delvec_cache_key(_tablet_meta->id(), each_delvec.second);
+        DelVectorPtr delvec_cache_ptr = _tablet.tablet_mgr()->lookup_delvec(cache_key);
+        if (delvec_cache_ptr == nullptr) {
+            delvec_cache_ptr = std::make_shared<DelVector>();
+            // 2. read from old file
+            RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+            std::string buf;
+            raw::stl_string_resize_uninitialized(&buf, each_delvec.second.size());
+            std::string filepath =
+                    _tablet.tablet_mgr()->delvec_location(_tablet_meta->id(), each_delvec.second.version());
+            auto rf = fs::new_random_access_file(opts, filepath);
+            if (!rf.ok()) {
+                return rf.status();
+            }
+            RETURN_IF_ERROR((*rf)->read_at_fully(each_delvec.second.offset(), buf.data(), each_delvec.second.size()));
+            // parse delvec
+            RETURN_IF_ERROR(
+                    delvec_cache_ptr->load(each_delvec.second.version(), buf.data(), each_delvec.second.size()));
+        }
+        ready_to_add.push_back(std::make_pair(delvec_cache_ptr, each_delvec.first));
+    }
+    // 3. write to buf together for atomic
+    for (auto& each : ready_to_add) {
+        append_delvec(each.first, each.second);
+    }
+    // 4. clear old delvec page
+    _tablet_meta->mutable_delvec_meta()->clear_delvecs();
+    LOG(INFO) << "lake primary table compact delvecs, merge to " << _buf.size()
+              << " bytes file, cost(ms): " << watch.elapsed_time() / 1000000;
     return Status::OK();
 }
 
@@ -259,7 +311,7 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
             delvec->copy_from(*delvec_cache_ptr);
             return Status::OK();
         }
-        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        RandomAccessFileOptions opts{.skip_fill_local_cache = false};
         auto rf = fs::new_random_access_file(opts, filepath);
         if (!rf.ok()) {
             return rf.status();

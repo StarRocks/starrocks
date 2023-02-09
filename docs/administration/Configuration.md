@@ -528,6 +528,7 @@ BE static parameters are as follows.
 | lake_gc_segment_check_interval | 3600 | N/A | |
 | lake_gc_segment_expire_seconds | 259200 | N/A | |
 | lake_metadata_cache_limit | 2147483648 | N/A | |
+| lake_delvec_compact_threshold | 10 | N/A | |
 | late_materialization_ratio | 10 | N/A | |
 | local_library_dir |  | N/A | |
 | loop_count_wait_fragments_finish | 0 | N/A | |
