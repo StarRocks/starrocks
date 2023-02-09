@@ -73,9 +73,9 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -391,13 +391,13 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPreProcess() throws IOException {
-        serializedIdToRange = Maps.newHashMap();
+        serializedIdToRange = Maps.newConcurrentMap();
         for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
             byte[] serializedRange = serializeRange(entry.getValue());
             serializedIdToRange.put(entry.getKey(), serializedRange);
         }
 
-        serializedIdToTempRange = Maps.newHashMap();
+        serializedIdToTempRange = Maps.newConcurrentMap();
         for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
             byte[] serializedRange = serializeRange(entry.getValue());
             serializedIdToTempRange.put(entry.getKey(), serializedRange);
@@ -406,14 +406,14 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        idToRange = Maps.newHashMap();
+        idToRange = Maps.newConcurrentMap();
         if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
                 idToRange.put(entry.getKey(), deserializeRange(entry.getValue()));
             }
             serializedIdToRange = null;
         }
-        idToTempRange = Maps.newHashMap();
+        idToTempRange = Maps.newConcurrentMap();
         if (serializedIdToTempRange != null && !serializedIdToTempRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToTempRange.entrySet()) {
                 idToTempRange.put(entry.getKey(), deserializeRange(entry.getValue()));
