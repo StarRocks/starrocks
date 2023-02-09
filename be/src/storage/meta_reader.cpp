@@ -225,7 +225,6 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 
     nullable_column->null_column_data().emplace_back(0);
 
-
     return Status::OK();
 }
 
