@@ -100,7 +100,8 @@ public class HiveMetaClient {
         @Override
         public void close() {
             synchronized (clientPoolLock) {
-                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
+                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE || (hiveClient instanceof HiveMetaStoreThriftClient &&
+                        !((HiveMetaStoreThriftClient) hiveClient).isConnected())) {
                     hiveClient.close();
                 } else {
                     clientPool.offer(this);

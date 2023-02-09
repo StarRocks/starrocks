@@ -362,6 +362,10 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         return localMetaStore;
     }
 
+    public boolean isConnected() {
+        return isConnected;
+    }
+
     @Override
     public boolean isCompatibleWith(Configuration conf) {
         // Make a copy of currentMetaVars, there is a race condition that
