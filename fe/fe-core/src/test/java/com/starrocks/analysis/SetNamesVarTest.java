@@ -17,9 +17,12 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetNamesVar;
+import com.starrocks.sql.ast.SetStmt;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -28,17 +31,17 @@ public class SetNamesVarTest {
     @Test
     public void testNormal() throws AnalysisException {
         SetNamesVar var = new SetNamesVar(null, null);
-        var.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
         Assert.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", null);
-        var.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
         Assert.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", "aBc");
-        var.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
         Assert.assertEquals("aBc", var.getCollate());
     }
@@ -46,7 +49,7 @@ public class SetNamesVarTest {
     @Test(expected = SemanticException.class)
     public void testUnsupported()  {
         SetNamesVar var = new SetNamesVar("gbk");
-        var.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         Assert.fail("No exception throws.");
     }
 }

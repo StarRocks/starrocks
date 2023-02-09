@@ -34,6 +34,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
@@ -47,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -122,7 +124,7 @@ public class SetPasswordTest {
         user1.setIsAnalyzed();
         SetPassVar setPassVar = new SetPassVar(user1, null);
         try {
-            setPassVar.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -131,7 +133,7 @@ public class SetPasswordTest {
         // set password without for
         SetPassVar setPassVar2 = new SetPassVar(null, null);
         try {
-            setPassVar2.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar2)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -151,7 +153,7 @@ public class SetPasswordTest {
         // set password without for
         SetPassVar setPassVar3 = new SetPassVar(null, null);
         try {
-            setPassVar3.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar3)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -162,7 +164,7 @@ public class SetPasswordTest {
         user2.setIsAnalyzed();
         SetPassVar setPassVar4 = new SetPassVar(user2, null);
         try {
-            setPassVar4.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar4)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
