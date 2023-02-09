@@ -454,7 +454,7 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public void updateBackendState(Backend be) {
-        throw new SemanticException("not implemented");
+
     }
 
     @Override
@@ -474,6 +474,5 @@ public class LakeSystemInfoService extends SystemInfoService {
 
     @Override
     public void updatePathInfo(List<DiskInfo> addedDisks, List<DiskInfo> removedDisks) {
-        throw new SemanticException("not implemented");
     }
 }

@@ -184,7 +184,7 @@ public class InsertPlanner {
 
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
                         insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
-                        olapTable.enableReplicatedStorage());
+                        olapTable.enableReplicatedStorage(), session.getCurrentWarehouse());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {

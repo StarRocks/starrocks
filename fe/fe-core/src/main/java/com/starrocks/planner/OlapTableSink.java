@@ -122,13 +122,17 @@ public class OlapTableSink extends DataSink {
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
 
+    private final String currentWarehouse;
+
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage);
+            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage, String currentWarehouse) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum,
+                enableReplicatedStorage, currentWarehouse);
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-            boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
+            boolean enablePipelineLoad, TWriteQuorumType writeQuorum,
+            boolean enableReplicatedStorage, String currentWarehouse) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -137,6 +141,7 @@ public class OlapTableSink extends DataSink {
         this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
         this.enableReplicatedStorage = enableReplicatedStorage;
+        this.currentWarehouse = currentWarehouse;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -431,14 +436,11 @@ public class OlapTableSink extends DataSink {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isLakeTable()) {
                         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                                getWarehouse(ConnectContext.get().getCurrentWarehouse());
+                                getWarehouse(currentWarehouse);
                         com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().orElseThrow(
                                 () -> new UserException("no cluster exists in this warehouse")
                         );
                         long workerGroupId = cluster.getWorkerGroupId();
-                        // for debug
-                        LOG.info("current warehous is {}", warehouse.getFullName());
-                        LOG.info("workerGroupId is {}", workerGroupId);
                         locationParam.addToTablets(new TTabletLocation(
                                 tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId(workerGroupId))));
                     } else {

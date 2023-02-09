@@ -174,7 +174,7 @@ public class StreamLoadPlanner {
 
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage());
+                destTable.enableReplicatedStorage(), null);
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable);
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());

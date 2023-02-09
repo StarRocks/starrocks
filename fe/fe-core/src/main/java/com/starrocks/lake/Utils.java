@@ -41,6 +41,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class Utils {
@@ -52,12 +54,17 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()
-                    .values().stream().findFirst().orElseThrow(() -> new UserException("no warehouse exists"));
-            com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().orElseThrow(
-                    () -> new UserException("no cluster exists in this warehouse")
-            );
+            // TODO: choose a cluster whose state is ready
+            List<Warehouse> warehouseList = GlobalStateMgr.getCurrentState().
+                    getWarehouseMgr().getAllWarehouses().values().stream().
+                    filter(warehouse -> warehouse.getClusters().size() > 0).collect(Collectors.toList());
 
+            if (warehouseList.isEmpty()) {
+                throw new UserException("no warehouse exists");
+            }
+            Warehouse warehouse = warehouseList.get(ThreadLocalRandom.current().
+                    nextInt(warehouseList.size()) % warehouseList.size());
+            com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().get();
             long workerGroupId = cluster.getWorkerGroupId();
             return tablet.getPrimaryBackendId(workerGroupId);
         } catch (UserException ex) {

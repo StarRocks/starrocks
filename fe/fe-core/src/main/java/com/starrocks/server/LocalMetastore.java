@@ -210,6 +210,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -243,6 +244,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -1689,9 +1691,27 @@ public class LocalMetastore implements ConnectorMetadata {
                 (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500)) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
             // lake table need to get current warehouse
-            String currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends, warehouse);
+            String tableName = table.getName();
+            Warehouse currentWarehouse = null;
+            if (db.getFullName().equals(StatsConstants.STATISTICS_DB_NAME) &&
+                    (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME) ||
+                    tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME) ||
+                    tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME))) {
+                // TODO: choose a cluster whose state is ready
+                List<Warehouse> warehouseList = GlobalStateMgr.getCurrentState().
+                        getWarehouseMgr().getAllWarehouses().values().stream().
+                        filter(warehouse -> warehouse.getClusters().size() > 0).collect(Collectors.toList());
+
+                if (warehouseList.isEmpty()) {
+                    throw new DdlException("no warehouse exists");
+                }
+                currentWarehouse = warehouseList.get(ThreadLocalRandom.current().
+                        nextInt(warehouseList.size()) % warehouseList.size());
+            } else {
+                String currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
+                currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
+            }
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends, currentWarehouse);
         } else if (numAliveBackends > 0) {
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else {

@@ -100,7 +100,7 @@ public class DeletePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage());
+                    table.enableReplicatedStorage(), session.getCurrentWarehouse());
             execPlan.getFragments().get(0).setSink(dataSink);
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);

@@ -85,7 +85,7 @@ public class LakeTablet extends Tablet {
                 getPrimaryBackendIdByShard(getShardId(), workerGroupId);
     }
 
-    // need to delete finally
+    @Deprecated
     public long getPrimaryBackendId() throws UserException {
         return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
     }

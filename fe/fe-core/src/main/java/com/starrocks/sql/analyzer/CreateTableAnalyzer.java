@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,16 +103,29 @@ public class CreateTableAnalyzer {
         return charsetName;
     }
 
-    public static void analyze(CreateTableStmt statement, ConnectContext context) {
-
-        if (Config.use_staros && context.getCurrentWarehouse() == null) {
-            throw new SemanticException("No warehouse selected");
+    private static boolean isStatisticsTable(TableName tableNameObject) {
+        final String tableName = tableNameObject.getTbl();
+        final String dbName = tableNameObject.getDb();
+        if (dbName == StatsConstants.STATISTICS_DB_NAME &&
+                (tableName == StatsConstants.SAMPLE_STATISTICS_TABLE_NAME ||
+                tableName == StatsConstants.FULL_STATISTICS_TABLE_NAME ||
+                tableName == StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+            return  true;
         }
+        return false;
+    }
 
+    public static void analyze(CreateTableStmt statement, ConnectContext context) {
         final TableName tableNameObject = statement.getDbTbl();
         MetaUtils.normalizationTableName(context, tableNameObject);
 
+        if (Config.use_staros && context.getCurrentWarehouse() == null &&
+                !isStatisticsTable(tableNameObject)) {
+            throw new SemanticException("No warehouse selected");
+        }
+
         final String tableName = tableNameObject.getTbl();
+
         try {
             FeNameFormat.checkTableName(tableName);
         } catch (AnalysisException e) {
