@@ -596,6 +596,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowUserStatement(ShowUserStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitDropRoleStatement(DropRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -604,8 +608,12 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowUserStatement(ShowUserStmt statement, C context) {
-        return visitShowStatement(statement, context);
+    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
@@ -719,10 +727,6 @@ public abstract class AstVisitor<R, C> {
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
