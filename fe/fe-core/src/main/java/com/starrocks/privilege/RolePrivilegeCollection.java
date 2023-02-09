@@ -38,6 +38,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         REMOVABLE(2);
 
         private long mask;
+
         RoleFlags(int m) {
             this.mask = 1L << m;
         }
@@ -61,7 +62,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     }
 
     private void assertMutable() throws PrivilegeException {
-        if (! checkFlag(RoleFlags.MUTABLE)) {
+        if (!checkFlag(RoleFlags.MUTABLE)) {
             throw new PrivilegeException("role " + name + " is not mutable!");
         }
     }
@@ -77,6 +78,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     public String getName() {
         return name;
     }
+
     private boolean checkFlag(RoleFlags flag) {
         return (this.mask & flag.mask) != 0;
     }
@@ -108,16 +110,16 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     }
 
     @Override
-    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+    public void grant(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
             throws PrivilegeException {
         assertMutable();
-        super.grant(type, actionSet, objects, isGrant);
+        super.grant(type, privilegeTypes, objects, isGrant);
     }
 
     @Override
-    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+    public void revoke(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
             throws PrivilegeException {
         assertMutable();
-        super.revoke(type, actionSet, objects, isGrant);
+        super.revoke(type, privilegeTypes, objects, isGrant);
     }
 }
