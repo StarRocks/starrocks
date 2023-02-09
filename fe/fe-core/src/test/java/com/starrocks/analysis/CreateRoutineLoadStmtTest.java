@@ -104,6 +104,7 @@ public class CreateRoutineLoadStmtTest {
                 + "FROM KAFKA\n"
                 + "(\n"
                 + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\",\n"
                 + "\"kafka_topic\" = \"topictest\"\n"
                 + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
@@ -121,6 +122,7 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
         Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
         Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+        Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
     }
 
     @Test
@@ -432,12 +434,13 @@ public class CreateRoutineLoadStmtTest {
                 + "FROM KAFKA\n"
                 + "(\n"
                 + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
-                + "\"kafka_topic\" = \"topictest\"\n"
+                + "\"kafka_topic\" = \"topictest\",\n"
+                + "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\"\n"
                 + ");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assert.assertEquals("CREATE ROUTINE LOAD null.null ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
-                "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\" )", AstToStringBuilder.toString(stmt));
+        "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 
     private Map<String, String> getCustomProperties() {
