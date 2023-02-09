@@ -31,7 +31,7 @@ import java.util.Map;
 public class PrivilegeCollection {
     private static final Logger LOG = LogManager.getLogger(PrivilegeCollection.class);
 
-    @SerializedName("m")
+    @SerializedName("m2")
     protected Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
     public static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
