@@ -65,7 +65,7 @@ Status StreamAggregateOperator::reset_epoch(RuntimeState* state) {
 
 Status StreamAggregateOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     return _aggregator->open(state);
 }
 

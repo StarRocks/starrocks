@@ -43,7 +43,7 @@ Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     auto params = convert_to_aggregator_params(_tnode);
     _aggregator = std::make_shared<Aggregator>(std::move(params));
-    return _aggregator->prepare(state, _pool, runtime_profile(), _mem_tracker.get());
+    return _aggregator->prepare(state, _pool, runtime_profile());
 }
 
 Status AggregateBaseNode::close(RuntimeState* state) {
@@ -51,6 +51,11 @@ Status AggregateBaseNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_aggregator != nullptr) {
+        if (_aggregator->is_hash_set()) {
+            _mem_tracker->set(_aggregator->hash_set_memory_usage());
+        } else {
+            _mem_tracker->set(_aggregator->hash_map_memory_usage());
+        }
         _num_rows_returned = _aggregator->num_rows_returned();
         _aggregator->close(state);
         _aggregator.reset();

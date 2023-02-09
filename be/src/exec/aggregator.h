@@ -216,8 +216,7 @@ public:
     }
 
     Status open(RuntimeState* state);
-    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                           MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -238,6 +237,10 @@ public:
     int64_t num_pass_through_rows() { return _num_pass_through_rows; }
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
+
+    bool is_hash_set() { return _is_only_group_by_columns; }
+    const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
@@ -316,8 +319,6 @@ protected:
 
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
-
-    MemTracker* _mem_tracker = nullptr;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;

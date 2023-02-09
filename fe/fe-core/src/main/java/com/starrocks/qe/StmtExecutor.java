@@ -244,12 +244,6 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
 
-        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
-        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
-        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
-        summaryProfile.addInfoString(ProfileManager.QUERY_CPU_COST, DebugUtil.getPrettyStringNs(cpuCostNs));
-        summaryProfile.addInfoString(ProfileManager.QUERY_MEM_COST, DebugUtil.getPrettyStringBytes(memCostBytes));
-
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
         if (variables != null) {
@@ -281,7 +275,7 @@ public class StmtExecutor {
             if (coord.getQueryProfile() != null) {
                 coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles();
+                coord.mergeIsomorphicProfiles(getQueryStatisticsForAuditLog());
                 profile.addChild(coord.getQueryProfile());
             }
             coord = null;
@@ -934,7 +928,6 @@ public class StmtExecutor {
                 .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
-
 
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;

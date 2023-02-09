@@ -216,7 +216,8 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
+    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
+                                      _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
