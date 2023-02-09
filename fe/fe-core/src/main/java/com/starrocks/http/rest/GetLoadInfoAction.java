@@ -79,7 +79,7 @@ public class GetLoadInfoAction extends RestBaseAction {
 
         if (info.tblNames.isEmpty()) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkActionInDb(ConnectContext.get(), info.dbName, "INSERT")) {
+                if (!PrivilegeManager.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT)) {
                     throw new UnauthorizedException(
                             "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
                 }

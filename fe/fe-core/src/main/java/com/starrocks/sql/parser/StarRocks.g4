@@ -249,7 +249,6 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setRoleStatement
 
     //Unsupported Statement
     | unsupportedStatement

@@ -17,7 +17,6 @@ package com.starrocks.privilege;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -32,34 +31,31 @@ public interface AuthorizationProvider {
 
     Set<ObjectType> getAllPrivObjectTypes();
 
-    ObjectType getObjectType(short typeId) throws PrivilegeException;
+    List<PrivilegeType> getAvailablePrivType(ObjectType objectType);
 
-    /**
-     * analyze action type id -> action
-     */
-    Collection<Action> getAllActions(short typeId) throws PrivilegeException;
-
-    Action getAction(short objectTypeId, String actionName) throws PrivilegeException;
+    boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType);
 
     /**
      * analyze plural type name -> type name
      */
-    String getTypeNameByPlural(String plural) throws PrivilegeException;
+    ObjectType getTypeNameByPlural(String plural) throws PrivilegeException;
+
+    String getPlural(ObjectType objectType) throws PrivilegeException;
 
     /**
      * generate PEntryObject by tokenlist
      */
-    PEntryObject generateObject(String type, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException;
+    PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException;
 
-    PEntryObject generateUserObject(String type, UserIdentity user, GlobalStateMgr mgr) throws PrivilegeException;
+    PEntryObject generateUserObject(ObjectType objectType, UserIdentity user, GlobalStateMgr mgr) throws PrivilegeException;
 
     /**
      * validate if grant is allowed
      * e.g. To forbid `NODE` privilege being granted, we should put some code here.
      */
     void validateGrant(
-            String type,
-            List<String> actions,
+            ObjectType objectType,
+            List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects) throws PrivilegeException;
 
     /**
@@ -67,8 +63,8 @@ public interface AuthorizationProvider {
      * Developers can implement their own logic here.
      */
     boolean check(
-            short type,
-            Action want,
+            ObjectType objectType,
+            PrivilegeType want,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
@@ -78,7 +74,7 @@ public interface AuthorizationProvider {
      * For example, `use db1` statement will pass a (db1, ALL) as the object to check if any table exists
      */
     boolean searchAnyActionOnObject(
-            short type,
+            ObjectType objectType,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
@@ -86,14 +82,14 @@ public interface AuthorizationProvider {
      * Search if any object in collection matches the specified object with required action.
      */
     boolean searchActionOnObject(
-            short type,
+            ObjectType objectType,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection,
-            Action want);
+            PrivilegeType want);
 
     boolean allowGrant(
-            short type,
-            ActionSet wants,
+            ObjectType objectType,
+            List<PrivilegeType> wants,
             List<PEntryObject> objects,
             PrivilegeCollection currentPrivilegeCollection);
 

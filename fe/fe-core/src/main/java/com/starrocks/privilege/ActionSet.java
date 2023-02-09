@@ -23,8 +23,8 @@ public class ActionSet {
     @SerializedName(value = "b")
     protected long bitSet = 0;
 
-    public ActionSet(Collection<Action> actions) {
-        for (Action action : actions) {
+    public ActionSet(Collection<PrivilegeType> actions) {
+        for (PrivilegeType action : actions) {
             bitSet |= (1L << action.getId());
         }
     }
@@ -40,7 +40,7 @@ public class ActionSet {
         this.bitSet = bitSet;
     }
 
-    public boolean contains(Action action) {
+    public boolean contains(PrivilegeType action) {
         return (bitSet & (1L << action.getId())) != 0;
     }
 
