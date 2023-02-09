@@ -33,6 +33,14 @@ class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
+    inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
+        if (column->is_nullable()) {
+            return column;
+        }
+        auto null = NullColumn::create(column->size(), 0);
+        return NullableColumn::create(std::move(column), std::move(null));
+    }
+
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
     NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
 
