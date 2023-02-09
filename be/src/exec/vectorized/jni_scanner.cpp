@@ -22,7 +22,7 @@
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
     if (_jni_env->ExceptionCheck()) {
@@ -139,23 +139,23 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     return Status::OK();
 }
 
-template <LogicalType type, typename CppType>
+template <PrimitiveType type, typename CppType>
 Status JniScanner::_append_primitive_data(const FillColumnArgs& args) {
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-    using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using ColumnType = typename starrocks::vectorized::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     memcpy(runtime_column->get_data().data(), column_ptr, args.num_rows * sizeof(CppType));
     return Status::OK();
 }
 
-template <LogicalType type>
+template <PrimitiveType type>
 Status JniScanner::_append_string_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
     auto* data_column = args.column;
-    using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using ColumnType = typename starrocks::vectorized::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(data_column);
     Bytes& bytes = runtime_column->get_bytes();
     Offsets& offsets = runtime_column->get_offset();
@@ -169,12 +169,12 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
-template <LogicalType type, typename CppType>
+template <PrimitiveType type, typename CppType>
 Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
-    using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using ColumnType = typename starrocks::vectorized::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     CppType* runtime_data = runtime_column->get_data().data();
@@ -203,7 +203,7 @@ Status JniScanner::_append_date_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATE>;
+    using ColumnType = typename starrocks::vectorized::RunTimeColumnType<TYPE_DATE>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     DateValue* runtime_data = runtime_column->get_data().data();
@@ -228,7 +228,7 @@ Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATETIME>;
+    using ColumnType = typename starrocks::vectorized::RunTimeColumnType<TYPE_DATETIME>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     TimestampValue* runtime_data = runtime_column->get_data().data();
@@ -369,38 +369,38 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         // we assume every column starswith `null_column`.
     }
 
-    LogicalType column_type = args.slot_type.type;
-    if (column_type == LogicalType::TYPE_BOOLEAN) {
+    PrimitiveType column_type = args.slot_type.type;
+    if (column_type == PrimitiveType::TYPE_BOOLEAN) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN, uint8_t>(args)));
-    } else if (column_type == LogicalType::TYPE_SMALLINT) {
+    } else if (column_type == PrimitiveType::TYPE_SMALLINT) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(args)));
-    } else if (column_type == LogicalType::TYPE_INT) {
+    } else if (column_type == PrimitiveType::TYPE_INT) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_INT, int32_t>(args)));
-    } else if (column_type == LogicalType::TYPE_FLOAT) {
+    } else if (column_type == PrimitiveType::TYPE_FLOAT) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT, float>(args)));
-    } else if (column_type == LogicalType::TYPE_BIGINT) {
+    } else if (column_type == PrimitiveType::TYPE_BIGINT) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT, int64_t>(args)));
-    } else if (column_type == LogicalType::TYPE_DOUBLE) {
+    } else if (column_type == PrimitiveType::TYPE_DOUBLE) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE, double>(args)));
-    } else if (column_type == LogicalType::TYPE_VARCHAR) {
+    } else if (column_type == PrimitiveType::TYPE_VARCHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(args)));
-    } else if (column_type == LogicalType::TYPE_CHAR) {
+    } else if (column_type == PrimitiveType::TYPE_CHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(args)));
-    } else if (column_type == LogicalType::TYPE_DATE) {
+    } else if (column_type == PrimitiveType::TYPE_DATE) {
         RETURN_IF_ERROR((_append_date_data(args)));
-    } else if (column_type == LogicalType::TYPE_DATETIME) {
+    } else if (column_type == PrimitiveType::TYPE_DATETIME) {
         RETURN_IF_ERROR((_append_datetime_data(args)));
-    } else if (column_type == LogicalType::TYPE_DECIMAL32) {
+    } else if (column_type == PrimitiveType::TYPE_DECIMAL32) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(args)));
-    } else if (column_type == LogicalType::TYPE_DECIMAL64) {
+    } else if (column_type == PrimitiveType::TYPE_DECIMAL64) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(args)));
-    } else if (column_type == LogicalType::TYPE_DECIMAL128) {
+    } else if (column_type == PrimitiveType::TYPE_DECIMAL128) {
         RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(args)));
-    } else if (column_type == LogicalType::TYPE_ARRAY) {
+    } else if (column_type == PrimitiveType::TYPE_ARRAY) {
         RETURN_IF_ERROR((_append_array_data(args)));
-    } else if (column_type == LogicalType::TYPE_MAP) {
+    } else if (column_type == PrimitiveType::TYPE_MAP) {
         RETURN_IF_ERROR((_append_map_data(args)));
-    } else if (column_type == LogicalType::TYPE_STRUCT) {
+    } else if (column_type == PrimitiveType::TYPE_STRUCT) {
         RETURN_IF_ERROR((_append_struct_data(args)));
     } else {
         return Status::InternalError(fmt::format("Type {} is not supported for off-heap table scanner", column_type));
@@ -461,4 +461,4 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     return status;
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -21,7 +21,7 @@
 #include "jni.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 class JniScanner : public HdfsScanner {
 public:
@@ -57,13 +57,13 @@ private:
 
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
-    template <LogicalType type, typename CppType>
+    template <PrimitiveType type, typename CppType>
     Status _append_primitive_data(const FillColumnArgs& args);
 
-    template <LogicalType type, typename CppType>
+    template <PrimitiveType type, typename CppType>
     Status _append_decimal_data(const FillColumnArgs& args);
 
-    template <LogicalType type>
+    template <PrimitiveType type>
     Status _append_string_data(const FillColumnArgs& args);
 
     Status _append_date_data(const FillColumnArgs& args);
@@ -101,4 +101,4 @@ private:
     void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
-} // namespace starrocks
+} // namespace starrocks::vectorized
