@@ -303,6 +303,23 @@ void HdfsScannerContext::append_not_existed_columns_to_chunk(vectorized::ChunkPt
     }
 }
 
+Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
+    size_t chunk_size = (*chunk)->num_rows();
+    if (conjunct_ctxs_by_slot.size()) {
+        filter->assign(chunk_size, 1);
+        for (auto& it : conjunct_ctxs_by_slot) {
+            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
+            if (chunk_size == 0) {
+                break;
+            }
+        }
+        if (chunk_size != 0 && chunk_size != (*chunk)->num_rows()) {
+            (*chunk)->filter(*filter);
+        }
+    }
+    return Status::OK();
+}
+
 StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
