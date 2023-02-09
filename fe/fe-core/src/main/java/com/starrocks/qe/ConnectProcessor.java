@@ -220,6 +220,10 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
+        if (queryStmt == null) {
+            return "";
+        }
+
         String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -370,7 +374,7 @@ public class ConnectProcessor {
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         }
-
+        
         // audit after exec
         // replace '\n' to '\\n' to make string in one line
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
