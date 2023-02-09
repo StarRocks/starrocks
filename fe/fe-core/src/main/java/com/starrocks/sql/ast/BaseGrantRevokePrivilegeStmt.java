@@ -20,9 +20,9 @@ import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
 
 import java.util.List;
 
@@ -32,7 +32,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     protected String role;
     protected String objectTypeUnResolved;
-    protected List<String> privList;
+    protected List<String> privilegeTypeUnResolved;
 
     // the following fields is set by analyzer for old privilege framework and will be removed after 2.5 released
     private PrivBitSet privBitSet = null;
@@ -41,15 +41,15 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     // the following fields is set by analyzer, for new RBAC privilege framework
     private ObjectType objectType;
-    private ActionSet actionList;
+    private List<PrivilegeType> privilegeTypes;
     private List<PEntryObject> objectList;
 
     public BaseGrantRevokePrivilegeStmt(
-            List<String> privList,
+            List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
             GrantRevokeClause clause,
             GrantRevokePrivilegeObjects objects) {
-        this.privList = privList;
+        this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
         this.objects = objects;
@@ -97,10 +97,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.role = role;
     }
 
-    public void setObjectTypeUnResolved(String objectTypeUnResolved) {
-        this.objectTypeUnResolved = objectTypeUnResolved;
-    }
-
     public String getRole() {
         return role;
     }
@@ -113,8 +109,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectTypeUnResolved;
     }
 
-    public List<String> getPrivList() {
-        return privList;
+    public List<String> getPrivilegeTypeUnResolved() {
+        return privilegeTypeUnResolved;
     }
 
     public TablePattern getTblPattern() {
@@ -133,10 +129,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return clause.isWithGrantOption();
     }
 
-    public short getTypeId() {
-        return (short) objectType.getId();
-    }
-
     public ObjectType getObjectType() {
         return objectType;
     }
@@ -145,12 +137,12 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.objectType = objectType;
     }
 
-    public ActionSet getActionList() {
-        return actionList;
+    public List<PrivilegeType> getPrivilegeTypes() {
+        return privilegeTypes;
     }
 
-    public void setActionList(ActionSet actionList) {
-        this.actionList = actionList;
+    public void setPrivilegeTypes(List<PrivilegeType> privilegeTypes) {
+        this.privilegeTypes = privilegeTypes;
     }
 
     public List<PEntryObject> getObjectList() {
