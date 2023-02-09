@@ -132,18 +132,12 @@ private:
 
     bool move_cursor();
 
-    void acquire_remaining_chunk();
-
     SortDescs _sort_desc;
     SortedRun _left_run;
     SortedRun _right_run;
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
-
-    Permutation _permutation;
-    PermutationView _permutation_view = PermutationView(_permutation);
-    int _tail_cmp;
 
 #ifndef NDEBUG
     bool _left_is_empty = false;

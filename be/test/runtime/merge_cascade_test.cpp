@@ -148,6 +148,7 @@ TEST(MergeCascadeTest, merge_cursor_test) {
         // call get next 1
         auto merge_res = out_cursor->try_get_next();
         ASSERT_TRUE(!merge_res.first->is_empty());
+        ASSERT_EQ(chunk_size, merge_res.first->num_rows());
 
         // call get next 2
         merge_res = out_cursor->try_get_next();

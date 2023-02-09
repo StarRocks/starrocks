@@ -120,8 +120,6 @@ bool MergeTwoCursor::move_cursor() {
     DCHECK(is_data_ready());
     DCHECK(!is_eos());
 
-    acquire_remaining_chunk();
-
     bool eos = _left_run.empty() || _right_run.empty();
 
     if (_left_run.empty() && !_left_cursor->is_eos()) {
@@ -188,45 +186,38 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
 StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2) {
     const auto& sort_desc = _sort_desc;
 
-    _tail_cmp = CursorAlgo::compare_tail(sort_desc, run1, run2);
+    int tail_cmp = CursorAlgo::compare_tail(sort_desc, run1, run2);
+
+    Permutation permutation;
 
     // Merge partial chunk
-    RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run1, run2, &_permutation));
-    DCHECK_EQ(run1.num_rows() + run2.num_rows(), _permutation.size());
+    RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run1, run2, &permutation));
+    DCHECK_EQ(run1.num_rows() + run2.num_rows(), permutation.size());
 
     size_t merged_rows = std::max(run1.num_rows(), run2.num_rows());
 
     ChunkUniquePtr merged = run2.chunk->clone_empty(merged_rows);
 
-    _permutation_view = PermutationView(_permutation.data(), merged_rows);
+    auto perm_view = PermutationView(permutation.data(), merged_rows);
 
     // TODO: avoid copy the whole chunk, but copy orderby columns only
-    materialize_by_permutation(merged.get(), {run1.chunk, run2.chunk}, _permutation_view);
+    materialize_by_permutation(merged.get(), {run1.chunk, run2.chunk}, perm_view);
+
+    auto left_rows = permutation.size() - merged_rows;
+    perm_view = PermutationView(permutation.data() + merged_rows, left_rows);
+    ChunkUniquePtr left_merged = run2.chunk->clone_empty(left_rows);
+    materialize_by_permutation(left_merged.get(), {run1.chunk, run2.chunk}, perm_view);
+
+    if (tail_cmp <= 0) {
+        run1.reset();
+        run2 = SortedRun(std::move(left_merged), _left_cursor->get_sort_exprs());
+    } else {
+        run1 = SortedRun(std::move(left_merged), _left_cursor->get_sort_exprs());
+        run2.reset();
+    }
+    DCHECK_EQ(merged_rows + left_rows, permutation.size());
 
     return merged;
-}
-
-void MergeTwoCursor::acquire_remaining_chunk() {
-    if (_permutation.empty()) {
-        return;
-    }
-
-    size_t merged_rows = _permutation.size() - _permutation_view.size();
-    _permutation_view = PermutationView(_permutation.data() + _permutation_view.size(), merged_rows);
-
-    ChunkUniquePtr merged = _left_run.chunk->clone_empty(merged_rows);
-    materialize_by_permutation(merged.get(), {_left_run.chunk, _right_run.chunk}, _permutation_view);
-
-    _left_run.reset();
-    _right_run.reset();
-
-    if (_tail_cmp <= 0) {
-        _right_run = SortedRun(std::move(merged), _left_cursor->get_sort_exprs());
-    } else {
-        _left_run = SortedRun(std::move(merged), _left_cursor->get_sort_exprs());
-    }
-
-    _permutation.clear();
 }
 
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only
