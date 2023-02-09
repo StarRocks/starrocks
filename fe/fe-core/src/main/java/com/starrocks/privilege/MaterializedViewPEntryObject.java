@@ -22,8 +22,8 @@ import java.util.List;
 
 public class MaterializedViewPEntryObject extends TablePEntryObject {
 
-    protected MaterializedViewPEntryObject(long databaseId, long tableId) {
-        super(databaseId, tableId);
+    protected MaterializedViewPEntryObject(String dbUUID, String tblUUID) {
+        super(dbUUID, tblUUID);
     }
 
     public static MaterializedViewPEntryObject generate(GlobalStateMgr mgr, List<String> tokens)
@@ -31,31 +31,31 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
         if (tokens.size() != 2) {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
         }
-        long dbId;
-        long tableId;
+        String dbUUID;
+        String tblUUID;
 
         if (tokens.get(0).equals("*")) {
-            dbId = ALL_DATABASE_ID;
-            tableId = ALL_TABLES_ID;
+            dbUUID = ALL_DATABASE_UUID;
+            tblUUID = ALL_TABLES_UUID;
         } else {
             Database database = mgr.getDb(tokens.get(0));
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
             }
-            dbId = database.getId();
+            dbUUID = database.getUUID();
 
             if (tokens.get(1).equals("*")) {
-                tableId = ALL_TABLES_ID;
+                tblUUID = ALL_TABLES_UUID;
             } else {
                 Table table = database.getTable(tokens.get(1));
                 if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
                     throw new PrivObjNotFoundException(
                             "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
                 }
-                tableId = table.getId();
+                tblUUID = table.getUUID();
             }
         }
 
-        return new MaterializedViewPEntryObject(dbId, tableId);
+        return new MaterializedViewPEntryObject(dbUUID, tblUUID);
     }
 }

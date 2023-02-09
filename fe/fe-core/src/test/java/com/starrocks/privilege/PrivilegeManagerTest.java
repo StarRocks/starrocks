@@ -559,16 +559,16 @@ public class PrivilegeManagerTest {
         manager.grant(grantDbStmt);
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
         // 3. add invalidate entry: select on invalidatedb.table
-        objects = Arrays.asList(new TablePEntryObject(-1, goodTableObject.tableId));
+        objects = Arrays.asList(new TablePEntryObject("-1", goodTableObject.tableUUID));
         manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
         // 4. add invalidate entry: select on db.invalidatetable
-        objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseId, -1));
+        objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseUUID, "-1"));
         manager.grantToUser(grantTableStmt.getObjectType(), grantTableStmt.getPrivilegeTypes(), objects, false, testUser);
         // 5. add invalidate entry: create_table, drop on invalidatedb
-        objects = Arrays.asList(new DbPEntryObject(-1));
+        objects = Arrays.asList(new DbPEntryObject("-1"));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 6. add valid entry: ALL databases
-        objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASE_ID));
+        objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASES_UUID));
         manager.grantToUser(grantDbStmt.getObjectType(), grantDbStmt.getPrivilegeTypes(), objects, false, testUser);
         // 7. add valid user
         sql = "grant impersonate on USER root to test_user";
