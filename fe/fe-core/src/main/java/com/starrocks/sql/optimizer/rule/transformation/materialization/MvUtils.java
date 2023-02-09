@@ -317,24 +317,41 @@ public class MvUtils {
         }
     }
 
-    public static boolean isAllEqualInnerJoin(OptExpression root) {
+    public static boolean isAllEqualInnerOrCrossJoin(OptExpression root) {
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalOperator)) {
             return false;
         }
+
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+<<<<<<< HEAD
             boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
             if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
+=======
+            if (!isEqualInnerOrCrossJoin(joinOperator)) {
+>>>>>>> b40dded57 ([Enhancement] Materialized view query rewrite support cross join (#16650))
                 return false;
             }
         }
         for (OptExpression child : root.getInputs()) {
-            if (!isAllEqualInnerJoin(child)) {
+            if (!isAllEqualInnerOrCrossJoin(child)) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean isEqualInnerOrCrossJoin(LogicalJoinOperator joinOperator) {
+        if (joinOperator.getJoinType() == JoinOperator.CROSS_JOIN && joinOperator.getOnPredicate() == null) {
+            return true;
+        }
+
+        if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN &&
+                isColumnEqualPredicate(joinOperator.getOnPredicate())) {
+            return true;
+        }
+        return false;
     }
 
     public static boolean isColumnEqualPredicate(ScalarOperator predicate) {
