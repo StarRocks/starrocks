@@ -122,15 +122,17 @@ bool MergeTwoCursor::move_cursor() {
         auto chunk = _left_cursor->try_get_next();
         if (chunk.first) {
             _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
         }
     }
     if (_right_run.empty() && !_right_cursor->is_eos()) {
         auto chunk = _right_cursor->try_get_next();
         if (chunk.first) {
             _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
         }
+    }
+
+    if (!_left_run.empty() && !_right_run.empty()) {
+        eos = false;
     }
 
     // one is eos but the other has data stream
@@ -150,6 +152,15 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     DCHECK(!(_left_run.empty() && _right_run.empty()));
     const SortDescs& sort_desc = _sort_desc;
     ChunkUniquePtr result;
+
+#ifndef NDEBUG
+    // debug scope
+    DCHECK(!(_left_is_empty && !_left_run.empty()));
+    DCHECK(!(_right_is_empty && !_right_run.empty()));
+
+    _left_is_empty |= _left_run.empty();
+    _right_is_empty |= _right_run.empty();
+#endif
 
     int intersect = _left_run.intersect(sort_desc, _right_run);
     if (intersect < 0) {
