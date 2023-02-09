@@ -25,7 +25,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -113,7 +113,7 @@ public class TaskRun implements Comparable<TaskRun> {
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
-                    runCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))), true);
+                    runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
                 } catch (DdlException e) {
                     // not session variable
                     taskRunContextProperties.put(key, properties.get(key));

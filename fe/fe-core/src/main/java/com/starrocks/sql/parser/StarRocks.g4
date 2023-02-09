@@ -1429,9 +1429,9 @@ setVar
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
-    | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | userVariable '=' expression                                                               #setVariable
-    | systemVariable '=' setExprOrDefault                                                       #setVariable
+    | userVariable '=' expression                                                               #setUserVar
+    | varType? identifier '=' setExprOrDefault                                                  #setSystemVar
+    | systemVariable '=' setExprOrDefault                                                       #setSystemVar
     | varType? TRANSACTION transaction_characteristics                                          #setTransaction
     ;
 

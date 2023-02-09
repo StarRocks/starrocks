@@ -122,12 +122,12 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -172,6 +172,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -1445,7 +1446,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitSetStatement(SetStmt statement, ConnectContext context) {
-            List<SetVar> varList = statement.getSetVars();
+            List<SetListItem> varList = statement.getSetListItems();
             varList.forEach(setVar -> {
                 if ((setVar instanceof SetPassVar)) {
                     UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
@@ -1455,15 +1456,19 @@ public class PrivilegeCheckerV2 {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR, "ANALYZE ERROR");
                     }
                     if (!context.getUserIdentity().equals(prepareChangeUser)) {
+                        if (prepareChangeUser.equals(UserIdentity.ROOT)) {
+                            throw new SemanticException("Can not set password for root user, except root itself");
+                        }
+
                         if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
                             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                         }
                     }
-                    return;
-                }
-                SetType type = setVar.getType();
-                if (type != null && type.equals(SetType.GLOBAL)) {
-                    checkStmtOperatePrivilege(context);
+                } else if (setVar instanceof SystemVariable) {
+                    SetType type = ((SystemVariable) setVar).getType();
+                    if (type != null && type.equals(SetType.GLOBAL)) {
+                        checkStmtOperatePrivilege(context);
+                    }
                 }
             });
             return null;

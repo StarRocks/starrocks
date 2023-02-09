@@ -199,11 +199,11 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -3396,7 +3396,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null && !optHints.isEmpty()) {
                 SessionVariable sessionVariable = VariableMgr.newSessionVariable();
                 for (String key : optHints.keySet()) {
-                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                    VariableMgr.setSystemVariable(sessionVariable,
+                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
                 }
             }
         }

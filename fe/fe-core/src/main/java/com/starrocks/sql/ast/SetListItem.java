@@ -14,5 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-public class SetTransaction extends SetListItem {
+import com.starrocks.analysis.ParseNode;
+
+public class SetListItem implements ParseNode {
 }

@@ -50,7 +50,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowClustersStmt;
@@ -77,7 +76,6 @@ import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
-import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -127,14 +125,6 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
-            return null;
-        }
-
-        @Override
-        public Void visitShowVariablesStatement(ShowVariablesStmt node, ConnectContext context) {
-            if (node.getType() == null) {
-                node.setType(SetType.DEFAULT);
-            }
             return null;
         }
 

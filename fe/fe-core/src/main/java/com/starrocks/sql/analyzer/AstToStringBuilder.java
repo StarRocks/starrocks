@@ -91,14 +91,15 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -132,36 +133,32 @@ public class AstToStringBuilder {
             sb.append("SET ");
 
             List<String> setVarList = new ArrayList<>();
-            for (SetVar setVar : stmt.getSetVars()) {
-                if (setVar instanceof SetPassVar) {
-                    StringBuilder tmp = new StringBuilder();
-                    tmp.append("PASSWORD FOR ")
-                            .append(((SetPassVar) setVar).getUserIdent().toString())
-                            .append(" = PASSWORD('***')");
-                    setVarList.add(tmp.toString());
-                    continue;
-                }
-                String setVarSql = "";
+            for (SetListItem setVar : stmt.getSetListItems()) {
+                if (setVar instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += systemVariable.getType().toString() + " ";
+                    setVarSql += "`" + systemVariable.getVariable() + "`";
+                    setVarSql += " = ";
+                    setVarSql += visit(systemVariable.getResolvedExpression());
 
-                // `SET DEFAULT` is not supported
-                if (!setVar.getType().equals(SetType.DEFAULT)) {
-                    if (setVar.getType().equals(SetType.USER)) {
-                        setVarSql += "@";
-                    } else {
-                        setVarSql += setVar.getType().toString() + " ";
-                    }
-                }
-                setVarSql += "`" + setVar.getVariable() + "`";
-                setVarSql += " = ";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof UserVariable) {
+                    UserVariable userVariable = (UserVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += "@";
+                    setVarSql += "`" + userVariable.getVariable() + "`";
+                    setVarSql += " = ";
 
-                if (setVar instanceof UserVariable) {
-                    setVarSql += "cast (" + visit(setVar.getResolvedExpression())
-                            + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
-                } else {
-                    setVarSql += visit(setVar.getExpression());
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof SetPassVar) {
+                    String tmp = "PASSWORD FOR " +
+                            ((SetPassVar) setVar).getUserIdent().toString() +
+                            " = PASSWORD('***')";
+                    setVarList.add(tmp);
                 }
-
-                setVarList.add(setVarSql);
             }
 
             return sb.append(Joiner.on(",").join(setVarList)).toString();
@@ -176,7 +173,7 @@ public class AstToStringBuilder {
                 if (idx != 0) {
                     sb.append(", ");
                 }
-                sb.append(stringStringPair.first + " = " + stringStringPair.second);
+                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
                 idx++;
             }
             return sb.toString();
