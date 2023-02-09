@@ -54,6 +54,13 @@ Status MetaReader::open() {
 }
 
 Status MetaReader::_read(Chunk* chunk, size_t n) {
+    if (_collect_context.seg_collecters.size() == 0) {
+        // no segment, fill chunk with an empty result
+        _fill_empty_result(chunk);
+        _has_more = false;
+        return Status::OK();
+    }
+
     std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
         const ColumnPtr& col = chunk->get_column_by_index(i);
@@ -76,9 +83,25 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
     return Status::OK();
 }
 
+void MetaReader::_fill_empty_result(Chunk* chunk) {
+    DCHECK(chunk != nullptr);
+    for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
+        auto s_id = _collect_context.result_slot_ids[i];
+        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
+        const auto& field = _collect_context.seg_collecter_params.fields[i];
+        ColumnPtr column = chunk->get_column_by_slot_id(slot->id());
+        if (field == "count") {
+            column->append_datum(int64_t(0));
+        } else {
+            column->append_nulls(1);
+        }
+    }
+}
+
 bool MetaReader::has_more() {
     return _has_more;
 }
+
 Status MetaReader::_fill_result_chunk(Chunk* chunk) {
     for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
         auto s_id = _collect_context.result_slot_ids[i];
@@ -90,7 +113,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            ColumnPtr column = ColumnHelper::create_column(desc, true);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == "count") {
             TypeDescriptor item_desc;
@@ -101,7 +124,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -186,8 +209,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
-    ArrayColumn* array_column = nullptr;
-    array_column = down_cast<ArrayColumn*>(column);
+    NullableColumn* nullable_column = down_cast<NullableColumn*>(column);
+
+    ArrayColumn* array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
 
     auto* offsets = array_column->offsets_column().get();
     auto& data = offsets->get_data();
@@ -198,6 +222,8 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     // add elements
     auto dst = array_column->elements_column().get();
     CHECK(dst->append_strings(words));
+
+    nullable_column->null_column_data().emplace_back(0);
 
     return Status::OK();
 }
