@@ -343,29 +343,119 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
     }
 };
 
-// TODO(hcf) to be implemented
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKey {
+struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
+    using KeyType = typename HashMap::key_type;
+
     HashMap hash_map;
 
-    PartitionHashMapWithSerializedKey(int32_t chunk_size) {}
+    Buffer<uint32_t> slice_sizes;
+    uint32_t max_one_row_size = 8;
+
+    std::unique_ptr<MemPool> inner_mem_pool;
+    uint8_t* buffer;
+
+    PartitionHashMapWithSerializedKey(int32_t chunk_size)
+            : PartitionHashMapBase(chunk_size),
+              inner_mem_pool(std::make_unique<MemPool>()),
+              buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
+
     bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
-        return false;
+        if (is_downgrade) {
+            return is_downgrade;
+        }
+
+        size_t num_rows = chunk->num_rows();
+        slice_sizes.assign(num_rows, 0);
+
+        uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
+            max_one_row_size = cur_max_one_row_size;
+            inner_mem_pool->clear();
+            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
+            // from accessing out-of-bound memory.
+            buffer = inner_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        }
+
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, num_rows, max_one_row_size);
+        }
+
+        append_chunk_for_one_key(
+                hash_map, chunk,
+                [&](uint32_t offset) {
+                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
+                },
+                [&](const KeyType& key) {
+                    uint8_t* pos = mem_pool->allocate(key.size);
+                    strings::memcpy_inlined(pos, key.data, key.size);
+                    return Slice{pos, key.size};
+                },
+                obj_pool);
+
+        return is_downgrade;
+    }
+
+    uint32_t get_max_serialize_size(const Columns& key_columns) {
+        uint32_t max_size = 0;
+        for (const auto& key_column : key_columns) {
+            max_size += key_column->max_one_element_serialize_size();
+        }
+        return max_size;
     }
 };
 
-// TODO(hcf) to be implemented
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKeyFixedSize {
+struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
+    using FixedSizeSliceKey = typename HashMap::key_type;
+
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+
     HashMap hash_map;
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
 
-    PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) {}
+    Buffer<uint32_t> slice_sizes;
+    std::vector<FixedSizeSliceKey> buffer;
+
+    PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {
+        buffer.reserve(chunk_size);
+        auto* buf = reinterpret_cast<uint8_t*>(buffer.data());
+        memset(buf, 0x0, max_fixed_size * chunk_size);
+    }
+
     bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
-        return false;
+        DCHECK(fixed_byte_size != -1);
+
+        if (is_downgrade) {
+            return is_downgrade;
+        }
+
+        size_t num_rows = chunk->num_rows();
+        slice_sizes.assign(num_rows, 0);
+
+        auto* buf = reinterpret_cast<uint8_t*>(buffer.data());
+        if (has_null_column) {
+            memset(buf, 0x0, max_fixed_size * num_rows);
+        }
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buf, slice_sizes, num_rows, max_fixed_size);
+        }
+
+        auto* keys = reinterpret_cast<FixedSizeSliceKey*>(buffer.data());
+        if (has_null_column) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                keys[i].u.size = slice_sizes[i];
+            }
+        }
+
+        append_chunk_for_one_key(
+                hash_map, chunk, [&](uint32_t offset) { return keys[offset]; },
+                [&](const FixedSizeSliceKey& key) { return key; }, obj_pool);
+
+        return is_downgrade;
     }
 };
 

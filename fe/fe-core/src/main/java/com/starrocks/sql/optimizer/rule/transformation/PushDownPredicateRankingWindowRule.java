@@ -135,11 +135,6 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
-        // TODO(hcf) we will support multi-partition later
-        if (partitionByColumns.size() > 1) {
-            return Collections.emptyList();
-        }
-
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
