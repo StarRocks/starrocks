@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
-import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -230,7 +229,6 @@ public class Optimizer {
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
-        ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
         cleanUpMemoGroup(memo);
