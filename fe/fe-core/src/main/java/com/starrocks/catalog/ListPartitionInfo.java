@@ -222,36 +222,38 @@ public class ListPartitionInfo extends PartitionInfo {
                 .map(item -> "`" + item.getName() + "`")
                 .collect(Collectors.joining(",")));
         sb.append(")(\n");
-
+        List<Long> partitionIds = getPartitionIds(false);
         if (!this.idToValues.isEmpty()) {
-            sb.append(this.singleListPartitionSql(table, tableReplicationNum));
+            sb.append(this.singleListPartitionSql(table, partitionIds, tableReplicationNum));
         }
 
         if (!this.idToMultiValues.isEmpty()) {
-            sb.append(this.multiListPartitionSql(table, tableReplicationNum));
+            sb.append(this.multiListPartitionSql(table, partitionIds, tableReplicationNum));
         }
 
         sb.append("\n)");
         return sb.toString();
     }
 
-    private String singleListPartitionSql(OlapTable table, short tableReplicationNum) {
+    private String singleListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToLiteralExprValues.forEach((partitionId, values) -> {
-            Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
-            Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
-                String partitionName = partition.getName();
-                sb.append("  PARTITION ")
-                        .append(partitionName)
-                        .append(" VALUES IN ")
-                        .append(this.valuesToString(values));
+            if (partitionIds.contains(partitionId)) {
+                Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
+                Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
+                    String partitionName = partition.getName();
+                    sb.append("  PARTITION ")
+                            .append(partitionName)
+                            .append(" VALUES IN ")
+                            .append(this.valuesToString(values));
 
-                if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
-                            .append("\")");
-                }
-                sb.append(",\n");
-            });
+                    if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
+                        sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                                .append("\")");
+                    }
+                    sb.append(",\n");
+                });
+            }
         });
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
@@ -261,24 +263,26 @@ public class ListPartitionInfo extends PartitionInfo {
                 .collect(Collectors.joining(", ")) + ")";
     }
 
-    private String multiListPartitionSql(OlapTable table, short tableReplicationNum) {
+    private String multiListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToMultiLiteralExprValues.forEach((partitionId, multiValues) -> {
-            Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
-            Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
-                String partitionName = partition.getName();
-                sb.append("  PARTITION ")
-                        .append(partitionName)
-                        .append(" VALUES IN ")
-                        .append(this.multiValuesToString(multiValues));
+            if (partitionIds.contains(partitionId)) {
+                Short partitionReplicaNum = table.getPartitionInfo().idToReplicationNum.get(partitionId);
+                Optional.ofNullable(table.getPartition(partitionId)).ifPresent(partition -> {
+                    String partitionName = partition.getName();
+                    sb.append("  PARTITION ")
+                            .append(partitionName)
+                            .append(" VALUES IN ")
+                            .append(this.multiValuesToString(multiValues));
 
-                if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
-                            .append("\")");
-                }
+                    if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
+                        sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                                .append("\")");
+                    }
 
-                sb.append(",\n");
-            });
+                    sb.append(",\n");
+                });
+            }
         });
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
