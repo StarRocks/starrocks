@@ -796,14 +796,18 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
         return true;
     }
 
+    if (chunk_num <= 0) {
+        return false;
+    }
+
     bool is_buffer_full = _recvr->_num_buffered_bytes > _recvr->_total_buffer_limit;
     // 3. if buffer is full and this queue has chunks, return true to release the buffer capacity ASAP
-    if (is_buffer_full && chunk_num > 0) {
+    if (is_buffer_full) {
         return true;
     }
     // 4. if there is no new data, return true if this queue has chunks
     if (_num_remaining_senders == 0) {
-        return chunk_num > 0;
+        return true;
     }
     // 5. if this queue has blocked closures, return true to release the closure ASAP to trigger the next transmit requests
     return chunk_queue_state.blocked_closure_num > 0;
