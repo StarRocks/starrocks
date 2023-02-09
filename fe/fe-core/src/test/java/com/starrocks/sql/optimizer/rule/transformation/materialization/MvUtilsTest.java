@@ -111,29 +111,29 @@ public class MvUtilsTest {
         OptExpression joinExpr = OptExpression.create(joinOperator, scanExpr, scanExpr2);
         List<ScalarOperator> predicates = MvUtils.getAllPredicates(joinExpr);
         Assert.assertEquals(3, predicates.size());
-        Assert.assertTrue(MvUtils.isAllEqualInnerJoin(joinExpr));
+        Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr));
         LogicalJoinOperator joinOperator2 = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, binaryPredicate);
         OptExpression joinExpr2 = OptExpression.create(joinOperator2, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerJoin(joinExpr2));
+        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr2));
         OptExpression joinExpr3 = OptExpression.create(joinOperator, scanExpr, joinExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerJoin(joinExpr3));
+        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr3));
 
         LogicalJoinOperator joinOperator3 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundAnd(binaryPredicate, binaryPredicate2));
         OptExpression joinExpr4 = OptExpression.create(joinOperator3, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerJoin(joinExpr4));
+        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr4));
 
         BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef3);
         LogicalJoinOperator joinOperator4 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundAnd(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr5 = OptExpression.create(joinOperator4, scanExpr, scanExpr2);
-        Assert.assertTrue(MvUtils.isAllEqualInnerJoin(joinExpr5));
+        Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr5));
 
         LogicalJoinOperator joinOperator5 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundOr(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr6 = OptExpression.create(joinOperator5, scanExpr, scanExpr2);
-        Assert.assertFalse(MvUtils.isAllEqualInnerJoin(joinExpr6));
+        Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr6));
     }
 
     @Test
