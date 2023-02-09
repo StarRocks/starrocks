@@ -424,6 +424,7 @@ public class Utils {
                 }
             }
         } catch (Exception ignored) {
+            LOG.debug("invalid value: {} to type {}", op, descType);
         }
         return Optional.empty();
     }
