@@ -345,11 +345,9 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         } else if (topN.getPartitionByColumns() == null) {
             outputProperty = PhysicalPropertySet.EMPTY;
         } else {
-            List<Integer> partitionColumnRefSet = new ArrayList<>();
-            topN.getPartitionByColumns().forEach(c ->
-                    partitionColumnRefSet.addAll(
-                            Arrays.stream(c.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList()))
-            );
+            List<Integer> partitionColumnRefSet = topN.getPartitionByColumns().stream()
+                    .flatMap(c -> Arrays.stream(c.getUsedColumns().getColumnIds()).boxed())
+                    .collect(Collectors.toList());
             if (partitionColumnRefSet.isEmpty()) {
                 outputProperty = PhysicalPropertySet.EMPTY;
             } else {
