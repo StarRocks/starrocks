@@ -397,7 +397,7 @@ public class UtFrameUtils {
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
-            statements = SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+            statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
