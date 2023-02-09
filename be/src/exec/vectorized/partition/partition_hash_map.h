@@ -338,11 +338,6 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
 
     HashMap hash_map;
 
-<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
-    PartitionHashMapWithSerializedKey(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
-        return false;
-=======
     Buffer<uint32_t> slice_sizes;
     uint32_t max_one_row_size = 8;
 
@@ -396,7 +391,6 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
             max_size += key_column->max_one_element_serialize_size();
         }
         return max_size;
->>>>>>> 1008900a9 ([Enhancement] Rank window function optimization supports multi partition columns (#17544)):be/src/exec/partition/partition_hash_map.h
     }
 };
 
@@ -411,11 +405,6 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase 
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
 
-<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
-    PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
-        return false;
-=======
     Buffer<uint32_t> slice_sizes;
     std::vector<FixedSizeSliceKey> buffer;
 
@@ -455,7 +444,6 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase 
                 [&](const FixedSizeSliceKey& key) { return key; }, obj_pool);
 
         return is_downgrade;
->>>>>>> 1008900a9 ([Enhancement] Rank window function optimization supports multi partition columns (#17544)):be/src/exec/partition/partition_hash_map.h
     }
 };
 
