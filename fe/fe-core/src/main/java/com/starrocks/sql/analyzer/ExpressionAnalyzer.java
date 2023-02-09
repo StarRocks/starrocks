@@ -212,6 +212,15 @@ public class ExpressionAnalyzer {
             }
         } else {
             // map_apply(func, map)
+            if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                throw new SemanticException("The right part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have key and value arguments");
+            }
+            if (expression.getChild(0).getChildren().size() != 3) {
+                throw new SemanticException("The left part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have 2 arguments, but there are "
+                        + (expression.getChild(0).getChildren().size() - 1) + " arguments");
+            }
             Expr expr = expression.getChild(1);
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {

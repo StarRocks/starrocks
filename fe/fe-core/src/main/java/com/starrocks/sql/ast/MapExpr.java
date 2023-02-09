@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Type;
@@ -38,13 +39,13 @@ public class MapExpr extends Expr {
         super(other);
     }
 
-    // TODO: it would be null
     public Expr getKeyExpr() {
+        Preconditions.checkState(children.size() > 1);
         return children.get(0);
     }
 
-    // TODO: it would be null
     public Expr getValueExpr() {
+        Preconditions.checkState(children.size() > 1);
         return children.get(1);
     }
 
@@ -59,9 +60,6 @@ public class MapExpr extends Expr {
     @Override
     protected String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
-        if (this.explicitType) {
-            sb.append(this.type.toSql());
-        }
         sb.append('[');
         sb.append(children.stream().map(Expr::toSql).collect(Collectors.joining(",")));
         sb.append(']');

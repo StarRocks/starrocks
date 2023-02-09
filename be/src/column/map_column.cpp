@@ -62,6 +62,50 @@ uint8_t* MapColumn::mutable_raw_data() {
     return nullptr;
 }
 
+// get rid of the case where the map is null but the map'elements are not empty.
+bool MapColumn::empty_null_map(const NullColumnPtr& null_map) {
+    DCHECK(null_map->size() == this->size());
+    bool need_empty = false;
+    auto size = this->size();
+    // TODO: optimize it using SIMD
+    for (auto i = 0; i < size && !need_empty; ++i) {
+        if (null_map->get_data()[i] && _offsets->get_data()[i + 1] != _offsets->get_data()[i]) {
+            need_empty = true;
+        }
+    }
+    // TODO: copy too much may result in worse performance.
+    if (need_empty) {
+        auto new_column = clone_empty();
+        int count = 0;
+        int null_count = 0;
+        for (size_t i = 0; i < size; ++i) {
+            if (null_map->get_data()[i]) {
+                ++null_count;
+                if (count > 0) {
+                    new_column->append(*this, i - count, count);
+                    count = 0;
+                }
+            } else {
+                ++count;
+                if (null_count > 0) {
+                    new_column->append_default(null_count);
+                    null_count = 0;
+                }
+            }
+        }
+        if (count > 0) {
+            new_column->append(*this, size - count, count);
+            count = 0;
+        }
+        if (null_count > 0) {
+            new_column->append_default(null_count);
+            null_count = 0;
+        }
+        swap_column(*new_column.get());
+    }
+    return need_empty;
+}
+
 size_t MapColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     return _keys->byte_size(_offsets->get_data()[from],

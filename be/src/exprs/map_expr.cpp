@@ -32,9 +32,6 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
-        // check the map's value type is the same as the expr's type
-        DCHECK_EQ(_type, _children[0]->type().children[1]);
-        // TODO: what if null column?
         ASSIGN_OR_RETURN(ColumnPtr key_col, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(ColumnPtr value_col, _children[1]->evaluate_checked(context, chunk));
         size_t num_rows = std::max(key_col->size(), value_col->size());
@@ -43,10 +40,10 @@ public:
         value_col = ColumnHelper::unfold_const_column(_children[1]->type(), num_rows, value_col);
         key_col = ColumnHelper::cast_to_nullable_column(key_col);
         value_col = ColumnHelper::cast_to_nullable_column(value_col);
+        // fake offsets, just for creating map column.
         auto offsets = UInt32Column::create();
-        for (auto i = 0; i <= num_rows; ++i) {
-            offsets->append(i);
-        }
+        offsets->append(0);
+        offsets->append(num_rows);
         return std::make_shared<MapColumn>(std::move(key_col), std::move(value_col), std::move(offsets));
     }
 

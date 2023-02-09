@@ -19,6 +19,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "column/nullable_column.h"
 
 namespace starrocks {
 
@@ -57,6 +58,8 @@ public:
     const uint8_t* raw_data() const override;
 
     uint8_t* mutable_raw_data() override;
+
+    bool empty_null_map(const NullColumnPtr& null_map);
 
     size_t size() const override;
 
