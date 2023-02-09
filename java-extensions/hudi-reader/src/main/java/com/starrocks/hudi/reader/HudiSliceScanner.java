@@ -39,6 +39,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.hadoop.realtime.HoodieRealtimeFileSplit;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +48,7 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.starrocks.hudi.reader.HudiScannerUtils.MARK_TYPE_VALUE_MAPPING;
+import static com.starrocks.hudi.reader.HudiScannerUtils.HIVE_TYPE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
@@ -93,6 +94,9 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
+        for (Map.Entry<String, String> kv : params.entrySet()) {
+            System.out.println("key = " + kv.getKey() + ", value = " + kv.getValue());
+        }
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -151,13 +155,15 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
         properties.setProperty("columns", this.hiveColumnNames);
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
+        List<String> types = new ArrayList<>();
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
             String type = this.hiveColumnTypes[i];
-            if (MARK_TYPE_VALUE_MAPPING.containsKey(type)) {
-                this.hiveColumnTypes[i] = MARK_TYPE_VALUE_MAPPING.get(type);
+            if (HIVE_TYPE_MAPPING.containsKey(type)) {
+                type = HIVE_TYPE_MAPPING.get(type);
             }
+            types.add(type);
         }
-        properties.setProperty("columns.types", String.join(",", this.hiveColumnTypes));
+        properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
         return properties;
     }
