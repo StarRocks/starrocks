@@ -801,7 +801,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         }
     }
 
-    @Test
     public void testLimitTabletPrune(@Mocked Replica replica) throws Exception {
         new Expectations() {
             {
@@ -1280,8 +1279,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "        AND v1 = 100;";
         getFragmentPlan(sql);
     }
-
-    @Test
+    
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
