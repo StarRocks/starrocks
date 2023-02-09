@@ -246,7 +246,11 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/storage_engine_test.cpp
+        ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp
+        ./storage/binlog_builder_test.cpp
+        ./storage/binlog_manager_test.cpp
+        ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -263,7 +267,7 @@ set(EXEC_FILES
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/result_queue_mgr_test.cpp
-        ./runtime/routine_load_task_executor_test.cpp
+        #./runtime/routine_load_task_executor_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp

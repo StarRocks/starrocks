@@ -201,15 +201,11 @@ MySQL > SELECT * FROM order_mv;
 
 In StarRocks v2.5, multi-table async refresh materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
-When querying data in the internal tables, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view data expires, the materialized view will not be used as a candidate materialized view.
-
-> **CAUTION**
->
-> Currently, StarRocks does not support query rewrite based on external catalog materialized views.
+Currently, StarRocks supports rewriting queries on materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a [candidate materialized view](#candidate-materialized-view-for-query-rewrite). When querying data in external catalogs, StarRocks does not ensure strong consistency of the results because StarRocks cannot perceive the data changes in partitions of external catalogs.
 
 #### Candidate materialized view for query rewrite
 
-When rewriting a query, StarRocks will roughly select candidate materialized views that may meet the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
+When rewriting a query, StarRocks roughly selects candidate materialized views that meet the corresponding conditions from all materialized views, so as to reduce the cost of rewriting.
 
 Candidate materialized views must meet the following conditions:
 
@@ -222,10 +218,31 @@ Candidate materialized views must meet the following conditions:
 
 #### Enable query rewrite based on async materialized views
 
+- Enable query rewrite based on the default catalog materialized views
+
 StarRocks enables materialized view query rewrite by default. You can enable or disable this feature through the session variable `enable_materialized_view_rewrite`.
 
 ```SQL
 SET GLOBAL enable_materialized_view_rewrite = { true | false };
+```
+
+- Enable query rewrite based on the external catalog materialized views
+
+Because StarRocks does not ensure strong consistency of the results when you query data in external catalogs using materialized views, the query rewrite based on the external catalog materialized views is disabled by default. You can enable this feature for a materialized view by adding the property `"force_external_table_query_rewrite" = "true"` when creating the materialized view.
+
+Example:
+
+```SQL
+CREATE MATERIALIZED VIEW ex_mv_par_tbl
+PARTITION BY emp_date
+DISTRIBUTED BY hash(empid)
+PROPERTIES (
+"force_external_table_query_rewrite" = "true"
+) 
+AS
+select empid, deptno, emp_date
+from `hive_catalog`.`emp_db`.`emps_par_tbl`
+where empid < 5;
 ```
 
 #### Configure query rewrite based on async materialized views

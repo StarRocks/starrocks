@@ -50,6 +50,10 @@ public class HiveMetaClientTest {
                 metaStoreClient.getTable(anyString, anyString);
                 result = new Table();
                 minTimes = 0;
+
+                metaStoreClient.isConnected();
+                result = true;
+                minTimes = 0;
             }
         };
 

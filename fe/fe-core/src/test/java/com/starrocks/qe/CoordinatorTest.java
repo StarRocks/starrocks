@@ -75,13 +75,17 @@ public class CoordinatorTest extends PlanTestBase {
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
-    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
-
+    private PlanFragment genFragment() {
         ArrayList<TupleId> tupleIdArrayList = new ArrayList<>();
         tupleIdArrayList.add(new TupleId(1));
         PlanFragment fragment =
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
+        return fragment;
+    }
+
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
+        PlanFragment fragment = genFragment();
         CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
         CoordinatorPreprocessor.FInstanceExecParam instance0 =
                 new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
@@ -133,7 +137,7 @@ public class CoordinatorTest extends PlanTestBase {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(null);
+        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(genFragment());
         CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
                 new CoordinatorPreprocessor.BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToAddress.keySet()) {
@@ -452,7 +456,7 @@ public class CoordinatorTest extends PlanTestBase {
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
         prepare.computeScanRangeAssignment();
 
-        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeMap =
+        FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
         Assert.assertFalse(scanRangeMap.isEmpty());
@@ -520,7 +524,7 @@ public class CoordinatorTest extends PlanTestBase {
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
         CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
-        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
+        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
         List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());

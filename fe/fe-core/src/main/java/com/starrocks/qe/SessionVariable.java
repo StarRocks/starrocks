@@ -161,6 +161,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
+    public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
+    public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ = "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
@@ -187,6 +190,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
+    public static final String MAX_PIPELINE_DOP = "max_pipeline_dop";
 
     public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
@@ -305,6 +309,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+    public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -338,6 +343,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
+    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -364,6 +371,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
+    private boolean enableRuntimeAdaptiveDop = false;
+
+    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
+    private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -571,6 +584,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
+    /*
+     * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
+     * This limitation is to avoid the negative overhead caused by scheduling on super multi-core scenarios.
+     */
+    @VariableMgr.VarAttr(name = MAX_PIPELINE_DOP)
+    private int maxPipelineDop = 64;
+
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int profileTimeout = 2;
 
@@ -769,6 +789,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
+    @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
+    private boolean hudiMORForceJNIReader = false;
+
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
@@ -837,8 +860,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
+    private String activateAllRolesOnLogin = "OFF";
+
+    public boolean isActivateAllRolesOnLogin() {
+        if (activateAllRolesOnLogin.equals("ON")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
+    }
+
+    public boolean getHudiMORForceJNIReader() {
+        return hudiMORForceJNIReader;
     }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
@@ -1002,7 +1040,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop;
             }
-            return BackendCoreStat.getDefaultDOP();
+            if (maxPipelineDop <= 0) {
+                return BackendCoreStat.getDefaultDOP();
+            }
+            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -1224,8 +1265,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
-    public boolean isPipelineDopAdaptionEnabled() {
+    public boolean isEnablePipelineAdaptiveDop() {
         return enablePipelineEngine && pipelineDop <= 0;
+    }
+
+    public boolean isEnableRuntimeAdaptiveDop() {
+        return enablePipelineEngine && enableRuntimeAdaptiveDop;
+    }
+
+    public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {
+        return adaptiveDopMaxBlockRowsPerDriverSeq;
     }
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
@@ -1258,6 +1307,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public void setMaxPipelineDop(int maxPipelineDop) {
+        this.maxPipelineDop = maxPipelineDop;
+    }
+
+    public int getMaxPipelineDop() {
+        return this.maxPipelineDop;
     }
 
     public boolean isEnableSharedScan() {
@@ -1397,6 +1454,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
+    }
+
+    public void setEnableOptimizerTraceLog(boolean val) {
+        this.enableOptimizerTraceLog = val;
     }
 
     public boolean isRuntimeFilterOnExchangeNode() {

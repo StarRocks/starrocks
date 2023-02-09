@@ -78,7 +78,7 @@ public:
     // responsible for the memory allocation and release used by
     // the LogEntryInfo, and the memory also can be reused when next()
     // is called. The caller should not modify the data, and dependent
-    // on it's state accross two next().
+    // on it's state across two next().
     LogEntryInfo* log_entry();
 
     static Status page_file_header(RandomAccessFile* read_file, int64_t file_size, BinlogFileHeaderPB* file_header,

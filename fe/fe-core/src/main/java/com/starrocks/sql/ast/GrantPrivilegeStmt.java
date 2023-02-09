@@ -23,10 +23,10 @@ import java.util.List;
 public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
     public GrantPrivilegeStmt(
             List<String> privList,
-            String privType,
+            String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects) {
-        super(privList, privType, grantRevokeClause, objects);
+        super(privList, objectTypeUnResolved, grantRevokeClause, objects);
     }
 
     /**

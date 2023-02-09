@@ -83,7 +83,6 @@ public class BackendCoreStat {
     }
 
     public static int getDefaultDOP() {
-        int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
-        return Math.max(1, avgNumOfCores / 2);
+        return Math.max(1, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
     }
 }

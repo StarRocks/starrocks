@@ -166,4 +166,8 @@ public class MetaScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
 }

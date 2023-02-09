@@ -526,4 +526,29 @@ public class Utils {
 
         root.getChildren().forEach(child -> collect(child, clazz, output));
     }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMaxLEPower2(int num) {
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num - (num >>> 1);
+    }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMinGEPower2(int num) {
+        num -= 1;
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num < 0 ? 1 : num + 1;
+    }
 }

@@ -303,6 +303,7 @@ struct FirstValueState {
     using T = AggDataValueType<PT>;
     T value;
     bool is_null = false;
+    uint64_t count;
 };
 
 template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
@@ -312,6 +313,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
         this->data(state).is_null = false;
+        this->data(state).count = 0;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -323,6 +325,13 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
             this->data(state).is_null = true;
             return;
         }
+
+        // only calculate once
+        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+            return;
+        }
+
+        this->data(state).count++;
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);

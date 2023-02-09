@@ -68,6 +68,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -87,6 +90,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -300,10 +304,6 @@ public class ExpressionAnalyzer {
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
                     }
 
-                    // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type
-                    if (targetItemType.isDecimalV3()) {
-                        targetItemType = ScalarType.DECIMALV2;
-                    }
 
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
@@ -316,7 +316,7 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                node.setType(Type.ARRAY_NULL);
             }
             return null;
         }
@@ -628,6 +628,12 @@ public class ExpressionAnalyzer {
         public Void visitInPredicate(InPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
 
+            List<Expr> queryExpressions = Lists.newArrayList();
+            node.collect(arg -> arg instanceof Subquery, queryExpressions);
+            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+                throw new SemanticException("In Predicate only support literal expression list");
+            }
+
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
@@ -864,7 +870,7 @@ public class ExpressionAnalyzer {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_CONCAT)) {
                 if (node.getChildren().size() < 2) {
-                    throw new SemanticException(fnName + " should have at least tow inputs");
+                    throw new SemanticException(fnName + " should have at least two inputs");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
@@ -1151,6 +1157,27 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase("CURRENT_USER")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentUserIdentity().toString());
+            } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
+                node.setType(Type.VARCHAR);
+
+                PrivilegeManager manager = session.getGlobalStateMgr().getPrivilegeManager();
+                List<String> roleName = new ArrayList<>();
+
+                try {
+                    for (Long roleId : session.getCurrentRoleIds()) {
+                        RolePrivilegeCollection rolePrivilegeCollection =
+                                manager.getRolePrivilegeCollectionUnlocked(roleId, true);
+                        roleName.add(rolePrivilegeCollection.getName());
+                    }
+                } catch (PrivilegeException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                if (roleName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(roleName));
+                }
             } else if (funcType.equalsIgnoreCase("CONNECTION_ID")) {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());

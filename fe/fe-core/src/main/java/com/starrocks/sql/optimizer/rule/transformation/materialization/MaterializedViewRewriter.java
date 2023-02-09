@@ -131,9 +131,9 @@ public class MaterializedViewRewriter {
             return false;
         }
 
-        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(queryExpression);
-        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(mvExpression);
-        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+        boolean isQueryAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+        boolean isMVAllEqualInnerOrCrossJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+        if (isQueryAllEqualInnerOrCrossJoin && isMVAllEqualInnerOrCrossJoin) {
             return true;
         } else {
             // If not all join types are InnerJoin, need to check whether MV's join tables' order
@@ -147,6 +147,8 @@ public class MaterializedViewRewriter {
             // Use traverse order to check whether all joins' order and operator are exactly matched.
             List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
             List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
+            Preconditions.checkState(queryJoinOperators.size() + 1 == queryTables.size());
+            Preconditions.checkState(mvJoinOperators.size() + 1 == mvTables.size());
             return queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators);
         }
     }

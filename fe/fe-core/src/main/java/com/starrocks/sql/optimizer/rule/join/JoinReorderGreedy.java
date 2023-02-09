@@ -173,7 +173,10 @@ public class JoinReorderGreedy extends JoinOrder {
 
         // For top group, we keep multi best join expressions
         if (groupInfo.atoms.cardinality() == atomSize) {
-            topKExpr.offer(expr);
+            // avoid repeated put, check object is enough
+            if (!topKExpr.contains(expr)) {
+                topKExpr.offer(expr);
+            }
         } else {
             if (cost < groupInfo.lowestExprCost) {
                 groupInfo.bestExprInfo = expr;

@@ -39,6 +39,7 @@ using Drivers = std::vector<DriverPtr>;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
 using OpFactories = std::vector<OpFactoryPtr>;
+class SourceOperatorFactory;
 class Operator;
 using OperatorRawPtr = Operator*;
 using OperatorPtr = std::shared_ptr<Operator>;

@@ -87,6 +87,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     public List<Expr> resolvedTupleExprs;
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private boolean withRuntimeFilters = false;
 
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
@@ -161,6 +162,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 this.buildRuntimeFilters.add(rf);
             }
         }
+        withRuntimeFilters = !buildRuntimeFilters.isEmpty();
     }
 
     @Override
@@ -334,6 +336,11 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return !withRuntimeFilters && getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
     @Override

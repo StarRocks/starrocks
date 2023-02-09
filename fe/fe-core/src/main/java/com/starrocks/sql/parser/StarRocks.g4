@@ -209,6 +209,8 @@ statement
     | showRolesStatement
     | grantRoleStatement
     | revokeRoleStatement
+    | setRoleStatement
+    | setDefaultRoleStatement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
     | showGrantsStatement
@@ -322,6 +324,7 @@ columnDesc
 charsetName
     : CHAR SET identifier
     | CHARSET identifier
+    | CHARACTER SET identifier
     ;
 
 defaultDesc
@@ -1103,7 +1106,7 @@ showBrokerStatement
     ;
 
 showCharsetStatement
-    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCollationStatement
@@ -1189,122 +1192,6 @@ helpStatement
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
-// [deprecated] grant select on *
-// [deprecated] grant select on *.*
-// grant select on db1.tbl1,db2.tbl2
-// grant select on db1,db2
-tableDbPrivilegeObjectNameList
-    : identifierOrStringOrStar                                  #deprecatedDbPrivilegeObject
-    | identifierOrStringOrStar '.' identifierOrStringOrStar     #deprecatedTablePrivilegeObject
-    | tablePrivilegeObjectNameList                              #tablePrivilegeObjectList
-    | identifierOrStringList                                    #defaultPrivilegeObjectList
-    ;
-
-userList
-    : user (',' user)*
-    ;
-
-tablePrivilegeObjectNameList
-    : tablePrivilegeObjectName (',' tablePrivilegeObjectName)*
-    ;
-
-tablePrivilegeObjectName
-    : identifierOrString '.' identifierOrString
-    ;
-
-// the last one is deprecated
-privilegeObjectNameList
-    : tablePrivilegeObjectNameList
-    | identifierOrStringList
-    | userList
-    | ASTERISK_SYMBOL
-    ;
-
-identifierOrStringOrStar
-    : ASTERISK_SYMBOL
-    | identifier
-    | string
-    ;
-
-privilegeActionReserved
-    : ADMIN
-    | ALTER
-    | CREATE
-    | DROP
-    | GRANT
-    | LOAD
-    | SELECT
-    | INSERT
-    | DELETE
-    | USAGE
-    | CREATE_DATABASE
-    | UPDATE
-    | EXPORT
-    | REPOSITORY
-    | CREATE_MATERIALIZED_VIEW
-    | ALL
-    ;
-
-privilegeActionList
-    :  privilegeAction (',' privilegeAction)*
-    ;
-
-privilegeAction
-    : privilegeActionReserved
-    | identifier
-    ;
-
-privilegeTypeReserved
-    : SYSTEM
-    | TABLE
-    | DATABASE
-    | CATALOG
-    | DATABASES
-    | FUNCTION
-    | RESOURCE_GROUP
-    ;
-
-privilegeType
-    : privilegeTypeReserved
-    | identifier
-    ;
-
-grantRevokeClause
-    : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
-    ;
-
-grantPrivilegeStatement
-    : GRANT IMPERSONATE ON user TO grantRevokeClause                                                     #grantImpersonateBrief
-    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause                   #grantTablePrivBrief
-    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause         #grantPrivWithType
-    | GRANT privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' TO grantRevokeClause     #grantPrivWithFunc
-    | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
-    | GRANT privilegeActionList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause   #grantOnAllGlobalFunctions
-    ;
-
-revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                                  #revokeImpersonateBrief
-    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause                #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause      #revokePrivWithType
-    | REVOKE privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' FROM grantRevokeClause  #revokePrivWithFunc
-    | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
-    | REVOKE privilegeActionList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause   #revokeOnAllGlobalFunctions
-    ;
-
-grantRoleStatement
-    : GRANT identifierOrStringList TO user                                                      #grantRoleToUser
-    | GRANT identifierOrStringList TO ROLE identifierOrString                                   #grantRoleToRole
-    ;
-
-revokeRoleStatement
-    : REVOKE identifierOrStringList FROM user                                                   #revokeRoleFromUser
-    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                #revokeRoleFromRole
-    ;
-
-executeAsStatement
-    : EXECUTE AS user (WITH NO REVERT)?
-    ;
-
 createUserStatement
     : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?
     ;
@@ -1315,6 +1202,7 @@ dropUserStatement
 
 alterUserStatement
     : ALTER USER user authOption
+    | ALTER USER user DEFAULT ROLE (NONE| ALL | roleList)
     ;
 
 showUserStatement
@@ -1322,8 +1210,12 @@ showUserStatement
     ;
 
 showAuthenticationStatement
-    : SHOW ALL AUTHENTICATION                                                                #showAllAuthentication
-    | SHOW AUTHENTICATION (FOR user)?                                                        #showAuthenticationForUser
+    : SHOW ALL AUTHENTICATION                                                                           #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                                                                   #showAuthenticationForUser
+    ;
+
+executeAsStatement
+    : EXECUTE AS user (WITH NO REVERT)?
     ;
 
 createRoleStatement
@@ -1338,10 +1230,86 @@ showRolesStatement
     : SHOW ROLES
     ;
 
+grantRoleStatement
+    : GRANT identifierOrStringList TO USER? user                                                        #grantRoleToUser
+    | GRANT identifierOrStringList TO ROLE identifierOrString                                           #grantRoleToRole
+    ;
+
+revokeRoleStatement
+    : REVOKE identifierOrStringList FROM USER? user                                                     #revokeRoleFromUser
+    | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
+    ;
+
+setRoleStatement
+    : SET ROLE DEFAULT
+    | SET ROLE NONE
+    | SET ROLE ALL (EXCEPT roleList)?
+    | SET ROLE roleList
+    ;
+
+setDefaultRoleStatement
+    : SET DEFAULT ROLE (NONE | ALL | roleList) TO user;
+
+grantRevokeClause
+    : (USER? user | ROLE identifierOrString) (WITH GRANT OPTION)?
+    ;
+
+grantPrivilegeStatement
+    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause                                   #grantImpersonate
+    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause                                #grantTablePrivBrief
+    | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
+        TO grantRevokeClause                                                                            #grantPrivWithType
+    | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+        TO grantRevokeClause                                                                            #grantPrivWithFunc
+    | GRANT privilegeTypeList ON ALL privObjectType
+        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause                  #grantOnAll
+    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause                              #grantOnAllGlobalFunctions
+    ;
+
+revokePrivilegeStatement
+    : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeImpersonate
+    | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
+    | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
+        FROM grantRevokeClause                                                                          #revokePrivWithType
+    | REVOKE privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+        FROM grantRevokeClause                                                                          #revokePrivWithFunc
+    | REVOKE privilegeTypeList ON ALL privObjectType
+        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
+    | REVOKE privilegeTypeList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause                           #revokeOnAllGlobalFunctions
+    ;
+
 showGrantsStatement
     : SHOW GRANTS
     | SHOW GRANTS FOR USER? user
     | SHOW GRANTS FOR ROLE identifierOrString
+    ;
+
+authOption
+    : IDENTIFIED BY PASSWORD? string                                                                    #authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?                                            #authWithPlugin
+    ;
+
+privObjectName
+    : identifierOrStringOrStar ('.' identifierOrStringOrStar)?
+    ;
+
+privObjectNameList
+    : privObjectName (',' privObjectName)*
+    ;
+
+privilegeTypeList
+    :  privilegeType (',' privilegeType)*
+    ;
+
+privilegeType
+    : ADMIN | ALTER | CREATE | DROP | GRANT | LOAD
+    | SELECT | INSERT | DELETE | UPDATE | EXPORT | REPOSITORY| ALL PRIVILEGES?
+    | identifier
+    ;
+
+privObjectType
+    : SYSTEM | TABLE | DATABASE | CATALOG | DATABASES | FUNCTION
+    | identifier
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -1457,7 +1425,7 @@ setStatement
     ;
 
 setVar
-    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    : (CHAR SET | CHARSET | CHARACTER SET) (identifierOrString | DEFAULT)                       #setNames
     | NAMES (charset = identifierOrString | DEFAULT)
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
@@ -1503,12 +1471,7 @@ setUserPropertyStatement
     ;
 
 roleList
-    : string (',' string)*
-    ;
-
-setRoleStatement
-    : SET ROLE roleList                #setRole
-    | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
+    : identifierOrString (',' identifierOrString)*
     ;
 
 unsupportedStatement
@@ -1737,8 +1700,8 @@ tupleInSubquery
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expressionList ')'                                                      #inList
-    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    : NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    | NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
@@ -1838,6 +1801,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
+    | name = CURRENT_ROLE '(' ')'
     ;
 
 specialDateTimeExpression
@@ -2163,6 +2127,12 @@ identifierOrStringList
     : identifierOrString (',' identifierOrString)*
     ;
 
+identifierOrStringOrStar
+    : ASTERISK_SYMBOL
+    | identifier
+    | string
+    ;
+
 user
     : identifierOrString                                     # userWithoutHost
     | identifierOrString '@' identifierOrString              # userWithHost
@@ -2183,11 +2153,6 @@ number
     | INTEGER_VALUE  #integerValue
     ;
 
-authOption
-    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
-    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
-    ;
-
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
@@ -2200,9 +2165,9 @@ nonReserved
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
-    | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
+    | NAME | NAMES | NEGATIVE | NO | NODE | NONE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY

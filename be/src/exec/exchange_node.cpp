@@ -270,6 +270,9 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+
+    operators = context->maybe_interpolate_collect_stats(runtime_state(), operators);
+
     return operators;
 }
 
