@@ -118,14 +118,21 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        static TCounterStrategy create_strategy(TUnit::type type,
+        static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
                                                 TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
                                                 int64_t display_threshold = 0) {
             TCounterStrategy strategy;
-            strategy.aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
+            strategy.aggregate_type = aggregate_type;
             strategy.merge_type = merge_type;
             strategy.display_threshold = display_threshold;
             return strategy;
+        }
+
+        static TCounterStrategy create_strategy(TUnit::type type,
+                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                                                int64_t display_threshold = 0) {
+            auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
+            return create_strategy(aggregate_type, merge_type, display_threshold);
         }
 
         explicit Counter(TUnit::type type, int64_t value = 0)

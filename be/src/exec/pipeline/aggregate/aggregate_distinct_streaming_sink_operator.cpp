@@ -22,11 +22,13 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     return _aggregator->open(state);
 }
 
 void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
+    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
+    counter->set(_aggregator->hash_set_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -78,7 +80,6 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
-    _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
     return Status::OK();
@@ -98,7 +99,6 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPt
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk_size));
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
-        _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
     } else {
         {

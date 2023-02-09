@@ -165,13 +165,11 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                           MemTracker* mem_tracker) {
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _state = state;
 
     _pool = pool;
     _runtime_profile = runtime_profile;
-    _mem_tracker = mem_tracker;
 
     _limit = _params->limit;
     _needs_finalize = _params->needs_finalize;
@@ -759,13 +757,15 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 }
 
 void Aggregator::try_convert_to_two_level_map() {
-    if (_mem_tracker->consumption() > two_level_memory_threshold) {
+    auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
+    if (current_size > two_level_memory_threshold) {
         _hash_map_variant.convert_to_two_level(_state);
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
-    if (_mem_tracker->consumption() > two_level_memory_threshold) {
+    auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
+    if (current_size > two_level_memory_threshold) {
         _hash_set_variant.convert_to_two_level(_state);
     }
 }

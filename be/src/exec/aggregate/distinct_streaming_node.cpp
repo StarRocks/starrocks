@@ -84,7 +84,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
-                _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
                 _aggregator->try_convert_to_two_level_set();
 
                 TRY_CATCH_ALLOC_SCOPE_END()
@@ -107,7 +106,6 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     _aggregator->build_hash_set(input_chunk_size);
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-                    _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
                     _aggregator->try_convert_to_two_level_set();
                     TRY_CATCH_ALLOC_SCOPE_END()

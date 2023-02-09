@@ -81,7 +81,6 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             if (!_aggregator->is_none_group_by_exprs()) {
                 TRY_CATCH_ALLOC_SCOPE_START()
                 _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
-                _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
                 _aggregator->try_convert_to_two_level_map();
                 TRY_CATCH_ALLOC_SCOPE_END()
