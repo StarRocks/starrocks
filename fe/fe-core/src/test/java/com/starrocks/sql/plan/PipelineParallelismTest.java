@@ -70,7 +70,7 @@ public class PipelineParallelismTest extends PlanTestBase {
         PlanFragment fragment0 = plan.getFragments().get(0);
         assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "SCAN SCHEMA");
         Assert.assertEquals(1, fragment0.getParallelExecNum());
-        Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+        Assert.assertEquals(numHardwareCores, fragment0.getPipelineDop());
     }
 
     @Test
@@ -79,7 +79,7 @@ public class PipelineParallelismTest extends PlanTestBase {
         PlanFragment fragment1 = plan.getFragments().get(1);
         assertContains(fragment1.getExplainString(TExplainLevel.NORMAL), "MetaScan");
         Assert.assertEquals(1, fragment1.getParallelExecNum());
-        Assert.assertEquals(numHardwareCores / 2, fragment1.getPipelineDop());
+        Assert.assertEquals(numHardwareCores, fragment1.getPipelineDop());
     }
 
     @Test
@@ -93,7 +93,7 @@ public class PipelineParallelismTest extends PlanTestBase {
         PlanFragment fragment0 = plan.getFragments().get(0);
         assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
         Assert.assertEquals(1, fragment0.getParallelExecNum());
-        Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+        Assert.assertEquals(numHardwareCores, fragment0.getPipelineDop());
     }
 
     @Test
@@ -127,7 +127,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // ParallelExecNum of fragment not 1. still can not use pipeline
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -165,7 +165,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -203,7 +203,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -216,7 +216,7 @@ public class PipelineParallelismTest extends PlanTestBase {
         PlanFragment fragment1 = plan.getFragments().get(1);
         assertContains(fragment1.getExplainString(TExplainLevel.NORMAL), "TOP-N");
         Assert.assertEquals(1, fragment1.getParallelExecNum());
-        Assert.assertEquals(numHardwareCores / 2, fragment1.getPipelineDop());
+        Assert.assertEquals(numHardwareCores, fragment1.getPipelineDop());
     }
 
     private void testJoinHelper(int expectedParallelism) throws Exception {
@@ -265,7 +265,7 @@ public class PipelineParallelismTest extends PlanTestBase {
 
             connectContext.getSessionVariable().setPipelineDop(0);
             connectContext.getSessionVariable().setParallelExecInstanceNum(1);
-            testJoinHelper(numHardwareCores / 2);
+            testJoinHelper(numHardwareCores);
 
             connectContext.getSessionVariable().setPipelineDop(4);
             connectContext.getSessionVariable().setParallelExecInstanceNum(8);
