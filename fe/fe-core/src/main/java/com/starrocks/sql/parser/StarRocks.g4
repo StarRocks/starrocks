@@ -249,7 +249,6 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setRoleStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -1219,11 +1218,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE roleList
+    : CREATE ROLE identifierOrString
     ;
 
 dropRoleStatement
-    : DROP ROLE roleList
+    : DROP ROLE identifierOrString
     ;
 
 showRolesStatement
@@ -1430,9 +1429,9 @@ setVar
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
-    | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | userVariable '=' expression                                                               #setVariable
-    | systemVariable '=' setExprOrDefault                                                       #setVariable
+    | userVariable '=' expression                                                               #setUserVar
+    | varType? identifier '=' setExprOrDefault                                                  #setSystemVar
+    | systemVariable '=' setExprOrDefault                                                       #setSystemVar
     | varType? TRANSACTION transaction_characteristics                                          #setTransaction
     ;
 

@@ -266,6 +266,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
@@ -276,7 +277,6 @@ import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -349,6 +349,7 @@ import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncStmt;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -2812,47 +2813,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------------- Set Statement -----------------------------------------------------------
-
-    @Override
-    public ParseNode visitSetUserPropertyStatement(StarRocksParser.SetUserPropertyStatementContext context) {
-        String user = context.FOR() == null ? null : ((StringLiteral) visit(context.string())).getValue();
-        List<SetVar> list = new ArrayList<>();
-        if (context.userPropertyList() != null) {
-            List<Property> propertyList = visit(context.userPropertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                SetVar setVar = new SetUserPropertyVar(property.getKey(), property.getValue());
-                list.add(setVar);
-            }
-        }
-        return new SetUserPropertyStmt(user, list);
-    }
-
     @Override
     public ParseNode visitSetStatement(StarRocksParser.SetStatementContext context) {
-        List<SetVar> propertyList = visit(context.setVar(), SetVar.class);
+        List<SetListItem> propertyList = visit(context.setVar(), SetListItem.class);
         return new SetStmt(propertyList);
     }
 
-    @Override
-    public ParseNode visitSetVariable(StarRocksParser.SetVariableContext context) {
-        if (context.userVariable() != null) {
-            VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
-            Expr expr = (Expr) visit(context.expression());
-            return new UserVariable(variableDesc.getName(), expr);
-        } else if (context.systemVariable() != null) {
-            VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
-            Expr expr = (Expr) visit(context.setExprOrDefault());
-            return new SetVar(variableDesc.getSetType(), variableDesc.getName(), expr);
-        } else {
-            Expr expr = (Expr) visit(context.setExprOrDefault());
-            String variable = ((Identifier) visit(context.identifier())).getValue();
-            if (context.varType() != null) {
-                return new SetVar(getVariableType(context.varType()), variable, expr);
-            } else {
-                return new SetVar(variable, expr);
-            }
-        }
-    }
 
     @Override
     public ParseNode visitSetNames(StarRocksParser.SetNamesContext context) {
@@ -2894,6 +2860,49 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSetUserVar(StarRocksParser.SetUserVarContext context) {
+        VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
+        Expr expr = (Expr) visit(context.expression());
+        return new UserVariable(variableDesc.getName(), expr);
+    }
+
+    @Override
+    public ParseNode visitSetSystemVar(StarRocksParser.SetSystemVarContext context) {
+        if (context.systemVariable() != null) {
+            VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            return new SystemVariable(variableDesc.getSetType(), variableDesc.getName(), expr);
+        } else {
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            String variable = ((Identifier) visit(context.identifier())).getValue();
+            if (context.varType() != null) {
+                return new SystemVariable(getVariableType(context.varType()), variable, expr);
+            } else {
+                return new SystemVariable(variable, expr);
+            }
+        }
+    }
+
+    @Override
+    public ParseNode visitSetTransaction(StarRocksParser.SetTransactionContext context) {
+        return new SetTransaction();
+    }
+
+    @Override
+    public ParseNode visitSetUserPropertyStatement(StarRocksParser.SetUserPropertyStatementContext context) {
+        String user = context.FOR() == null ? null : ((StringLiteral) visit(context.string())).getValue();
+        List<SetUserPropertyVar> list = new ArrayList<>();
+        if (context.userPropertyList() != null) {
+            List<Property> propertyList = visit(context.userPropertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                SetUserPropertyVar setVar = new SetUserPropertyVar(property.getKey(), property.getValue());
+                list.add(setVar);
+            }
+        }
+        return new SetUserPropertyStmt(user, list);
+    }
+
+    @Override
     public ParseNode visitSetExprOrDefault(StarRocksParser.SetExprOrDefaultContext context) {
         if (context.DEFAULT() != null) {
             return null;
@@ -2904,11 +2913,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return visit(context.expression());
         }
-    }
-
-    @Override
-    public ParseNode visitSetTransaction(StarRocksParser.SetTransactionContext context) {
-        return new SetTransaction();
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
@@ -3974,15 +3978,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         s -> ((Identifier) s).getValue()).collect(toList()));
             }
 
-            SetDefaultRoleStmt setDefaultRoleStmt = new SetDefaultRoleStmt(user.getUserIdentity(), roles);
-
+            SetRoleType setRoleType;
             if (context.ALL() != null) {
-                setDefaultRoleStmt.setTypeAll();
+                setRoleType = SetRoleType.ALL;
             } else if (context.NONE() != null) {
-                setDefaultRoleStmt.setTypeNone();
+                setRoleType = SetRoleType.NONE;
+            } else {
+                setRoleType = SetRoleType.ROLE;
             }
 
-            return setDefaultRoleStmt;
+            return new SetDefaultRoleStmt(user.getUserIdentity(), setRoleType, roles);
         }
 
         UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
@@ -4095,17 +4100,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
 
-        SetRoleStmt setRoleStmt = new SetRoleStmt(roles);
-
+        SetRoleType setRoleType;
         if (context.ALL() != null) {
-            setRoleStmt.setTypeAll();
+            setRoleType = SetRoleType.ALL;
         } else if (context.DEFAULT() != null) {
-            setRoleStmt.setTypeDefault();
+            setRoleType = SetRoleType.DEFAULT;
         } else if (context.NONE() != null) {
-            setRoleStmt.setTypeNone();
+            setRoleType = SetRoleType.NONE;
+        } else {
+            setRoleType = SetRoleType.ROLE;
         }
 
-        return setRoleStmt;
+        return new SetRoleStmt(setRoleType, roles);
     }
 
     @Override
@@ -4117,16 +4123,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
 
-        SetDefaultRoleStmt setDefaultRoleStmt =
-                new SetDefaultRoleStmt(((UserIdentifier) visit(context.user())).getUserIdentity(), roles);
-
+        SetRoleType setRoleType;
         if (context.ALL() != null) {
-            setDefaultRoleStmt.setTypeAll();
+            setRoleType = SetRoleType.ALL;
         } else if (context.NONE() != null) {
-            setDefaultRoleStmt.setTypeNone();
+            setRoleType = SetRoleType.NONE;
+        } else {
+            setRoleType = SetRoleType.ROLE;
         }
 
-        return setDefaultRoleStmt;
+        return new SetDefaultRoleStmt(((UserIdentifier) visit(context.user())).getUserIdentity(), setRoleType, roles);
     }
 
     @Override
@@ -5232,17 +5238,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {
         if (context == null) {
-            return SetType.DEFAULT;
+            return SetType.SESSION;
         }
 
         if (context.GLOBAL() != null) {
             return SetType.GLOBAL;
-        } else if (context.LOCAL() != null || context.SESSION() != null) {
-            return SetType.SESSION;
         } else if (context.VERBOSE() != null) {
             return SetType.VERBOSE;
         } else {
-            return SetType.DEFAULT;
+            return SetType.SESSION;
         }
     }
 

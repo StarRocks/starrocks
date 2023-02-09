@@ -17,32 +17,32 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserIdentity;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
     public GrantPrivilegeStmt(
-            List<String> privList,
+            List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects) {
-        super(privList, objectTypeUnResolved, grantRevokeClause, objects);
+        super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects);
     }
 
     /**
      * The following 2 functions is used to generate sql when excuting `show grants` in old privilege framework
      */
-    public GrantPrivilegeStmt(List<String> privList, String privType, UserIdentity userIdentity) {
-        super(privList, privType, new GrantRevokeClause(userIdentity, null, false),
+    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserIdentity userIdentity) {
+        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(userIdentity, null, false),
                 new GrantRevokePrivilegeObjects());
     }
 
-    public GrantPrivilegeStmt(List<String> privList, String privType, String roleName) {
-        super(privList, privType, new GrantRevokeClause(null, roleName, false),
+    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, String roleName) {
+        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(null, roleName, false),
                 new GrantRevokePrivilegeObjects());
     }
 
     public void setUserPrivilegeObject(UserIdentity userIdentity) {
-        this.objects.setUserPrivilegeObjectList(Arrays.asList(userIdentity));
+        this.objects.setUserPrivilegeObjectList(Collections.singletonList(userIdentity));
     }
 }

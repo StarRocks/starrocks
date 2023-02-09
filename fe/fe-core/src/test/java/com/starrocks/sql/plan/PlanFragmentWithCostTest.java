@@ -1991,4 +1991,221 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 11: L_SHIPDATE > CAST(TRUE AS DATE)");
     }
+
+    @Test
+    public void testRankWindowOptimization() throws Exception {
+        String sql;
+        String plan;
+
+        // Partition columns include aggregation grouping columns, so needdn't exchange between PartitionTopN and Analytic.
+        {
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by v2, max_v1 order by max_v1) as rn from w1) " +
+                    "select * from w2 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 11: v2, 13: max\n" +
+                    "  |  order by: 13: max ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: max(13: max)\n" +
+                    "  |  group by: 11: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by v2, max_v1 order by max_v1) as rn from w1) " +
+                    "select * from w2 order by rn, v2 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "6:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 11: v2, 13: max\n" +
+                    "  |  order by: 13: max ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: max(13: max)\n" +
+                    "  |  group by: 11: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+        }
+
+        // Partition columns don't include aggregation grouping columns, so need exchange between PartitionTopN and Analytic.
+        {
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by max_v1 order by v2) as rn from w1) " +
+                    "select * from w2 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 13: max\n" +
+                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  6:SORT\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  5:EXCHANGE");
+            assertContains(plan, "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by max_v1 order by v2) as rn from w1) " +
+                    "select * from w2 order by rn, v2 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 13: max\n" +
+                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  6:SORT\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  5:EXCHANGE");
+            assertContains("  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+
+        // Partition columns include table bucket columns, so needn't exchange between PartitionTopN and Analytic.
+        {
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v1, v2 order by v3) as rn from t0) " +
+                    "select * from w1 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:SELECT\n" +
+                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 5: v1, 6: v2\n" +
+                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v1, v2 order by v3) as rn from t0) " +
+                    "select * from w1 order by rn, v1 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:TOP-N\n" +
+                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 2\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 5: v1, 6: v2\n" +
+                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        }
+
+        // Partition columns don't include table bucket columns, so need exchange between PartitionTopN and Analytic.
+        {
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v2, v3 order by v1) as rn from t0) " +
+                    "select * from w1 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:SELECT\n" +
+                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  \n" +
+                    "  4:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 6: v2, 7: v3\n" +
+                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  3:SORT\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE\n");
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v2, v3 order by v1) as rn from t0) " +
+                    "select * from w1 order by rn, v1 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:TOP-N\n" +
+                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 2\n" +
+                    "  |  \n" +
+                    "  4:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 6: v2, 7: v3\n" +
+                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  3:SORT\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n");
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        }
+    }
 }

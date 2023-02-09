@@ -110,6 +110,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_PARTITIONS_PROPERTY = "kafka_partitions";
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
+    // optional
+    public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
 
     // pulsar type properties
     public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
@@ -144,6 +146,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(KAFKA_TOPIC_PROPERTY)
             .add(KAFKA_PARTITIONS_PROPERTY)
             .add(KAFKA_OFFSETS_PROPERTY)
+            .add(CONFLUENT_SCHEMA_REGISTRY_URL)
             .build();
 
     private static final ImmutableSet<String> PULSAR_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -154,6 +157,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(PULSAR_INITIAL_POSITIONS_PROPERTY)
             .build();
 
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    private String confluentSchemaRegistryUrl;
     private LabelName labelName;
     private final String tableName;
     private final List<ParseNode> loadPropertyList;
@@ -479,6 +491,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 jsonPaths = jobProperties.get(JSONPATHS);
                 jsonRoot = jobProperties.get(JSONROOT);
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
+            } else if (format.equalsIgnoreCase("avro")) {
+                format = "avro";
             } else {
                 throw new UserException("Format type is invalid. format=`" + format + "`");
             }
@@ -547,6 +561,22 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         String kafkaOffsetsString = dataSourceProperties.get(KAFKA_OFFSETS_PROPERTY);
         if (kafkaOffsetsString != null) {
             analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
+        }
+        String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
+        if (confluentSchemaRegistryUrlString == null) {
+            if (format == null) {
+                format = jobProperties.get(FORMAT);
+                if (format != null) {
+                    if (format.equalsIgnoreCase("avro")) {
+                        format = "avro";
+                    }
+                }
+            }
+            if (format.equals("avro")) {
+                throw new AnalysisException(CONFLUENT_SCHEMA_REGISTRY_URL + " is a required property");
+            }
+        } else {
+            confluentSchemaRegistryUrl = confluentSchemaRegistryUrlString;
         }
     }
 

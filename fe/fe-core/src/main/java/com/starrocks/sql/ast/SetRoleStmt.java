@@ -25,39 +25,19 @@ import java.util.List;
 public class SetRoleStmt extends StatementBase {
 
     private final List<String> roles = new ArrayList<>();
-    private SetRoleType setRoleType;
+    private final SetRoleType setRoleType;
 
-    public SetRoleStmt(List<String> roles) {
+    public SetRoleStmt(SetRoleType setRoleType, List<String> roles) {
         this.roles.addAll(roles);
-        this.setRoleType = SetRoleType.ROLE;
+        this.setRoleType = setRoleType;
+    }
+
+    public SetRoleType getSetRoleType() {
+        return setRoleType;
     }
 
     public List<String> getRoles() {
         return roles;
-    }
-
-    public void setTypeAll() {
-        setRoleType = SetRoleType.ALL;
-    }
-
-    public boolean isAll() {
-        return setRoleType.equals(SetRoleType.ALL);
-    }
-
-    public void setTypeDefault() {
-        setRoleType = SetRoleType.DEFAULT;
-    }
-
-    public boolean isDefault() {
-        return setRoleType.equals(SetRoleType.DEFAULT);
-    }
-
-    public void setTypeNone() {
-        setRoleType = SetRoleType.NONE;
-    }
-
-    public boolean isNone() {
-        return setRoleType.equals(SetRoleType.NONE);
     }
 
     @Override

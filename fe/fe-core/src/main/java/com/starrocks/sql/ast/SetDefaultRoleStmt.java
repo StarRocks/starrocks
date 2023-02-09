@@ -24,36 +24,24 @@ public class SetDefaultRoleStmt extends StatementBase {
 
     private final UserIdentity userIdentity;
     private final List<String> roles = new ArrayList<>();
-    private SetRoleType setRoleType;
+    private final SetRoleType setRoleType;
 
-    public SetDefaultRoleStmt(UserIdentity userIdentity, List<String> roles) {
+    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles) {
         this.userIdentity = userIdentity;
         this.roles.addAll(roles);
-        this.setRoleType = SetRoleType.ROLE;
+        this.setRoleType = setRoleType;
     }
 
     public UserIdentity getUserIdentifier() {
         return userIdentity;
     }
 
+    public SetRoleType getSetRoleType() {
+        return setRoleType;
+    }
+
     public List<String> getRoles() {
         return roles;
-    }
-
-    public void setTypeAll() {
-        setRoleType = SetRoleType.ALL;
-    }
-
-    public boolean isAll() {
-        return setRoleType.equals(SetRoleType.ALL);
-    }
-
-    public void setTypeNone() {
-        setRoleType = SetRoleType.NONE;
-    }
-
-    public boolean isNone() {
-        return setRoleType.equals(SetRoleType.NONE);
     }
 
     @Override
