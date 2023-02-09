@@ -342,8 +342,17 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             } else {
                 outputProperty = new PhysicalPropertySet(new SortProperty(topN.getOrderSpec()));
             }
-        } else {
+        } else if (topN.getPartitionByColumns() == null) {
             outputProperty = PhysicalPropertySet.EMPTY;
+        } else {
+            List<Integer> partitionColumnRefSet = topN.getPartitionByColumns().stream()
+                    .flatMap(c -> Arrays.stream(c.getUsedColumns().getColumnIds()).boxed())
+                    .collect(Collectors.toList());
+            if (partitionColumnRefSet.isEmpty()) {
+                outputProperty = PhysicalPropertySet.EMPTY;
+            } else {
+                outputProperty = new PhysicalPropertySet(childrenOutputProperties.get(0).getDistributionProperty());
+            }
         }
         return mergeCTEProperty(outputProperty);
     }
