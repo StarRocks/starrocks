@@ -78,7 +78,7 @@ public class ShowVariablesStmt extends ShowStmt {
             return null;
         }
         if (type == null) {
-            type = SetType.DEFAULT;
+            type = SetType.SESSION;
         }
         // Columns
         SelectList selectList = new SelectList();
