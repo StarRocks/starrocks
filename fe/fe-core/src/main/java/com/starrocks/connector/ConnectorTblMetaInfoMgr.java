@@ -28,19 +28,19 @@ public class ConnectorTblMetaInfoMgr {
     private static final Logger LOG = LogManager.getLogger(ConnectorTblMetaInfoMgr.class);
 
     // catalogName -> dbName -> tableIdentifier -> ConnectorTableInfo
-    private Table<String, String, Map<String, ConnectorTableInfo>> persistTableInfos;
+    private Table<String, String, Map<String, ConnectorTableInfo>> connectorTableMetaInfos;
 
     private ReentrantReadWriteLock lock;
 
     public ConnectorTblMetaInfoMgr() {
-        persistTableInfos = HashBasedTable.create();
+        connectorTableMetaInfos = HashBasedTable.create();
         lock = new ReentrantReadWriteLock();
     }
 
     public ConnectorTableInfo getConnectorTableInfo(String catalog, String db, String tableIdentifier) {
         readLock();
         try {
-            Map<String, ConnectorTableInfo> tableInfoMap = persistTableInfos.get(catalog, db);
+            Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
             return tableInfoMap == null ? null : tableInfoMap.get(tableIdentifier);
         } finally {
             readUnlock();
@@ -51,7 +51,7 @@ public class ConnectorTblMetaInfoMgr {
                                       ConnectorTableInfo connectorTableInfo) {
         writeLock();
         try {
-            Map<String, ConnectorTableInfo> tableInfoMap = persistTableInfos.get(catalog, db);
+            Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
             if (tableInfoMap == null) {
                 tableInfoMap = Maps.newHashMap();
             }
@@ -60,10 +60,10 @@ public class ConnectorTblMetaInfoMgr {
             if (tableInfo == null) {
                 tableInfo = ConnectorTableInfo.builder().build();
             }
-            tableInfo.addConnectorTableInfo(connectorTableInfo);
+            tableInfo.updateMetaInfo(connectorTableInfo);
 
             tableInfoMap.put(tableIdentifier, tableInfo);
-            persistTableInfos.put(catalog, db, tableInfoMap);
+            connectorTableMetaInfos.put(catalog, db, tableInfoMap);
             LOG.info("{}.{}.{} add persistent connector table info : {}", catalog, db, tableIdentifier,
                     connectorTableInfo);
         } finally {
@@ -75,7 +75,7 @@ public class ConnectorTblMetaInfoMgr {
                                             ConnectorTableInfo connectorTableInfo) {
         writeLock();
         try {
-            Map<String, ConnectorTableInfo> tableInfoMap = persistTableInfos.get(catalog, db);
+            Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
             if (tableInfoMap == null) {
                 return false;
             }
@@ -84,7 +84,7 @@ public class ConnectorTblMetaInfoMgr {
             if (tableInfo == null) {
                 return false;
             }
-            tableInfo.removeConnectorTableInfo(connectorTableInfo);
+            tableInfo.removeMetaInfo(connectorTableInfo);
             LOG.info("{}.{}.{} remove persistent connector table info : {}", catalog, db, tableIdentifier,
                     connectorTableInfo);
             return true;

@@ -653,9 +653,10 @@ public class GlobalStateMgr {
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
-        this.catalogMgr = new CatalogMgr(connectorMgr);
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
+        this.catalogMgr = new CatalogMgr(connectorMgr);
+
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();

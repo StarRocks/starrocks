@@ -29,7 +29,7 @@ public class ConnectorTableInfo {
         this.relatedMaterializedViews = relatedMaterializedViews;
     }
 
-    public void addConnectorTableInfo(ConnectorTableInfo tableInfo) {
+    public void updateMetaInfo(ConnectorTableInfo tableInfo) {
         if (relatedMaterializedViews == null) {
             relatedMaterializedViews = Sets.newHashSet(tableInfo.relatedMaterializedViews);
         } else {
@@ -37,7 +37,7 @@ public class ConnectorTableInfo {
         }
     }
 
-    public void removeConnectorTableInfo(ConnectorTableInfo tableInfo) {
+    public void removeMetaInfo(ConnectorTableInfo tableInfo) {
         if (relatedMaterializedViews != null && tableInfo.relatedMaterializedViews != null) {
             relatedMaterializedViews.removeAll(tableInfo.relatedMaterializedViews);
         }
