@@ -90,8 +90,12 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             } else {
                 metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
             }
+
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
-            newScanColumnRefs.put(metaColumn, scanOperator.getColRefToColumnMetaMap().get(usedColumn));
+            Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+            // for empty table, meta scan may return NULL result, so we force set usedColumn to nullable.
+            c.setIsAllowNull(true);
+            newScanColumnRefs.put(metaColumn, c);
 
 
             Function aggFunction = aggCall.getFunction();
