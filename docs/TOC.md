@@ -596,6 +596,7 @@
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
+  + [Use the debuginfo file for debugging](./developers/debuginfo.md)
   + Development Environment
     + [IDE Setup](./developers/development-environment/ide-setup.md)
     + [IDEA](./developers/development-environment/IDEA.md)
