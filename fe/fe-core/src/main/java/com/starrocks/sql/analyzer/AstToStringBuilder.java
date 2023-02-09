@@ -109,6 +109,7 @@ import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -331,20 +332,23 @@ public class AstToStringBuilder {
                     case VIEW:
                     case MATERIALIZED_VIEW: {
                         TablePEntryObject tablePEntryObject = (TablePEntryObject) stmt.getObjectList().get(0);
-                        if (tablePEntryObject.getDatabaseId() == TablePEntryObject.ALL_DATABASE_ID) {
+                        if (Objects.equals(tablePEntryObject.getDatabaseUUID(), TablePEntryObject.ALL_DATABASE_UUID)) {
                             sb.append("ALL ").append(plural).append(" IN ALL DATABASES");
                         } else {
-                            Database database = GlobalStateMgr.getCurrentState().getDb(tablePEntryObject.getDatabaseId());
-                            if (tablePEntryObject.getTableId() == TablePEntryObject.ALL_TABLES_ID) {
+                            // TODO(yiming): change it for external catalog
+                            Database database = GlobalStateMgr.getCurrentState()
+                                    .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
+                            if (Objects.equals(tablePEntryObject.getTableUUID(), TablePEntryObject.ALL_TABLES_UUID)) {
                                 sb.append("ALL TABLES ");
                                 sb.append("IN DATABASE ").append(database.getFullName());
                             } else {
                                 sb.append(stmt.getObjectType().name()).append(" ");
-
                                 List<String> objectString = new ArrayList<>();
                                 for (PEntryObject pEntryObject : stmt.getObjectList()) {
+
                                     TablePEntryObject tp = (TablePEntryObject) pEntryObject;
-                                    Table table = database.getTable(tp.getTableId());
+                                    // TODO(yiming): change it for external catalog
+                                    Table table = database.getTable(Long.parseLong(tp.getTableUUID()));
                                     objectString.add(database.getFullName() + "." + table.getName());
                                 }
                                 sb.append(Joiner.on(", ").join(objectString));
@@ -354,11 +358,13 @@ public class AstToStringBuilder {
                     }
                     case DATABASE: {
                         DbPEntryObject dbPEntryObject = (DbPEntryObject) stmt.getObjectList().get(0);
-                        if (dbPEntryObject.getId() == DbPEntryObject.ALL_DATABASE_ID) {
+                        if (Objects.equals(dbPEntryObject.getUUID(), DbPEntryObject.ALL_DATABASES_UUID)) {
                             sb.append("ALL DATABASES");
                         } else {
                             sb.append(stmt.getObjectType().name()).append(" ");
-                            Database database = GlobalStateMgr.getCurrentState().getDb(dbPEntryObject.getId());
+                            // TODO(yiming): change it for external catalog
+                            Database database =
+                                    GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
                             sb.append(database.getFullName());
                         }
                         break;
