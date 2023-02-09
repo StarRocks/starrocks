@@ -47,25 +47,20 @@ import java.util.stream.Collectors;
 public class StatementPlanner {
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
-        return plan(stmt, session, true, TResultSinkType.MYSQL_PROTOCAL);
+        return plan(stmt, session, TResultSinkType.MYSQL_PROTOCAL);
     }
 
-    public static ExecPlan plan(StatementBase stmt, ConnectContext session, boolean lockDb,
+    public static ExecPlan plan(StatementBase stmt, ConnectContext session,
                                 TResultSinkType resultSinkType) {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }
 
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-        Map<String, Database> dbLocks = null;
-
-        if (lockDb) {
-            dbLocks = dbs;
-        }
 
         // 1. For all queries, we need db lock when analyze phase
         try {
-            lock(dbLocks);
+            lock(dbs);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -77,17 +72,17 @@ public class StatementPlanner {
 
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         } finally {
-            unLock(dbLocks);
+            unLock(dbs);
         }
 
         // 2. For only olap table queries, we have snapshot the olap table metadata, so we needn't db lock again
         boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
         if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-            dbLocks = null;
+            dbs = null;
         }
 
         try {
-            lock(dbLocks);
+            lock(dbs);
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
@@ -103,7 +98,7 @@ public class StatementPlanner {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
         } finally {
-            unLock(dbLocks);
+            unLock(dbs);
         }
         return null;
     }
