@@ -1,1 +1,1 @@
-(^// Licensed to the Apache Software Foundation \(ASF\) under one$)|(^// This file is licensed under the Elastic License 2\.0\. Copyright 2021-present, StarRocks Inc\.$)|(^// This file is made available under Elastic License 2.0\.$)
+(^// Copyright 2021-present StarRocks, Inc. All rights reserved.)|(^// Licensed to the Apache Software Foundation \(ASF\) under one$)|(^// This file is licensed under the Elastic License 2\.0\. Copyright 2021-present, StarRocks Inc\.$)|(^// This file is made available under Elastic License 2.0\.$)
