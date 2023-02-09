@@ -1,0 +1,67 @@
+version: "3.9"
+services:
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:main
+    hostname: starrocks-fe
+    container_name: starrocks-fe
+    #user: root
+    command: /opt/starrocks/fe/bin/start_fe.sh
+    ports:
+      - 1030:8030
+      - 2020:9020
+      - 3030:9030
+#    volumes:
+#      - path/of/host/fe.conf:/opt/starrocks/fe/conf/fe.conf
+#      - path/of/host/fe/meta:/opt/starrocks/fe/meta
+
+  starrocks-be1:
+    image: starrocks/be-ubuntu:main
+    #user: root
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sleep 15s; mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "alter system add backend \"starrocks-be1:9050\";"
+        /opt/starrocks/be/bin/start_be.sh 
+
+    hostname: starrocks-be1
+    container_name: starrocks-be1
+    depends_on:
+      - "starrocks-fe"
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be1/storage:/opt/starrocks/be/storage
+  starrocks-be2:
+    image: starrocks/be-ubuntu:main
+    #user: root
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sleep 15s;  mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "alter system add backend \"starrocks-be2:9050\";"
+        /opt/starrocks/be/bin/start_be.sh 
+
+    hostname: starrocks-be2
+    container_name: starrocks-be2
+    depends_on:
+      - "starrocks-fe"
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be2/storage:/opt/starrocks/be/storage
+  starrocks-be3:
+    image: starrocks/be-ubuntu:main
+    #user: root
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sleep 15s; mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "alter system add backend \"starrocks-be3:9050\";"
+        /opt/starrocks/be/bin/start_be.sh 
+
+    hostname: starrocks-be3
+    container_name: starrocks-be3
+    depends_on:
+      - "starrocks-fe"
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be3/storage:/opt/starrocks/be/storage
