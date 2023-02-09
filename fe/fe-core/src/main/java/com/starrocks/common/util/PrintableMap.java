@@ -46,6 +46,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretKey");
         SENSITIVE_KEY.add("property.sasl.password");
         SENSITIVE_KEY.add("broker.password");
+        SENSITIVE_KEY.add("confluent.schema.registry.url");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
