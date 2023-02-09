@@ -128,11 +128,6 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
-        // TODO(hcf) we will support multi-partition later
-        if (partitionByColumns.size() > 1) {
-            return Collections.emptyList();
-        }
-
         Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
         if (!firstOrdering.isAscending()) {
             return Collections.emptyList();
