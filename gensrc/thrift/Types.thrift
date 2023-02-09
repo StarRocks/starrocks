@@ -454,6 +454,10 @@ struct TUserIdentity {
     3: optional bool is_domain
 }
 
+struct TUserRoles {
+    1: optional list<i64> role_id_list
+}
+
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
 const i32 TSNAPSHOT_REQ_VERSION2 = 4; // corresponding to beta rowset
 // the snapshot request should always set prefer snapshot version to TPREFER_SNAPSHOT_REQ_VERSION
