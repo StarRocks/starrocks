@@ -61,6 +61,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceClient;
@@ -1513,7 +1514,7 @@ public class Coordinator {
         return false;
     }
 
-    public void mergeIsomorphicProfiles() {
+    public void mergeIsomorphicProfiles(PQueryStatistics statistics) {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         if (!sessionVariable.isEnableProfile()) {
@@ -1598,13 +1599,24 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
+        long queryAllocatedMemoryUsage = 0;
+        long queryDeallocatedMemoryUsage = 0;
         // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
         // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
         // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
         // NetworkTime(for ExchangeOperator)
-        long operatorCumulativeTime = 0;
+        long queryCumulativeOperatorTime = 0;
         boolean foundResultSink = false;
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            Counter instanceAllocatedMemoryUsage = fragmentProfile.getCounter("InstanceAllocatedMemoryUsage");
+            if (instanceAllocatedMemoryUsage != null) {
+                queryAllocatedMemoryUsage += instanceAllocatedMemoryUsage.getValue();
+            }
+            Counter instanceDeallocatedMemoryUsage = fragmentProfile.getCounter("InstanceDeallocatedMemoryUsage");
+            if (instanceDeallocatedMemoryUsage != null) {
+                queryDeallocatedMemoryUsage += instanceDeallocatedMemoryUsage.getValue();
+            }
+
             for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
                 RuntimeProfile pipelineProfile = pipelineProfilePair.first;
                 for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
@@ -1624,23 +1636,35 @@ public class Coordinator {
                     }
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
                     Preconditions.checkNotNull(operatorTotalTime);
-                    operatorCumulativeTime += operatorTotalTime.getValue();
+                    queryCumulativeOperatorTime += operatorTotalTime.getValue();
 
                     Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
                     if (scanTime != null) {
-                        operatorCumulativeTime += scanTime.getValue();
+                        queryCumulativeOperatorTime += scanTime.getValue();
                     }
 
                     Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
                     if (networkTime != null) {
-                        operatorCumulativeTime += networkTime.getValue();
+                        queryCumulativeOperatorTime += networkTime.getValue();
                     }
                 }
             }
         }
-        Counter operatorCumulativeTimer = queryProfile.addCounter("OperatorCumulativeTime", TUnit.TIME_NS, null);
-        operatorCumulativeTimer.setValue(operatorCumulativeTime);
+        Counter queryAllocatedMemoryUsageCounter =
+                queryProfile.addCounter("QueryAllocatedMemoryUsage", TUnit.BYTES, null);
+        queryAllocatedMemoryUsageCounter.setValue(queryAllocatedMemoryUsage);
+        Counter queryDeallocatedMemoryUsageCounter =
+                queryProfile.addCounter("QueryDeallocatedMemoryUsage", TUnit.BYTES, null);
+        queryDeallocatedMemoryUsageCounter.setValue(queryDeallocatedMemoryUsage);
+        Counter queryCumulativeOperatorTimer =
+                queryProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
+        queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
         queryProfile.getCounterTotalTime().setValue(0);
+
+        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
+        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
+        queryProfile.addInfoString("QueryCumulativeCpuTime", DebugUtil.getPrettyStringNs(cpuCostNs));
+        queryProfile.addInfoString("MachinePeakMemoryUsage", DebugUtil.getPrettyStringBytes(memCostBytes));
     }
 
     /**

@@ -87,7 +87,7 @@ public class Counter {
 
     public Counter(TUnit type, TCounterStrategy strategy, long value) {
         this.type = type.getValue();
-        if (strategy == null) {
+        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null) {
             this.strategy = Counter.createStrategy(type);
         } else {
             this.strategy = strategy;
