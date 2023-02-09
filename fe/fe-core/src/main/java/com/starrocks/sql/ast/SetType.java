@@ -19,17 +19,10 @@ import com.starrocks.thrift.TVarType;
 
 // Set statement type.
 public enum SetType {
-    DEFAULT("DEFAULT"),
-    GLOBAL("GLOBAL"),
-    SESSION("SESSION"),
-    USER("USER"),
-    VERBOSE("VERBOSE");
-
-    private final String desc;
-
-    SetType(String desc) {
-        this.desc = desc;
-    }
+    GLOBAL,
+    SESSION,
+    USER,
+    VERBOSE;
 
     public TVarType toThrift() {
         if (this == SetType.GLOBAL) {

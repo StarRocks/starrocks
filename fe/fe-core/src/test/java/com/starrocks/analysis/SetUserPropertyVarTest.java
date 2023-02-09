@@ -17,8 +17,11 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
+import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.junit.Assert;
 import org.junit.Test;
@@ -27,15 +30,14 @@ public class SetUserPropertyVarTest {
     @Test
     public void testNormal() throws UserException {
         SetUserPropertyVar var = new SetUserPropertyVar("quota.normal", "1000");
-        var.analyze(true);
         Assert.assertEquals("quota.normal", var.getPropertyKey());
         Assert.assertEquals("1000", var.getPropertyValue());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testUnknownProperty() throws UserException{
         SetUserPropertyVar var = new SetUserPropertyVar("unknown_property", "1000");
-        var.analyze( true);
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         Assert.fail("No exception throws.");
     }
 }

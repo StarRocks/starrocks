@@ -35,6 +35,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.mysql.privilege.UserProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -107,7 +108,6 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
@@ -152,6 +152,8 @@ import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
@@ -357,6 +359,40 @@ public class PrivilegeChecker {
             return null;
         }
 
+        private void checkoutSetUserPropertyAccess(String key, boolean isSelf) {
+            for (Pattern advPattern : UserProperty.ADVANCED_PROPERTIES) {
+                Matcher matcher = advPattern.matcher(key);
+                if (matcher.find()) {
+                    // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                    "ADMIN");
+                        }
+                    }
+                    return;
+                }
+            }
+
+            for (Pattern commPattern : UserProperty.COMMON_PROPERTIES) {
+                Matcher matcher = commPattern.matcher(key);
+                if (matcher.find()) {
+                    // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!isSelf && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                                PrivPredicate.ADMIN)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                    "GRANT");
+                        }
+                    }
+                    return;
+                }
+            }
+
+            throw new SemanticException("Unknown property key: " + key);
+        }
+
         @Override
         public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext session) {
             if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
@@ -364,12 +400,8 @@ public class PrivilegeChecker {
             }
 
             boolean isSelf = statement.getUser().equals(ConnectContext.get().getQualifiedUser());
-            try {
-                for (SetVar var : statement.getPropertyList()) {
-                    ((SetUserPropertyVar) var).analyze(isSelf);
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            for (SetUserPropertyVar var : statement.getPropertyList()) {
+                checkoutSetUserPropertyAccess(var.getPropertyKey(), isSelf);
             }
 
             return null;

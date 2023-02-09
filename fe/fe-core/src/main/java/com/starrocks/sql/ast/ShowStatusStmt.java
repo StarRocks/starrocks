@@ -40,7 +40,7 @@ public class ShowStatusStmt extends ShowStmt {
     private Expr where;
 
     public ShowStatusStmt() {
-        this.type = SetType.DEFAULT;
+        this.type = SetType.SESSION;
     }
 
     public ShowStatusStmt(SetType type, String pattern, Expr where) {

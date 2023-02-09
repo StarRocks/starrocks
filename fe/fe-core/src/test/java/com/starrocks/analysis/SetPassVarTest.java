@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.UserException;
@@ -41,15 +42,15 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -81,21 +82,20 @@ public class SetPassVarTest {
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B");
-        stmt.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
         Assert.assertEquals("testUser", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", new String(stmt.getPassword()));
-
         Assert.assertEquals("'testUser'@'%'", stmt.getUserIdent().toString());
 
         // empty password
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), null);
-        stmt.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
         Assert.assertEquals("'testUser'@'%'", stmt.getUserIdent().toString());
 
         // empty user
         // empty password
         stmt = new SetPassVar(null, null);
-        stmt.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), ctx);
         Assert.assertEquals("'root'@'192.168.1.1'", stmt.getUserIdent().toString());
     }
 
@@ -105,7 +105,7 @@ public class SetPassVarTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        SetVar setVars = stmt.getSetVars().get(0);
+        SystemVariable setVars = (SystemVariable) stmt.getSetListItems().get(0);
 
         Assert.assertTrue(setVars.getResolvedExpression().getStringValue().contains("STRICT_TRANS_TABLES"));
     }
@@ -115,7 +115,7 @@ public class SetPassVarTest {
         SetPassVar stmt;
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBAHD913688E7278E2AD071FDB5E76D76D34B");
-        stmt.analyze();
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
         Assert.fail("No exception throws.");
     }
 

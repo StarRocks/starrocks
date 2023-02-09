@@ -1198,13 +1198,13 @@ public class ExpressionAnalyzer {
                         return null;
                     }
 
-                    Type variableType = userVariable.getResolvedExpression().getType();
+                    Type variableType = userVariable.getEvaluatedExpression().getType();
                     node.setType(variableType);
 
-                    if (userVariable.getResolvedExpression() instanceof NullLiteral) {
+                    if (userVariable.getEvaluatedExpression() instanceof NullLiteral) {
                         node.setIsNull();
                     } else {
-                        node.setValue(userVariable.getResolvedExpression().getRealObjectValue());
+                        node.setValue(userVariable.getEvaluatedExpression().getRealObjectValue());
                     }
                 } else {
                     VariableMgr.fillValue(session.getSessionVariable(), node);
