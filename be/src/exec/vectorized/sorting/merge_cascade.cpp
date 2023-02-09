@@ -111,15 +111,17 @@ bool MergeTwoCursor::move_cursor() {
         auto chunk = _left_cursor->try_get_next();
         if (chunk.first) {
             _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
         }
     }
     if (_right_run.empty() && !_right_cursor->is_eos()) {
         auto chunk = _right_cursor->try_get_next();
         if (chunk.first) {
             _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
         }
+    }
+
+    if (!_left_run.empty() && !_right_run.empty()) {
+        eos = false;
     }
 
     // one is eos but the other has data stream
