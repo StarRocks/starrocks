@@ -59,18 +59,18 @@ public class ShowMaterializedViewTest {
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testDb", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
         stmt = new ShowMaterializedViewsStmt("abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("abc", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
         stmt = new ShowMaterializedViewsStmt("abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
         Assert.assertEquals("abc", stmt.getDb());
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
 
         stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
@@ -92,10 +92,10 @@ public class ShowMaterializedViewTest {
                         "FROM information_schema.materialized_views " +
                         "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
-        checkShowMaterializedViewStmt(stmt);
+        checkShowMaterializedViewsStmt(stmt);
     }
 
-    private void checkShowMaterializedViewStmt(ShowMaterializedViewStmt stmt) {
+    private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
         Assert.assertEquals(13, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
