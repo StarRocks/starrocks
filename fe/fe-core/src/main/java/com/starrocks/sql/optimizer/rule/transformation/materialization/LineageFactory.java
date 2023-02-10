@@ -62,4 +62,10 @@ public class LineageFactory {
             return null;
         }
     }
+
+    public static Map<ColumnRefOperator, ScalarOperator> getLineage(OptExpression expression,
+                                                                    ColumnRefFactory refFactory) {
+        LineageFactory factory = new LineageFactory(expression, refFactory);
+        return factory.getLineage();
+    }
 }
