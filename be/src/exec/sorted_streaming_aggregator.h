@@ -27,7 +27,8 @@ public:
     SortedStreamingAggregator(AggregatorParamsPtr&& params);
     ~SortedStreamingAggregator() override;
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                   MemTracker* mem_tracker) override;
     Status streaming_compute_agg_state(size_t chunk_size);
 
     StatusOr<ChunkPtr> pull_eos_chunk();

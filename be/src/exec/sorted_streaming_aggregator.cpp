@@ -269,8 +269,9 @@ SortedStreamingAggregator::~SortedStreamingAggregator() {
     }
 }
 
-Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
-    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile));
+Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                                          MemTracker* mem_tracker) {
+    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
     _streaming_state_allocator =
             std::make_shared<StateAllocator>(_mem_pool.get(), _state->chunk_size(), _agg_states_total_size);
     return Status::OK();
