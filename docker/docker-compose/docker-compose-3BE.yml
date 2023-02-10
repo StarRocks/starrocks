@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   starrocks-fe:
-    image: starrocks/fe-ubuntu:2.5.0-rc03
+    image: starrocks/fe-ubuntu:main
     hostname: starrocks-fe
     container_name: starrocks-fe
     #user: root
@@ -10,17 +10,12 @@ services:
       - 1030:8030
       - 2020:9020
       - 3030:9030
-    volumes:
-      - ../../conf/fe.conf:/opt/starrocks/fe/conf/fe.conf
-      #- ./data/fe/meta:/opt/starrocks/fe/meta
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9030"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
+#    volumes:
+#      - path/of/host/fe.conf:/opt/starrocks/fe/conf/fe.conf
+#      - path/of/host/fe/meta:/opt/starrocks/fe/meta
 
   starrocks-be1:
-    image: starrocks/be-ubuntu:2.5.0-rc03
+    image: starrocks/be-ubuntu:main
     #user: root
     command:
       - /bin/bash
@@ -33,11 +28,11 @@ services:
     container_name: starrocks-be1
     depends_on:
       - "starrocks-fe"
-    volumes:
-      - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
-      #- ./data/starrocks-be1/storage:/opt/starrocks/be/storage
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be1/storage:/opt/starrocks/be/storage
   starrocks-be2:
-    image: starrocks/be-ubuntu:2.5.0-rc03
+    image: starrocks/be-ubuntu:main
     #user: root
     command:
       - /bin/bash
@@ -50,11 +45,11 @@ services:
     container_name: starrocks-be2
     depends_on:
       - "starrocks-fe"
-    volumes:
-      - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
-      #- ./data/starrocks-be2/storage:/opt/starrocks/be/storage
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be2/storage:/opt/starrocks/be/storage
   starrocks-be3:
-    image: starrocks/be-ubuntu:2.5.0-rc03
+    image: starrocks/be-ubuntu:main
     #user: root
     command:
       - /bin/bash
@@ -67,6 +62,6 @@ services:
     container_name: starrocks-be3
     depends_on:
       - "starrocks-fe"
-    volumes:
-      - ../../conf/be.conf:/opt/starrocks/be/conf/be.conf
-      #- ./data/starrocks-be3/storage:/opt/starrocks/be/storage
+#    volumes:
+#      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
+#      - path/of/host/starrocks-be3/storage:/opt/starrocks/be/storage
