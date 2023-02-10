@@ -1761,7 +1761,7 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    auto chunk = std::make_shared<Chunk>();
+    auto chunk = std::make_shared<vectorized::Chunk>();
     chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
 
