@@ -161,7 +161,8 @@ void RepeatedStoredColumnReader::reset() {
     _meet_first_record = false;
 }
 
-Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) {
+Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type,
+                                                   vectorized::Column* dst) {
     if (_eof) {
         *num_records = 0;
         return Status::EndOfFile("");
@@ -466,7 +467,8 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
     _levels_decoded += levels_to_decode;
 }
 
-Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) {
+Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type,
+                                                   vectorized::Column* dst) {
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {

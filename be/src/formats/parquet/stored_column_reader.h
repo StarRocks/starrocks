@@ -67,7 +67,8 @@ protected:
 
     virtual Status do_read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) = 0;
 
-    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, vectorized::Column* dst);
+    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
+                     vectorized::Column* dst);
 
     void update_read_context(size_t records_read);
 
