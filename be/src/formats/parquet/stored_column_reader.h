@@ -53,7 +53,10 @@ public:
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
+    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) {
+        reset();
+        return do_read_records(num_rows, content_type, dst);
+    }
 
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.
@@ -71,6 +74,8 @@ public:
 
 protected:
     virtual bool page_selected(size_t num_values);
+
+    virtual Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
 
     Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
 
