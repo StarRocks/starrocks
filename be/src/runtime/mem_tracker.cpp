@@ -148,7 +148,7 @@ std::string MemTracker::err_msg(const std::string& msg) const {
         break;
     case MemTracker::QUERY:
         str << "Mem usage has exceed the limit of single query, You can change the limit by "
-               "set session variable exec_mem_limit or query_mem_limit.";
+               "set session variable query_mem_limit.";
         break;
     case MemTracker::PROCESS:
         str << "Mem usage has exceed the limit of BE";
