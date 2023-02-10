@@ -785,7 +785,7 @@ build_hadoop() {
 #jdk
 build_jdk() {
     check_if_source_exist $JDK_SOURCE
-    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
+    rm -rf $TP_INSTALL_DIR/open_jdk && cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
 }
 
 # ragel
@@ -966,7 +966,7 @@ build_fast_float() {
 
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
-    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+    rm -rf $STARROCKS_THIRDPARTY/installed/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
 }
 
 # streamvbyte
