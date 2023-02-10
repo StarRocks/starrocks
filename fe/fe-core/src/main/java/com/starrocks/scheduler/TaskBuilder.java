@@ -52,6 +52,23 @@ public class TaskBuilder {
         return task;
     }
 
+    public static String getAnalyzeMVStmt(String tableName) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return "";
+        }
+        String stmt;
+        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        if ("sample".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE SAMPLE TABLE " + tableName;
+        } else if ("full".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE TABLE " + tableName;
+        } else {
+            stmt = "";
+        }
+        return stmt;
+    }
+
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
@@ -65,7 +82,7 @@ public class TaskBuilder {
         task.setProperties(taskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
-        task.setPostRun("analyze sample table " + materializedView.getName());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }
@@ -80,7 +97,7 @@ public class TaskBuilder {
         task.setProperties(previousTaskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
-        task.setPostRun("analyze sample table " + materializedView.getName());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }
