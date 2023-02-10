@@ -662,6 +662,7 @@ alterClause
     | dropComputeNodeClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
+    | createImageClause
 
     //Alter table clause
     | createIndexClause
@@ -733,6 +734,10 @@ modifyBrokerClause
 
 alterLoadErrorUrlClause
     : SET LOAD ERRORS HUB properties?
+    ;
+
+createImageClause
+    : CREATE IMAGE
     ;
 
 // ---------Alter table clause---------
@@ -2162,7 +2167,7 @@ nonReserved
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
-    | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
