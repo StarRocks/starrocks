@@ -215,7 +215,7 @@ private:
         while (chunk_it != chunk_end) {
             // Because we first fetch chunks from hash_map, so the _partition_idx here
             // is already set to hash_map.size()
-            if (!consumer(kNullKeyPartitionIdx, *chunk_it++)) {
+            if (!consumer(hash_map_with_key.kNullKeyPartitionIdx, *chunk_it++)) {
                 return false;
             }
         }
@@ -225,7 +225,6 @@ private:
     const bool _has_nullable_partition_column;
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<PartitionColumnType> _partition_types;
-    static constexpr size_t kNullKeyPartitionIdx = 0;
 
     RuntimeState* _state = nullptr;
     std::unique_ptr<MemPool> _mem_pool = nullptr;

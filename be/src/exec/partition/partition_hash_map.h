@@ -82,6 +82,7 @@ struct PartitionHashMapBase {
     int64_t total_num_rows = 0;
 
     bool init_null_key_partition = false;
+    static constexpr size_t kNullKeyPartitionIdx = 0;
 
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
@@ -237,7 +238,7 @@ protected:
 
         if (!init_null_key_partition) {
             init_null_key_partition = true;
-            new_partition_cb(0);
+            new_partition_cb(kNullKeyPartitionIdx);
         }
 
         if (nullable_key_column->only_null()) {
@@ -358,7 +359,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
-    PartitionChunks null_key_value{0};
+    PartitionChunks null_key_value{kNullKeyPartitionIdx};
 
     PartitionHashMapWithOneNullableNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
@@ -406,7 +407,7 @@ template <typename HashMap>
 struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
-    PartitionChunks null_key_value{0};
+    PartitionChunks null_key_value{kNullKeyPartitionIdx};
 
     PartitionHashMapWithOneNullableStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
