@@ -92,7 +92,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Manage workloads](../administration//resource_group.md)
+- [Manage workloads](../administration/resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
