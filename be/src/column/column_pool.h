@@ -246,7 +246,12 @@ public:
             _release_free_block(blk);
         }
 
-        _mem_tracker->release(freed_bytes);
+        // _mem_tracker maybe nullptr in graceful exit because the main thread don't wait until all
+        // source in children threads are recycled, so the mem_tracker maybe release before we call
+        // ~LocalPool()
+        if (_mem_tracker) {
+            _mem_tracker->release(freed_bytes);
+        }
         tls_thread_status.mem_consume(freed_bytes);
 
         return freed_bytes;
