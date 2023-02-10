@@ -87,8 +87,8 @@ public class AuthUpgrader {
         LOG.info("start to replay upgrade journal.");
         upgradeUser();
         upgradeRole(roleNameToId);
-        authenticationManager.setLoaded();
-        privilegeManager.setLoaded();
+        authenticationManager.setLoaded(true);
+        privilegeManager.setLoaded(true);
         LOG.info("replayed upgrade journal successfully.");
     }
 

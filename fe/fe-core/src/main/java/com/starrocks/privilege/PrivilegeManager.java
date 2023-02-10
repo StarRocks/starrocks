@@ -1922,8 +1922,8 @@ public class PrivilegeManager {
         return isLoaded;
     }
 
-    public void setLoaded() {
-        isLoaded = true;
+    public void setLoaded(boolean loaded) {
+        isLoaded = loaded;
     }
 
     /**

@@ -1011,6 +1011,14 @@ public class GlobalStateMgr {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
+
+                // For follower/observer, defer setting auth to null when we have replayed all the journal,
+                // because we may encounter old auth journal when replaying log in which case we still
+                // need the auth object.
+                if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
+                    // already upgraded, set auth = null
+                    auth = null;
+                }
                 break;
             }
 
@@ -1082,7 +1090,7 @@ public class GlobalStateMgr {
 
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
-                // if isFirstTimeStartUp is true, frontends must contains this Node.
+                // if isFirstTimeStartUp is true, frontends must contain this Node.
                 Frontend self = nodeMgr.getMySelf();
                 Preconditions.checkNotNull(self);
                 // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
@@ -1099,12 +1107,14 @@ public class GlobalStateMgr {
 
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
+                    reInitializeNewPrivilegeOnUpgrade();
                     AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
-                    usingNewPrivilege.set(true);
                 }
+                LOG.info("set usingNewPrivilege to true after transfer to leader");
+                usingNewPrivilege.set(true);
                 auth = null;  // remove references to useless objects to release memory
             }
 
@@ -1243,10 +1253,6 @@ public class GlobalStateMgr {
 
     private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
-        if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
-            // already upgraded, set auth = null
-            auth = null;
-        }
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
@@ -1477,7 +1483,7 @@ public class GlobalStateMgr {
     }
 
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
-        if (isUsingNewPrivilege()) {
+        if (USING_NEW_PRIVILEGE) {
             this.authenticationManager = AuthenticationManager.load(dis);
             this.privilegeManager = PrivilegeManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
@@ -1704,7 +1710,7 @@ public class GlobalStateMgr {
     }
 
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
-        if (isUsingNewPrivilege()) {
+        if (USING_NEW_PRIVILEGE) {
             this.authenticationManager.save(dos);
             this.privilegeManager.save(dos);
         }
@@ -3467,6 +3473,16 @@ public class GlobalStateMgr {
         if (USING_NEW_PRIVILEGE) {
             LOG.warn("replay old auth journal right after restart, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
+            // If we still need to replay old auth journal, it means that,
+            // 1. either no new privilege image has been generated, and some old auth journal haven't been compacted
+            //    into old auth image
+            // 2. or new privilege image has already been generated, and we roll back to old version, make some user or
+            //    privilege operation, then generate old auth journal
+            // in both cases, we need a definite upgrade, so we mark the managers of
+            // new privilege framework as unloaded to trigger upgrade process.
+            LOG.info("set authenticationManager and privilegeManager as unloaded because of old auth journal");
+            authenticationManager.setLoaded(false);
+            privilegeManager.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3524,16 +3540,24 @@ public class GlobalStateMgr {
 
     }
 
+    private void reInitializeNewPrivilegeOnUpgrade() {
+        // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
+        // we may already load the image from last upgrade, in this case we should
+        // discard the privilege data from last upgrade and only use the data from
+        // current image to upgrade, so we initialize a new PrivilegeManager and AuthenticationManger
+        // instance here
+        LOG.info("reinitialize privilege info before upgrade");
+        this.authenticationManager = new AuthenticationManager();
+        this.privilegeManager = new PrivilegeManager(this, null);
+    }
+
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        if (GlobalStateMgr.getCurrentState().needUpgradedToNewPrivilege()) {
-            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-            upgrader.replayUpgrade(info.getRoleNameToId());
-            usingNewPrivilege.set(true);
-            domainResolver.setAuthenticationManager(authenticationManager);
-            if (!isCheckpointThread()) {
-                this.auth = null;
-            }
-        }
+        reInitializeNewPrivilegeOnUpgrade();
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        upgrader.replayUpgrade(info.getRoleNameToId());
+        LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
+        usingNewPrivilege.set(true);
+        domainResolver.setAuthenticationManager(authenticationManager);
     }
 
     // entry of checking tablets operation
