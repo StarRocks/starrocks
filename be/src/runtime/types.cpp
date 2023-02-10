@@ -342,7 +342,6 @@ int TypeDescriptor::get_slot_size() const {
     case INVALID_TYPE:
     case TYPE_BINARY:
     case TYPE_FUNCTION:
-        DCHECK(false);
         break;
     }
     // For llvm complain

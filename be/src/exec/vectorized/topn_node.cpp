@@ -75,6 +75,36 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _materialized_tuple_desc = _row_descriptor.tuple_descriptors()[0];
     DCHECK(_materialized_tuple_desc != nullptr);
 
+    bool all_slot_ref = true;
+    std::unordered_set<SlotId> eager_materialized_slots;
+    for (ExprContext* expr_ctx : _sort_exec_exprs.lhs_ordering_expr_ctxs()) {
+        auto* expr = expr_ctx->root();
+        if (expr->is_slotref()) {
+            eager_materialized_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
+        } else {
+            all_slot_ref = false;
+        }
+    }
+
+    int materialized_cost = 0;
+    for (auto* slot : _materialized_tuple_desc->slots()) {
+        if (eager_materialized_slots.count(slot->id())) {
+            continue;
+        }
+        materialized_cost += slot->is_nullable();
+        if (slot->type().is_string_type()) {
+            materialized_cost += 16;
+        } else {
+            materialized_cost += std::max<int>(1, slot->type().get_slot_size());
+        }
+    }
+    static constexpr auto ORDINAL_SORT_COST = 4;
+    auto lazy_materialization = _tnode.sort_node.__isset.lazy_materialization && _tnode.sort_node.lazy_materialization;
+    if (lazy_materialization && all_slot_ref && materialized_cost > ORDINAL_SORT_COST) {
+        _eager_materialized_slots.insert(_eager_materialized_slots.begin(), eager_materialized_slots.begin(),
+                                         eager_materialized_slots.end());
+    }
+
     _runtime_profile->add_info_string("SortKeys", _sort_keys);
     _runtime_profile->add_info_string("SortType", tnode.sort_node.use_top_n ? "TopN" : "All");
     return Status::OK();
@@ -168,11 +198,12 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     } else {
         _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys);
+                                                                &_is_asc_order, &_is_null_first, _sort_keys, 1024000,
+                                                                16 * 1024 * 1024, _eager_materialized_slots);
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(runtime_profile());
+    _chunks_sorter->setup_runtime(runtime_profile(), runtime_state()->instance_mem_tracker());
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
@@ -198,7 +229,6 @@ template <class ContextFactory, class SinkFactory, class SourceFactory>
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context, bool is_partition, bool is_merging) {
     using namespace pipeline;
-
     OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     int64_t partition_limit = _limit;
 
@@ -248,12 +278,23 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     OperatorFactoryPtr sink_operator;
-
     sink_operator = std::make_shared<SinkFactory>(
             context->next_operator_id(), id(), context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
             _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc,
             child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, spill_channel_factory);
 
+    if constexpr (std::is_base_of_v<PartitionSortSinkOperatorFactory, SinkFactory>) {
+        int64_t max_buffered_rows = 1024000;
+        int64_t max_buffered_bytes = 16 * 1024 * 1024;
+        if (_tnode.sort_node.__isset.max_buffered_bytes) {
+            max_buffered_rows = _tnode.sort_node.max_buffered_rows;
+            max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
+        }
+        auto* partition_sort_factory = down_cast<PartitionSortSinkOperatorFactory*>(sink_operator.get());
+        partition_sort_factory->set_max_buffered_rows(max_buffered_rows);
+        partition_sort_factory->set_max_buffered_bytes(max_buffered_bytes);
+        partition_sort_factory->set_eager_materialized_slots(_eager_materialized_slots);
+    }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
 
