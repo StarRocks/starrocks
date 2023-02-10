@@ -67,3 +67,5 @@ SHOW CREATE TABLE table1;
     ```SQL
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
+
+> 说明：修改索引为异步操作，可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) 命令查看索引修改进度。当前每张表只允许同时进行一个修改索引任务。
