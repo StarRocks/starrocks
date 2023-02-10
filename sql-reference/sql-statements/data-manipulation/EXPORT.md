@@ -9,12 +9,13 @@
 ## 语法
 
 ```sql
-EXPORT TABLE table_name
-[PARTITION (partition_name[, ...])]
-[(column_name[, ...])]
-TO export_path
+EXPORT TABLE <table_name>
+[PARTITION (<partition_name>[, ...])]
+[(<column_name>[, ...])]
+TO <export_path>
 [opt_properties]
 WITH BROKER
+[broker_properties]
 ```
 
 ## 参数说明
@@ -39,6 +40,7 @@ WITH BROKER
   - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为 `true`，表示包含。
 
 - `WITH BROKER`：在 StarRocks v2.4 及以前版本，用于指定 Broker 的名称，格式为 `WITH BROKER "<broker_name>"`。自 StarRocks v2.5 起，只保留 `WITH BROKER` 关键字，不再需要提供 `broker_name`。
+- `broker_properties`: 用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
 
 ## 示例
 
