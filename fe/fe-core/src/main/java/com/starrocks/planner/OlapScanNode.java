@@ -218,6 +218,10 @@ public class OlapScanNode extends ScanNode {
         this.bucketColumns = bucketColumns;
     }
 
+    public List<Expr> getBucketExprs() {
+        return bucketExprs;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }
