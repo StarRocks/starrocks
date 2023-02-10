@@ -743,8 +743,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
-        Preconditions.checkState(!type.isNull());
-        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type));
+        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
+        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();

@@ -63,30 +63,30 @@ protected:
         map_column.add_sub_column(value_column);
 
         auto src_offsets = UInt32Column::create();
-        auto src_keys = Int32Column::create();
-        auto src_values = Int32Column::create();
+        auto src_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto src_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
         ColumnPtr src_column = MapColumn::create(src_keys, src_values, src_offsets);
 
         //  {1 = 1}
-        src_keys->append(1);
-        src_values->append(1);
+        src_keys->append_datum(1);
+        src_values->append_datum(1);
         src_offsets->append(1);
         // {}
         src_offsets->append(1);
         // { 2 = 200, 3 = 3000}
-        src_keys->append(2);
-        src_keys->append(3);
-        src_values->append(200);
-        src_values->append(3000);
+        src_keys->append_datum(2);
+        src_keys->append_datum(3);
+        src_values->append_datum(200);
+        src_values->append_datum(3000);
         src_offsets->append(3);
         // { 4 = -1, 5 = -2, 6 = -3}
-        src_keys->append(4);
-        src_keys->append(5);
-        src_keys->append(6);
-        src_values->append(-1);
-        src_values->append(-2);
-        src_values->append(-3);
+        src_keys->append_datum(4);
+        src_keys->append_datum(5);
+        src_keys->append_datum(6);
+        src_values->append_datum(-1);
+        src_values->append_datum(-2);
+        src_values->append_datum(-3);
         src_offsets->append(6);
 
         TypeInfoPtr type_info = get_type_info(map_column);
@@ -163,8 +163,8 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_offsets = UInt32Column::create();
-                auto dst_keys = Int32Column::create();
-                auto dst_values = Int32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
