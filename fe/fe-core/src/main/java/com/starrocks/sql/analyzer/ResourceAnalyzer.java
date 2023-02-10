@@ -15,8 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Resource;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -44,11 +42,7 @@ public class ResourceAnalyzer {
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt createResourceStmt, ConnectContext context) {
             // check name
-            try {
-                FeNameFormat.checkResourceName(createResourceStmt.getResourceName());
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkResourceName(createResourceStmt.getResourceName());
             // check type in properties
             Map<String, String> properties = createResourceStmt.getProperties();
             if (properties == null || properties.isEmpty()) {
@@ -76,22 +70,14 @@ public class ResourceAnalyzer {
 
         @Override
         public Void visitDropResourceStatement(DropResourceStmt dropResourceStmt, ConnectContext context) {
-            try {
-                FeNameFormat.checkResourceName(dropResourceStmt.getResourceName());
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkResourceName(dropResourceStmt.getResourceName());
             return null;
         }
 
         @Override
         public Void visitAlterResourceStatement(AlterResourceStmt alterResourceStmt, ConnectContext context) {
             // check name
-            try {
-                FeNameFormat.checkResourceName(alterResourceStmt.getResourceName());
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkResourceName(alterResourceStmt.getResourceName());
             // check properties
             Map<String, String> properties = alterResourceStmt.getProperties();
             String typeStr = PropertyAnalyzer.analyzeType(properties);

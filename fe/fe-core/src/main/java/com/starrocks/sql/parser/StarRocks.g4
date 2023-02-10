@@ -1192,7 +1192,7 @@ helpStatement
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)?
     ;
 
 dropUserStatement

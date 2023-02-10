@@ -12,23 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-public class CreateRoleStmt extends DdlStmt {
-
-    private final String role;
-
-    public CreateRoleStmt(String role) {
-        this.role = role;
-    }
-
-    public String getQualifiedRole() {
-        return role;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateRoleStatement(this, context);
-    }
+public enum SetRoleType {
+    ALL,
+    DEFAULT,
+    NONE,
+    ROLE
 }

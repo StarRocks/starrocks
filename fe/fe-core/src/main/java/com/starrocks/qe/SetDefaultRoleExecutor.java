@@ -17,41 +17,33 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.UserException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetRoleType;
 
 import java.util.HashSet;
 import java.util.Set;
 
 public class SetDefaultRoleExecutor {
-    private static long getValidRoleId(PrivilegeManager manager, Set<Long> roleIdsForUser, String roleName)
-            throws UserException {
-        Long id = manager.getRoleIdByNameAllowNull(roleName);
-        if (id == null) {
-            throw new UserException("Cannot find role " + roleName);
-        }
-
-        if (!roleIdsForUser.contains(id)) {
-            throw new UserException("Role " + roleName + " is not granted");
-        }
-        return id;
-    }
-
-
     public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         UserIdentity user = stmt.getUserIdentifier();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;
 
-        if (stmt.isNone()) {
+        if (stmt.getSetRoleType().equals(SetRoleType.NONE)) {
             roleIds = new HashSet<>();
-        } else if (stmt.isAll()) {
+        } else if (stmt.getSetRoleType().equals(SetRoleType.ALL)) {
             roleIds = roleIdsForUser;
         } else {
             // set role 'role1', 'role2'
             roleIds = new HashSet<>();
             for (String roleName : stmt.getRoles()) {
-                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName));
+                Long roleId = manager.getRoleIdByNameAllowNull(roleName);
+                if (roleId == null || !roleIdsForUser.contains(roleId)) {
+                    throw new SemanticException("Role " + roleName + " is not granted to " + user.toString());
+                }
+                roleIds.add(roleId);
             }
         }
 
