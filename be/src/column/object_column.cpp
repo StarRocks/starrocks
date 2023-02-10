@@ -89,7 +89,23 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::C
     for (uint32_t j = 0; j < size; ++j) {
         append(obj_col.get_object(index));
     }
-};
+}
+
+template <typename T>
+void ObjectColumn<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
+    if constexpr(std::is_same_v<T, BitmapValue>) {
+        if (deep_copy) {
+            return append_value_multiple_times(src, index, size);
+        } else {
+            const auto& obj_col = down_cast<const ObjectColumn<BitmapValue>&>(src);
+            for (uint32_t j = 0; j < size; ++j) {
+                append({*obj_col.get_object(index), true});
+            }
+        }
+    } else {
+        return append_value_multiple_times(src, index, size);
+    }
+}
 
 template <typename T>
 bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {

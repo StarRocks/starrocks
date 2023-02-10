@@ -107,6 +107,26 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    uint32_t orig_size = _null_column->size();
+
+    if (src.is_nullable()) {
+        const auto& src_column = down_cast<const NullableColumn&>(src);
+
+        DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
+
+        _null_column->append_value_multiple_times(*src_column._null_column, index, size);
+        _data_column->append_value_multiple_times(*src_column._data_column, index, size, deep_copy);
+        _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
+    } else {
+        _null_column->resize(orig_size + size);
+        _data_column->append_value_multiple_times(src, index, size, deep_copy);
+    }
+
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+}
+
 bool NullableColumn::append_nulls(size_t count) {
     DCHECK_GT(count, 0u);
     _data_column->append_default(count);

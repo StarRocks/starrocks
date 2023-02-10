@@ -90,6 +90,8 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
+
     bool append_nulls(size_t count) override { return false; }
 
     bool append_strings(const Buffer<Slice>& strs) override;

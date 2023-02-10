@@ -153,6 +153,10 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override {
+        return append_value_multiple_times(src, index, size);
+    }
+
     bool append_nulls(size_t count) override { return false; }
 
     void append_string(const std::string& str) {

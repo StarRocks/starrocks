@@ -53,6 +53,7 @@ public:
     BitmapValue(){};
 
     BitmapValue(const BitmapValue& other);
+    BitmapValue(const BitmapValue& other, bool deep_copy);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept

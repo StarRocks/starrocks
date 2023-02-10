@@ -49,6 +49,17 @@ BitmapValue::BitmapValue(const BitmapValue& other)
           _sv(other._sv),
           _type(other._type) {}
 
+BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy) {
+    if (deep_copy) {
+        _bitmap = other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
+    } else {
+        _bitmap = other._bitmap == nullptr ? nullptr : other._bitmap;
+    }
+    _set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
+    _sv = other._sv;
+    _type = other._type;
+}
+
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
         this->_bitmap = (other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap));
