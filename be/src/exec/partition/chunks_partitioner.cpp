@@ -39,28 +39,6 @@ Status ChunksPartitioner::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ChunksPartitioner::offer(const ChunkPtr& chunk) {
-    DCHECK(!_partition_it.has_value());
-
-    if (!_is_downgrade) {
-        for (size_t i = 0; i < _partition_exprs.size(); i++) {
-            ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
-        }
-    }
-
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                          \
-        TRY_CATCH_BAD_ALLOC(_split_chunk_by_partition<decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, chunk));                                                      \
-    }
-    APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
-    return Status::OK();
-}
-
 ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
     ChunkPtr chunk = nullptr;
     if (_downgrade_buffer.empty()) {

@@ -60,7 +60,16 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    auto st = _chunks_partitioner->offer(chunk);
+    auto st = _chunks_partitioner->offer(
+            chunk,
+            [this, state](size_t partition_idx) {
+                _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
+                        state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
+                        _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
+            },
+            [this, state](size_t partition_idx, const ChunkPtr& chunk) {
+                _chunks_sorters[partition_idx]->update(state, chunk);
+            });
     if (_chunks_partitioner->is_downgrade()) {
         transfer_all_chunks_from_partitioner_to_sorters(state);
     }
@@ -75,13 +84,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     if (_is_transfered) {
         return Status::OK();
     }
-    const auto num_partitions = _chunks_partitioner->num_partitions();
-    _chunks_sorters.resize(num_partitions);
-    for (int i = 0; i < num_partitions; ++i) {
-        _chunks_sorters[i] = std::make_shared<ChunksSorterTopn>(
-                state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit, _topn_type,
-                ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
-    }
+
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
