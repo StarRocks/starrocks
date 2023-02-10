@@ -40,23 +40,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _build_runtime_filters.emplace_back(rf_desc);
     }
     DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());
-    if (_parent->type() == TPlanNodeType::PROJECT_NODE) {
-        const auto& slot_ids = reinterpret_cast<ProjectNode*>(_parent)->slot_ids();
-        for (size_t i = 0; i < _build_column_count; i++) {
-            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
-                _deep = false;
-                for (size_t j = 0; j < slot_ids.size(); j++) {
-                    if (slot_ids[j] == _col_types[j]->id()) {
-                        _deep = true;
-                        break;
-                    }
-                }
-            }
-            if (_deep) {
-                break;
-            }
-        }
-    }
+
     return Status::OK();
 }
 
@@ -69,6 +53,23 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
     _probe_rows_counter = ADD_COUNTER(runtime_profile(), "ProbeRows", TUnit::UNIT);
 
     _init_row_desc();
+    if (_parent->type() == TPlanNodeType::PROJECT_NODE) {
+        const auto& slot_ids = reinterpret_cast<ProjectNode*>(_parent)->slot_ids();
+        for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
+            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
+                _deep = false;
+                for (size_t j = 0; j < slot_ids.size(); j++) {
+                    if (slot_ids[j] == _col_types[i]->id()) {
+                        _deep = true;
+                        break;
+                    }
+                }
+                if (_deep) {
+                    break;
+                }
+            }
+        }
+    }
     return Status::OK();
 }
 
