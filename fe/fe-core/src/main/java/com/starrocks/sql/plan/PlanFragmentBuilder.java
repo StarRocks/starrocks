@@ -1515,7 +1515,7 @@ public class PlanFragmentBuilder {
             return inputFragment;
         }
 
-       /**
+        /**
          * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
          * <p>
          * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
