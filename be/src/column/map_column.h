@@ -170,9 +170,9 @@ public:
     size_t get_map_size(size_t idx) const;
 
 private:
-    // keys must be NullableColumn
+    // Keys must be NullableColumn to facilitate handling nested types.
     ColumnPtr _keys;
-    // values must be NullableColumn
+    // Values must be NullableColumn to facilitate handling nested types.
     ColumnPtr _values;
     // Offsets column will store the start position of every map element.
     // Offsets store more one data to indicate the end position.

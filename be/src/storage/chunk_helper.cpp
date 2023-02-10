@@ -211,15 +211,22 @@ inline std::shared_ptr<vectorized::DecimalColumnType<T>> get_decimal_column_ptr(
 
 template <bool force>
 struct ColumnPtrBuilder {
+<<<<<<< HEAD
     template <FieldType ftype>
     vectorized::ColumnPtr operator()(size_t chunk_size, const vectorized::Field& field, int precision, int scale) {
         auto nullable = [&](vectorized::ColumnPtr c) -> vectorized::ColumnPtr {
+=======
+    template <LogicalType ftype>
+    ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
+        auto NullableIfNeed = [&](ColumnPtr c) -> ColumnPtr {
+>>>>>>> 87163ff66 ([BugFix] Adjust NULL_TYPE hack processing(2) (#17483))
             return field.is_nullable()
                            ? vectorized::NullableColumn::create(
                                      std::move(c), get_column_ptr<vectorized::NullColumn, force>(chunk_size))
                            : c;
         };
 
+<<<<<<< HEAD
         if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
             auto elements = field.sub_field(0).create_column();
             auto offsets = get_column_ptr<vectorized::UInt32Column, force>(chunk_size);
@@ -236,8 +243,38 @@ struct ColumnPtrBuilder {
             case OLAP_FIELD_TYPE_DECIMAL128:
                 return nullable(
                         get_decimal_column_ptr<vectorized::Decimal128Column, force>(precision, scale, chunk_size));
+=======
+        if constexpr (ftype == TYPE_ARRAY) {
+            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
+            auto array = ArrayColumn::create(std::move(elements), offsets);
+            return NullableIfNeed(array);
+        } else if constexpr (ftype == TYPE_MAP) {
+            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
+            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
+            auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
+            return NullableIfNeed(map);
+        } else if constexpr (ftype == TYPE_STRUCT) {
+            std::vector<std::string> names;
+            std::vector<ColumnPtr> fields;
+            for (auto& sub_field : field.sub_fields()) {
+                names.template emplace_back(sub_field.name());
+                fields.template emplace_back(sub_field.create_column());
+            }
+            auto struct_column = StructColumn::create(std::move(fields), std::move(names));
+            return NullableIfNeed(struct_column);
+        } else {
+            switch (ftype) {
+            case TYPE_DECIMAL32:
+                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+            case TYPE_DECIMAL64:
+                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+            case TYPE_DECIMAL128:
+                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+>>>>>>> 87163ff66 ([BugFix] Adjust NULL_TYPE hack processing(2) (#17483))
             default: {
-                return nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
             }
             }
         }
