@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -299,24 +300,24 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals(2, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertEquals("role2", setRoleStmt.getRoles().get(1));
-        Assert.assertFalse(setRoleStmt.isAll());
+        Assert.assertNotEquals(setRoleStmt.getSetRoleType(), SetRoleType.ALL);
 
         sql = "set role 'role1'";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals(1, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
-        Assert.assertFalse(setRoleStmt.isAll());
+        Assert.assertNotEquals(setRoleStmt.getSetRoleType(), SetRoleType.ALL);
 
         sql = "set role all";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertTrue(setRoleStmt.getRoles().isEmpty());
-        Assert.assertTrue(setRoleStmt.isAll());
+        Assert.assertEquals(setRoleStmt.getSetRoleType(), SetRoleType.ALL);
 
         sql = "set role all except 'role1'";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals(1, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
-        Assert.assertTrue(setRoleStmt.isAll());
+        Assert.assertEquals(setRoleStmt.getSetRoleType(), SetRoleType.ALL);
 
         sql = "set role all except 'role1', 'role2', 'role3'";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -324,7 +325,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertEquals("role2", setRoleStmt.getRoles().get(1));
         Assert.assertEquals("role3", setRoleStmt.getRoles().get(2));
-        Assert.assertTrue(setRoleStmt.isAll());
+        Assert.assertEquals(setRoleStmt.getSetRoleType(), SetRoleType.ALL);
 
         // invalidate rolename
         try {

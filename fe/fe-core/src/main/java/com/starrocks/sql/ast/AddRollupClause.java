@@ -24,7 +24,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
 
 import java.util.List;
 import java.util.Map;

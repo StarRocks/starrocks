@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -48,11 +45,8 @@ public class CatalogAnalyzer {
             if (Strings.isNullOrEmpty(catalogName)) {
                 throw new SemanticException("'catalog name' can not be null or empty");
             }
-            try {
-                FeNameFormat.checkCatalogName(catalogName);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+
+            FeNameFormat.checkCatalogName(catalogName);
 
             if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                 throw new SemanticException("External catalog name can't be the same as internal catalog name 'default'");

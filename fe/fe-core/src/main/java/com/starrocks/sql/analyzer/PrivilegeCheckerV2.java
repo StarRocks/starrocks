@@ -1031,7 +1031,7 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- Privilege Statement -----------------------------------
 
         @Override
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, ConnectContext context) {
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }

@@ -1206,15 +1206,19 @@ public class PrivilegeManager {
     /**
      * init all builtin privilege when a user is created, called by AuthenticationManager
      */
-    public UserPrivilegeCollection onCreateUser(UserIdentity user, String defaultRoleName) throws PrivilegeException {
+    public UserPrivilegeCollection onCreateUser(UserIdentity user, List<String> defaultRoleName) throws PrivilegeException {
         userWriteLock();
         try {
             UserPrivilegeCollection privilegeCollection = new UserPrivilegeCollection();
 
-            if (defaultRoleName != null) {
-                Long roleId = getRoleIdByNameNoLock(defaultRoleName);
-                privilegeCollection.grantRole(roleId);
-                privilegeCollection.setDefaultRoleIds(Sets.newHashSet(roleId));
+            if (!defaultRoleName.isEmpty()) {
+                Set<Long> roleIds = new HashSet<>();
+                for (String role : defaultRoleName) {
+                    Long roleId = getRoleIdByNameNoLock(role);
+                    privilegeCollection.grantRole(roleId);
+                    roleIds.add(roleId);
+                }
+                privilegeCollection.setDefaultRoleIds(roleIds);
             }
 
             userToPrivilegeCollection.put(user, privilegeCollection);
