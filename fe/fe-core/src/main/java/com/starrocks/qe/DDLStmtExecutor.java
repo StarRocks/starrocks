@@ -45,7 +45,6 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
@@ -401,22 +400,24 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (stmt instanceof CreateUserStmt) {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthenticationManager().createUser((CreateUserStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
-                    }
-                } else if (stmt instanceof AlterUserStmt) {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthenticationManager().alterUser((AlterUserStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
-                    }
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
                 } else {
-                    throw new DdlException("unsupported user stmt: " + stmt.toSql());
+                    context.getGlobalStateMgr().getAuth().createUser(stmt);
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().alterUser(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().alterUser(stmt);
                 }
             });
             return null;

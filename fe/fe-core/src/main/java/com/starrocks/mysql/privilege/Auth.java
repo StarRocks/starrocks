@@ -620,7 +620,16 @@ public class Auth implements Writable {
         if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
-        createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
+
+        //The current version of the code, here has been completely abandoned, here is only for UT compatibility,
+        String role;
+        if (!stmt.getDefaultRoles().isEmpty()) {
+            role = stmt.getDefaultRoles().get(0);
+        } else {
+            role = null;
+        }
+
+        createUserInternal(stmt.getUserIdent(), role,
                 new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExist());
     }
 

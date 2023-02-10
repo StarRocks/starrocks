@@ -14,10 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
+
+import java.util.List;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public class BaseCreateAlterUserStmt extends DdlStmt {
@@ -28,25 +29,22 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     protected String authPlugin;
     protected String authString;
     protected String userForAuthPlugin;
-    protected String role;
-    private final String operationName;   // CREATE or ALTER
+
+    protected SetRoleType setRoleType;
+    protected List<String> defaultRoles;
     // used in new RBAC privilege framework
     private UserAuthenticationInfo authenticationInfo = null;
 
-    public BaseCreateAlterUserStmt(UserDesc userDesc, String prepositionName) {
+    public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles) {
         this.userIdent = userDesc.getUserIdent();
         this.password = userDesc.getPassword();
         this.isPasswordPlain = userDesc.isPasswordPlain();
         this.authPlugin = userDesc.getAuthPlugin();
         this.authString = userDesc.getAuthString();
-        this.operationName = prepositionName;
-    }
 
-    public BaseCreateAlterUserStmt(UserDesc userDesc, String role, String prepositionName) {
-        this(userDesc, prepositionName);
-        this.role = role;
+        this.setRoleType = setRoleType;
+        this.defaultRoles = defaultRoles;
     }
-
 
     public String getOriginalPassword() {
         return password;
@@ -62,10 +60,6 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
 
     public void setScramblePassword(byte[] scramblePassword) {
         this.scramblePassword = scramblePassword;
-    }
-
-    public void setAuthPlugin(String authPlugin) {
-        this.authPlugin = authPlugin;
     }
 
     public void setUserForAuthPlugin(String userForAuthPlugin) {
@@ -88,16 +82,13 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
         return userForAuthPlugin;
     }
 
-    public boolean hasRole() {
-        return role != null;
+
+    public SetRoleType getSetRoleType() {
+        return setRoleType;
     }
 
-    public String getQualifiedRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
+    public List<String> getDefaultRoles() {
+        return defaultRoles;
     }
 
     public UserAuthenticationInfo getAuthenticationInfo() {
@@ -109,48 +100,12 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     }
 
     @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBaseCreateAlterUserStmt(this, context);
+    }
+
+    @Override
     public boolean needAuditEncryption() {
         return true;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(operationName).append(" USER ").append(userIdent);
-        if (!Strings.isNullOrEmpty(password)) {
-            if (isPasswordPlain) {
-                sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-            } else {
-                sb.append(" IDENTIFIED BY PASSWORD '").append(password).append("'");
-            }
-        }
-
-        if (!Strings.isNullOrEmpty(authPlugin)) {
-            sb.append(" IDENTIFIED WITH ").append(authPlugin);
-            if (!Strings.isNullOrEmpty(authString)) {
-                if (isPasswordPlain) {
-                    sb.append(" BY '");
-                } else {
-                    sb.append(" AS '");
-                }
-                sb.append(authString).append("'");
-            }
-        }
-
-        if (!Strings.isNullOrEmpty(role)) {
-            sb.append(" DEFAULT ROLE '").append(role).append("'");
-        }
-
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateAlterUserStatement(this, context);
     }
 }

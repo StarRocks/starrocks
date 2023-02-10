@@ -20,6 +20,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.SetRoleType;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -45,11 +46,11 @@ public class SetRoleExecutor {
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;
 
-        if (stmt.isNone()) {
+        if (stmt.getSetRoleType().equals(SetRoleType.NONE)) {
             roleIds = new HashSet<>();
-        } else if (stmt.isDefault()) {
+        } else if (stmt.getSetRoleType().equals(SetRoleType.DEFAULT)) {
             roleIds = manager.getDefaultRoleIdsByUser(user);
-        } else if (stmt.isAll()) {
+        } else if (stmt.getSetRoleType().equals(SetRoleType.ALL)) {
             roleIds = roleIdsForUser;
 
             // SET ROLE ALL EXCEPT

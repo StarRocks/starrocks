@@ -36,9 +36,9 @@ package com.starrocks.analysis;
 
 // Description of user in SQL statement
 public class UserDesc {
-    private UserIdentity userIdent;
+    private final UserIdentity userIdent;
     private String password;
-    private boolean isPasswordPlain;
+    private final boolean isPasswordPlain;
     private String authPlugin;
     private String authString;
 
@@ -50,11 +50,6 @@ public class UserDesc {
         this.userIdent = userIdent;
         this.password = password;
         this.isPasswordPlain = isPasswordPlain;
-    }
-
-    public UserDesc(UserIdentity userIdent, String authPlugin) {
-        this.userIdent = userIdent;
-        this.authPlugin = authPlugin;
     }
 
     public UserDesc(UserIdentity userIdent, String authPlugin, String authString, boolean isPasswordPlain) {

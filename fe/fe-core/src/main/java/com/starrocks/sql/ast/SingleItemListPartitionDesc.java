@@ -24,10 +24,10 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.ArrayList;
