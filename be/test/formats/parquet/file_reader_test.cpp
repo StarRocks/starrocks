@@ -1772,9 +1772,9 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
 
     EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
     EXPECT_EQ("[2, [NULL]]", chunk->debug_row(1));
-    EXPECT_EQ("[3, [NULL,NULL,NULL]]", chunk->debug_row(2));
-    EXPECT_EQ("[4, [[1,2,3,4],NULL,[1,2,3,4]]]", chunk->debug_row(3));
-    EXPECT_EQ("[5, [[1,2,3,4,5]]]", chunk->debug_row(4));
+    EXPECT_EQ("[3, [NULL, NULL, NULL]]", chunk->debug_row(2));
+    EXPECT_EQ("[4, [[1, 2, 3, 4], NULL, [1, 2, 3, 4]]]", chunk->debug_row(3));
+    EXPECT_EQ("[5, [[1, 2, 3, 4, 5]]]", chunk->debug_row(4));
 
     {
         while (!status.is_end_of_file()) {
