@@ -57,7 +57,7 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
                         _topn_type, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
             },
-            [this, state](size_t partition_idx, const ChunkPtr& chunk) {
+            [this, state](size_t partition_idx, const vectorized::ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
             });
     if (_chunks_partitioner->is_downgrade()) {
