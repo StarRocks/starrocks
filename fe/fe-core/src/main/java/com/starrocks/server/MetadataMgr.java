@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
@@ -47,12 +48,15 @@ public class MetadataMgr {
 
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
+    private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
     private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
 
-    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
+                       ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
         Preconditions.checkNotNull(localMetastore, "localMetastore is null");
         this.localMetastore = localMetastore;
         this.connectorMgr = connectorMgr;
+        this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
     protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
@@ -139,7 +143,12 @@ public class MetadataMgr {
 
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        if (connectorTable != null) {
+            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
+            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+        return connectorTable;
     }
 
     public Statistics getTableStatistics(OptimizerContext session,

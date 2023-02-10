@@ -117,6 +117,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -3592,6 +3593,15 @@ public class LocalMetastore implements ConnectorMetadata {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
                         baseTable.removeRelatedMaterializedView(mvId);
+                        if (!baseTable.isLocalTable()) {
+                            // remove relatedMaterializedViews for connector table
+                            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                                    removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                            baseTableInfo.getDbName(),
+                                            baseTableInfo.getTableIdentifier(),
+                                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                                    Sets.newHashSet(mvId)).build());
+                        }
                     }
                 }
             }
