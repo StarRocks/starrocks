@@ -75,7 +75,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_probe(vectorized::C
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, _deep);
         }
     } else {
         if (src_col->is_constant()) {
@@ -86,7 +86,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_probe(vectorized::C
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, _deep);
         }
     }
 }

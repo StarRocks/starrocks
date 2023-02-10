@@ -18,13 +18,15 @@ public:
     CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           const std::vector<ExprContext*>& conjunct_ctxs,
                           const vectorized::Buffer<SlotDescriptor*>& col_types, const size_t& probe_column_count,
-                          const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
+                          const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context,
+                          bool deep = true)
             : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id, driver_sequence),
               _col_types(col_types),
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
-              _cross_join_context(cross_join_context) {
+              _cross_join_context(cross_join_context),
+              _deep(deep) {
         _cross_join_context->ref();
     }
 
@@ -147,6 +149,7 @@ private:
     std::vector<uint32_t> _buf_selective;
 
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
+    bool _deep = true;
 };
 
 class CrossJoinLeftOperatorFactory final : public OperatorWithDependencyFactory {
@@ -154,20 +157,21 @@ public:
     CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                  const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
                                  std::vector<ExprContext*>&& conjunct_ctxs,
-                                 std::shared_ptr<CrossJoinContext>&& cross_join_context)
+                                 std::shared_ptr<CrossJoinContext>&& cross_join_context, bool deep = true)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _row_descriptor(row_descriptor),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _cross_join_context(std::move(cross_join_context)) {}
+              _cross_join_context(std::move(cross_join_context)),
+              _deep(deep) {}
 
     ~CrossJoinLeftOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs,
                                                        _col_types, _probe_column_count, _build_column_count,
-                                                       _cross_join_context);
+                                                       _cross_join_context, _deep);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -187,6 +191,7 @@ private:
     std::vector<ExprContext*> _conjunct_ctxs;
 
     std::shared_ptr<CrossJoinContext> _cross_join_context;
+    bool _deep = true;
 };
 
 } // namespace pipeline
