@@ -176,7 +176,8 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
     } else {
         array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size() * sizeof(uint8_t));
 
-        auto result_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+        auto result_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                                UInt32Column::create());
         NullColumnPtr null_array = NullColumn::create();
         for (int row = 0; row < row_nums; ++row) {
             array_offsets->append(offset);

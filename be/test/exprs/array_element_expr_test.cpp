@@ -250,7 +250,8 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        auto array1 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                          UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(array1, type_array_int));
@@ -275,7 +276,8 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        auto array1 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                          UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(array1, type_array_int));
@@ -300,7 +302,8 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
 
-        auto array1 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+        auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                          UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(array1, type_array_int));

@@ -189,7 +189,7 @@ public:
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
 private:
-    // _elements must be NullableColumn
+    // Elements must be NullableColumn to facilitate handling nested types.
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.
