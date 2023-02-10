@@ -629,7 +629,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            std::move(_conjunct_ctxs), std::move(cross_join_context), _deep);
+            std::move(_conjunct_ctxs), std::move(cross_join_context), _children[0]->parent_node());
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));

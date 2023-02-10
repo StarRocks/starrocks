@@ -7,6 +7,7 @@
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "exec/vectorized/project_node.h"
 
 namespace starrocks::pipeline {
 
@@ -329,6 +330,25 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
 
     _init_row_desc();
+
+    if (_parent_node->type() == TPlanNodeType::PROJECT_NODE) {
+        const auto& slot_ids = reinterpret_cast<const vectorized::ProjectNode*>(_parent_node)->slot_ids();
+        for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
+            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
+                _deep = false;
+                for (size_t j = 0; j < slot_ids.size(); j++) {
+                    if (slot_ids[j] == _col_types[i]->id()) {
+                        _deep = true;
+                        break;
+                    }
+                }
+                if (_deep) {
+                    break;
+                }
+            }
+        }
+    }
+
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
