@@ -30,7 +30,7 @@ import java.util.Set;
 
 public class ColumnRewriter {
     private static final Logger LOG = LogManager.getLogger(ColumnRewriter.class);
-    private RewriteContext rewriteContext;
+    private final RewriteContext rewriteContext;
 
     public ColumnRewriter(RewriteContext rewriteContext) {
         this.rewriteContext = rewriteContext;
@@ -84,9 +84,9 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    private class ColumnRewriteVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
-        private boolean enableRelationRewrite;
-        private boolean enableEquivalenceClassesRewrite;
+    private static class ColumnRewriteVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
+        private final boolean enableRelationRewrite;
+        private final boolean enableEquivalenceClassesRewrite;
 
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
@@ -131,13 +131,13 @@ public class ColumnRewriter {
             if (enableRelationRewrite && srcToDstRelationIdMapping != null) {
                 Integer srcRelationId = srcRefFactory.getRelationId(columnRef.getId());
                 if (srcRelationId < 0) {
-                    LOG.warn("invalid columnRef:%s", columnRef);
+                    LOG.warn("invalid columnRef: {}", columnRef);
                     return null;
                 }
                 Integer targetRelationId = srcToDstRelationIdMapping.get(srcRelationId);
                 List<ColumnRefOperator> relationColumns = dstRelationIdToColumns.get(targetRelationId);
                 if (relationColumns == null) {
-                    LOG.warn("no columns for relation id:%d", targetRelationId);
+                    LOG.warn("no columns for relation id:{}", targetRelationId);
                     return null;
                 }
                 boolean found = false;
@@ -149,7 +149,7 @@ public class ColumnRewriter {
                     }
                 }
                 if (!found) {
-                    LOG.warn("can not find column ref:%s in target relation:%d", columnRef, targetRelationId);
+                    LOG.warn("can not find column ref:{} in target relation:{}", columnRef, targetRelationId);
                 }
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {

@@ -916,9 +916,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             mvPartitionMap.remove(deleted);
         }
         needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : partitionDiff.getAdds().entrySet()) {
-            mvPartitionMap.put(addEntry.getKey(), addEntry.getValue());
-        }
+        mvPartitionMap.putAll(partitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
