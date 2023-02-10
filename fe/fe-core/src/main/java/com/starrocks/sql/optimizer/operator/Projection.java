@@ -125,8 +125,9 @@ public class Projection {
         columnRefMap.forEach((k, v) -> {
             if (columnRefSet.contains(k.getId())) {
                 columnRefSet.union(v.getUsedColumns());
+            } else {
+                fillDisableDictOptimizeColumns(v, columnRefSet, sids);
             }
-            fillDisableDictOptimizeColumns(v, columnRefSet, sids);
         });
     }
 
