@@ -14,6 +14,10 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Range;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.plan.ExecPlan;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -21,9 +25,11 @@ public class MvTaskRunContext extends TaskRunContext {
 
     Map<String, Set<String>> baseToMvNameRef;
     Map<String, Set<String>> mvToBaseNameRef;
+    Map<String, Range<PartitionKey>> basePartitionMap;
 
     String nextPartitionStart = null;
     String nextPartitionEnd = null;
+    ExecPlan execPlan = null;
 
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;
@@ -66,5 +72,21 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
         this.nextPartitionEnd = nextPartitionEnd;
+    }
+
+    public void setBasePartitionMap(Map<String, Range<PartitionKey>> basePartitionMap) {
+        this.basePartitionMap = basePartitionMap;
+    }
+
+    public Map<String, Range<PartitionKey>> getBasePartitionMap() {
+        return this.basePartitionMap;
+    }
+
+    public ExecPlan getExecPlan() {
+        return this.execPlan;
+    }
+
+    public void setExecPlan(ExecPlan execPlan) {
+        this.execPlan = execPlan;
     }
 }
