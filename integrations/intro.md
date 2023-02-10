@@ -4,7 +4,7 @@
 
 ## BI 工具
 
-[SuperSet](https://github.com/StarRocks/starrocks/tree/main/contrib/sqlalchemy-connector)
+[SuperSet](./superset_support.md)
 
 ## 数据集成
 
@@ -34,4 +34,4 @@
 
 ## 监控
 
-[DataDog](https://github.com/StarRocks/starrocks/tree/main/contrib/datadog-connector)
+[DataDog](./datadog_support.md)
