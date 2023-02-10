@@ -362,8 +362,11 @@ public class ShowStmtAnalyzer {
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
                                                 column.getDisplayName(),
-                                                column.getType().canonicalName(),
-                                                column.isAllowNull() ? "Yes" : "No",
+                                                // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                                // If you do not follow this specification, it may cause the BI system,
+                                                // such as superset, to fail to recognize the column type.
+                                                column.getType().canonicalName().toLowerCase(),
+                                                column.isAllowNull() ? "YES" : "NO",
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -438,8 +441,11 @@ public class ShowStmtAnalyzer {
                                 List<String> row = Arrays.asList("",
                                         "",
                                         column.getDisplayName(),
-                                        column.getType().canonicalName(),
-                                        column.isAllowNull() ? "Yes" : "No",
+                                        // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                        // If you do not follow this specification, it may cause the BI system,
+                                        // such as superset, to fail to recognize the column type.
+                                        column.getType().canonicalName().toLowerCase(),
+                                        column.isAllowNull() ? "YES" : "NO",
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);
