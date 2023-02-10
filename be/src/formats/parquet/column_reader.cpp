@@ -50,6 +50,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
             continue;
         }
 
+        // Start for a new row
         offset_pos++;
         offsets[offset_pos] = offsets[offset_pos - 1];
         if (def_levels[i] >= level_info.max_def_level) {

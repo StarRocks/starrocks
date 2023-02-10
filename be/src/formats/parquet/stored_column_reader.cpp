@@ -40,7 +40,7 @@ public:
 
     void reset() override;
 
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
+    Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = &_def_levels[0];
@@ -89,7 +89,7 @@ public:
     // Reset internal state and ready for next read_values
     void reset() override;
 
-    Status read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
         if (_needs_levels) {
             return _read_records_and_levels(num_records, content_type, dst);
         } else {
@@ -145,7 +145,7 @@ public:
 
     void reset() override {}
 
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
+    Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = nullptr;
@@ -170,10 +170,12 @@ void RepeatedStoredColumnReader::reset() {
     memmove(&_rep_levels[0], &_rep_levels[_levels_parsed], num_levels * sizeof(level_t));
     _levels_decoded -= _levels_parsed;
     _levels_parsed = 0;
+    _meet_first_record = false;
 }
 
-Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
+Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
     if (_eof) {
+        *num_records = 0;
         return Status::EndOfFile("");
     }
 
@@ -182,6 +184,7 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
         if (_num_values_left_in_cur_page == 0) {
             size_t read_count = 0;
             auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
+            DCHECK(read_count <= (*num_records - records_read));
             records_read += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
@@ -227,6 +230,8 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
         update_read_context(records_to_read);
     } while (records_read < *num_records);
 
+    DCHECK(records_read <= *num_records);
+
     *num_records = records_read;
     return Status::OK();
 }
@@ -265,6 +270,15 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     for (; levels_pos < _levels_decoded && rows_read < *num_rows; ++levels_pos) {
         rows_read += _rep_levels[levels_pos] == 0;
     }
+    if (levels_pos < _levels_decoded) {
+        // means rows_read == *num_rows, but notice, ++levels_pos in for-loop will take one step forward, so we need -1
+        levels_pos--;
+        DCHECK_EQ(0, _rep_levels[levels_pos]);
+    } // else {
+      //    means  rows_read < *num_rows, levels_pos >= _levels_decoded,
+      //    so we need to decode more levels to obtain a complete line or
+      //    we have read all the records in this column chunk.
+    // }
 
     VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
     *num_rows = rows_read;
@@ -289,8 +303,9 @@ void RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
         _levels_capacity = new_capacity;
     }
 
-    _reader->decode_def_levels(levels_to_decode, &_def_levels[_levels_decoded]);
-    _reader->decode_rep_levels(levels_to_decode, &_rep_levels[_levels_decoded]);
+    size_t res_def = _reader->decode_def_levels(levels_to_decode, &_def_levels[_levels_decoded]);
+    size_t res_rep = _reader->decode_rep_levels(levels_to_decode, &_rep_levels[_levels_decoded]);
+    DCHECK_EQ(res_def, res_rep);
 
     _levels_decoded += levels_to_decode;
 }
@@ -310,6 +325,7 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
                                                             Column* dst) {
     SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
     if (_eof) {
+        *num_records = 0;
         return Status::EndOfFile("");
     }
     size_t records_read = 0;
@@ -462,7 +478,7 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
     _levels_decoded += levels_to_decode;
 }
 
-Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
+Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
