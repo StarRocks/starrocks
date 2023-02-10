@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic

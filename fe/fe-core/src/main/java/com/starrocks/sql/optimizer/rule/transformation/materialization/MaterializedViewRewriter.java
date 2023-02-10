@@ -586,8 +586,8 @@ public class MaterializedViewRewriter {
     }
 
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
-                                    Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
-                                    OptExpression targetExpr) {
+                                              Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
+                                              OptExpression targetExpr) {
         Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
@@ -726,8 +726,8 @@ public class MaterializedViewRewriter {
     }
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr,
-                                                 Multimap<ScalarOperator, ColumnRefOperator> exprMap,
-                                                 Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
+                                                   Multimap<ScalarOperator, ColumnRefOperator> exprMap,
+                                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
             @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {

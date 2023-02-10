@@ -28,8 +28,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 /**
  * Materialized View Rewrite Rule for pattern:
  * - Aggregate
- *  - Aggregate
- *      - Scan
+ * - Aggregate
+ * - Scan
  */
 public class AggregateAggregateScanRule extends SingleTableRewriteBaseRule {
     private static AggregateAggregateScanRule INSTANCE = new AggregateAggregateScanRule();

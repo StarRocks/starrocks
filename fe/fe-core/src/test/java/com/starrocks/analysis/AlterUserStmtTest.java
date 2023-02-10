@@ -17,18 +17,14 @@ package com.starrocks.analysis;
 
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.UserIdentity;
 
 /**
  * TODO this class is merely a wrapper of UserIdentity,

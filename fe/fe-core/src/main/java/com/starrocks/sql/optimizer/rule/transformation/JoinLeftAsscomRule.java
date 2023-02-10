@@ -77,8 +77,8 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
 
     @Override
     public ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
-                                         ScalarOperator newTopOnCondition, ColumnRefSet newBotJoinOutputCols,
-                                         ColumnRefFactory columnRefFactory) {
+                                                   ScalarOperator newTopOnCondition, ColumnRefSet newBotJoinOutputCols,
+                                                   ColumnRefFactory columnRefFactory) {
         return newTopOnCondition;
     }
 

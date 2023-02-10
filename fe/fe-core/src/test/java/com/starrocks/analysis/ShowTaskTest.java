@@ -14,7 +14,6 @@
 
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -28,6 +27,7 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -35,7 +35,6 @@ import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -83,7 +83,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R  visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+    public R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

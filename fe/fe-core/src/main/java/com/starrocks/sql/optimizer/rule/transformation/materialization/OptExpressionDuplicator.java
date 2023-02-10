@@ -67,6 +67,7 @@ public class OptExpressionDuplicator {
         this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
+
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
         return source.getOp().accept(visitor, source, null);
@@ -177,7 +178,7 @@ public class OptExpressionDuplicator {
                 });
                 newGroupKeys.add(mapped);
             }
-            LogicalAggregationOperator.Builder aggregationBuilder  = (LogicalAggregationOperator.Builder) opBuilder;
+            LogicalAggregationOperator.Builder aggregationBuilder = (LogicalAggregationOperator.Builder) opBuilder;
             aggregationBuilder.setGroupingKeys(newGroupKeys);
             Map<ColumnRefOperator, CallOperator> newAggregates = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {

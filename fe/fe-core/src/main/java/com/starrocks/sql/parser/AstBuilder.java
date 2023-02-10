@@ -74,7 +74,6 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
@@ -365,6 +364,7 @@ import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UseWarehouseStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentifier;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -2819,7 +2819,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
 
-
     @Override
     public ParseNode visitSetNames(StarRocksParser.SetNamesContext context) {
         if (context.CHAR() != null || context.CHARSET() != null) {
@@ -3939,14 +3938,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateUserStatement(StarRocksParser.CreateUserStatementContext context) {
         UserDesc userDesc;
-        UserIdentifier user = (UserIdentifier) visit(context.user());
+        UserIdentity user = (UserIdentity) visit(context.user());
         UserAuthOption authOption = context.authOption() == null ? null : (UserAuthOption) visit(context.authOption());
         if (authOption == null) {
-            userDesc = new UserDesc(user.getUserIdentity());
+            userDesc = new UserDesc(user);
         } else if (authOption.getAuthPlugin() == null) {
-            userDesc = new UserDesc(user.getUserIdentity(), authOption.getPassword(), authOption.isPasswordPlain());
+            userDesc = new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain());
         } else {
-            userDesc = new UserDesc(user.getUserIdentity(), authOption.getAuthPlugin(), authOption.getAuthString(),
+            userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
         }
         boolean ifNotExists = context.IF() != null;
@@ -3956,14 +3955,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropUserStatement(StarRocksParser.DropUserStatementContext context) {
-        UserIdentifier user = (UserIdentifier) visit(context.user());
-        return new DropUserStmt(user.getUserIdentity());
+        UserIdentity user = (UserIdentity) visit(context.user());
+        return new DropUserStmt(user);
     }
 
     @Override
     public ParseNode visitAlterUserStatement(StarRocksParser.AlterUserStatementContext context) {
         UserDesc userDesc;
-        UserIdentifier user = (UserIdentifier) visit(context.user());
+        UserIdentity user = (UserIdentity) visit(context.user());
 
         if (context.ROLE() != null) {
             List<String> roles = new ArrayList<>();
@@ -3972,7 +3971,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         s -> ((Identifier) s).getValue()).collect(toList()));
             }
 
-            SetDefaultRoleStmt setDefaultRoleStmt = new SetDefaultRoleStmt(user.getUserIdentity(), roles);
+            SetDefaultRoleStmt setDefaultRoleStmt = new SetDefaultRoleStmt(user, roles);
 
             if (context.ALL() != null) {
                 setDefaultRoleStmt.setTypeAll();
@@ -3985,9 +3984,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
         if (authOption.getAuthPlugin() == null) {
-            userDesc = new UserDesc(user.getUserIdentity(), authOption.getPassword(), authOption.isPasswordPlain());
+            userDesc = new UserDesc(user, authOption.getPassword(), authOption.isPasswordPlain());
         } else {
-            userDesc = new UserDesc(user.getUserIdentity(), authOption.getAuthPlugin(), authOption.getAuthString(),
+            userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
         }
         return new AlterUserStmt(userDesc);
@@ -4010,8 +4009,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAuthenticationForUser(StarRocksParser.ShowAuthenticationForUserContext context) {
         if (context.user() != null) {
-            UserIdentity user = ((UserIdentifier) visit(context.user())).getUserIdentity();
-            return new ShowAuthenticationStmt(user, false);
+            return new ShowAuthenticationStmt((UserIdentity) visit(context.user()), false);
         } else {
             return new ShowAuthenticationStmt(null, false);
         }
@@ -4019,10 +4017,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitExecuteAsStatement(StarRocksParser.ExecuteAsStatementContext context) {
-        UserIdentity toUser = ((UserIdentifier) visit(context.user())).getUserIdentity();
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
-        return new ExecuteAsStmt(toUser, allowRevert);
+        return new ExecuteAsStmt((UserIdentity) visit(context.user()), allowRevert);
     }
 
     @Override
@@ -4044,13 +4041,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantRoleToUser(StarRocksParser.GrantRoleToUserContext context) {
-        UserIdentifier user = (UserIdentifier) visit(context.user());
         List<String> roleNameList = new ArrayList<>();
         for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
-        return new GrantRoleStmt(roleNameList, user.getUserIdentity());
+        return new GrantRoleStmt(roleNameList, (UserIdentity) visit(context.user()));
     }
 
     @Override
@@ -4065,13 +4061,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRevokeRoleFromUser(StarRocksParser.RevokeRoleFromUserContext context) {
-        UserIdentifier user = (UserIdentifier) visit(context.user());
         List<String> roleNameList = new ArrayList<>();
         for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList().identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
-        return new RevokeRoleStmt(roleNameList, user.getUserIdentity());
+        return new RevokeRoleStmt(roleNameList, (UserIdentity) visit(context.user()));
     }
 
     @Override
@@ -4115,8 +4110,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
 
-        SetDefaultRoleStmt setDefaultRoleStmt =
-                new SetDefaultRoleStmt(((UserIdentifier) visit(context.user())).getUserIdentity(), roles);
+        SetDefaultRoleStmt setDefaultRoleStmt = new SetDefaultRoleStmt((UserIdentity) visit(context.user()), roles);
 
         if (context.ALL() != null) {
             setDefaultRoleStmt.setTypeAll();
@@ -4133,7 +4127,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier role = (Identifier) visit(context.identifierOrString());
             return new ShowGrantsStmt(role.getValue());
         } else {
-            UserIdentity userId = context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
+            UserIdentity userId = context.user() == null ? null : (UserIdentity) visit(context.user());
             return new ShowGrantsStmt(userId);
         }
     }
@@ -4158,7 +4152,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantRevokeClause(StarRocksParser.GrantRevokeClauseContext context) {
         boolean withGrantOption = context.WITH() != null;
         if (context.user() != null) {
-            UserIdentity user = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            UserIdentity user = (UserIdentity) visit(context.user());
             return new GrantRevokeClause(user, null, withGrantOption);
         } else {
             String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
@@ -4171,7 +4165,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
         List<UserIdentity> users = context.user().stream()
-                .map(user -> ((UserIdentifier) visit(user)).getUserIdentity()).collect(toList());
+                .map(user -> (UserIdentity) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new GrantPrivilegeStmt(privList, "USER", clause, objects);
@@ -4182,7 +4176,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
         List<UserIdentity> users = context.user().stream()
-                .map(user -> ((UserIdentifier) visit(user)).getUserIdentity()).collect(toList());
+                .map(user -> (UserIdentity) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new RevokePrivilegeStmt(privList, "USER", clause, objects);
@@ -5500,20 +5494,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentifier(user.getValue(), host.getValue(), true);
+        return new UserIdentity(user.getValue(), host.getValue(), true);
     }
 
     @Override
     public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentifier(user.getValue(), host.getValue(), false);
+        return new UserIdentity(user.getValue(), host.getValue());
     }
 
     @Override
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
-        return new UserIdentifier(user.getValue(), "%", false);
+        return new UserIdentity(user.getValue(), "%");
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
