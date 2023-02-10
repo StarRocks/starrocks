@@ -336,8 +336,11 @@ public class ShowStmtAnalyzer {
                                         List<String> row = Arrays.asList(
                                                 column.getDisplayName(),
                                                 column.getType().canonicalName(),
-                                                column.isAllowNull() ? "Yes" : "No",
-                                                ((Boolean) column.isKey()).toString(),
+                                                column.isAllowNull() ? "YES" : "NO",
+                                                // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                                // If you do not follow this specification, it may cause the BI system,
+                                                // such as superset, to fail to recognize the column type.
+                                                ((Boolean) column.isKey()).toString().toLowerCase(),
                                                 defaultStr,
                                                 extraStr);
                                         node.getTotalRows().add(row);
@@ -412,7 +415,10 @@ public class ShowStmtAnalyzer {
                                         "",
                                         column.getDisplayName(),
                                         column.getType().canonicalName(),
-                                        column.isAllowNull() ? "Yes" : "No",
+                                        column.isAllowNull() ? "YES" : "NO",
+                                        // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                        // If you do not follow this specification, it may cause the BI system,
+                                        // such as superset, to fail to recognize the column type.
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);
