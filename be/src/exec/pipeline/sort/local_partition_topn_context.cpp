@@ -53,7 +53,7 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
     auto st = _chunks_partitioner->offer(
             chunk,
             [this, state](size_t partition_idx) {
-                _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
+                _chunks_sorters.emplace_back(std::make_shared<vectorized::ChunksSorterTopn>(
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
                         _topn_type, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
             },
@@ -75,8 +75,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(
-            _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
+    RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
+            [this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
                 return true;
             }));
