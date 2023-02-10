@@ -62,8 +62,8 @@
 
 | **配置** | **例子** | **描述** |
 | -------------------------------------- | ------------ | ---------------------------------------------- |
-| fe_metric_url | http://localhost:8030/metrics | 用于获取 StarRocks FE 配置的 URL。|
-| metrics | - starrocks_fe_* | 需要监控的指标，支持通配符`*`。| 
+| fe_metric_url | `http://localhost:8030/metrics` | 用于获取 StarRocks FE 配置的 URL。|
+| metrics | - starrocks_fe_* | 需要监控的指标，支持通配符`*`。|
 
 #### 配置 BE
 
@@ -73,7 +73,7 @@
 
 | **配置** | **例子** | **描述** |
   | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-   | be_metric_url | http://localhost:8040/metrics | 用于获取 StarRocks BE 配置的 URL。 |
+   | be_metric_url | `http://localhost:8040/metrics` | 用于获取 StarRocks BE 配置的 URL。 |
    | metrics | - starrocks_be_* | 需要监控的指标，支持通配符`*`。 |
 
 ### 重启 Datadog Agent
