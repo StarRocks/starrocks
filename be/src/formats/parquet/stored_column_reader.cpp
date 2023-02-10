@@ -28,7 +28,7 @@ public:
 
     void reset() override;
 
-    Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
+    Status do_read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = &_def_levels[0];
@@ -77,7 +77,7 @@ public:
     // Reset internal state and ready for next read_values
     void reset() override;
 
-    Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status do_read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         if (_needs_levels) {
             return _read_records_and_levels(num_records, content_type, dst);
         } else {
@@ -133,7 +133,7 @@ public:
 
     void reset() override {}
 
-    Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
+    Status do_read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = nullptr;
@@ -161,7 +161,7 @@ void RepeatedStoredColumnReader::reset() {
     _meet_first_record = false;
 }
 
-Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
+Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) {
     if (_eof) {
         *num_records = 0;
         return Status::EndOfFile("");
@@ -466,7 +466,7 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
     _levels_decoded += levels_to_decode;
 }
 
-Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
+Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) {
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
