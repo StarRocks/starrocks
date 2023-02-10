@@ -53,7 +53,9 @@ import org.apache.commons.collections4.iterators.PermutationIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -511,12 +513,12 @@ public class MaterializedViewRewriter {
 
     private MatchMode getMatchMode(List<Table> queryTables, List<Table> mvTables) {
         MatchMode matchMode = MatchMode.NOT_MATCH;
-        if (queryTables.size() == mvTables.size() && queryTables.containsAll(mvTables)) {
+        if (queryTables.size() == mvTables.size() && new HashSet<>(queryTables).containsAll(mvTables)) {
             matchMode = MatchMode.COMPLETE;
-        } else if (queryTables.containsAll(mvTables)) {
+        } else if (new HashSet<>(queryTables).containsAll(mvTables)) {
             // TODO: query delta
             matchMode = MatchMode.QUERY_DELTA;
-        } else if (mvTables.containsAll(queryTables)) {
+        } else if (new HashSet<>(mvTables).containsAll(queryTables)) {
             // TODO: view delta
             matchMode = MatchMode.VIEW_DELTA;
         }
@@ -598,7 +600,7 @@ public class MaterializedViewRewriter {
     }
 
     protected boolean isAllExprReplaced(ScalarOperator rewritten, ColumnRefSet originalColumnSet) {
-        ScalarOperatorVisitor visitor = new ScalarOperatorVisitor<Void, Void>() {
+        ScalarOperatorVisitor<Void, Void> visitor = new ScalarOperatorVisitor<Void, Void>() {
             @Override
             public Void visit(ScalarOperator scalarOperator, Void context) {
                 for (ScalarOperator child : scalarOperator.getChildren()) {
@@ -699,7 +701,7 @@ public class MaterializedViewRewriter {
                 ImmutableList.Builder<BiMap<Integer, Integer>> newResult = ImmutableList.builder();
                 PermutationIterator<Integer> permutationIterator =
                         new PermutationIterator<>(mvTableToRelationId.get(queryEntry.getKey()));
-                List<Integer> queryList = queryEntry.getValue().stream().collect(Collectors.toList());
+                List<Integer> queryList = new ArrayList<>(queryEntry.getValue());
                 while (permutationIterator.hasNext()) {
                     List<Integer> permutation = permutationIterator.next();
                     for (BiMap<Integer, Integer> m : result) {
@@ -796,9 +798,9 @@ public class MaterializedViewRewriter {
         ScalarOperator compensationPu;
         if (srcPu == null && targetPu == null) {
             compensationPu = ConstantOperator.createBoolean(true);
-        } else if (srcPu == null && targetPu != null) {
+        } else if (srcPu == null) {
             return null;
-        } else if (srcPu != null && targetPu == null) {
+        } else if (targetPu == null) {
             compensationPu = srcPu;
         } else {
             ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(srcPu.clone());
@@ -832,7 +834,7 @@ public class MaterializedViewRewriter {
     private ScalarOperator getCompensationResidualPredicate(ScalarOperator srcPu, ScalarOperator targetPu) {
         List<ScalarOperator> srcConjuncts = Utils.extractConjuncts(srcPu);
         List<ScalarOperator> targetConjuncts = Utils.extractConjuncts(targetPu);
-        if (srcConjuncts.containsAll(targetConjuncts)) {
+        if (new HashSet<>(srcConjuncts).containsAll(targetConjuncts)) {
             srcConjuncts.removeAll(targetConjuncts);
             if (srcConjuncts.isEmpty()) {
                 return ConstantOperator.createBoolean(true);
@@ -850,7 +852,7 @@ public class MaterializedViewRewriter {
         ScalarOperator compensationPr;
         if (srcPr == null && targetPr == null) {
             compensationPr = ConstantOperator.createBoolean(true);
-        } else if (srcPr == null && targetPr != null) {
+        } else if (srcPr == null) {
             return null;
         } else {
             ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
