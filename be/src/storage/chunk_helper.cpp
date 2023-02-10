@@ -129,7 +129,7 @@ template <bool force>
 struct ColumnPtrBuilder {
     template <FieldType ftype>
     ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
-        auto nullable = [&](ColumnPtr c) -> ColumnPtr {
+        auto NullableIfNeed = [&](ColumnPtr c) -> ColumnPtr {
             return field.is_nullable()
                            ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
                            : c;
@@ -149,7 +149,7 @@ struct ColumnPtrBuilder {
             case OLAP_FIELD_TYPE_DECIMAL128:
                 return nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
             default: {
-                return nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
             }
             }
         }
