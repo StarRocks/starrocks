@@ -166,10 +166,10 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public String getPlural(ObjectType objectType) throws PrivilegeException {
+    public String getPlural(ObjectType objectType) {
         String plural = TYPE_TO_PLURAL.get(objectType);
         if (plural == null) {
-            throw new PrivilegeException("invalid plural privilege type " + plural);
+            return objectType.name();
         }
         return plural;
     }

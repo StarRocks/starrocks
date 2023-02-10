@@ -36,9 +36,12 @@ import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -51,6 +54,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -61,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -373,6 +378,31 @@ public class PrivilegeStmtAnalyzerV2 {
                 }
 
                 stmt.setPrivilegeTypes(privilegeTypes);
+
+
+                if (stmt instanceof RevokePrivilegeStmt) {
+                    RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) stmt;
+
+                    if (stmt.getUserIdentity() != null) {
+                        UserPrivilegeCollection userPrivilegeCollection =
+                                privilegeManager.getUserPrivilegeCollectionUnlocked(stmt.getUserIdentity());
+
+                        Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> m =
+                                userPrivilegeCollection.getTypeToPrivilegeEntryList();
+                        List<PrivilegeCollection.PrivilegeEntry> l = m.get(stmt.getObjectType());
+                        for (PrivilegeCollection.PrivilegeEntry p : l) {
+                            pri
+                        }
+
+
+
+                    } else {
+                        RolePrivilegeCollection rolePrivilegeCollection = privilegeManager.getRolePrivilegeCollectionUnlocked(
+                                        privilegeManager.getRoleIdByNameAllowNull(stmt.getRole()), true);
+                    }
+
+                }
+
 
                 privilegeManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList());
             } catch (PrivilegeException | AnalysisException e) {

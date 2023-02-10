@@ -1608,6 +1608,7 @@ public class PrivilegeManager {
         return roleId;
     }
 
+    //TODO : check object
     public PEntryObject analyzeObject(ObjectType objectType, List<String> objectTokenList) throws PrivilegeException {
         if (objectTokenList == null) {
             return null;
@@ -1617,6 +1618,13 @@ public class PrivilegeManager {
 
     public PEntryObject analyzeUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException {
         return this.provider.generateUserObject(objectType, user, globalStateMgr);
+    }
+
+    public boolean checkObject(PrivilegeCollection privilegeCollection,
+                               ObjectType objectType,
+                               PrivilegeType privilegeType,
+                               PEntryObject object) {
+        provider.searchActionOnObject(objectType, object, privilegeCollection, privilegeType);
     }
 
     /**
