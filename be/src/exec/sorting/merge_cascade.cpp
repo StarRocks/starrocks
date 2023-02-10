@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_helper.h"
@@ -157,8 +159,8 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     const SortDescs& sort_desc = _sort_desc;
     ChunkUniquePtr result;
 
+    //debug scope
 #ifndef NDEBUG
-    // debug scope
     DCHECK(!(_left_is_empty && !_left_run.empty()));
     DCHECK(!(_right_is_empty && !_right_run.empty()));
 
@@ -194,7 +196,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
     RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, run1, run2, &permutation));
     DCHECK_EQ(run1.num_rows() + run2.num_rows(), permutation.size());
 
-    size_t merged_rows = std::max(run1.num_rows(), run2.num_rows());
+    size_t merged_rows = std::min(run1.num_rows(), run2.num_rows());
 
     ChunkUniquePtr merged = run2.chunk->clone_empty(merged_rows);
 
