@@ -168,7 +168,14 @@ public class ExpressionAnalyzer {
     // only high-order functions can use lambda functions.
     void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
         if (!isHighOrderFunction(expression)) {
-            throw new SemanticException("Lambda Functions can only be used in supported high-order functions.");
+            String funcName = "";
+            if (expression instanceof FunctionCallExpr) {
+                funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+            } else {
+                funcName = expression.toString();
+            }
+            throw new SemanticException(funcName + " can't use lambda functions, " +
+                    "as it is not a supported high-order function.");
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -187,7 +194,7 @@ public class ExpressionAnalyzer {
                 expr.setType(Type.ARRAY_INT); // Let it have item type.
             }
             if (!expr.getType().isArrayType()) {
-                throw new SemanticException("Lambda inputs should be arrays.");
+                throw new SemanticException(i + "th lambda input should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
             if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),

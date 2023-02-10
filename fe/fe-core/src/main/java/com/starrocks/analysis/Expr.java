@@ -1335,20 +1335,22 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
             if (children.size() <= 1) {
-                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+                throw new SemanticException("Lambda functions need array inputs in high-order functions.");
             }
             return true;
         } else if (num > 1) {
-            throw new SemanticException("A high-order function can have one lambda function.");
+            throw new SemanticException("A high-order function should have only 1 lambda function, " +
+                    "but there are " + num + " lambda functions.");
         } else if (pos > 0 && pos < children.size() - 1) {
             throw new SemanticException(
-                    "Lambda functions can only be the first or last argument of any high-order function, " +
-                            "or lambda arguments should be in ().");
+                    "Lambda functions should only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in () if there are more than one lambda arguments, " +
+                            "like (x,y)->x+y.");
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
                 if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM)) {
-                    throw new SemanticException(funcName + " should not without lambda function input.");
+                    throw new SemanticException("There are no lambda functions in high-order function " + funcName);
                 }
             }
         }
