@@ -132,10 +132,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (Ordering orderDesc : orderSpec.getOrderDescs()) {
             if (orderDesc.getColumnRef().getUsedColumns().isIntersect(dictSet)) {
