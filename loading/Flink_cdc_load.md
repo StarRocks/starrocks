@@ -53,7 +53,7 @@
 
       ```Bash
       # 下载 Flink
-      wget https://dlcdn.apache.org/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
+      wget https://archive.apache.org/dist/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
       # 解压 Flink  
       tar -xzf flink-1.14.5-bin-scala_2.11.tgz
       # 进入 Flink 目录
