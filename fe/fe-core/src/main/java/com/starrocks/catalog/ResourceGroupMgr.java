@@ -171,6 +171,7 @@ public class ResourceGroupMgr implements Writable {
                 }
             } catch (PrivilegeException e) {
                 LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+                return null;
             }
         }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
