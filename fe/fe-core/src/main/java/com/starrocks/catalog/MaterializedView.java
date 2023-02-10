@@ -26,6 +26,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -529,6 +530,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 }
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
+
+                if (!table.isLocalTable()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                            baseTableInfo.getTableIdentifier(),
+                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                    Sets.newHashSet(mvId)).build()
+                    );
+                }
             }
         }
         analyzePartitionInfo();
