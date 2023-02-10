@@ -24,8 +24,8 @@ import java.util.List;
 // TODO: now depends on equal
 // This will be extended to rollup(like date_trunc)
 public class GroupKeyChecker {
-    private List<ScalarOperator> mvGroupKeys;
-    private BitSet matchingBits;
+    private final List<ScalarOperator> mvGroupKeys;
+    private final BitSet matchingBits;
 
     public GroupKeyChecker(List<ScalarOperator> mvGroupKeys) {
         this.mvGroupKeys = mvGroupKeys;

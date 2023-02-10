@@ -25,7 +25,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  *
  */
 public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
-    private static OnlyJoinRule INSTANCE = new OnlyJoinRule();
+    private static final OnlyJoinRule INSTANCE = new OnlyJoinRule();
 
     public OnlyJoinRule() {
         super(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN_MULTIJOIN));

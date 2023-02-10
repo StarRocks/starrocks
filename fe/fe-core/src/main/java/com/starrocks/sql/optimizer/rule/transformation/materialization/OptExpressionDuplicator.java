@@ -53,10 +53,10 @@ public class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
-    private ReplaceColumnRefRewriter rewriter;
-    private Table partitionByTable;
-    private Column partitionColumn;
-    private boolean partialPartitionRewrite;
+    private final ReplaceColumnRefRewriter rewriter;
+    private final Table partitionByTable;
+    private final Column partitionColumn;
+    private final boolean partialPartitionRewrite;
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
@@ -107,10 +107,8 @@ public class OptExpressionDuplicator {
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key, k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key,
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
                         columnRefFactory.getColumnRefToTable().get(key));
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
@@ -171,20 +169,16 @@ public class OptExpressionDuplicator {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
             List<ColumnRefOperator> newGroupKeys = Lists.newArrayList();
             for (ColumnRefOperator groupKey : aggregationOperator.getGroupingKeys()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey, k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey,
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 newGroupKeys.add(mapped);
             }
             LogicalAggregationOperator.Builder aggregationBuilder  = (LogicalAggregationOperator.Builder) opBuilder;
             aggregationBuilder.setGroupingKeys(newGroupKeys);
             Map<ColumnRefOperator, CallOperator> newAggregates = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(), k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(),
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 ScalarOperator newValue = rewriter.rewrite(entry.getValue());
                 Preconditions.checkState(newValue instanceof CallOperator);
                 newAggregates.put(mapped, (CallOperator) newValue);
@@ -195,10 +189,8 @@ public class OptExpressionDuplicator {
             List<ColumnRefOperator> partitionColumns = aggregationOperator.getPartitionByColumns();
             if (partitionColumns != null) {
                 for (ColumnRefOperator columnRef : partitionColumns) {
-                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef, k -> {
-                        ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                        return newColumnRef;
-                    });
+                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef,
+                            k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                     newPartitionColumns.add(mapped);
                 }
             }

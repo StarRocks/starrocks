@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,11 +59,11 @@ import java.util.stream.Collectors;
 public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter {
     private static final Logger LOG = LogManager.getLogger(AggregatedMaterializedViewRewriter.class);
 
-    private static Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
+    private static final Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.COUNT, FunctionSet.SUM)
             .build();
 
-    private static Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
+    private static final Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
             .add(FunctionSet.SUM)
             .add(FunctionSet.COUNT)
             .add(FunctionSet.MAX)
@@ -146,7 +147,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             swappedQueryAggs.put(entry.getKey(), swapped);
         }
         AggregateRewriteChecker aggregateRewriteChecker = new AggregateRewriteChecker(swappedMvAggs);
-        boolean aggMatched = aggregateRewriteChecker.check(swappedQueryAggs.values().stream().collect(Collectors.toList()));
+        boolean aggMatched = aggregateRewriteChecker.check(new ArrayList<>(swappedQueryAggs.values()));
         if (!aggMatched) {
             return null;
         }
@@ -319,7 +320,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
                 MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
         // keys of queryColumnRefMap and mvColumnRefMap are the same
-        List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
+        List<ColumnRefOperator> originalOutputColumns = new ArrayList<>(queryColumnRefMap.keySet());
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
@@ -414,14 +415,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(aggregateMapping);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
-                if (queryAgg.getGroupingKeys().contains(entry.getValue())) {
-                    ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                    newProjection.put(entry.getKey(), rewritten);
-                } else {
-                    // Aggregates map's keys are changed, so here entry values should be rewritten by aggregateMapping
-                    ScalarOperator newValue = rewriter.rewrite(entry.getValue());
-                    newProjection.put(entry.getKey(), newValue);
-                }
+                // Aggregates map's keys are changed, so here entry values should be rewritten by aggregateMapping
+                ScalarOperator newValue = rewriter.rewrite(entry.getValue());
+                newProjection.put(entry.getKey(), newValue);
             }
         }
         Projection projection = new Projection(newProjection);
@@ -478,7 +474,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Map<ColumnRefOperator, ScalarOperator> aggregateMapping) {
         Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregates.entrySet()) {
-            Preconditions.checkState(entry.getValue() instanceof CallOperator);
+            Preconditions.checkState(entry.getValue() != null);
             CallOperator aggCall = entry.getValue();
             ColumnRefOperator targetColumn = mapping.get(entry.getKey());
             if (targetColumn == null) {
