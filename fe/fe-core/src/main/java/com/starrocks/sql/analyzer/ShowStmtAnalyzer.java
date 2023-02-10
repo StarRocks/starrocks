@@ -362,8 +362,8 @@ public class ShowStmtAnalyzer {
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
                                                 column.getDisplayName(),
-                                                column.getType().canonicalName(),
-                                                column.isAllowNull() ? "Yes" : "No",
+                                                column.getType().canonicalName().toLowerCase(),
+                                                column.isAllowNull() ? "YES" : "NO",
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -438,8 +438,8 @@ public class ShowStmtAnalyzer {
                                 List<String> row = Arrays.asList("",
                                         "",
                                         column.getDisplayName(),
-                                        column.getType().canonicalName(),
-                                        column.isAllowNull() ? "Yes" : "No",
+                                        column.getType().canonicalName().toLowerCase(),
+                                        column.isAllowNull() ? "YES" : "NO",
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);
