@@ -31,12 +31,12 @@ CREATE USER user_identity [auth_option] [DEFAULT ROLE 'role_name'];
 ```sql
 -- 创建一个无密码用户，且不指定 host。
 CREATE USER 'jack';
--- 使用明文密码创建用户，允许其从 '172.10.1.10' 登录。
-CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
+-- 使用明文密码创建用户，允许其从 '172.16.1.10' 登录。
+CREATE USER jack@'172.16.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
 -- 使用暗文密码创建用户。
-CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+CREATE USER jack@'172.16.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
 -- 创建一个 LDAP 认证的用户，并指定用户在 LDAP 中的 Distinguished Name (DN)。
-CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
+CREATE USER jack@'172.16.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
 -- 创建一个允许从 '192.168' 子网登录的用户，同时指定其角色为 example_role。
 CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
 -- 创建一个允许从域名 'example_domain' 登录的用户。
