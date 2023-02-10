@@ -88,6 +88,10 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
             String defaultStr = column.getMetaDefaultValue(extras);
             String extraStr = StringUtils.join(extras, ",");
 
+            // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+            // If you do not follow this specification, it may cause the BI system,
+            // such as superset, to fail to recognize the column type.
+
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName().toLowerCase(),
                     column.isAllowNull() ? "YES" : "NO",
