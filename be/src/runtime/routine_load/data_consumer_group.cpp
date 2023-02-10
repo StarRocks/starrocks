@@ -117,8 +117,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     serdes_conf_t* sconf = nullptr;
     serdes_t* serdes = nullptr;
     if (ctx->format == TFileFormatType::FORMAT_AVRO) {
-        sconf = serdes_conf_new(NULL, 0, "schema.registry.url",
-                                            ctx->kafka_info->confluent_schema_registry_url.c_str(), NULL);
+        sconf = serdes_conf_new(NULL, 0, "schema.registry.url", ctx->kafka_info->confluent_schema_registry_url.c_str(),
+                                NULL);
         serdes = serdes_new(sconf, errstr, sizeof(errstr));
         if (!serdes) {
             LOG(ERROR) << "failed to create serdes handle: " << errstr;
