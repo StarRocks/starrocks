@@ -229,7 +229,7 @@ public class AuthenticationManager {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
             // init user privilege
-            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getQualifiedRole());
+            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
             short pluginId = privilegeManager.getProviderPluginId();
             short pluginVersion = privilegeManager.getProviderPluginVersion();

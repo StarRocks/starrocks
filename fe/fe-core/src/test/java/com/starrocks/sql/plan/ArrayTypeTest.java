@@ -269,5 +269,21 @@ public class ArrayTypeTest extends PlanTestBase {
                     "(9223372036854775807,[[9223372036854775807]],[[9223372036854775807]]);\n";
             getFragmentPlan(sql);
         }
+        {
+            String sql = "select array_append([],null)";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select [][1]";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([], [])";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([[]], [])";
+            getThriftPlan(sql);
+        }
     }
 }

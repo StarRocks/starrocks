@@ -62,6 +62,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Collections;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class SetPasswordTest {
@@ -109,7 +111,7 @@ public class SetPasswordTest {
     @Test
     public void test() throws DdlException {
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
-        CreateUserStmt stmt = new CreateUserStmt(new UserDesc(userIdentity));
+        CreateUserStmt stmt = new CreateUserStmt(false, new UserDesc(userIdentity), Collections.emptyList());
         auth.createUser(stmt);
 
         ConnectContext ctx = new ConnectContext(null);
@@ -138,7 +140,7 @@ public class SetPasswordTest {
 
         // create user cmy2@'192.168.1.1'
         UserIdentity userIdentity2 = new UserIdentity("cmy2", "192.168.1.1");
-        stmt = new CreateUserStmt(new UserDesc(userIdentity2));
+        stmt = new CreateUserStmt(false, new UserDesc(userIdentity2), Collections.emptyList());
         auth.createUser(stmt);
 
         UserIdentity currentUser2 = new UserIdentity("cmy2", "192.168.1.1");

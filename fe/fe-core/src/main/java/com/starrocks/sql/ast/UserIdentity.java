@@ -41,11 +41,11 @@ import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;
@@ -53,14 +53,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 // https://dev.mysql.com/doc/refman/8.0/en/account-names.html
-// user name must be literally matched.
-// host name can take many forms, and wildcards are permitted.
-// cmy@%
-// cmy@192.168.%
-// cmy@[domain.name]
+// username must be literally matched.
 public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
-    // change user to default_cluster:user for write
-    // and change default_cluster:user to user after read
     @SerializedName("user")
     private String user;
     @SerializedName("host")
@@ -198,6 +192,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return sb.toString();
     }
 
+    // change user to default_cluster:user for write
+    // and change default_cluster:user to user after read
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, ClusterNamespace.getFullName(user));

@@ -101,7 +101,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, Gson
             isAnyHost = true;
         }
         this.hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
-        ;
+
         if (realOrigUser.equals(ANY_USER)) {
             isAnyUser = true;
         }

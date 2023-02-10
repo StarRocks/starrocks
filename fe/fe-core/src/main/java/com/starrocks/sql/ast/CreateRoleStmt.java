@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 
 public class CreateRoleStmt extends DdlStmt {
 
-    private String role;
+    private final String role;
 
     public CreateRoleStmt(String role) {
         this.role = role;
@@ -25,10 +25,6 @@ public class CreateRoleStmt extends DdlStmt {
 
     public String getQualifiedRole() {
         return role;
-    }
-
-    public void setQualifiedRole(String role) {
-        this.role = role;
     }
 
     @Override
