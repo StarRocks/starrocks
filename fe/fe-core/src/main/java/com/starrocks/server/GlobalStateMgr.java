@@ -28,6 +28,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -110,6 +111,8 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
@@ -436,6 +439,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
+    private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
@@ -615,8 +620,11 @@ public class GlobalStateMgr {
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
+        this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+
+
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
@@ -826,6 +834,17 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
+<<<<<<< HEAD
+=======
+    public WarehouseManager getWarehouseMgr() {
+        return warehouseMgr;
+    }
+
+    public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
+        return connectorTblMetaInfoMgr;
+    }
+
+>>>>>>> 696283c63 ([Enhancement] Add ConnectorTblMetaInfoMgr to manage metadata which can not get from hms (#17573))
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1182,7 +1201,7 @@ public class GlobalStateMgr {
         esRepository.start();
         starRocksRepository.start();
         // materialized view active checker
-        mvActiveChecker.start();
+        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1312,6 +1331,50 @@ public class GlobalStateMgr {
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
+<<<<<<< HEAD
+=======
+    private void postLoadImage() {
+        processMvRelatedMeta();
+    }
+
+    private void processMvRelatedMeta() {
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        long startMillis = System.currentTimeMillis();
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                    Table table = baseTableInfo.getTable();
+                    if (table == null) {
+                        LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
+                                baseTableInfo.getTableName(), mv.getId());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                        LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                                baseTableInfo.getTableName(), mv.getId());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    MvId mvId = new MvId(db.getId(), mv.getId());
+                    table.addRelatedMaterializedView(mvId);
+                    if (!table.isLocalTable()) {
+                        connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                        Sets.newHashSet(mvId)).build());
+                    }
+                }
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startMillis;
+        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+    }
+
+>>>>>>> 696283c63 ([Enhancement] Add ConnectorTblMetaInfoMgr to manage metadata which can not get from hms (#17573))
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
         // for community, version schema is [int], and the int value must be positive
         // for starrocks, version schema is [-1, int, int]
