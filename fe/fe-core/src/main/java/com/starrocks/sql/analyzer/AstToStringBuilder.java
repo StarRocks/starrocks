@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -68,11 +69,13 @@ import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -128,183 +131,47 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
-        @Override
-        public String visitSetStatement(SetStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("SET ");
 
-            List<String> setVarList = new ArrayList<>();
-            for (SetListItem setVar : stmt.getSetListItems()) {
-                if (setVar instanceof SystemVariable) {
-                    SystemVariable systemVariable = (SystemVariable) setVar;
-                    String setVarSql = "";
-                    setVarSql += systemVariable.getType().toString() + " ";
-                    setVarSql += "`" + systemVariable.getVariable() + "`";
-                    setVarSql += " = ";
-                    setVarSql += visit(systemVariable.getResolvedExpression());
-
-                    setVarList.add(setVarSql);
-                } else if (setVar instanceof UserVariable) {
-                    UserVariable userVariable = (UserVariable) setVar;
-                    String setVarSql = "";
-                    setVarSql += "@";
-                    setVarSql += "`" + userVariable.getVariable() + "`";
-                    setVarSql += " = ";
-
-                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
-                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
-                    setVarList.add(setVarSql);
-                } else if (setVar instanceof SetPassVar) {
-                    String tmp = "PASSWORD FOR " +
-                            ((SetPassVar) setVar).getUserIdent().toString() +
-                            " = PASSWORD('***')";
-                    setVarList.add(tmp);
-                }
-            }
-
-            return sb.append(Joiner.on(",").join(setVarList)).toString();
-        }
+        // ------------------------------------------- Privilege Statement -------------------------------------------------
 
         @Override
-        public String visitSetUserPropertyStatement(SetUserPropertyStmt stmt, Void context) {
+        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
-            int idx = 0;
-            for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
-                if (idx != 0) {
-                    sb.append(", ");
-                }
-                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
-                idx++;
-            }
-            return sb.toString();
-        }
-
-        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
-
-            sb.append(" PROPERTIES (");
-            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
-            sb.append(")");
-            return sb.toString();
-        }
-
-        @Override
-        public String visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            if (stmt.isExplain()) {
-                sb.append("EXPLAIN ");
-            }
-
-            sb.append("DROP MATERIALIZED VIEW ");
-            if (stmt.isSetIfExists()) {
-                sb.append("IF EXISTS ");
-            }
-
-            sb.append(stmt.getMvName());
-            return sb.toString();
-        }
-
-        @Override
-        public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
-
-            if (stmt.getRoutineLoadDesc() != null) {
-                sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
-            }
-
-            if (!stmt.getJobProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
-                sb.append("PROPERTIES ( ").append(map).append(" )");
-            }
-
-            sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
-
-            if (!stmt.getDataSourceProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
-                sb.append("( ").append(map).append(" )");
-            }
-
-            return sb.toString();
-        }
-
-
-        @Override
-        public String visitLoadStatement(LoadStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-
-            sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
-            sb.append("(");
-            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
-                @Override
-                public Object apply(DataDescription dataDescription) {
-                    return dataDescription.toString();
-                }
-            })).append(")");
-
-            if (stmt.getBrokerDesc() != null) {
-                sb.append(stmt.getBrokerDesc());
-            }
-
-            if (stmt.getCluster() != null) {
-                sb.append("BY '");
-                sb.append(stmt.getCluster());
-                sb.append("'");
-            }
-            if (stmt.getResourceDesc() != null) {
-                sb.append(stmt.getResourceDesc());
-            }
-
-            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
-                sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
-                sb.append(")");
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public String visitExportStatement(ExportStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-
-            sb.append("EXPORT TABLE ");
-            if (stmt.getTblName() == null) {
-                sb.append("non-exist");
+            if (statement instanceof CreateUserStmt) {
+                sb.append("CREATE");
             } else {
-                sb.append(stmt.getTblName().toSql());
+                sb.append("ALTER");
             }
 
-            if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
-                sb.append(" PARTITION (");
-                Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
-            }
-
-            if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
-                sb.append("(");
-                Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
-            }
-            sb.append(" TO ");
-            sb.append("\"" + stmt.getPath() + "\" ");
-            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
-                sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
-                sb.append(")");
-            }
-            sb.append("WITH BROKER ");
-            if (stmt.getBrokerDesc() != null) {
-                if (!stmt.getBrokerDesc().getName().isEmpty()) {
-                    sb.append(stmt.getBrokerDesc().getName());
+            sb.append(" USER ").append(statement.getUserIdent());
+            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
+                if (statement.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
                 }
-                sb.append("' (");
-                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
-                sb.append(")");
             }
+
+            if (!Strings.isNullOrEmpty(statement.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(statement.getAuthString())) {
+                    if (statement.isPasswordPlain()) {
+                        sb.append(" BY '");
+                    } else {
+                        sb.append(" AS '");
+                    }
+                    sb.append(statement.getAuthString()).append("'");
+                }
+            }
+
+            if (!statement.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
             return sb.toString();
         }
-        // ------------------------------------------- Privilege Statement ---------------------------------------------
 
         @Override
         public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
@@ -523,6 +390,185 @@ public class AstToStringBuilder {
             }
 
             return sqlBuilder.toString();
+        }
+
+        // --------------------------------------------Set Statement -------------------------------------------------------
+
+        @Override
+        public String visitSetStatement(SetStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SET ");
+
+            List<String> setVarList = new ArrayList<>();
+            for (SetListItem setVar : stmt.getSetListItems()) {
+                if (setVar instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += systemVariable.getType().toString() + " ";
+                    setVarSql += "`" + systemVariable.getVariable() + "`";
+                    setVarSql += " = ";
+                    setVarSql += visit(systemVariable.getResolvedExpression());
+
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof UserVariable) {
+                    UserVariable userVariable = (UserVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += "@";
+                    setVarSql += "`" + userVariable.getVariable() + "`";
+                    setVarSql += " = ";
+
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof SetPassVar) {
+                    String tmp = "PASSWORD FOR " +
+                            ((SetPassVar) setVar).getUserIdent().toString() +
+                            " = PASSWORD('***')";
+                    setVarList.add(tmp);
+                }
+            }
+
+            return sb.append(Joiner.on(",").join(setVarList)).toString();
+        }
+
+        @Override
+        public String visitSetUserPropertyStatement(SetUserPropertyStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
+            int idx = 0;
+            for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
+                if (idx != 0) {
+                    sb.append(", ");
+                }
+                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
+                idx++;
+            }
+            return sb.toString();
+        }
+
+        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt.isExplain()) {
+                sb.append("EXPLAIN ");
+            }
+
+            sb.append("DROP MATERIALIZED VIEW ");
+            if (stmt.isSetIfExists()) {
+                sb.append("IF EXISTS ");
+            }
+
+            sb.append(stmt.getMvName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
+                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+
+            if (stmt.getRoutineLoadDesc() != null) {
+                sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
+            }
+
+            if (!stmt.getJobProperties().isEmpty()) {
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
+                sb.append("PROPERTIES ( ").append(map).append(" )");
+            }
+
+            sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
+
+            if (!stmt.getDataSourceProperties().isEmpty()) {
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
+                sb.append("( ").append(map).append(" )");
+            }
+
+            return sb.toString();
+        }
+
+
+        @Override
+        public String visitLoadStatement(LoadStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
+            sb.append("(");
+            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
+                @Override
+                public Object apply(DataDescription dataDescription) {
+                    return dataDescription.toString();
+                }
+            })).append(")");
+
+            if (stmt.getBrokerDesc() != null) {
+                sb.append(stmt.getBrokerDesc());
+            }
+
+            if (stmt.getCluster() != null) {
+                sb.append("BY '");
+                sb.append(stmt.getCluster());
+                sb.append("'");
+            }
+            if (stmt.getResourceDesc() != null) {
+                sb.append(stmt.getResourceDesc());
+            }
+
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitExportStatement(ExportStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("EXPORT TABLE ");
+            if (stmt.getTblName() == null) {
+                sb.append("non-exist");
+            } else {
+                sb.append(stmt.getTblName().toSql());
+            }
+
+            if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
+                sb.append(" PARTITION (");
+                Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
+            }
+
+            if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
+                sb.append("(");
+                Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
+            }
+            sb.append(" TO ");
+            sb.append("\"" + stmt.getPath() + "\" ");
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            sb.append("WITH BROKER ");
+            if (stmt.getBrokerDesc() != null) {
+                if (!stmt.getBrokerDesc().getName().isEmpty()) {
+                    sb.append(stmt.getBrokerDesc().getName());
+                }
+                sb.append("' (");
+                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
+                sb.append(")");
+            }
+            return sb.toString();
         }
 
         @Override

@@ -21,7 +21,7 @@ import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
 
 import java.util.Map;
 

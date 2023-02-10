@@ -1756,7 +1756,7 @@ public class AuthTest {
         UserIdentity userIdentity = new UserIdentity("test_user", "%");
         userIdentity.analyze();
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
         com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
 
         auth.createUser(createUserStmt);
@@ -2006,7 +2006,7 @@ public class AuthTest {
             UserIdentity userIdentity = new UserIdentity(name, "%");
             userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
             com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
             userToBeCreated.add(userIdentity);
@@ -2123,7 +2123,7 @@ public class AuthTest {
         userToBeCreated.add(gregory);
         for (UserIdentity userIdentity : userToBeCreated) {
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, Collections.emptyList());
             com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
         }

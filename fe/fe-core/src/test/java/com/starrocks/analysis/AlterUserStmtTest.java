@@ -17,18 +17,14 @@ package com.starrocks.analysis;
 
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -53,7 +49,7 @@ public class AlterUserStmtTest {
         String sql = "ALTER USER 'user' IDENTIFIED BY 'passwd'";
         AlterUserStmt stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY '*XXX'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
@@ -62,20 +58,20 @@ public class AlterUserStmtTest {
         Assert.assertEquals("user", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals(
                 "ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
         sql = "ALTER USER 'user' IDENTIFIED BY ''";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assert.assertEquals("ALTER USER 'user'@'%'", stmt.toString());
+        Assert.assertEquals("ALTER USER 'user'@'%'", AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertNull(stmt.getAuthPlugin());
 
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
@@ -83,13 +79,13 @@ public class AlterUserStmtTest {
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS ''";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD", stmt.toString());
+        Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD", AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
@@ -97,7 +93,7 @@ public class AlterUserStmtTest {
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "ALTER USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
@@ -106,7 +102,7 @@ public class AlterUserStmtTest {
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "ALTER USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
@@ -114,7 +110,7 @@ public class AlterUserStmtTest {
         sql = "ALTER USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE",
-                stmt.toString());
+                AstToSQLBuilder.toSQL(stmt));
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertNull(stmt.getUserForAuthPlugin());
     }

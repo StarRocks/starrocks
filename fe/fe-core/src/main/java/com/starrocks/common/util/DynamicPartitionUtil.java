@@ -51,8 +51,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -211,8 +211,8 @@ public class DynamicPartitionUtil {
         String enable = properties.get(DynamicPartitionProperty.ENABLE);
 
         if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
-                    && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
-                    && Strings.isNullOrEmpty(buckets))) {
+                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
+                && Strings.isNullOrEmpty(buckets))) {
             if (Strings.isNullOrEmpty(enable)) {
                 properties.put(DynamicPartitionProperty.ENABLE, "true");
             }
@@ -255,7 +255,7 @@ public class DynamicPartitionUtil {
         if (olapTable.getTableProperty() != null
                 && olapTable.getTableProperty().getPartitionTTLNumber() > 0) {
             GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                        .registerTtlPartitionTable(dbId, olapTable.getId());
+                    .registerTtlPartitionTable(dbId, olapTable.getId());
         } else {
             GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                     .removeTtlPartitionTable(dbId, olapTable.getId());
