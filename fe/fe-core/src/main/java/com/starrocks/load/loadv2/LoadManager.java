@@ -212,7 +212,14 @@ public class LoadManager implements Writable {
             LOG.warn("job does not exist when replaying end load job edit log: {}", operation);
             return;
         }
+<<<<<<< HEAD
         job.unprotectReadEndOperation(operation);
+=======
+        job.unprotectReadEndOperation(operation, true);
+
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
+
+>>>>>>> 29cbcfde0 ([BugFix] Fix Insert overwrite memory leak on follower node (#17556))
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
                 .add("msg", "replay end load job")
