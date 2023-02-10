@@ -1004,10 +1004,10 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
-    $CMAKE_CMD -G "Unix Makefiles" ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib/libavrocpp.so*
+    rm -f ${TP_INSTALL_DIR}/lib/libavrocpp.so*
 }
 
 # avro-c
@@ -1019,7 +1019,7 @@ build_avro_c() {
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL    
     ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+    rm -f ${TP_INSTALL_DIR}/lib64/libavro.so*
 }
 
 # serders
@@ -1037,9 +1037,10 @@ build_serdes() {
                 --enable-static \
                 --disable-shared
 
+    BUILD_SYSTEM='make'
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    rm -f ${TP_INSTALL_DIR}/lib/libserdes.so*
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
 }
