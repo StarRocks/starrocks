@@ -53,19 +53,21 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
     _probe_rows_counter = ADD_COUNTER(runtime_profile(), "ProbeRows", TUnit::UNIT);
 
     _init_row_desc();
-    if (_parent->type() == TPlanNodeType::PROJECT_NODE) {
-        const auto& slot_ids = reinterpret_cast<ProjectNode*>(_parent)->slot_ids();
-        for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
-            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
-                _deep = false;
-                for (size_t j = 0; j < slot_ids.size(); j++) {
-                    if (slot_ids[j] == _col_types[i]->id()) {
-                        _deep = true;
+    if (_parent != nullptr) {
+        if (_parent->type() == TPlanNodeType::PROJECT_NODE) {
+            const auto& slot_ids = reinterpret_cast<ProjectNode*>(_parent)->slot_ids();
+            for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
+                if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
+                    _deep = false;
+                    for (size_t j = 0; j < slot_ids.size(); j++) {
+                        if (slot_ids[j] == _col_types[i]->id()) {
+                            _deep = true;
+                            break;
+                        }
+                    }
+                    if (_deep) {
                         break;
                     }
-                }
-                if (_deep) {
-                    break;
                 }
             }
         }
@@ -629,7 +631,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            std::move(_conjunct_ctxs), std::move(cross_join_context), _children[0]->parent_node());
+            std::move(_conjunct_ctxs), std::move(cross_join_context), _parent);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));

@@ -76,7 +76,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_probe(vectorized::C
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, _deep);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     } else {
         if (src_col->is_constant()) {
@@ -87,7 +87,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_probe(vectorized::C
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, _deep);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     }
 }
@@ -151,14 +151,14 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_build(vectorized::C
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, _deep);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, _deep);
         }
     }
 }
@@ -331,19 +331,21 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
 
     _init_row_desc();
 
-    if (_parent_node->type() == TPlanNodeType::PROJECT_NODE) {
-        const auto& slot_ids = reinterpret_cast<const vectorized::ProjectNode*>(_parent_node)->slot_ids();
-        for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
-            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
-                _deep = false;
-                for (size_t j = 0; j < slot_ids.size(); j++) {
-                    if (slot_ids[j] == _col_types[i]->id()) {
-                        _deep = true;
+    if (_parent_node != nullptr) {
+        if (_parent_node->type() == TPlanNodeType::PROJECT_NODE) {
+            const auto& slot_ids = reinterpret_cast<const vectorized::ProjectNode*>(_parent_node)->slot_ids();
+            for (size_t i = _probe_column_count; i < _build_column_count + _probe_column_count; i++) {
+                if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
+                    _deep = false;
+                    for (size_t j = 0; j < slot_ids.size(); j++) {
+                        if (slot_ids[j] == _col_types[i]->id()) {
+                            _deep = true;
+                            break;
+                        }
+                    }
+                    if (_deep) {
                         break;
                     }
-                }
-                if (_deep) {
-                    break;
                 }
             }
         }

@@ -59,12 +59,12 @@ private:
 
 class ProjectOperatorFactory final : public OperatorFactory {
 public:
-    ProjectOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<int32_t>&& column_ids,
+    ProjectOperatorFactory(int32_t id, int32_t plan_node_id, const std::vector<int32_t>& column_ids,
                            std::vector<ExprContext*>&& expr_ctxs, std::vector<bool>&& type_is_nullable,
                            std::vector<int32_t>&& common_sub_column_ids,
                            std::vector<ExprContext*>&& common_sub_expr_ctxs)
             : OperatorFactory(id, "project", plan_node_id),
-              _column_ids(std::move(column_ids)),
+              _column_ids(column_ids),
               _expr_ctxs(std::move(expr_ctxs)),
               _type_is_nullable(std::move(type_is_nullable)),
               _common_sub_column_ids(std::move(common_sub_column_ids)),
