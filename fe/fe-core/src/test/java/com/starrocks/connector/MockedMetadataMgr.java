@@ -28,7 +28,7 @@ public class MockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
 
     public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr);
+        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
     }
 
