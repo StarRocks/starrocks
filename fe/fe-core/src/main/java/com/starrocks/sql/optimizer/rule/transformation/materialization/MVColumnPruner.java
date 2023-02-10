@@ -74,7 +74,7 @@ public class MVColumnPruner {
 
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             scanOperator.getColRefToColumnMetaMap().keySet().stream()
-                    .filter(key -> outputColumns.contains(key))
+                    .filter(outputColumns::contains)
                     .forEach(key -> columnRefColumnMapBuilder.put(key, scanOperator.getColRefToColumnMetaMap().get(key)));
             ImmutableMap<ColumnRefOperator, Column> newColumnRefMap = columnRefColumnMapBuilder.build();
             if (newColumnRefMap.size() != scanOperator.getColRefToColumnMetaMap().size()) {
