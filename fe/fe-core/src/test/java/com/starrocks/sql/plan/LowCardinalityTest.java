@@ -290,7 +290,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite10() throws Exception {
         String sql = "select upper(S_ADDRESS) as a, count(*) from supplier group by a";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
                 "  |  <dict id 12> : <string id 9>"));
         Assert.assertTrue(plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
 
@@ -470,7 +470,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, count(*) from supplier group by a,b";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
                 "  |  <dict id 13> : <string id 9>\n" +
                 "  |  <dict id 14> : <string id 10>\n" +
                 "  |  string functions:\n" +
@@ -502,7 +502,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select max(upper(S_ADDRESS)) from supplier";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
                 "  |  <dict id 13> : <string id 10>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 13> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
@@ -842,7 +842,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select count(*) as b from supplier group by S_ADDRESS having b > 3";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  group by: 10: S_ADDRESS\n" +
+        Assert.assertTrue(plan, plan.contains("  |  group by: 10: S_ADDRESS\n" +
                 "  |  having: 9: count > 3"));
         // test couldn't push down predicate
         sql = "select sum(S_NATIONKEY) a, sum(S_ACCTBAL) as b, S_ADDRESS as c from supplier group by S_ADDRESS " +
@@ -1192,12 +1192,14 @@ public class LowCardinalityTest extends PlanTestBase {
                 "min(upper(S_COMMENT)) from supplier_nullable " +
                 "group by upper(S_COMMENT)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("6:Decode\n" +
                 "  |  <dict id 17> : <string id 12>\n" +
-                "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 17> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])\n" +
-                "  |  <function id 15> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])"));
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 11> : 11: max\n" +
+                "  |  <slot 17> : 17: upper"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
@@ -1567,4 +1569,51 @@ public class LowCardinalityTest extends PlanTestBase {
                 "OR (DictExpr(12: S_ADDRESS,[<place-holder> = 'address']))");
     }
 
+    @Test
+    public void testAggWithProjection() throws Exception {
+        String sql = "select cast(max(s_address) as date) from supplier";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 10> : DictExpr(12: S_ADDRESS,[CAST(<place-holder> AS DATE)])\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(11: S_ADDRESS)\n" +
+                "  |  group by: ");
+    }
+
+    @Test
+    public void testJoinWithProjection() throws Exception {
+        String sql = "select s_address, cast(t1.s_address as date), cast(t1.s_phone as date), upper(t1.s_address)," +
+                " cast(t2.a as date), 123 from supplier t1 join (select max(s_address) a from supplier) t2 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:Project\n" +
+                "  |  <slot 18> : DictExpr(23: S_ADDRESS,[CAST(<place-holder> AS DATE)])\n" +
+                "  |  <slot 19> : CAST(5: S_PHONE AS DATE)\n" +
+                "  |  <slot 21> : DictExpr(25: S_ADDRESS,[CAST(<place-holder> AS DATE)])\n" +
+                "  |  <slot 22> : 123\n" +
+                "  |  <slot 23> : 23: S_ADDRESS\n" +
+                "  |  <slot 26> : DictExpr(23: S_ADDRESS,[upper(<place-holder>)])\n" +
+                "  |  \n" +
+                "  4:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE");
+    }
+
+    @Test
+    public void testTopNWithProjection() throws Exception {
+        String sql = "select t2.s_address, cast(t1.a as date), concat(t1.b, '') from (select max(s_address) a, min(s_phone) b " +
+                "from supplier group by s_address) t1 join (select s_address from supplier) t2 order by t1.a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "10:Decode\n" +
+                "  |  <dict id 23> : <string id 13>\n" +
+                "  |  \n" +
+                "  9:Project\n" +
+                "  |  <slot 19> : 19: cast\n" +
+                "  |  <slot 20> : 20: concat\n" +
+                "  |  <slot 23> : 23: S_ADDRESS\n" +
+                "  |  \n" +
+                "  8:MERGING-EXCHANGE");
+    }
 }
