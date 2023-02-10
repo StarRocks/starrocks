@@ -30,6 +30,8 @@ public:
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
+    const std::vector<SlotId>& slot_ids() { return _slot_ids; }
+
 private:
     std::vector<SlotId> _slot_ids;
     std::vector<ExprContext*> _expr_ctxs;

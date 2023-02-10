@@ -365,6 +365,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
     if (parent != nullptr) {
         parent->_children.push_back(node);
+        node->_parent = parent;
     } else {
         *root = node;
     }

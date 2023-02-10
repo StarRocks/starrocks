@@ -248,6 +248,7 @@ protected:
     std::set<TPlanNodeId> _local_rf_waiting_set;
 
     std::vector<ExecNode*> _children;
+    ExecNode* _parent = nullptr;
     RowDescriptor _row_descriptor;
 
     /// Resource information sent from the frontend.

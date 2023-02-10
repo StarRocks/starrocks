@@ -99,7 +99,7 @@ void ObjectColumn<T>::append_value_multiple_times(const Column& src, uint32_t in
         } else {
             const auto& obj_col = down_cast<const ObjectColumn<BitmapValue>&>(src);
             for (uint32_t j = 0; j < size; ++j) {
-                append({*obj_col.get_object(index), true});
+                append({*obj_col.get_object(index), false});
             }
         }
     } else {

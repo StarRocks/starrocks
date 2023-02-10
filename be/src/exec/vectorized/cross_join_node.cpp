@@ -22,6 +22,7 @@
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "exec/vectorized/project_node.h"
 
 namespace starrocks::vectorized {
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -39,6 +40,23 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _build_runtime_filters.emplace_back(rf_desc);
     }
     DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());
+    if (_parent->type() == TPlanNodeType::PROJECT_NODE) {
+        const auto& slot_ids = reinterpret_cast<ProjectNode*>(_parent)->slot_ids();
+        for (size_t i = 0; i < _build_column_count; i++) {
+            if (_col_types[i]->type().type == PrimitiveType::TYPE_OBJECT) {
+                _deep = false;
+                for (size_t j = 0; j < slot_ids.size(); j++) {
+                    if (slot_ids[j] == _col_types[j]->id()) {
+                        _deep = true;
+                        break;
+                    }
+                }
+            }
+            if (_deep) {
+                break;
+            }
+        }
+    }
     return Status::OK();
 }
 
@@ -253,14 +271,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, _deep);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, _deep);
         }
     }
 }
