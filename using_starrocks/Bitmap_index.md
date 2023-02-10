@@ -55,6 +55,16 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
     CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
     ```
 
+## 创建进度
+
+创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+
+```SQL
+SHOW ALTER TABLE COLUMN [FROM db_name];
+```
+
+> 说明：当前每张表只允许同时进行一个 Schema Change 任务，在一个 Bitmap 索引未异步创建完成前，无法进行新 Bitmap 索引的创建。
+
 ## 查看索引
 
 查看指定表的所有 bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW%20INDEX.md)。

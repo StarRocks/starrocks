@@ -10,29 +10,29 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
 
 1. 聚合模型建表时指定字段类型为 BITMAP。
 
-```sql
-CREATE TABLE pv_bitmap (
-    dt INT(11) NULL COMMENT "",
-    page VARCHAR(10) NULL COMMENT "",
-    user_id bitmap BITMAP_UNION NULL COMMENT ""
-) ENGINE=OLAP
-AGGREGATE KEY(dt, page)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(dt) BUCKETS 2;
-```
+    ```sql
+    CREATE TABLE pv_bitmap (
+        dt INT(11) NULL COMMENT "",
+        page VARCHAR(10) NULL COMMENT "",
+        user_id bitmap BITMAP_UNION NULL COMMENT ""
+    ) ENGINE=OLAP
+    AGGREGATE KEY(dt, page)
+    COMMENT "OLAP"
+    DISTRIBUTED BY HASH(dt) BUCKETS 2;
+    ```
 
 2. 主键模型建表时指定字段类型为 BITMAP。
 
-```sql
-CREATE TABLE primary_bitmap (
-  `tagname` varchar(65533) NOT NULL COMMENT "Tag name",
-  `tagvalue` varchar(65533) NOT NULL COMMENT "Tag value",
-  `userid` bitmap NOT NULL COMMENT "User ID"
-) ENGINE=OLAP
-PRIMARY KEY(`tagname`, `tagvalue`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`tagname`) BUCKETS 1;
-```
+    ```sql
+    CREATE TABLE primary_bitmap (
+      `tagname` varchar(65533) NOT NULL COMMENT "Tag name",
+      `tagvalue` varchar(65533) NOT NULL COMMENT "Tag value",
+      `userid` bitmap NOT NULL COMMENT "User ID"
+    ) ENGINE=OLAP
+    PRIMARY KEY(`tagname`, `tagvalue`)
+    COMMENT "OLAP"
+    DISTRIBUTED BY HASH(`tagname`) BUCKETS 1;
+    ```
 
 向 BITMAP 列中插入数据需要先使用 to_bitmap() 函数进行转换。
 
