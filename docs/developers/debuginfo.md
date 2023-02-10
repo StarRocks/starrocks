@@ -15,7 +15,7 @@ This change does not affect your download behavior or use of StarRocks. You can 
 1. Download and decompress the debuginfo package.
 
     ```SQL
-    wget https://releases.mirrorship.cn/starrocks/StarRocks-<sr_ver>.debuginfo.tar.gz
+    wget https://releases.starrocks.io/starrocks/StarRocks-<sr_ver>.debuginfo.tar.gz
 
     tar -xzvf StarRocks-<sr_ver>.debuginfo.tar.gz
     ```
