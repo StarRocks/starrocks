@@ -208,8 +208,6 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
         return std::make_unique<ParquetScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
-    } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else {
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }

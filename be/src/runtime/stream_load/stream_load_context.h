@@ -63,7 +63,6 @@ public:
     explicit KafkaLoadInfo(const TKafkaLoadInfo& t_info)
             : brokers(t_info.brokers),
               topic(t_info.topic),
-              confluent_schema_registry_url(t_info.confluent_schema_registry_url),
               begin_offset(t_info.partition_begin_offset),
               properties(t_info.properties) {
         // The offset(begin_offset) sent from FE is the starting offset,
@@ -84,7 +83,6 @@ public:
 public:
     std::string brokers;
     std::string topic;
-    std::string confluent_schema_registry_url;
 
     // partition -> begin offset, inclusive.
     std::map<int32_t, int64_t> begin_offset;

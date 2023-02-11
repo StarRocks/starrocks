@@ -432,31 +432,6 @@ fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
 
-# patch avro-cpp
-cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    patch -p0 < $TP_PATCH_DIR/avro-1.10.2.cpp.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $AVRO_SOURCE-cpp"
 
-# patch avro-cpp
-cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
-    cp $TP_PATCH_DIR/avro-1.10.2.c.findjasson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $AVRO_SOURCE-c"
-
-# patch serdes
-cd $TP_SOURCE_DIR/$SERDES_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
-    patch -p0 < $TP_PATCH_DIR/libserdes-7.3.1.patch
-    touch $PATCHED_MARK
-fi
-echo "Finished patching $SERDES_SOURCE"
 cd -
 
