@@ -4953,4 +4953,47 @@ TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
     }
 }
 
+TEST_F(ArrayFunctionsTest, array_generate_with_integer_columns) {
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    start_column->append_datum(Datum((int32_t)3));
+    stop_column->append_datum(Datum((int32_t)9));
+    step_column->append_datum(Datum((int32_t)2));
+
+    start_column->append_datum(Datum((int32_t)3));
+    stop_column->append_datum(Datum((int32_t)9));
+    step_column->append_datum(Datum((int32_t)3));
+
+    start_column->append_datum(Datum((int32_t)3));
+    stop_column->append_datum(Datum((int32_t)9));
+    step_column->append_datum(Datum((int32_t)4));
+
+    start_column->append_datum(Datum((int32_t)9));
+    stop_column->append_datum(Datum((int32_t)3));
+    step_column->append_datum(Datum((int32_t)-2));
+
+    // if one input is null, then output is null
+    start_column->append_datum(Datum());
+    stop_column->append_datum(Datum((int32_t)9));
+    step_column->append_datum(Datum((int32_t)2));
+
+    start_column->append_datum(Datum((int32_t)10));
+    stop_column->append_datum(Datum((int32_t)3));
+    step_column->append_datum(Datum((int32_t)6));
+
+    auto dest_column = ArrayGenerate<TYPE_INT>::process(nullptr, {start_column, stop_column, step_column}).value();
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 6);
+
+    _check_array<int32_t>({(int32_t)(3), (int32_t)(5), (int32_t)(7), (int32_t)(9)}, dest_column->get(0).get_array());
+    _check_array<int32_t>({(int32_t)(3), (int32_t)(6), (int32_t)(9)}, dest_column->get(1).get_array());
+    _check_array<int32_t>({(int32_t)(3), (int32_t)(7)}, dest_column->get(2).get_array());
+    _check_array<int32_t>({(int32_t)(9), (int32_t)(7), (int32_t)(5), (int32_t)(3)}, dest_column->get(3).get_array());
+    ASSERT_TRUE(dest_column->is_null(4));
+    ASSERT_TRUE(dest_column->get(5).get_array().empty());
+}
+
 } // namespace starrocks

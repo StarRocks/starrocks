@@ -252,6 +252,15 @@ public class FunctionSetTest {
         Assert.assertNotNull(fn);
         Assert.assertEquals(Type.INT, fn.getReturnType());
         Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
+
+        // array_generate(SmallInt,Int,BigInt)
+        argTypes = new Type[] {Type.SMALLINT, Type.INT, Type.BIGINT};
+        desc = new Function(new FunctionName("array_generate"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(Type.ARRAY_BIGINT, fn.getReturnType());
+        Assert.assertEquals(Type.BIGINT, fn.getArgs()[0]);
+
     }
 
     @Test

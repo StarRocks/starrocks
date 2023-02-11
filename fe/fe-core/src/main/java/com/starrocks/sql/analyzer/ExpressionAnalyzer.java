@@ -1020,6 +1020,47 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
                     }
                     break;
+                case FunctionSet.ARRAY_GENERATE:
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                        throw new SemanticException(fnName + " has wrong input numbers");
+                    }
+                    for (Expr expr : node.getChildren()) {
+                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                        }
+                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                        }
+                    }
+                    // add the default parameters for array_generate
+                    if (node.getChildren().size() == 1) {
+                        LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+                        node.clearChildren();
+                        node.addChild(new IntLiteral(1));
+                        node.addChild(secondParam);
+                    }
+                    if (node.getChildren().size() == 2) {
+                        int idx = 0;
+                        BigInteger[] childValues = new BigInteger[2];
+                        Boolean hasNUll = false;
+                        for (Expr expr : node.getChildren()) {
+                            if (expr instanceof NullLiteral) {
+                                hasNUll = true;
+                            } else if (expr instanceof IntLiteral) {
+                                childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
+                            } else {
+                                childValues[idx++] = ((LargeIntLiteral) expr).getValue();
+                            }
+                        }
+
+                        if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
+                            node.addChild(new IntLiteral(1));
+                        } else {
+                            node.addChild(new IntLiteral(-1));
+                        }
+                    }
+                    break;
                 case FunctionSet.MAP_FILTER:
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have 2 inputs, " +
