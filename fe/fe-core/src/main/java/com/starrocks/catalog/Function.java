@@ -30,6 +30,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import org.apache.commons.lang.ArrayUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -162,6 +163,22 @@ public class Function implements Writable {
             this.argTypes = new Type[0];
         }
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
+    }
+
+    // copy constructor
+    public Function(Function other) {
+        id = other.id;
+        name = other.name;
+        retType = other.retType;
+        argTypes = other.argTypes;
+        userVisible = other.userVisible;
+        location = other.location;
+        binaryType = other.binaryType;
+        checksum = other.checksum;
+        functionId = other.functionId;
+        isPolymorphic = other.isPolymorphic;
+        couldApplyDictOptimize = other.couldApplyDictOptimize;
+        isNullable = other.isNullable;
     }
 
     public FunctionName getFunctionName() {
@@ -745,6 +762,21 @@ public class Function implements Writable {
             return true;
         }
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
+    }
+
+    // just shallow copy
+    public Function copy() {
+        return new Function(this);
+    }
+
+    public Function updateArgType(Type[] newTypes) {
+        if (!ArrayUtils.isEquals(argTypes, newTypes)) {
+            Function newFunc = copy();
+            newFunc.setArgsType(newTypes);
+            return newFunc;
+        }
+
+        return this;
     }
 
 
