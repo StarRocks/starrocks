@@ -33,8 +33,9 @@
 
 namespace starrocks::pipeline {
 
-#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op) \
-    _is_profile_enabled ? op->mem_tracker() : _runtime_state->instance_mem_tracker()
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op)                          \
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_is_profile_enabled ? op->mem_tracker() \
+                                                               : _runtime_state->instance_mem_tracker())
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
