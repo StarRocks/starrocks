@@ -80,6 +80,13 @@ public class ScalarFunction extends Function {
         super(fid, name, argTypes, retType, hasVarArgs, isVectorized);
     }
 
+    public ScalarFunction(ScalarFunction other) {
+        super(other);
+        symbolName = other.symbolName;
+        prepareFnSymbol = other.prepareFnSymbol;
+        closeFnSymbol = other.closeFnSymbol;
+    }
+
     public static ScalarFunction createVectorizedBuiltin(long fid,
                                                          String name, List<Type> argTypes,
                                                          boolean hasVarArgs, Type retType) {
@@ -216,5 +223,10 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
+    }
+
+    @Override
+    public Function copy() {
+        return new ScalarFunction(this);
     }
 }
