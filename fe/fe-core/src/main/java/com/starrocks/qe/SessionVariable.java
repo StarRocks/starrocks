@@ -357,7 +357,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add(PIPELINE_SINK_DOP)
             .add("enable_cbo")
             .add("enable_vectorized_engine")
-            .add(EXEC_MEM_LIMIT)
             .add("vectorized_engine_enable")
             .add("enable_vectorized_insert")
             .add("vectorized_insert_enable")
@@ -432,7 +431,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
-    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
+    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
