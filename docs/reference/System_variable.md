@@ -106,7 +106,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * default_table_compression
 
-  Set the default compression algorithm for table storage, supported compression algorithms are: `snappy, lz4, lz4_frame, zlib, zstd, gzip, deflate, bzip2, lzo, brotli`.
+  Set the default compression algorithm for table storage, supported compression algorithms are: `snappy, lz4, lz4_frame, zlib, zstd`.
 
 * disable_colocate_join
 
