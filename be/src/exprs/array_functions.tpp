@@ -1203,4 +1203,89 @@ private:
     }
 };
 
+// Todo:support datatime/data
+template <LogicalType Type>
+class ArrayGenerate {
+public:
+    using InputColumnType = RunTimeColumnType<Type>;
+    using InputCppType = RunTimeCppType<Type>;
+    static StatusOr<ColumnPtr> process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        DCHECK(columns.size() == 3);
+
+        auto num_rows = columns[0]->size();
+
+        // compute nulls first. if any input is null, then output is null
+        NullColumnPtr nulls;
+        for (auto& column : columns) {
+            if (column->has_null()) {
+                auto nullable_column = down_cast<NullableColumn*>(column.get());
+                if (nulls == nullptr) {
+                    nulls = std::static_pointer_cast<NullColumn>(nullable_column->null_column()->clone_shared());
+                } else {
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
+                                                 nullable_column->null_column()->get_data().data());
+                }
+            }
+        }
+
+        // collect all input columns
+        std::vector<typename InputColumnType::Ptr> input_columns;
+        for (auto& column : columns) {
+            if (column->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(column.get());
+                input_columns.emplace_back(std::static_pointer_cast<InputColumnType>(nullable_column->data_column()));
+            } else if (column->is_constant()) {
+                input_columns.emplace_back(std::static_pointer_cast<InputColumnType>(
+                        ColumnHelper::unpack_and_duplicate_const_column(num_rows, column)));
+            } else {
+                input_columns.emplace_back(std::static_pointer_cast<InputColumnType>(column));
+            }
+        }
+
+        auto array_offsets = UInt32Column::create(0);
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+
+        auto offsets = array_offsets.get();
+        auto elements = down_cast<NullableColumn*>(array_elements.get());
+
+        offsets->reserve(num_rows + 1);
+        offsets->append(0);
+
+        size_t total_elements_num = 0;
+        for (size_t cur_row = 0; cur_row < num_rows; cur_row++) {
+            if (nulls && nulls->get_data()[cur_row]) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            auto start = columns[0]->get(cur_row).get<InputCppType>();
+            auto stop = columns[1]->get(cur_row).get<InputCppType>();
+            auto step = columns[2]->get(cur_row).get<InputCppType>();
+
+            // just return empty array
+            if (step == 0) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
+                 cur_element += step) {
+                elements->append_numbers(&cur_element, sizeof(InputCppType));
+                total_elements_num++;
+            }
+            offsets->append(total_elements_num);
+        }
+
+        CHECK_EQ(offsets->get_data().back(), elements->size());
+
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+        if (nulls == nullptr) {
+            return std::move(dst);
+        } else {
+            return NullableColumn::create(std::move(dst), std::move(nulls));
+        }
+    }
+};
+
 } // namespace starrocks

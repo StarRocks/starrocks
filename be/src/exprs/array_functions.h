@@ -125,6 +125,19 @@ public:
 
 #undef DEFINE_ARRAY_JOIN_FN
 
+#define DEFINE_ARRAY_GENERATE_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_generate_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayGenerate<PT>::process(context, columns);                                             \
+    }
+
+    DEFINE_ARRAY_GENERATE_FN(tinyint, TYPE_TINYINT);
+    DEFINE_ARRAY_GENERATE_FN(smallint, TYPE_SMALLINT);
+    DEFINE_ARRAY_GENERATE_FN(int, TYPE_INT);
+    DEFINE_ARRAY_GENERATE_FN(bigint, TYPE_BIGINT);
+    DEFINE_ARRAY_GENERATE_FN(largeint, TYPE_LARGEINT);
+
+#undef DEFINE_ARRAY_GENERATE_FN
+
     DEFINE_VECTORIZED_FN(array_sum_boolean);
     DEFINE_VECTORIZED_FN(array_sum_tinyint);
     DEFINE_VECTORIZED_FN(array_sum_smallint);

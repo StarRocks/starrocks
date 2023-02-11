@@ -304,7 +304,6 @@ public class ExpressionAnalyzer {
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
                     }
 
-
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
                             node.castChild(targetItemType, i);
@@ -873,6 +872,53 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(fnName + " should have at least two inputs");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals("array_generate")) {
+                if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                    throw new SemanticException(fnName + " has wrong input numbers");
+                }
+                for (Expr expr : node.getChildren()) {
+                    if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                        throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                    }
+                    if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                            !(expr instanceof SlotRef)) {
+                        throw new SemanticException(fnName + "'s parameter only support Integer");
+                    }
+                }
+                // add the default parameters for array_generate
+                if (node.getChildren().size() == 1) {
+                    LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+                    node.clearChildren();
+                    try {
+                        node.addChild(new IntLiteral("1", Type.TINYINT));
+                        node.addChild(secondParam);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+                if (node.getChildren().size() == 2) {
+                    int idx = 0;
+                    BigInteger[] childValues = new BigInteger[2];
+                    for (Expr expr : node.getChildren()) {
+                        if (expr instanceof IntLiteral) {
+                            childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
+                        } else {
+                            childValues[idx++] = ((LargeIntLiteral) expr).getValue();
+                        }
+                    }
+
+                    try {
+                        if (childValues[0].compareTo(childValues[1]) < 0) {
+                            node.addChild(new IntLiteral("1", Type.TINYINT));
+                        } else {
+                            node.addChild(new IntLiteral("-1", Type.TINYINT));
+                        }
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

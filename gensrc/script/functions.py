@@ -839,6 +839,12 @@ vectorized_functions = [
     [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby_date'],
     [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby_json'],
 
+    [150330, 'array_generate', 'ARRAY_TINYINT',  ['TINYINT', 'TINYINT', 'TINYINT'],          "ArrayFunctions::array_generate_tinyint"],
+    [150331, 'array_generate', 'ARRAY_SMALLINT',  ['SMALLINT', 'SMALLINT', 'SMALLINT'],      "ArrayFunctions::array_generate_smallint"],
+    [150332, 'array_generate', 'ARRAY_INT',  ['INT', 'INT', 'INT'],                          "ArrayFunctions::array_generate_int"],
+    [150333, 'array_generate', 'ARRAY_BIGINT',  ['BIGINT', 'BIGINT', 'BIGINT'],              "ArrayFunctions::array_generate_bigint"],
+    [150334, 'array_generate', 'ARRAY_LARGEINT',  ['LARGEINT', 'LARGEINT', 'LARGEINT'],      "ArrayFunctions::array_generate_largeint"],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 
