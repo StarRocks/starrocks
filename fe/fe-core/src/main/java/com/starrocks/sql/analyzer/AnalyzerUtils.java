@@ -26,6 +26,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -450,6 +452,29 @@ public class AnalyzerUtils {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
             return null;
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
+                node.getPredicate().getChildren().forEach(this::visit);
+            }
+            return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitInPredicate(InPredicate node, Void context) {
+            if (CollectionUtils.isNotEmpty(node.getChildren())) {
+                node.getChildren().forEach(this::visit);
+            }
+            return null;
+        }
+
+        public Void visitSubquery(Subquery node, Void context) {
+            return visit(node.getQueryStatement());
         }
     }
 
