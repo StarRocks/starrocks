@@ -313,6 +313,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
             optExpression.setChild(0, newChildExpr);
+            if (context.hasEncoded) {
+                optExpression.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                        context.stringColumnIdToDictColumnIds));
+            }
             return visitProjectionAfter(optExpression, context);
         }
 
@@ -471,12 +475,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             // For string column rewrite to dictionary column, other columns remain unchanged
             Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
                     .forEach(rewritesOutputColumns::union);
-            return new LogicalProperty(rewritesOutputColumns);
+            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            newProperty.setOutputColumns(rewritesOutputColumns);
+            return newProperty;
         }
 
         private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
                                                             ColumnRefSet outputColumns) {
-            return new LogicalProperty(outputColumns);
+            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            newProperty.setOutputColumns(outputColumns);
+            return newProperty;
         }
 
         private Projection rewriteProjectOperator(Projection projectOperator, DecodeContext context) {
