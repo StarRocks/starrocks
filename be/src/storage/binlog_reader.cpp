@@ -96,6 +96,7 @@ Status BinlogReader::get_next(ChunkPtr* chunk, int64_t max_version_exclusive) {
     if (_log_entry_info != nullptr && _log_entry_info->log_entry->entry_type() == EMPTY_PB) {
         _next_version += 1;
         _next_seq_id = 0;
+        _log_entry_info = nullptr;
     }
     Status status;
     while (_log_entry_info == nullptr && _next_version < max_version_exclusive) {
@@ -121,7 +122,7 @@ Status BinlogReader::get_next(ChunkPtr* chunk, int64_t max_version_exclusive) {
         }
 
         // sanity check
-        if (_log_entry_info->version != _next_version || _log_entry_info->start_seq_id == _next_seq_id) {
+        if (_log_entry_info->version != _next_version || _log_entry_info->start_seq_id != _next_seq_id) {
             std::string err_msg = fmt::format(
                     "Unexpected entry version/seq_id, reader: {}, tablet: {}, "
                     "expect version/seq_id {}/{}, actual version/seq_id {}/{}",

@@ -90,11 +90,10 @@ public:
     // Return Status::OK() if there is at least one change event in the chunk
     // Return Status::EndOfFile() if there is no more change events, or the
     // version of left change events are no less than *max_version_exclusive*.
-    // Return Status::NotFound if can't find the change event for the
-    // <_next_version, _seq_id> before calling get_next(). This may happen when
-    // the versions are not continuous in a tablet replica, and you may need
-    // to get the data from ather replicas.
-    // Return other status if error happens.
+    // Return Status::NotFound if there are missing change events less than
+    // *max_version_exclusive*. This may happen when the versions are not
+    // continuous in a tablet replica, and you may need to get the data from
+    // ather replicas. Return other status if error happens.
     Status get_next(ChunkPtr* chunk, int64_t max_version_exclusive);
 
     // The version of the next change event to read, and will update after seek/get_next is called.

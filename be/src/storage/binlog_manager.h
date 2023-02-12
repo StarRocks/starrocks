@@ -170,6 +170,8 @@ public:
 
     int64_t total_rowset_disk_size() { return _total_rowset_disk_size; }
 
+    void close_active_writer();
+
 private:
     void _apply_build_result(BinlogBuildResult* result);
 

@@ -72,18 +72,17 @@ protected:
         request.tablet_schema.columns.push_back(k1);
 
         TColumn k2;
-        k1.column_name = "k2";
-        k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::INT;
+        k2.column_name = "k2";
+        k2.__set_is_key(true);
+        k2.column_type.type = TPrimitiveType::INT;
         request.tablet_schema.columns.push_back(k2);
 
         TColumn v1;
         v1.column_name = "v1";
         v1.__set_is_key(false);
         v1.column_type.type = TPrimitiveType::VARCHAR;
+        v1.column_type.len = INT32_MAX;
         request.tablet_schema.columns.push_back(v1);
-
-        request.compression_type = TCompressionType::NO_COMPRESSION;
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
@@ -96,7 +95,7 @@ protected:
 
     void create_rowset(int32_t* start_key, RowsetInfo& rowset_info, RowsetSharedPtr* rowset);
 
-    void ingestion_rowsets(std::vector<RowsetInfo>& rowset_infos);
+    void ingestion_rowsets(std::vector<std::vector<RowsetInfo>>& rowset_infos);
 
     void test_reader(Schema& output_schema, OutputVerifier& verifier);
 
@@ -157,14 +156,19 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
     *rowset = status_or.value();
 }
 
-void BinlogReaderTest::ingestion_rowsets(std::vector<RowsetInfo>& rowset_infos) {
+void BinlogReaderTest::ingestion_rowsets(std::vector<std::vector<RowsetInfo>>& rowsets_per_binlog_file) {
     int32_t start_key = 0;
-    for (auto& rowset_info : rowset_infos) {
-        RowsetSharedPtr rowset;
-        create_rowset(&start_key, rowset_info, &rowset);
-        rowset_info.create_time_in_us = rowset->creation_time() * 1000000;
-        ASSERT_OK(_tablet->add_inc_rowset(rowset, rowset_info.version));
+    BinlogManager* binlog_manager = _tablet->binlog_manager();
+    for (auto& rowset_infos : rowsets_per_binlog_file) {
+        for (auto& rowset_info : rowset_infos) {
+            RowsetSharedPtr rowset;
+            create_rowset(&start_key, rowset_info, &rowset);
+            rowset_info.create_time_in_us = rowset->creation_time() * 1000000;
+            ASSERT_OK(_tablet->add_inc_rowset(rowset, rowset_info.version));
+        }
+        binlog_manager->close_active_writer();
     }
+    ASSERT_EQ(rowsets_per_binlog_file.size(), binlog_manager->file_metas().size());
 }
 
 class OutputVerifier {
@@ -175,8 +179,8 @@ public:
 void verify_binlog_reader(TabletSharedPtr tablet, std::vector<RowsetInfo>& rowset_infos, int32_t rowset_index,
                           int64_t row_index, Schema& output_schema, OutputVerifier* verifier) {
     int64_t next_key = 0;
-    for (int i = 0; i < rowset_index; rowset_index++) {
-        next_key += rowset_infos[rowset_index].total_rows;
+    for (int i = 0; i < rowset_index; i++) {
+        next_key += rowset_infos[i].total_rows;
     }
     next_key += row_index;
     int64_t next_rowset_index = rowset_index;
@@ -193,7 +197,7 @@ void verify_binlog_reader(TabletSharedPtr tablet, std::vector<RowsetInfo>& rowse
     Status st;
     while (true) {
         chunk->reset();
-        st = binlog_reader->get_next(&chunk, INT64_MAX);
+        st = binlog_reader->get_next(&chunk, rowset_infos.back().version + 1);
         if (!st.ok()) {
             break;
         }
@@ -229,22 +233,35 @@ void verify_binlog_reader(TabletSharedPtr tablet, std::vector<RowsetInfo>& rowse
         ASSERT_EQ(next_row_index, binlog_reader->next_seq_id());
     }
     ASSERT_TRUE(st.is_end_of_file());
+    while (next_rowset_index < rowset_infos.size()) {
+        ASSERT_EQ(0, rowset_infos[next_rowset_index].total_rows);
+        next_rowset_index += 1;
+    }
     ASSERT_EQ(rowset_infos.size(), next_rowset_index);
-    ASSERT_EQ(rowset_infos.back().version, binlog_reader->next_version());
-    ASSERT_EQ(rowset_infos.back().version, binlog_reader->next_seq_id());
+    ASSERT_EQ(rowset_infos.back().version + 1, binlog_reader->next_version());
+    ASSERT_EQ(0, binlog_reader->next_seq_id());
     binlog_reader->close();
 }
 
 void BinlogReaderTest::test_reader(Schema& output_schema, OutputVerifier& verifier) {
-    std::vector<RowsetInfo> rowset_infos;
-    for (int i = 2; i < 100; i++) {
+    std::vector<std::vector<RowsetInfo>> rowsets_per_binlog_file;
+    for (int i = 2; i < 15; i++) {
         RowsetInfo rowset_info;
         rowset_info.version = i;
         rowset_info.total_rows = std::rand() % 10000;
-        rowset_info.num_segments = std::min(rowset_info.total_rows, (int64_t)std::rand() % 10);
-        rowset_infos.push_back(rowset_info);
+        rowset_info.num_segments = std::min(rowset_info.total_rows, (int64_t)std::rand() % 10 + 1);
+        bool share_one_file = (std::rand() % 10) < 7;
+        if (i == 2 || !share_one_file) {
+            rowsets_per_binlog_file.push_back(std::vector<RowsetInfo>());
+        }
+        rowsets_per_binlog_file.back().push_back(rowset_info);
     }
-    ingestion_rowsets(rowset_infos);
+    ingestion_rowsets(rowsets_per_binlog_file);
+
+    std::vector<RowsetInfo> rowset_infos;
+    for (auto& vec : rowsets_per_binlog_file) {
+        rowset_infos.insert(rowset_infos.end(), vec.begin(), vec.end());
+    }
 
     for (int32_t rowset_index = 0; rowset_index < rowset_infos.size(); rowset_index++) {
         RowsetInfo& rowset_info = rowset_infos[rowset_index];
@@ -262,11 +279,10 @@ void BinlogReaderTest::test_reader(Schema& output_schema, OutputVerifier& verifi
     params.output_schema = output_schema;
     BinlogReaderSharedPtr binlog_reader = std::make_shared<BinlogReader>(_tablet, params);
     ASSERT_OK(binlog_reader->init());
-    ASSERT_TRUE(binlog_reader->seek(rowset_infos.back().version, 0).is_not_found());
+    ASSERT_TRUE(binlog_reader->seek(rowset_infos.back().version + 1, 0).is_not_found());
     binlog_reader->close();
 }
 
-// verifier for the output including both data and meta columns
 class FullColumnsVerifier : public OutputVerifier {
 public:
     void verify(DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
@@ -280,6 +296,7 @@ public:
     }
 };
 
+// verify that for the output including both meta and data columns
 TEST_F(BinlogReaderTest, test_read_full_columns) {
     Schema schema;
     FieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);
@@ -298,7 +315,6 @@ TEST_F(BinlogReaderTest, test_read_full_columns) {
     test_reader(schema, verifier);
 }
 
-// verifier for the output only including data columns
 class DataColumnsVerifier : public OutputVerifier {
 public:
     void verify(DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
@@ -308,12 +324,12 @@ public:
     }
 };
 
+// verify that for the output only including data columns
 TEST_F(BinlogReaderTest, test_read_data_columns) {
     DataColumnsVerifier verifier;
     test_reader(_schema, verifier);
 }
 
-// verify the result for BinlogReaderTest#_output_partial_schema
 class RandomColumnsVerifier : public OutputVerifier {
 public:
     void verify(DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
@@ -323,7 +339,7 @@ public:
     }
 };
 
-// verifier for the output including random columns
+// verify that for the output including random columns
 TEST_F(BinlogReaderTest, test_read_random_columns) {
     Schema schema;
     FieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);

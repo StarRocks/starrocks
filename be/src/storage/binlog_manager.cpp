@@ -181,10 +181,17 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::find_binlog_meta(int64_t version, i
     }
 
     if (file_meta->end_version() < version) {
-        return Status::NotFound(fmt::format("Can't find file meta for version {}}, seq_id {}", version, seq_id));
+        return Status::NotFound(fmt::format("Can't find file meta for version {}, seq_id {}", version, seq_id));
     }
 
     return file_meta;
+}
+
+void BinlogManager::close_active_writer() {
+    if (_active_binlog_writer != nullptr) {
+        _active_binlog_writer->close(true);
+        _active_binlog_writer.reset();
+    }
 }
 
 } // namespace starrocks
