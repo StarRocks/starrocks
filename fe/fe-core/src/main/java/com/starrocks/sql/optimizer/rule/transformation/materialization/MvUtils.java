@@ -325,12 +325,7 @@ public class MvUtils {
 
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-<<<<<<< HEAD
-            boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
-            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
-=======
             if (!isEqualInnerOrCrossJoin(joinOperator)) {
->>>>>>> b40dded57 ([Enhancement] Materialized view query rewrite support cross join (#16650))
                 return false;
             }
         }
