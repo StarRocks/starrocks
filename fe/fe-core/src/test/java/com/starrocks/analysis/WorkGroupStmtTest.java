@@ -192,7 +192,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
                 "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
@@ -535,7 +535,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
                 "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
