@@ -669,9 +669,9 @@ public class WorkGroupStmtTest {
         Set<Long> dbs = ImmutableSet.of(dbId);
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
-        TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+        TWorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                 starRocksAssert.getCtx(),
-                ResourceGroupClassifier.QueryType.SELECT,
+                WorkGroupClassifier.QueryType.SELECT,
                 dbs);
         Assert.assertEquals("rt_rg1", wg.getName());
 
