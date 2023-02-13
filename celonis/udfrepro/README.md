@@ -1,0 +1,1 @@
+Simply run the `debug.sh` script and it will try to create a docker container, register the udf function, run the udf function, and destroy the container for 100 times. You can check the logs to see if the image is flaky.
