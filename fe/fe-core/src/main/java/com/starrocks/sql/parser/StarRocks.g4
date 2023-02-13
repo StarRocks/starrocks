@@ -273,7 +273,26 @@ showCatalogsStatement
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
+<<<<<<< HEAD
     : createIndexClause
+=======
+    //Alter system clause
+    : addFrontendClause
+    | dropFrontendClause
+    | modifyFrontendHostClause
+    | addBackendClause
+    | dropBackendClause
+    | decommissionBackendClause
+    | modifyBackendHostClause
+    | addComputeNodeClause
+    | dropComputeNodeClause
+    | modifyBrokerClause
+    | alterLoadErrorUrlClause
+    | createImageClause
+
+    //Alter table clause
+    | createIndexClause
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
     | dropIndexClause
     | tableRenameClause
 
@@ -283,6 +302,63 @@ alterClause
     | dropFrontendClause
     ;
 
+<<<<<<< HEAD
+=======
+// ---------Alter system clause---------
+
+addFrontendClause
+   : ADD (FOLLOWER | OBSERVER) string
+   ;
+
+dropFrontendClause
+   : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+  : MODIFY FRONTEND HOST string TO string
+  ;
+
+addBackendClause
+   : ADD BACKEND string (',' string)*
+   ;
+
+dropBackendClause
+   : DROP BACKEND string (',' string)* FORCE?
+   ;
+
+decommissionBackendClause
+   : DECOMMISSION BACKEND string (',' string)*
+   ;
+
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
+addComputeNodeClause
+   : ADD COMPUTE NODE string (',' string)*
+   ;
+
+dropComputeNodeClause
+   : DROP COMPUTE NODE string (',' string)*
+   ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
+alterLoadErrorUrlClause
+    : SET LOAD ERRORS HUB properties?
+    ;
+
+createImageClause
+    : CREATE IMAGE
+    ;
+
+// ---------Alter table clause---------
+
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
 createIndexClause
     : ADD INDEX indexName=identifier identifierList indexType? comment?
     ;
@@ -954,12 +1030,22 @@ nonReserved
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
+<<<<<<< HEAD
     | HASH | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN
+=======
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
+    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | JOB
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL
+    | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
+    | NAME | NAMES | NEGATIVE | NO | NODE | NONE | NULLS
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA

@@ -2340,7 +2340,15 @@ public class GlobalStateMgr {
         return editLog;
     }
 
+<<<<<<< HEAD
     // Get the next available, need't lock because of nextId is atomic.
+=======
+    public Journal getJournal() {
+        return journal;
+    }
+
+    // Get the next available, lock-free because nextId is atomic.
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
     public long getNextId() {
         return idGenerator.getNextId();
     }
@@ -2795,6 +2803,10 @@ public class GlobalStateMgr {
 
     public void createView(CreateViewStmt stmt) throws DdlException {
         localMetastore.createView(stmt);
+    }
+
+    public void triggerNewImage() {
+        journalWriter.setForceRollJournal();
     }
 
     /**

@@ -251,7 +251,349 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+<<<<<<< HEAD
     // ----------------- Alter Clause ---------------
+=======
+    public R visitDropStatsStatement(DropStatsStmt statsStmt, C context) {
+        return visitStatement(statsStmt, context);
+    }
+
+    public R visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Resource Group Statement -----------------------------------------------
+
+    public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowResourceGroupStatement(ShowResourceGroupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    // ---------------------------------------- External Resource Statement---------------------------------------------
+
+    public R visitCreateResourceStatement(CreateResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropResourceStatement(DropResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterResourceStatement(AlterResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- UDF Statement-----------------------------------------------------------
+
+    public R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateFunctionStatement(CreateFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    // ---------------------------------------- LOAD Statement----------------------------------------------------------
+
+    public R visitLoadStatement(LoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowLoadStatement(ShowLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitCancelLoadStatement(CancelLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Show Statement ---------------------------------------------------------
+
+    public R visitShowWarningStatement(ShowWarningStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowProcStmt(ShowProcStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowColumnStatement(ShowColumnStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowTableStatusStatement(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowIndexStatement(ShowIndexStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAlterStatement(ShowAlterStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowUserPropertyStatement(ShowUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowOpenTableStatement(ShowOpenTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    // ---------------------------------------- Privilege Statement ----------------------------------------------------
+
+    public R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateUserStatement(CreateUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
+    }
+
+    public R visitDropUserStatement(DropUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
+    }
+
+    public R visitShowUserStatement(ShowUserStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropRoleStatement(DropRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRolesStatement(ShowRolesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Backup Restore Statement -----------------------------------------------
+
+    public R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowBackupStatement(ShowBackupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowRestoreStatement(ShowRestoreStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropRepositoryStatement(DropRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    // --------------------------------------- Sql BlackList And WhiteList Statement -----------------------------------
+
+    public R visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowWhiteListStatement(ShowWhiteListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // --------------------------------------- Export Statement --------------------------------------------------------
+
+    public R visitExportStatement(ExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExportStatement(CancelExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowExportStatement(ShowExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // --------------------------------------- Plugin Statement --------------------------------------------------------
+
+    public R visitInstallPluginStatement(InstallPluginStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUninstallPluginStatement(UninstallPluginStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowPluginsStatement(ShowPluginsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // --------------------------------------- File Statement ----------------------------------------------------------
+
+    public R visitCreateFileStatement(CreateFileStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropFileStatement(DropFileStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowSmallFilesStatement(ShowSmallFilesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------  Set Statement -----------------------------------------------------------------
+
+    public R visitSetStatement(SetStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetUserPropertyStatement(SetUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- Unsupported statement ---------------------------------------------------------
+
+    public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- Alter Clause --------------------------------------------------------
+
+    //Alter system clause
+
+    public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCreateImageClause(CreateImageClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitBackendClause(BackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    //Alter table clause
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
 
     public R visitCreateIndexClause(CreateIndexClause clause, C context) {
         return visitNode(clause, context);
