@@ -146,6 +146,15 @@ public class SystemInfoService {
         return null;
     }
 
+    /**
+     * For test.
+     */
+    public void addComputeNode(ComputeNode computeNode) {
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(computeNode.getId(), computeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+    }
+
     // Final entry of adding compute node
     private void addComputeNode(String host, int heartbeatPort) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
@@ -451,10 +460,10 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
-    public ComputeNode getBackendOrComputeNode(long idx) {
-        ComputeNode backend = idToBackendRef.get(idx);
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
         if (backend == null) {
-            backend =  idToComputeNodeRef.get(idx);
+            backend =  idToComputeNodeRef.get(nodeId);
         }
         return backend;
     }
