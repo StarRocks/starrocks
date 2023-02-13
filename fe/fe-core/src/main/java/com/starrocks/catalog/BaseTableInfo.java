@@ -142,7 +142,7 @@ public class BaseTableInfo {
 
     public String toString() {
         if (isInternalCatalog(catalogName)) {
-            return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, dbId, tableId);
+            return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
         }

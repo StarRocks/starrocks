@@ -146,16 +146,6 @@ public class MaterializedViewRewriter {
             return Lists.newArrayList();
         }
 
-        // for query: A1 join A2 join B, mv: A1 join A2 join B
-        // there may be two mapping:
-        //    1. A1 -> A1, A2 -> A2, B -> B
-        //    2. A1 -> A2, A2 -> A1, B -> B
-        List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(materializationContext.getQueryRefFactory(),
-                        queryTables, queryExpression, materializationContext.getMvColumnRefFactory(), mvTables, mvExpression);
-        if (relationIdMappings.isEmpty()) {
-            return Lists.newArrayList();
-        }
-
         // Compute MV queryPredicateSplit
         Map<ColumnRefOperator, ScalarOperator> mvLineage =
                 LineageFactory.getLineage(mvExpression, materializationContext.getMvColumnRefFactory());
@@ -175,6 +165,7 @@ public class MaterializedViewRewriter {
         // from top-down iteration.
         MatchMode matchMode = getMatchMode(queryTables, mvTables);
         Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
+        Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
         if (matchMode == MatchMode.COMPLETE) {
             if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
                 return Lists.newArrayList();
@@ -184,7 +175,8 @@ public class MaterializedViewRewriter {
             EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
             if (!compensateViewDelta(
                     queryTables, mvTables, viewEquivalenceClasses, compensationJoinColumns, mvExpression,
-                    materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory())) {
+                    materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory(),
+                    compensationRelations)) {
                 return Lists.newArrayList();
             }
         } else {
@@ -195,6 +187,18 @@ public class MaterializedViewRewriter {
                 getRelationIdToColumns(materializationContext.getQueryRefFactory());
         Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getMvColumnRefFactory());
+
+        // for query: A1 join A2 join B, mv: A1 join A2 join B
+        // there may be two mapping:
+        //    1. A1 -> A1, A2 -> A2, B -> B
+        //    2. A1 -> A2, A2 -> A1, B -> B
+        List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(
+                materializationContext.getQueryRefFactory(),
+                queryTables, queryExpression, materializationContext.getMvColumnRefFactory(),
+                mvTables, mvExpression, matchMode, compensationRelations);
+        if (relationIdMappings.isEmpty()) {
+            return Lists.newArrayList();
+        }
         // used to judge whether query scalar ops can be rewritten
         List<ColumnRefOperator> scanMvOutputColumns =
                 ((LogicalOlapScanOperator) materializationContext.getScanMvOperator()).getOutputColumns();
@@ -254,7 +258,7 @@ public class MaterializedViewRewriter {
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
             OptExpression mvExpression,
             ColumnRefFactory queryRefFactory,
-            ColumnRefFactory mvRefFactory) {
+            ColumnRefFactory mvRefFactory, Map<Table, Set<Integer>> compensationRelations) {
         // use directed graph to construct foreign key join graph
         MutableGraph<Table> graph = GraphBuilder.directed().build();
         // cases:
@@ -335,20 +339,25 @@ public class MaterializedViewRewriter {
                     // tableKeyColumns should be join keys,
                     // it means that there should be a join between childTable and parentTable
                     List<ColumnRefOperator> extraColumns = Lists.newArrayList();
+                    boolean hasJoin = true;
                     for (Pair<String, String> pair : columnPairs) {
                         // here should use relation id, but can not get it
                         ColumnRefOperator childColumn = getColumnRef(pair.first, childTable, mvRefFactory);
-                        ColumnRefOperator parentColumn = getColumnRef(pair.first, parentOlapTable, mvRefFactory);
+                        ColumnRefOperator parentColumn = getColumnRef(pair.second, parentOlapTable, mvRefFactory);
                         if (!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
                                 || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
                             // there is no join between childTable and parentTable
+                            hasJoin = false;
                             break;
                         }
                         extraColumns.add(parentColumn);
                         mvCompensationJoinColumns.put(childColumn, parentColumn);
                     }
+                    if (!hasJoin) {
+                        break;
+                    }
                     extraTableColumns.put(parentTable, extraColumns);
-                    // add edge to graph
+                    // add an edge to graph
                     if (!graph.successors(childTable).contains(parentTable)) {
                         graph.putEdge(childTable, parentTable);
                     }
@@ -384,6 +393,8 @@ public class MaterializedViewRewriter {
                 queryRefFactory.updateColumnToRelationIds(newColumn.getId(), relationId);
                 queryRefFactory.updateColumnRefToColumns(newColumn, column, olapTable);
             }
+            Set<Integer> relationIds = compensationRelations.computeIfAbsent(entry.getKey(), table -> Sets.newHashSet());
+            relationIds.add(relationId);
         }
         // convert mv's columns into query's after we get relationId mapping
         compensationJoinColumns.putAll(mvCompensationJoinColumns);
@@ -455,11 +466,11 @@ public class MaterializedViewRewriter {
 
             @Override
             public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
-                for (OptExpression child : mvExpression.getInputs()) {
+                for (OptExpression child : optExpression.getInputs()) {
                     if (child.getOp() instanceof LogicalScanOperator) {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         if (scanOperator.getTable() == table) {
-                            return mvExpression;
+                            return optExpression;
                         }
                     } else {
                         OptExpression ret = child.getOp().accept(this, child, null);
@@ -978,8 +989,12 @@ public class MaterializedViewRewriter {
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
             ColumnRefFactory queryRefFactory, List<Table> queryTables, OptExpression queryExpression,
-            ColumnRefFactory mvRefFactory, List<Table> mvTables, OptExpression mvExpression) {
+            ColumnRefFactory mvRefFactory, List<Table> mvTables, OptExpression mvExpression,
+            MatchMode matchMode, Map<Table, Set<Integer>> compensationRelations) {
         Map<Table, Set<Integer>> queryTableToRelationId = getTableToRelationid(queryExpression, queryRefFactory, queryTables);
+        if (matchMode == MatchMode.VIEW_DELTA) {
+            queryTableToRelationId.putAll(compensationRelations);
+        }
         Map<Table, Set<Integer>> mvTableToRelationId = getTableToRelationid(mvExpression, mvRefFactory, mvTables);
         // `queryTableToRelationId` may not equal to `mvTableToRelationId` when mv/query's columns are not
         // satisfied for the query.

@@ -159,7 +159,7 @@ public class OptimizerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
         TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
         // just give a valid RuleType
-        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_FILTER_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
+        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
         OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
         optimizer1.getContext().getTaskScheduler().pushTask(
                 new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
