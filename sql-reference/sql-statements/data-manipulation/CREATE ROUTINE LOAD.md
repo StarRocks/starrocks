@@ -94,7 +94,7 @@ PARTITION(p1, p2, p3)
 
 ### `job_properties`
 
-必填。导入作业的的属性。语法：
+必填。导入作业的属性。语法：
 
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
@@ -104,7 +104,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 | **参数**                  | **是否必选** | **说明**                                                     |
 | ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)``alive_be_number`：存活的 BE 节点数量。`partition_number`：消费分区数量。`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/Configuration.md)。 |
+| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul> <li>`alive_be_number`：存活的 BE 节点数量。</li><li>`partition_number`：消费分区数量。</li><li>`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/Configuration.md)。</li></ul> |
 | max_batch_interval        | 否           | 任务的调度间隔，即任务多久执行一次。单位：秒。取值范围：`5`～`60`。默认值：`10`。建议取值为导入间隔 10s 以上，否则会因为导入频率过高可能会报错版本数过多。 |
 | max_batch_rows            | 否           | 该参数只用于定义错误检测窗口范围，错误检测窗口范围为单个 Routine Load 导入任务所消费的 `10 * max-batch-rows` 行数据，默认为 `10 * 200000 = 2000000`。导入任务时会检测窗口中数据是否存在错误。错误数据是指 StarRocks 无法解析的数据，比如非法的 JSON。 |
 | max_error_number          | 否           | 错误检测窗口范围内允许的错误数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。错误行不包括通过 WHERE 子句过滤掉的数据。 |
@@ -113,8 +113,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
 | format                    | 否           | 待导入数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。 |
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
-| jsonpaths                 | 否           | 导入时指定待导入 JSON 数据的 Key，该模式称为匹配模式，适用于 JSON 数据的 Key 名与目标表的列名不一致的场景。具体请参见本文提供的示例[目标表的列名与 JSON 数据的 key 一致]。如果 JSON 数据的 Key 名与目标表的列名一致，则可以不设置 `jsonpaths` ，该模式称为简单模式。例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是字段的名称，按名称直接对应目标表中的 `category`、`author`、`price` 三列。具体请参见本文提供的示例[目标表存在基于 JSON 数据进行计算生成的衍生列] |
-| json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点]。 |
+| jsonpaths                 | 否           | 导入时指定待导入 JSON 数据的 Key，该模式称为匹配模式，适用于 JSON 数据的 Key 名与目标表的列名不一致的场景。具体请参见本文提供的示例[目标表存在基于 JSON 数据进行计算生成的衍生列](#目标表存在基于-json-数据进行计算生成的衍生列)。如果 JSON 数据的 Key 名与目标表的列名一致，则可以不设置 `jsonpaths` ，该模式称为简单模式。例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是字段的名称，按名称直接对应目标表中的 `category`、`author`、`price` 三列。具体请参见本文提供的示例[目标表的列名与 JSON 数据的 key 一致](#目标表的列名与-json-数据的-key-一致) |
+| json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
 
 ### `data_source`、`data_source_properties`
 
@@ -210,7 +210,7 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
   - **待导入数据比目标表多列**。
     比如目标表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；待导入数据文件中有四列，前三列按顺序依次对应目标表中的 `col1`、`col2` 和 `col3`，第四列在目标表中无对应的列。这种情况下，需要指定 `COLUMNS(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
   - **目标表存在基于待导入数据的列进行计算后生成的衍生列**。
-    例如待导入数据中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。目标表中有三列，按顺序依次为 `year`、`month` 和 `day`，均是基于待导入数据中包含时间数据的列进行计算后生成的衍生列。这种情况下，可以指定 `COLUMNS(col, year = year(col), month=month(col), day=day(col)`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入目标表中对应的衍生列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。更多示例，请参见[设置列的映射和转换关系]xxx
+    例如待导入数据中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。目标表中有三列，按顺序依次为 `year`、`month` 和 `day`，均是基于待导入数据中包含时间数据的列进行计算后生成的衍生列。这种情况下，可以指定 `COLUMNS(col, year = year(col), month=month(col), day=day(col)`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入目标表中对应的衍生列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。更多示例，请参见[设置列的映射和转换关系](#列映射和转换关系)。
 
 ### 导入 JSON 数据
 
@@ -284,7 +284,7 @@ FROM KAFKA
 
 如果需要提高导入性能，避免出现消费积压等情况，则可以通过设置单个 Routine Load 导入作业的期望任务并发度`desired_concurrent_number`，增加实际任务并行度，将一个导入作业拆分成尽可能多的导入任务并行执行。
 
-> 更多提升导入性能的方式，请参见 [Routine Load常见问题]
+> 更多提升导入性能的方式，请参见 [Routine Load常见问题](../../../faq/loading/Routine_load_faq.md)
 
 请注意，实际任务并行度由如下多个参数组成的公式决定，上限为 BE 节点的数量或者消费分区的数量。
 
