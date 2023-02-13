@@ -151,6 +151,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -3013,6 +3014,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAlterLoadErrorUrlClause(StarRocksParser.AlterLoadErrorUrlClauseContext context) {
         return new AlterLoadErrorUrlClause(getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitCreateImageClause(StarRocksParser.CreateImageClauseContext context) {
+        return new CreateImageClause();
     }
 
     // ---------Alter table clause---------

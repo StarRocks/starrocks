@@ -38,15 +38,6 @@
 #include "runtime/routine_load/data_consumer.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/defer_op.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include "libserdes/serdes-avro.h"
-#ifdef __cplusplus
-}
-#endif
 
 namespace starrocks {
 
@@ -113,16 +104,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         }
     }
 
-    char errstr[512];
-    serdes_conf_t* sconf = serdes_conf_new(NULL, 0, "schema.registry.url",
-                                           ctx->kafka_info->confluent_schema_registry_url.c_str(), NULL);
-    serdes_t* serdes = serdes_new(sconf, errstr, sizeof(errstr));
-    if (!serdes) {
-        LOG(ERROR) << "failed to create serdes handle: " << errstr;
-        return Status::InternalError("failed to create serdes handle");
-    }
-    DeferOp serdesDeleter([&] { free(serdes); });
-
     // consuming from queue and put data to stream load pipe
     int64_t left_time = ctx->max_interval_s * 1000;
     int64_t received_rows = 0;
@@ -139,7 +120,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     //improve performance
     Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter);
     char row_delimiter = '\n';
-    if (ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO) {
+    if (ctx->format == TFileFormatType::FORMAT_JSON) {
         append_data = &KafkaConsumerPipe::append_json;
     } else {
         append_data = &KafkaConsumerPipe::append_with_row_delimiter;
@@ -228,28 +209,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     cmt_offset[msg->partition()] = msg->offset() - 1;
                 }
             } else {
-                Status st = Status::OK();
-                if (ctx->format == TFileFormatType::FORMAT_AVRO) {
-                    avro_value_t avro;
-                    DeferOp op([&] { avro_value_decref(&avro); });
-                    serdes_schema_t* schema;
-                    serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
-                                                               errstr, sizeof(errstr));
-                    if (err) {
-                        LOG(ERROR) << "serdes deserialize avro failed: " << errstr;
-                        return Status::InternalError("serdes deserialize avro failed");
-                    }
-                    char* as_json;
-                    if (avro_value_to_json(&avro, 1, &as_json)) {
-                        LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
-                        return Status::InternalError("avro to json failed");
-                    }
-                    st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
-                    free(as_json);
-                } else {
-                    st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                                          static_cast<size_t>(msg->len()), row_delimiter);
-                }
+                Status st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
+                                                             static_cast<size_t>(msg->len()), row_delimiter);
                 if (st.ok()) {
                     received_rows++;
                     left_bytes -= msg->len();

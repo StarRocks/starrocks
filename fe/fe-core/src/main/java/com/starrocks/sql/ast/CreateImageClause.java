@@ -12,25 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast;
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
+import com.starrocks.alter.AlterOpType;
 
-import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.rule.RuleType;
-
-/**
- * Materialized View Rewrite Rule for pattern:
- * - Scan
- */
-public class OnlyScanRule extends SingleTableRewriteBaseRule {
-    private static final OnlyScanRule INSTANCE = new OnlyScanRule();
-
-    public OnlyScanRule() {
-        super(RuleType.TF_MV_ONLY_SCAN_RULE, Pattern.create(OperatorType.PATTERN_SCAN));
+public class CreateImageClause extends AlterClause {
+    public CreateImageClause() {
+        super(AlterOpType.ALTER_OTHER);
     }
 
-    public static OnlyScanRule getInstance() {
-        return INSTANCE;
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateImageClause(this, context);
     }
 }

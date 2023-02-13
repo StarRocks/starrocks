@@ -785,7 +785,7 @@ build_hadoop() {
 #jdk
 build_jdk() {
     check_if_source_exist $JDK_SOURCE
-    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
+    rm -rf $TP_INSTALL_DIR/open_jdk && cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
 }
 
 # ragel
@@ -966,7 +966,7 @@ build_fast_float() {
 
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
-    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+    rm -rf $STARROCKS_THIRDPARTY/installed/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
 }
 
 # streamvbyte
@@ -985,63 +985,6 @@ build_streamvbyte() {
 
     make -j$PARALLEL
     make install
-}
-
-# jasson
-build_jasson() {
-    check_if_source_exist $JANSSON_SOURCE
-    cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
-    mkdir -p build
-    cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
-}
-
-# avro-cpp
-build_avro_cpp() {
-    check_if_source_exist $AVRO_SOURCE
-    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
-    mkdir -p build
-    cd build
-    $CMAKE_CMD -G "Unix Makefiles" ..
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib/libavrocpp.so*
-}
-
-# avro-c
-build_avro_c() {
-    check_if_source_exist $AVRO_SOURCE
-    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
-    mkdir -p build
-    cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
-    ${BUILD_SYSTEM} -j$PARALLEL    
-    ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
-}
-
-# serders
-build_serdes() {
-    OLD_CFLAGS=$CFLAGS
-    unset CFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
-    check_if_source_exist $SERDES_SOURCE
-    cd $TP_SOURCE_DIR/$SERDES_SOURCE
-    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavrocpp_s -lavro -lssl -lcrypto -ldl" 
-    ./configure --prefix=${TP_INSTALL_DIR} \
-                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
-                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
-                --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
-                --enable-static \
-                --disable-shared
-
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
-    unset LIBS
-    export CFLAGS=$OLD_CFLAGS
 }
 
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
@@ -1094,10 +1037,6 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
-build_jasson
-build_avro_cpp
-build_avro_c
-build_serdes
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

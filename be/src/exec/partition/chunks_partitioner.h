@@ -43,8 +43,38 @@ public:
     Status prepare(RuntimeState* state);
 
     // Chunk is divided into multiple parts by partition columns,
-    // and each partition corresponds to a key-value pair in the hash map
-    Status offer(const ChunkPtr& chunk);
+    // and each partition corresponds to a key-value pair in the hash map.
+    // Params:
+    // @chunk:
+    //      The chunk added to the hash map.
+    // @new_partition_cb: void(size_t partition_idx)
+    //      called when coming a new key not in the hash map.
+    // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
+    //      called for each partition with enough num rows after adding chunk to the hash map.
+    template <typename NewPartitionCallback, typename PartitionChunkConsumer>
+    Status offer(const ChunkPtr& chunk, NewPartitionCallback&& new_partition_cb,
+                 PartitionChunkConsumer&& partition_chunk_consumer) {
+        DCHECK(!_partition_it.has_value());
+
+        if (!_is_downgrade) {
+            for (size_t i = 0; i < _partition_exprs.size(); i++) {
+                ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
+            }
+        }
+
+        if (false) {
+        }
+#define HASH_MAP_METHOD(NAME)                                                                                   \
+    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                   \
+        TRY_CATCH_BAD_ALLOC(_split_chunk_by_partition<typename decltype(_hash_map_variant.NAME)::element_type>( \
+                *_hash_map_variant.NAME, chunk, std::forward<NewPartitionCallback>(new_partition_cb),           \
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));                               \
+    }
+        APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
+#undef HASH_MAP_METHOD
+
+        return Status::OK();
+    }
 
     // Number of partitions
     int32_t num_partitions();
@@ -92,9 +122,13 @@ private:
                                           bool* has_null);
     void _init_hash_map_variant();
 
-    template <typename HashMapWithKey>
-    void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk) {
-        _is_downgrade = hash_map_with_key.append_chunk(chunk, _partition_columns, _mem_pool.get(), _obj_pool);
+    template <typename HashMapWithKey, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
+                                   NewPartitionCallback&& new_partition_cb,
+                                   PartitionChunkConsumer&& partition_chunk_consumer) {
+        _is_downgrade = hash_map_with_key.append_chunk(chunk, _partition_columns, _mem_pool.get(), _obj_pool,
+                                                       std::forward<NewPartitionCallback>(new_partition_cb),
+                                                       std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         if (_is_downgrade) {
             std::lock_guard<std::mutex> l(_buffer_lock);
             _downgrade_buffer.push(chunk);
@@ -109,7 +143,6 @@ private:
         }
         if (!_partition_it.has_value()) {
             _partition_it = hash_map_with_key.hash_map.begin();
-            _partition_idx = 0;
         }
 
         using PartitionIterator = typename HashMapWithKey::Iterator;
@@ -131,6 +164,7 @@ private:
 
         while (partition_it != partition_end) {
             std::vector<ChunkPtr>& chunks = partition_it->second->chunks;
+            const auto partition_idx = partition_it->second->partition_idx;
             if (!_chunk_it.has_value()) {
                 _chunk_it = chunks.begin();
             }
@@ -139,14 +173,13 @@ private:
             auto chunk_end = chunks.end();
 
             while (chunk_it != chunk_end) {
-                if (!consumer(_partition_idx, *chunk_it++)) {
+                if (!consumer(partition_idx, *chunk_it++)) {
                     return false;
                 }
             }
 
             // Move to next partition
             ++partition_it;
-            ++_partition_idx;
             _chunk_it.reset();
         }
 
@@ -182,7 +215,7 @@ private:
         while (chunk_it != chunk_end) {
             // Because we first fetch chunks from hash_map, so the _partition_idx here
             // is already set to hash_map.size()
-            if (!consumer(_partition_idx, *chunk_it++)) {
+            if (!consumer(hash_map_with_key.kNullKeyPartitionIdx, *chunk_it++)) {
                 return false;
             }
         }
@@ -210,8 +243,6 @@ private:
     std::any _partition_it;
     // Iterator of chunks of current partition
     std::any _chunk_it;
-    // Offset of current consuming partition
-    int32_t _partition_idx = -1;
     bool _hash_map_eos = false;
     bool _null_key_eos = false;
 };

@@ -103,6 +103,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    static TypeDescriptor create_array_type(TypeDescriptor children) {
+        TypeDescriptor res;
+        res.type = TYPE_ARRAY;
+        res.children.push_back(children);
+        return res;
+    }
+
     static TypeDescriptor create_hll_type() {
         TypeDescriptor ret;
         ret.type = TYPE_HLL;
