@@ -79,17 +79,17 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     bool should_exit = false;
     if (_num_rows_input < _offset) {
         ChunkPtr tmp_chunk;
-        do {
-            if (!should_exit) {
-                RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(&tmp_chunk, &_is_finished, &should_exit));
-            }
+        while (!_is_finished && !should_exit && _num_rows_input < _offset) {
+            ChunkPtr empty_chunk;
+            RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(&empty_chunk, &_is_finished, &should_exit));
 
-            if (tmp_chunk) {
-                _num_rows_input += tmp_chunk->num_rows();
+            if (empty_chunk) {
+                _num_rows_input += empty_chunk->num_rows();
+                std::swap(empty_chunk, tmp_chunk);
             } else {
                 break;
             }
-        } while (!_is_finished && !should_exit && _num_rows_input < _offset);
+        }
 
         // tmp_chunk is the last chunk, no extra chunks needs to be read
         if (_num_rows_input > _offset) {
