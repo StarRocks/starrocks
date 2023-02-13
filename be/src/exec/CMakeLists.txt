@@ -49,6 +49,7 @@ set(EXEC_FILES
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
     partition/chunks_partitioner.cpp
+    partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
     csv_scanner.cpp
