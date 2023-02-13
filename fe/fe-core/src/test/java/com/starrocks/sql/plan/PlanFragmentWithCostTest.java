@@ -26,6 +26,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -1571,10 +1572,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
 
+        String sql;
+        String plan;
+        ExecPlan execPlan;
+        OlapScanNode olapScanNode;
+
         try {
             // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
-            String sql = "select sum(v2) from t0 group by v2";
-            String plan = getFragmentPlan(sql);
+            sql = "select sum(v2) from t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
@@ -1584,7 +1593,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
             // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
             sql = "select sum(v1) from t0 group by v1";
-            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(1: v1)\n" +
                     "  |  group by: 1: v1\n" +
@@ -1593,7 +1605,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
             // case 3: use two-phase aggregation for non-grouping agg.
             sql = "select sum(v2) from t0";
-            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: \n" +
@@ -1607,14 +1622,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
-            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
-            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2");

@@ -1398,12 +1398,13 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
+
             return sourceFragment;
         }
 
         /**
-         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE), if they don't satisfy
-         * the required hash property of blocking aggregation.
+         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
          * <p>
          * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
          * local shuffle partition exprs.
@@ -1416,35 +1417,23 @@ public class PlanFragmentBuilder {
          * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
          * local shuffle partition exprs.
          *
-         * @param fragment The fragment which need to check whether to clear bucket keys of OlapScanNode.
-         * @param aggOp    The aggregate which need to check whether OlapScanNode satisfies its reuiqred hash property.
+         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
          */
-        private void clearOlapScanNodePartitionsIfNotSatisfy(PlanFragment fragment,
-                                                             PhysicalHashAggregateOperator aggOp) {
-            // Only check ScanNode->BlockingAgg, which must be one-phase agg or
-            // the first phase in three/four-phase agg whose second phase is pruned.
-            if (!aggOp.isOnePhaseAgg() && !aggOp.isMergedLocalAgg()) {
+        private void clearOlapScanNodePartitions(PlanNode root) {
+            if (root instanceof OlapScanNode) {
+                OlapScanNode scanNode = (OlapScanNode) root;
+                scanNode.setBucketExprs(Lists.newArrayList());
+                scanNode.setBucketColumns(Lists.newArrayList());
                 return;
             }
 
-            if (aggOp.getPartitionByColumns().isEmpty()) {
+            if (root instanceof ExchangeNode) {
                 return;
             }
 
-            PlanNode leafNode = fragment.getLeftMostLeafNode();
-            if (!(leafNode instanceof OlapScanNode)) {
-                return;
+            for (PlanNode child : root.getChildren()) {
+                clearOlapScanNodePartitions(child);
             }
-
-            OlapScanNode olapScanNode = (OlapScanNode) leafNode;
-            Set<ColumnRefOperator> requiredPartColumns = new HashSet<>(aggOp.getPartitionByColumns());
-            boolean satisfy = requiredPartColumns.containsAll(olapScanNode.getBucketColumns());
-            if (satisfy) {
-                return;
-            }
-
-            olapScanNode.setBucketExprs(Lists.newArrayList());
-            olapScanNode.setBucketColumns(Lists.newArrayList());
         }
 
         private static class AggregateExprInfo {
@@ -1679,7 +1668,9 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
+                if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+                    clearOlapScanNodePartitions(aggregationNode);
+                }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
