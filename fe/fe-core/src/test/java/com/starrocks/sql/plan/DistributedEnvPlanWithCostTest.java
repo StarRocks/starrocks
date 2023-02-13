@@ -18,12 +18,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,6 +35,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+    }
+
+    @After
+    public void after() {
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     //  agg
@@ -1079,7 +1086,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
     }
 
-
     @Test
     public void testAggNodeAndBucketDistribution() throws Exception {
         // For the local one-phase aggregation, enable AssignScanRangesPerDriverSeq and disable SharedScan.
@@ -1402,5 +1408,49 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: LO_ORDERKEY, INT, false]\n" +
                 "  |  cardinality: 9223372036854775807");
+    }
+
+    @Test
+    public void testAggExecuteInOneTablet() throws Exception {
+        String sql;
+        String plan;
+        ExecPlan execPlan;
+        OlapScanNode olapScanNode;
+
+        // dates_n only contains one tablet.
+        sql = "select count(d_datekey), d_date from dates_n group by d_date";
+        execPlan = getExecPlan(sql);
+        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1: d_datekey)\n" +
+                "  |  group by: 2: d_date\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // dates_n only contains one tablet.
+        sql = "select count(d_date), d_datekey from dates_n group by d_datekey";
+        execPlan = getExecPlan(sql);
+        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: d_date)\n" +
+                "  |  group by: 1: d_datekey\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // lineorder_new_l contains more than one tablet.
+        sql = "select count(P_TYPE), LO_ORDERKEY from lineorder_new_l group by LO_ORDERKEY";
+        execPlan = getExecPlan(sql);
+        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+        Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(36: P_TYPE)\n" +
+                "  |  group by: 1: LO_ORDERKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 }
