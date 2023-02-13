@@ -67,7 +67,7 @@ bool TieIterator::next() {
 // Append permutation to column, implements `materialize_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
-    explicit ColumnAppendPermutation(const Columns& columns, const Permutation& perm)
+    explicit ColumnAppendPermutation(const Columns& columns, const PermutationView& perm)
             : ColumnVisitorMutableAdapter(this), _columns(columns), _perm(perm) {}
 
     Status do_visit(NullableColumn* dst) {
@@ -236,16 +236,16 @@ public:
 
 private:
     const Columns& _columns;
-    const Permutation& _perm;
+    const PermutationView& _perm;
 };
 
-void materialize_column_by_permutation(Column* dst, const Columns& columns, const Permutation& perm) {
+void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm) {
     ColumnAppendPermutation visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
 }
 
-void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm) {
     if (chunks.empty() || perm.empty()) {
         return;
     }

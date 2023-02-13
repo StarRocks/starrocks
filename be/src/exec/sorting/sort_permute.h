@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"
 #include "simd/simd.h"
+#include "util/array_view.hpp"
 
 namespace starrocks {
 
@@ -51,6 +52,7 @@ template <class T>
 using InlinePermutation = std::vector<InlinePermuteItem<T>>;
 
 using Permutation = std::vector<PermutationItem>;
+using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
 
 template <class T, class Container>
@@ -98,8 +100,8 @@ inline void permutate_to_selective(const Permutation& perm, std::vector<uint32_t
 }
 
 // Materialize chunk by permutation
-void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
-void materialize_column_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
+void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm);
 
 // Tie and TieIterator
 // Tie is a compact representation of equal ranges in a vector, in which `1` means equal and `0` means not equal.

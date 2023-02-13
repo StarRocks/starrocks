@@ -15,10 +15,13 @@
 #pragma once
 
 #include <deque>
+#include <memory>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
@@ -124,6 +127,9 @@ public:
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    // merge two runs
+    StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
+
     bool move_cursor();
 
     SortDescs _sort_desc;
