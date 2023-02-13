@@ -19,68 +19,6 @@
 
 namespace starrocks {
 
-#define APPLY_FOR_PARTITION_VARIANT_NOT_NULL(M) \
-    M(phase1_uint8)                             \
-    M(phase1_int8)                              \
-    M(phase1_int16)                             \
-    M(phase1_int32)                             \
-    M(phase1_int64)                             \
-    M(phase1_int128)                            \
-    M(phase1_decimal32)                         \
-    M(phase1_decimal64)                         \
-    M(phase1_decimal128)                        \
-    M(phase1_date)                              \
-    M(phase1_timestamp)                         \
-    M(phase1_string)                            \
-    M(phase1_slice)                             \
-    M(phase1_slice_fx4)                         \
-    M(phase1_slice_fx8)                         \
-    M(phase1_slice_fx16)
-
-#define APPLY_FOR_PARTITION_VARIANT_NULL(M) \
-    M(phase1_null_uint8)                    \
-    M(phase1_null_int8)                     \
-    M(phase1_null_int16)                    \
-    M(phase1_null_int32)                    \
-    M(phase1_null_int64)                    \
-    M(phase1_null_int128)                   \
-    M(phase1_null_decimal32)                \
-    M(phase1_null_decimal64)                \
-    M(phase1_null_decimal128)               \
-    M(phase1_null_date)                     \
-    M(phase1_null_timestamp)                \
-    M(phase1_null_string)
-
-#define APPLY_FOR_PARTITION_VARIANT_ALL(M) \
-    M(phase1_uint8)                        \
-    M(phase1_int8)                         \
-    M(phase1_int16)                        \
-    M(phase1_int32)                        \
-    M(phase1_int64)                        \
-    M(phase1_int128)                       \
-    M(phase1_decimal32)                    \
-    M(phase1_decimal64)                    \
-    M(phase1_decimal128)                   \
-    M(phase1_date)                         \
-    M(phase1_timestamp)                    \
-    M(phase1_string)                       \
-    M(phase1_slice)                        \
-    M(phase1_null_uint8)                   \
-    M(phase1_null_int8)                    \
-    M(phase1_null_int16)                   \
-    M(phase1_null_int32)                   \
-    M(phase1_null_int64)                   \
-    M(phase1_null_int128)                  \
-    M(phase1_null_decimal32)               \
-    M(phase1_null_decimal64)               \
-    M(phase1_null_decimal128)              \
-    M(phase1_null_date)                    \
-    M(phase1_null_timestamp)               \
-    M(phase1_null_string)                  \
-    M(phase1_slice_fx4)                    \
-    M(phase1_slice_fx8)                    \
-    M(phase1_slice_fx16)
-
 // Hash maps for phase1
 template <PhmapSeed seed>
 using UInt8PartitionHashMapWithOneNumberKey =
@@ -168,6 +106,43 @@ template <PhmapSeed seed>
 using SerializedKeyFixedSize16PartitionHashMap =
         PartitionHashMapWithSerializedKeyFixedSize<FixedSize16SlicePartitionHashMap<seed>>;
 
+namespace detail {
+using PartitionHashMapWithKeyPtr =
+        std::variant<std::unique_ptr<UInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Int8PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Int16PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Int32PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Int64PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Int128PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Decimal32PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Decimal64PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<Decimal128PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+
+                     std::unique_ptr<DatePartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<TimeStampPartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<OneStringPartitionHashMap<PhmapSeed1>>,
+                     std::unique_ptr<SerializedKeyPartitionHashMap<PhmapSeed1>>,
+
+                     std::unique_ptr<NullUInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullInt16PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullInt32PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullInt64PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullInt128PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+
+                     std::unique_ptr<NullDecimal32PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullDecimal64PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullDecimal128PartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+
+                     std::unique_ptr<NullDatePartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullTimeStampPartitionHashMapWithOneNumberKey<PhmapSeed1>>,
+                     std::unique_ptr<NullOneStringPartitionHashMap<PhmapSeed1>>,
+
+                     std::unique_ptr<SerializedKeyFixedSize4PartitionHashMap<PhmapSeed1>>,
+                     std::unique_ptr<SerializedKeyFixedSize8PartitionHashMap<PhmapSeed1>>,
+                     std::unique_ptr<SerializedKeyFixedSize16PartitionHashMap<PhmapSeed1>>>;
+}
+
 // For different partition columns type, size, cardinality, volume, we should choose different
 // hash functions and different hashmaps.
 // When runtime, we will only have one hashmap.
@@ -206,91 +181,20 @@ struct PartitionHashMapVariant {
         phase1_slice_fx16,
 
     };
+    detail::PartitionHashMapWithKeyPtr hash_map_with_key;
     Type type = Type::phase1_slice;
 
-    std::unique_ptr<UInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_uint8;
-    std::unique_ptr<Int8PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_int8;
-    std::unique_ptr<Int16PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_int16;
-    std::unique_ptr<Int32PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_int32;
-    std::unique_ptr<Int64PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_int64;
-    std::unique_ptr<Int128PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_int128;
-    std::unique_ptr<Decimal32PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_decimal32;
-    std::unique_ptr<Decimal64PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_decimal64;
-    std::unique_ptr<Decimal128PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_decimal128;
-
-    std::unique_ptr<DatePartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_date;
-    std::unique_ptr<TimeStampPartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_timestamp;
-    std::unique_ptr<OneStringPartitionHashMap<PhmapSeed1>> phase1_string;
-
-    std::unique_ptr<NullUInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_uint8;
-    std::unique_ptr<NullInt8PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int8;
-    std::unique_ptr<NullInt16PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int16;
-    std::unique_ptr<NullInt32PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int32;
-    std::unique_ptr<NullInt64PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int64;
-    std::unique_ptr<NullInt128PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int128;
-
-    std::unique_ptr<NullDecimal32PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_decimal32;
-    std::unique_ptr<NullDecimal64PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_decimal64;
-    std::unique_ptr<NullDecimal128PartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_decimal128;
-
-    std::unique_ptr<NullDatePartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_date;
-    std::unique_ptr<NullTimeStampPartitionHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_timestamp;
-    std::unique_ptr<NullOneStringPartitionHashMap<PhmapSeed1>> phase1_null_string;
-    std::unique_ptr<SerializedKeyPartitionHashMap<PhmapSeed1>> phase1_slice;
-
-    std::unique_ptr<SerializedKeyFixedSize4PartitionHashMap<PhmapSeed1>> phase1_slice_fx4;
-    std::unique_ptr<SerializedKeyFixedSize8PartitionHashMap<PhmapSeed1>> phase1_slice_fx8;
-    std::unique_ptr<SerializedKeyFixedSize16PartitionHashMap<PhmapSeed1>> phase1_slice_fx16;
-
-    void init(RuntimeState* state, Type type_) {
-        type = type_;
-        switch (type_) {
-#define M(NAME)                                                                     \
-    case Type::NAME:                                                                \
-        NAME = std::make_unique<decltype(NAME)::element_type>(state->chunk_size()); \
-        break;
-            APPLY_FOR_PARTITION_VARIANT_ALL(M)
-#undef M
-        }
+    template <class Vistor>
+    auto visit(Vistor&& vistor) const {
+        return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
-    size_t capacity() const {
-        switch (type) {
-#define M(NAME)      \
-    case Type::NAME: \
-        return NAME->hash_map.capacity();
-            APPLY_FOR_PARTITION_VARIANT_ALL(M)
-#undef M
-        }
-        return 0;
-    }
+    void init(RuntimeState* state, Type type_);
 
-    size_t size() const {
-        switch (type) {
-#define M(NAME)      \
-    case Type::NAME: \
-        return NAME->hash_map.size() + (NAME->null_key_value.chunks.empty() ? 0 : 1);
-            APPLY_FOR_PARTITION_VARIANT_NULL(M)
-#undef M
+    size_t capacity() const;
 
-#define M(NAME)      \
-    case Type::NAME: \
-        return NAME->hash_map.size();
-            APPLY_FOR_PARTITION_VARIANT_NOT_NULL(M)
-#undef M
-        }
-        return 0;
-    }
+    size_t size() const;
 
-    size_t memory_usage() const {
-        switch (type) {
-#define M(NAME)      \
-    case Type::NAME: \
-        return NAME->hash_map.dump_bound();
-            APPLY_FOR_PARTITION_VARIANT_ALL(M)
-#undef M
-        }
-        return 0;
-    }
+    size_t memory_usage() const;
 };
 } // namespace starrocks
