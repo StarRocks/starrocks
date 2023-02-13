@@ -328,9 +328,9 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   );
   ```
 
-## View the schema of a table
+## View the schema of a Hudi table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of a Hudi table:
 
 - View schema
 

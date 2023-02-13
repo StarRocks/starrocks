@@ -328,9 +328,9 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   );
   ```
 
-## View the schema of a table
+## View the schema of a Hive table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of a Hive table:
 
 - View schema
 

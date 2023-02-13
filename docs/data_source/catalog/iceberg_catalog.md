@@ -328,9 +328,9 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-## View the schema of a table
+## View the schema of an Iceberg table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of an Iceberg table:
 
 - View schema
 

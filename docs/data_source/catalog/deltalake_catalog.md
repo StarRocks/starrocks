@@ -328,9 +328,9 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
-## View the schema of a table
+## View the schema of a Delta Lake table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of a Delta Lake table:
 
 - View schema
 
