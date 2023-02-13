@@ -1158,6 +1158,131 @@ public class PlanFragmentBuilder {
              */
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
+<<<<<<< HEAD
+=======
+            return true;
+        }
+
+        /**
+         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
+         * <p>
+         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+         * which contains two steps:
+         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
+         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+         * <p>
+         * Specifically, transfer
+         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
+         * -      *inputFragment         sourceFragment
+         * to
+         * (AggNode->[ProjectNode->]ScanNode)
+         * -      *sourceFragment
+         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
+         *
+         * @param inputFragment The input fragment to match the above pattern.
+         * @param context       The context of building fragment, which contains all the fragments.
+         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
+         */
+        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
+            if (ConnectContext.get() == null) {
+                return inputFragment;
+            }
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
+                    && sessionVariable.isEnablePipelineEngine()
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+            if (!enableLocalShuffleAgg) {
+                return inputFragment;
+            }
+
+            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
+            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
+                return inputFragment;
+            }
+
+            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
+            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
+            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
+                return inputFragment;
+            }
+
+            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
+            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
+            if (sourceFragment instanceof MultiCastPlanFragment) {
+                return inputFragment;
+            }
+
+            // Traverse fragment in reverse to delete inputFragment,
+            // because the last fragment is inputFragment for the most cases.
+            ArrayList<PlanFragment> fragments = context.getFragments();
+            for (int i = fragments.size() - 1; i >= 0; --i) {
+                if (fragments.get(i).equals(inputFragment)) {
+                    fragments.remove(i);
+                    break;
+                }
+            }
+
+            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
+
+            return sourceFragment;
+        }
+
+        /**
+         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
+         * <p>
+         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+         * local shuffle partition exprs.
+         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+         * <p>
+         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+         * - OlapScanNode only has one tablet after pruned.
+         * - It is executed on the single BE.
+         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+         * local shuffle partition exprs.
+         *
+         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
+         */
+        private void clearOlapScanNodePartitions(PlanNode root) {
+            if (root instanceof OlapScanNode) {
+                OlapScanNode scanNode = (OlapScanNode) root;
+                scanNode.setBucketExprs(Lists.newArrayList());
+                scanNode.setBucketColumns(Lists.newArrayList());
+                return;
+            }
+
+            if (root instanceof ExchangeNode) {
+                return;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                clearOlapScanNodePartitions(child);
+            }
+        }
+
+        private static class AggregateExprInfo {
+            public final ArrayList<Expr> groupExpr;
+            public final ArrayList<FunctionCallExpr> aggregateExpr;
+            public final ArrayList<Expr> partitionExpr;
+            public final ArrayList<Expr> intermediateExpr;
+
+            public AggregateExprInfo(ArrayList<Expr> groupExpr, ArrayList<FunctionCallExpr> aggregateExpr,
+                                     ArrayList<Expr> partitionExpr,
+                                     ArrayList<Expr> intermediateExpr) {
+                this.groupExpr = groupExpr;
+                this.aggregateExpr = aggregateExpr;
+                this.partitionExpr = partitionExpr;
+                this.intermediateExpr = intermediateExpr;
+            }
+        }
+
+        private AggregateExprInfo buildAggregateTuple(
+                Map<ColumnRefOperator, CallOperator> aggregations,
+                List<ColumnRefOperator> groupBys,
+                List<ColumnRefOperator> partitionBys,
+                TupleDescriptor outputTupleDesc,
+                ExecPlan context) {
+>>>>>>> ceae8e25e ([BugFix] Clear olap scan bucket exprs correctly (#17666))
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
             for (ColumnRefOperator grouping : node.getGroupBys()) {
                 Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
@@ -1325,11 +1450,22 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
+<<<<<<< HEAD
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if ((node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal())
                     && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 estimateDopOfOnePhaseAgg(inputFragment);
+=======
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+                if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+                    clearOlapScanNodePartitions(aggregationNode);
+                }
+                // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                aggregationNode.setWithLocalShuffle(withLocalShuffle);
+                aggregationNode.setIdenticallyDistributed(true);
+>>>>>>> ceae8e25e ([BugFix] Clear olap scan bucket exprs correctly (#17666))
             }
 
             inputFragment.setPlanRoot(aggregationNode);
