@@ -208,7 +208,7 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = std::vector<Slice>;
+            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
@@ -217,7 +217,7 @@ public:
             std::vector<const Container*> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(&real->get_data());
+                containers.push_back(&real->get_proxy_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -228,8 +228,8 @@ public:
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
                 auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
                 auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-                auto left_value = left_column->get_data()[lhs.index_in_chunk];
-                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                auto left_value = left_column->get_slice(lhs.index_in_chunk);
+                auto right_value = right_column->get_slice(rhs.index_in_chunk);
                 return SorterComparator<Slice>::compare(left_value, right_value);
             };
 
