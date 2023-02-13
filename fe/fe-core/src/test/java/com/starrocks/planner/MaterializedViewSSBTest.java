@@ -15,22 +15,14 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.google.common.io.CharStreams;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import kotlin.text.Charsets;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import java.io.InputStreamReader;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class MaterializedViewSSBTest extends PlanTestBase {
     private static final String MATERIALIZED_DB_NAME = "test_mv";
@@ -57,46 +49,6 @@ public class MaterializedViewSSBTest extends PlanTestBase {
         // create lineorder_flat_mv
         createMaterializedViews("sql/materialized-view/ssb/", Lists.newArrayList("lineorder_flat_mv"));
     }
-
-    private static void createTables(String dirName, List<String> fileNames) {
-        getSqlList(dirName, fileNames).forEach(createTblSql -> {
-            System.out.println("create table sql:" + createTblSql);
-            try {
-                starRocksAssert.withTable(createTblSql);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-    }
-
-     private static void createMaterializedViews(String dirName, List<String> fileNames) {
-        getSqlList(dirName, fileNames).forEach(sql -> {
-            System.out.println("create mv sql:" + sql);
-            try {
-                starRocksAssert.withMaterializedView(sql);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-    }
-
-    private static List<String> getSqlList(String dirName, List<String> fileNames) {
-        ClassLoader loader = MaterializedViewSSBTest.class.getClassLoader();
-        List<String> createTableSqlList = fileNames.stream().map(n -> {
-            System.out.println("file name:" + n);
-            try {
-                return CharStreams.toString(
-                        new InputStreamReader(
-                                Objects.requireNonNull(loader.getResourceAsStream(dirName + n + ".sql")),
-                                Charsets.UTF_8));
-            } catch (Throwable e) {
-                return null;
-            }
-        }).collect(Collectors.toList());
-        Assert.assertFalse(createTableSqlList.contains(null));
-        return createTableSqlList;
-    }
-
     @Ignore
     @Test
     public void testQuery1_1() {

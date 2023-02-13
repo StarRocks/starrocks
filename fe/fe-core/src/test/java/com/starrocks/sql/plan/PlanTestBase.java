@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.io.CharStreams;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -28,12 +29,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.MaterializedViewTPCHTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import kotlin.text.Charsets;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.AfterClass;
@@ -49,6 +52,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -1516,5 +1520,44 @@ public class PlanTestBase {
             zips.add(Pair.create(sqls.get(i), plans.get(i)));
         }
         return zips;
+    }
+
+    protected static void createTables(String dirName, List<String> fileNames) {
+        getSqlList(dirName, fileNames).forEach(createTblSql -> {
+            System.out.println("create table sql:" + createTblSql);
+            try {
+                starRocksAssert.withTable(createTblSql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    protected  static void createMaterializedViews(String dirName, List<String> fileNames) {
+        getSqlList(dirName, fileNames).forEach(sql -> {
+            System.out.println("create mv sql:" + sql);
+            try {
+                starRocksAssert.withMaterializedView(sql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    protected  static List<String> getSqlList(String dirName, List<String> fileNames) {
+        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+        List<String> createTableSqlList = fileNames.stream().map(n -> {
+            System.out.println("file name:" + n);
+            try {
+                return CharStreams.toString(
+                        new InputStreamReader(
+                                Objects.requireNonNull(loader.getResourceAsStream(dirName + n + ".sql")),
+                                Charsets.UTF_8));
+            } catch (Throwable e) {
+                return null;
+            }
+        }).collect(Collectors.toList());
+        Assert.assertFalse(createTableSqlList.contains(null));
+        return createTableSqlList;
     }
 }
