@@ -869,7 +869,7 @@ struct ArrowListConverter {
                                size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
                                ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         auto* col_array = down_cast<ArrayColumn*>(column);
-        UInt32Column* col_offsets = col_array->offsets_column().get() + column_start_idx;
+        UInt32Column* col_offsets = col_array->offsets_column().get();
 
         auto type_id = array->type_id();
         if (is_list(type_id)) {
