@@ -103,9 +103,7 @@ public class CreateTableAnalyzer {
         return charsetName;
     }
 
-    private static boolean isStatisticsTable(TableName tableNameObject) {
-        final String tableName = tableNameObject.getTbl();
-        final String dbName = tableNameObject.getDb();
+    public static boolean isStatisticsTable(String dbName, String tableName) {
         if (dbName == StatsConstants.STATISTICS_DB_NAME &&
                 (tableName == StatsConstants.SAMPLE_STATISTICS_TABLE_NAME ||
                 tableName == StatsConstants.FULL_STATISTICS_TABLE_NAME ||
@@ -119,12 +117,13 @@ public class CreateTableAnalyzer {
         final TableName tableNameObject = statement.getDbTbl();
         MetaUtils.normalizationTableName(context, tableNameObject);
 
+        final String tableName = tableNameObject.getTbl();
+        final String dbName = tableNameObject.getDb();
+
         if (Config.use_staros && context.getCurrentWarehouse() == null &&
-                !isStatisticsTable(tableNameObject)) {
+                !isStatisticsTable(dbName, tableName)) {
             throw new SemanticException("No warehouse selected");
         }
-
-        final String tableName = tableNameObject.getTbl();
 
         try {
             FeNameFormat.checkTableName(tableName);

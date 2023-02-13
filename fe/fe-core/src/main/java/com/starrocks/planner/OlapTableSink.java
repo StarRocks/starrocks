@@ -437,9 +437,7 @@ public class OlapTableSink extends DataSink {
                     if (table.isLakeTable()) {
                         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
                                 getWarehouse(currentWarehouse);
-                        com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().orElseThrow(
-                                () -> new UserException("no cluster exists in this warehouse")
-                        );
+                        com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
                         long workerGroupId = cluster.getWorkerGroupId();
                         locationParam.addToTablets(new TTabletLocation(
                                 tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId(workerGroupId))));

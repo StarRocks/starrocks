@@ -130,6 +130,10 @@ public class Warehouse implements Writable {
         this(0, null);
     }
 
+    public Cluster getAnyAvailableCluster() {
+        return clusters.values().stream().findFirst().get();
+    }
+
     public long getId() {
         return id;
     }

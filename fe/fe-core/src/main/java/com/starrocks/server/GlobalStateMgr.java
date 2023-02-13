@@ -279,6 +279,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -303,9 +304,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -3669,5 +3672,17 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public Warehouse getAnyAvailableWarehouse() throws DdlException {
+        // TODO: choose a cluster whose state is ready
+        List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().values().stream().
+                filter(warehouse -> warehouse.getClusters().size() > 0).collect(Collectors.toList());
+
+        if (warehouseList.isEmpty()) {
+            throw new DdlException("no warehouse exists");
+        }
+        return warehouseList.get(ThreadLocalRandom.current().
+                nextInt(warehouseList.size()) % warehouseList.size());
     }
 }
