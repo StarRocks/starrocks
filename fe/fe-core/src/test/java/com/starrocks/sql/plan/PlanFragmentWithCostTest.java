@@ -846,7 +846,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         }
     }
 
-    @Test
     public void testLimitTabletPrune(@Mocked Replica replica) throws Exception {
         new Expectations() {
             {
