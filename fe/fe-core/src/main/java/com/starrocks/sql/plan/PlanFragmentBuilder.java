@@ -1298,9 +1298,12 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
+
             return sourceFragment;
         }
 
+<<<<<<< HEAD
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -1314,6 +1317,63 @@ public class PlanFragmentBuilder {
              */
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
+=======
+        /**
+         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
+         * <p>
+         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+         * local shuffle partition exprs.
+         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+         * <p>
+         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+         * - OlapScanNode only has one tablet after pruned.
+         * - It is executed on the single BE.
+         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+         * local shuffle partition exprs.
+         *
+         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
+         */
+        private void clearOlapScanNodePartitions(PlanNode root) {
+            if (root instanceof OlapScanNode) {
+                OlapScanNode scanNode = (OlapScanNode) root;
+                scanNode.setBucketExprs(Lists.newArrayList());
+                scanNode.setBucketColumns(Lists.newArrayList());
+                return;
+            }
+
+            if (root instanceof ExchangeNode) {
+                return;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                clearOlapScanNodePartitions(child);
+            }
+        }
+
+        private static class AggregateExprInfo {
+            public final ArrayList<Expr> groupExpr;
+            public final ArrayList<FunctionCallExpr> aggregateExpr;
+            public final ArrayList<Expr> partitionExpr;
+            public final ArrayList<Expr> intermediateExpr;
+
+            public AggregateExprInfo(ArrayList<Expr> groupExpr, ArrayList<FunctionCallExpr> aggregateExpr,
+                                     ArrayList<Expr> partitionExpr,
+                                     ArrayList<Expr> intermediateExpr) {
+                this.groupExpr = groupExpr;
+                this.aggregateExpr = aggregateExpr;
+                this.partitionExpr = partitionExpr;
+                this.intermediateExpr = intermediateExpr;
+            }
+        }
+
+        private AggregateExprInfo buildAggregateTuple(
+                Map<ColumnRefOperator, CallOperator> aggregations,
+                List<ColumnRefOperator> groupBys,
+                List<ColumnRefOperator> partitionBys,
+                TupleDescriptor outputTupleDesc,
+                ExecPlan context) {
+>>>>>>> ceae8e25e ([BugFix] Clear olap scan bucket exprs correctly (#17666))
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
             // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
             // the group-by expressions just denote the hash distribution of an exchange operator.
@@ -1500,7 +1560,9 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
+                if (optExpr.getLogicalProperty().isExecuteInOneTablet()) {
+                    clearOlapScanNodePartitions(aggregationNode);
+                }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
