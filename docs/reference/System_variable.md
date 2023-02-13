@@ -23,7 +23,7 @@ Variables can generally be set to take effect **globally** or **only on the curr
 A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
 
 ```SQL
-SET exec_mem_limit = 137438953472;
+SET query_mem_limit = 137438953472;
 
 SET forward_to_master = true;
 
@@ -33,7 +33,7 @@ SET time_zone = "Asia/Shanghai";
 A variable set by the `SET GLOBAL var_name=xxx;` statement takes effect globally. For example:
 
 ```SQL
-SET GLOBAL exec_mem_limit = 137438953472;
+SET GLOBAL query_mem_limit = 137438953472;
 ```
 
 > Note: Only ADMIN users can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
@@ -42,7 +42,7 @@ Variables that can be set both globally or partially effective include:
 
 * batch_size
 * disable_streaming_preaggregations
-* exec_mem_limit
+* query_mem_limit
 * force_streaming_aggregate
 * enable_profile
 * hash_join_push_down_right_table
@@ -63,7 +63,7 @@ Variables that can only be set globally effective include:
 In addition, variable settings also support constant expressions, such as:
 
 ```SQL
-SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
+SET query_mem_limit = 10 * 1024 * 1024 * 1024;
 ```
 
  ```SQL
@@ -75,7 +75,7 @@ SET forward_to_master = concat('tr', 'u', 'e');
 In some scenarios, we may need to set variables specifically for certain queries. By using `SET_VAR`, it is possible to set session variables that will only take effect within a single statement. For example:
 
 ```sql
-SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
+SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
@@ -136,16 +136,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * event_scheduler
 
   Used for MySQL client compatibility. No practical usage.
-
-* exec_mem_limit
-
-  Used to set the memory limit that can be used by a single query plan instance. The default value is 2GB, and the default unit is B. `B/K/KB/M/MB/G/GB/T/TB/P/PB` are supported.
-
-  There may be multiple instances of a query plan, and a BE node may execute one or more instances. Therefore, this parameter does not accurately limit the memory usage of a query across the cluster, nor does it accurately limit the memory usage of a query on a single BE node. It needs to be evaluated based on the generated query plan.
-
-  Usually, more memory is consumed on blocking nodes (e.g. Sort Node, Aggregate Node, Join Node). Unblocking nodes (e.g. Scan Node) transmit data in stream, which does not take up too much memory.
-
-  When there is a `Memory Exceed Limit` error, try to increase this parameter.
 
 * force_streaming_aggregate
 
@@ -239,7 +229,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * load_mem_limit
 
-  Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `exec_mem_limit` is used instead.
+  Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `query_mem_limit` is used instead.
 
   This variable is only used for the `INSERT` operation which involves both query and import. If the user does not set this variable, the memory limit for both query and import will be set as `exec_mem_limit`. Otherwise, the memory limit for query will be set as `exec_mem_limit` and the memory limit for import will be as `load_mem_limit`.
 
@@ -307,6 +297,12 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * query_cache_type
 
   Used for compatibility with JDBC connection pool C3P0. No practical use.
+  
+* query_mem_limit
+
+  Used to set the memory limit of a query on each backend node. The default value is 0, which means no limit for it. Units including `B/K/KB/M/MB/G/GB/T/TB/P/PB` are supported.
+
+  When the `Memory Exceed Limit` error happens, you could try to increase this parameter.
 
 * query_queue_concurrency_limit
 
