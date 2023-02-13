@@ -221,6 +221,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   This feature is supported from v2.5.
 
+* group_concat_max_len
+
+  Used for compatibility with MySQL. No practical usage. Default: 65535
+
 * enable_populate_block_cache
   
   Whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.

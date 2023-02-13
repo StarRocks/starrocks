@@ -345,6 +345,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
 
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -862,6 +864,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private String activateAllRolesOnLogin = "OFF";
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
 
     public boolean isActivateAllRolesOnLogin() {
         if (activateAllRolesOnLogin.equals("ON")) {
