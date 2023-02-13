@@ -2,7 +2,7 @@ FROM centos:7
 
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 
-RUN yum install -y tzdata openssl curl vim ca-certificates fontconfig gzip tar mysql java-11-openjdk
+RUN yum install -y tzdata openssl curl vim ca-certificates fontconfig gzip tar mysql java-11-openjdk less
 
 COPY output/be /opt/starrocks/be/
 Copy docker/bin/be_entrypoint.sh docker/bin/be_prestop.sh /opt/starrocks/
