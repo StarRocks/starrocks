@@ -25,7 +25,7 @@ CurrentThread::~CurrentThread() {
         tls_is_thread_status_init = false;
         return;
     }
-    commit();
+    commit(true);
     tls_is_thread_status_init = false;
 }
 

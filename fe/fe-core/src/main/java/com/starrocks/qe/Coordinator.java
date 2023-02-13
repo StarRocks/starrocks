@@ -1623,7 +1623,8 @@ public class Coordinator {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
                     if (!foundResultSink & operatorProfile.getName().contains("RESULT_SINK")) {
                         long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                        Counter executionTotalTime = queryProfile.addCounter("ExecutionWallTime", TUnit.TIME_NS, null);
+                        Counter executionTotalTime =
+                                queryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
                         queryProfile.getCounterTotalTime().setValue(0);
                         executionTotalTime.setValue(executionWallTime);
                         foundResultSink = true;
@@ -1661,10 +1662,11 @@ public class Coordinator {
         queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
         queryProfile.getCounterTotalTime().setValue(0);
 
-        long memCostBytes = statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes;
-        long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
-        queryProfile.addInfoString("QueryCumulativeCpuTime", DebugUtil.getPrettyStringNs(cpuCostNs));
-        queryProfile.addInfoString("MachinePeakMemoryUsage", DebugUtil.getPrettyStringBytes(memCostBytes));
+        Counter queryCumulativeCpuTime = queryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
+        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs);
+        Counter queryPeakMemoryUsage = queryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
+        queryPeakMemoryUsage.setValue(
+                statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes);
     }
 
     /**
