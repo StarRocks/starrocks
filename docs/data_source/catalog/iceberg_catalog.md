@@ -328,9 +328,9 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-## View the schema of a table
+## View the schema of an Iceberg table
 
-You can use one of the following syntaxes to view the schema of a table:
+You can use one of the following syntaxes to view the schema of an Iceberg table:
 
 - View schema
 
@@ -443,7 +443,7 @@ You can enable automatic incremental update for a single Iceberg catalog or for 
   );
   ```
 
-- To enable automatic incremental update for all Iceberg catalogs, add the `enable_hms_events_incremental_sync` parameter to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
+- To enable automatic incremental update for all Iceberg catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
 
 You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
 
@@ -463,7 +463,7 @@ By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_fi
 For example, there is an Iceberg table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
 
 - The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1`is 60 seconds.
+- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
 - The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
 - The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
 
