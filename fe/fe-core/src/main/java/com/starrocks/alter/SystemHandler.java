@@ -51,6 +51,26 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.CreateImageClause;
+import com.starrocks.sql.ast.DecommissionBackendClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.DropFollowerClause;
+import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
@@ -191,6 +211,8 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
+        } else if (alterClause instanceof CreateImageClause) {
+            GlobalStateMgr.getCurrentState().triggerNewImage();
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }

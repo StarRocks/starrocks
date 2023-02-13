@@ -453,7 +453,26 @@ showCatalogsStatement
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
+<<<<<<< HEAD
     : createIndexClause
+=======
+    //Alter system clause
+    : addFrontendClause
+    | dropFrontendClause
+    | modifyFrontendHostClause
+    | addBackendClause
+    | dropBackendClause
+    | decommissionBackendClause
+    | modifyBackendHostClause
+    | addComputeNodeClause
+    | dropComputeNodeClause
+    | modifyBrokerClause
+    | alterLoadErrorUrlClause
+    | createImageClause
+
+    //Alter table clause
+    | createIndexClause
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
     | dropIndexClause
     | tableRenameClause
     | addBackendClause
@@ -482,6 +501,19 @@ addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
 
+<<<<<<< HEAD
+=======
+alterLoadErrorUrlClause
+    : SET LOAD ERRORS HUB properties?
+    ;
+
+createImageClause
+    : CREATE IMAGE
+    ;
+
+// ---------Alter table clause---------
+
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
 createIndexClause
     : ADD INDEX indexName=identifier identifierList indexType? comment?
     ;
@@ -1432,8 +1464,13 @@ nonReserved
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
+<<<<<<< HEAD
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+=======
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
+    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE

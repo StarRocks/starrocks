@@ -14,6 +14,18 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.BackendClause;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.ComputeNodeClause;
+import com.starrocks.sql.ast.CreateImageClause;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.FrontendClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+>>>>>>> 8e3783863 ([Feature] Support triggering a new image manually (#17676))
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
@@ -70,6 +82,11 @@ public class AlterSystemStmtAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException("frontend host or port is wrong!");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateImageClause(CreateImageClause createImageClause, ConnectContext context) {
             return null;
         }
 
