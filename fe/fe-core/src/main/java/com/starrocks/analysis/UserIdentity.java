@@ -118,7 +118,6 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     }
 
     public String getQualifiedUser() {
-        Preconditions.checkState(isAnalyzed);
         return realUser;
     }
 

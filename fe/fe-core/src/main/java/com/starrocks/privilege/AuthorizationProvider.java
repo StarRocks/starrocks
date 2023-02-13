@@ -40,8 +40,6 @@ public interface AuthorizationProvider {
      */
     ObjectType getTypeNameByPlural(String plural) throws PrivilegeException;
 
-    String getPlural(ObjectType objectType) throws PrivilegeException;
-
     /**
      * generate PEntryObject by tokenlist
      */

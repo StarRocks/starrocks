@@ -36,12 +36,9 @@ import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -54,7 +51,6 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
-import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -65,7 +61,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -239,11 +234,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
                         .getFunction(searchDesc);
                 if (function == null) {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(function.signatureString())
                     );
@@ -253,12 +248,12 @@ public class PrivilegeStmtAnalyzerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(name.getDb());
             Function function = db.getFunction(searchDesc);
             if (null == function) {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
@@ -301,7 +296,7 @@ public class PrivilegeStmtAnalyzerV2 {
                         stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectType(), userIdentity));
+                            objectList.add(privilegeManager.generateUserObject(stmt.getObjectType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
@@ -322,10 +317,10 @@ public class PrivilegeStmtAnalyzerV2 {
                                 }
 
                                 tokensWithDatabase.add(tokens.get(0));
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(),
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(),
                                         tokensWithDatabase));
                             } else {
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(), tokens));
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
                             }
                         }
                     } else if (stmt.getFunctionArgsDef() != null) {
@@ -356,10 +351,10 @@ public class PrivilegeStmtAnalyzerV2 {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
-                                objectList.add(privilegeManager.analyzeUserObject(objectType, null));
+                                objectList.add(privilegeManager.generateUserObject(objectType, null));
                             }
                         } else {
-                            objectList.add(privilegeManager.analyzeObject(objectType, stmt.getTokens()));
+                            objectList.add(privilegeManager.generateObject(objectType, stmt.getTokens()));
                         }
                     }
                     stmt.setObjectList(objectList);
@@ -378,31 +373,6 @@ public class PrivilegeStmtAnalyzerV2 {
                 }
 
                 stmt.setPrivilegeTypes(privilegeTypes);
-
-
-                if (stmt instanceof RevokePrivilegeStmt) {
-                    RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) stmt;
-
-                    if (stmt.getUserIdentity() != null) {
-                        UserPrivilegeCollection userPrivilegeCollection =
-                                privilegeManager.getUserPrivilegeCollectionUnlocked(stmt.getUserIdentity());
-
-                        Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> m =
-                                userPrivilegeCollection.getTypeToPrivilegeEntryList();
-                        List<PrivilegeCollection.PrivilegeEntry> l = m.get(stmt.getObjectType());
-                        for (PrivilegeCollection.PrivilegeEntry p : l) {
-                            pri
-                        }
-
-
-
-                    } else {
-                        RolePrivilegeCollection rolePrivilegeCollection = privilegeManager.getRolePrivilegeCollectionUnlocked(
-                                        privilegeManager.getRoleIdByNameAllowNull(stmt.getRole()), true);
-                    }
-
-                }
-
 
                 privilegeManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList());
             } catch (PrivilegeException | AnalysisException e) {
