@@ -76,7 +76,7 @@ public:
 
 private:
     static Status do_create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         std::unique_ptr<ColumnReader>* reader);
+                            std::unique_ptr<ColumnReader>* reader);
 };
 
 } // namespace starrocks::parquet

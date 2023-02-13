@@ -117,9 +117,7 @@ public:
         return _reader->get_dict_codes(dict_values, dict_codes);
     }
 
-    void set_need_parse_levels(bool need_parse_levels) override {
-        _reader->set_need_parse_levels(need_parse_levels);
-    }
+    void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
 private:
     const ColumnReaderOptions& _opts;
@@ -429,7 +427,7 @@ private:
         if (rep_levels != nullptr) {
             // It's a RepeatedStoredColumnReader
             size_t rows = 0;
-            for(size_t i = 0; i < num_levels; i++) {
+            for (size_t i = 0; i < num_levels; i++) {
                 if (def_levels[i] < level_info.immediate_repeated_ancestor_def_level ||
                     rep_levels[i] > level_info.max_rep_level) {
                     continue;
@@ -448,7 +446,7 @@ private:
         } else {
             // For OptionalStoredColumnReader, num_levels is equal to num_rows
             DCHECK(num_rows == num_levels);
-            for(size_t i = 0; i < num_levels; i++) {
+            for (size_t i = 0; i < num_levels; i++) {
                 if (def_levels[i] >= level_info.max_def_level) {
                     is_nulls[i] = 0;
                 } else {
@@ -477,8 +475,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     return Status::OK();
 }
 
-Status ColumnReader::do_create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                            std::unique_ptr<ColumnReader>* output) {
+Status ColumnReader::do_create(const ColumnReaderOptions& opts, const ParquetField* field,
+                               const TypeDescriptor& col_type, std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
