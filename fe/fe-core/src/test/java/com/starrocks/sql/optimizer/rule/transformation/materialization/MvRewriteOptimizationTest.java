@@ -1025,7 +1025,17 @@ public class MvRewriteOptimizationTest {
                 " where t0.v1 < 100" +
                 " group by alias, test_all_type.t1d";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertNotContains(plan5, "agg_join_mv_1");
+        PlanTestBase.assertContains(plan5, "agg_join_mv_1");
+        PlanTestBase.assertContains(plan5, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(19: total_sum), sum(20: total_num)\n" +
+                "  |  group by: 23: add, 17: v1");
+        PlanTestBase.assertContains(plan5, "  1:Project\n" +
+                "  |  <slot 17> : 17: v1\n" +
+                "  |  <slot 18> : 18: t1d\n" +
+                "  |  <slot 19> : 19: total_sum\n" +
+                "  |  <slot 20> : 20: total_num\n" +
+                "  |  <slot 23> : 17: v1 + 1");
+
 
         dropMv("test", "agg_join_mv_1");
 
@@ -1183,7 +1193,7 @@ public class MvRewriteOptimizationTest {
         // abs(empid) can not be rewritten
         String query21 = "select abs(empid), sum(salary) from emps group by empid";
         String plan21 = getFragmentPlan(query21);
-        PlanTestBase.assertNotContains(plan21, "agg_mv_8");
+        PlanTestBase.assertContains(plan21, "agg_mv_8");
 
         // count(salary) + 1 cannot be rewritten
         String query22 = "select sum(salary), count(salary) + 1 from emps";
@@ -1379,13 +1389,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan1, "0:UNION\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE");
-        PlanTestBase.assertContains(plan1, "4:Project\n" +
-                "  |  <slot 13> : 5: empid\n" +
-                "  |  <slot 14> : 6: deptno\n" +
-                "  |  <slot 15> : 7: name\n" +
-                "  |  <slot 16> : 8: salary\n" +
-                "  |  \n" +
-                "  3:OlapScanNode\n" +
+        PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
         PlanTestBase.assertContains(plan1, "1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
