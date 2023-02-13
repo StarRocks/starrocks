@@ -53,7 +53,7 @@ class ThreadPool;
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
-    explicit AgentServer(ExecEnv* exec_env);
+    explicit AgentServer(ExecEnv* exec_env, bool is_compute_node);
 
     ~AgentServer();
 
