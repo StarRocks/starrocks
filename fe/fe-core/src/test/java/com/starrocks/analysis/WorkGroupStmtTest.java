@@ -665,7 +665,7 @@ public class WorkGroupStmtTest {
 
         // Prefer the short query group regardless its classifier weight is the lowest.
         String qualifiedUser = "rt_rg_user";
-        long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster::db1").getId();
+        long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
         Set<Long> dbs = ImmutableSet.of(dbId);
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
