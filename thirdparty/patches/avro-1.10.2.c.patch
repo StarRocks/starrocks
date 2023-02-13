@@ -6,12 +6,12 @@
  project(AvroC C)
 -enable_testing()
 +# enable_testing()
-
+ 
  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR})
-
-@@ -136,12 +136,14 @@ include_directories(${AvroC_SOURCE_DIR}/src)
-
-
+ 
+@@ -136,12 +136,14 @@ include_directories(${AvroC_SOURCE_DIR}/
+ 
+ 
  # Enable codecs
 -
 +set ( ZLIB_INCLUDE_DIR $ENV{TP_INSTALL_DIR}/include )
@@ -29,7 +29,7 @@
 @@ -149,17 +151,17 @@ else (ZLIB_FOUND)
      message("Disabled deflate codec. zlib not found.")
  endif (ZLIB_FOUND)
-
+ 
 -find_package(Snappy)
 -if (SNAPPY_FOUND AND ZLIB_FOUND)  # Snappy borrows crc32 from zlib
 -    set(SNAPPY_PKG libsnappy)
@@ -52,12 +52,12 @@
 +#     set(SNAPPY_LIBRARIES "")
 +#     message("Disabled snappy codec. libsnappy not found or zlib not found.")
 +# endif (SNAPPY_FOUND AND ZLIB_FOUND)
-
+ 
  find_package(PkgConfig)
  pkg_check_modules(LZMA liblzma)
-@@ -179,11 +181,14 @@ set(CODEC_LIBRARIES ${ZLIB_LIBRARIES} ${LZMA_LIBRARIES} ${SNAPPY_LIBRARIES})
+@@ -179,11 +181,14 @@ set(CODEC_LIBRARIES ${ZLIB_LIBRARIES} ${
  set(CODEC_PKG "@ZLIB_PKG@ @LZMA_PKG@ @SNAPPY_PKG@")
-
+ 
  # Jansson JSON library
 -pkg_check_modules(JANSSON jansson>=2.3)
 +# pkg_check_modules(JANSSON jansson>=2.3)
@@ -74,11 +74,11 @@
      message(FATAL_ERROR "libjansson >=2.3 not found")
  endif (JANSSON_FOUND)
 @@ -191,7 +196,7 @@ endif (JANSSON_FOUND)
-
+ 
  add_subdirectory(src)
  add_subdirectory(examples)
 -add_subdirectory(tests)
 +# add_subdirectory(tests)
  add_subdirectory(docs)
-
+ 
  add_custom_target(pretty
