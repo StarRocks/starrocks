@@ -5,7 +5,7 @@
 #include <fmt/format.h>
 #include "gutil/strings/substitute.h"
 #include "common/logging.h"
-#include "star_cache/util.h"
+#include "star_cache/utils.h"
 #include "star_cache/block_item.h"
 #include "star_cache/lru_eviction_policy.h"
 #include "star_cache/disk_space_manager.h"
@@ -32,38 +32,39 @@ Status DiskCache::init(const DiskCacheOptions& options) {
     return Status::OK();
 }
 
-Status DiskCache::write_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block,
-                              const IOBuf& buf) const {
-    if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
+Status DiskCache::write_block(const CacheId& cache_id, DiskBlockPtr block, const BlockSegment& segment) const {
+    if (UNLIKELY(segment.offset % config::FLAGS_slice_size != 0)) {
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::FLAGS_slice_size));
     }
 
     if (config::FLAGS_enable_disk_checksum) {
-        _update_block_checksum(block, offset_in_block, buf);
+        _update_block_checksum(block, segment);
     }
-    auto st =  _space_manager->write_block({ block->dir_index, block->block_index }, offset_in_block, buf);
+    auto st =  _space_manager->write_block({ block->dir_index, block->block_index }, segment.offset, segment.buf);
     return st;
 }
 
-Status DiskCache::read_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block, size_t size,
-                             IOBuf* buf) const {
+Status DiskCache::read_block(const CacheId& cache_id, DiskBlockPtr block, BlockSegment* segment) const {
     auto handle = evict_touch(cache_id);
-    if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
+    if (UNLIKELY(segment->offset % config::FLAGS_slice_size != 0)) {
+        DCHECK(false);
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::FLAGS_slice_size));
     }
 
-    Status st = _space_manager->read_block({ block->dir_index, block->block_index }, offset_in_block, size, buf);
+    Status st = _space_manager->read_block({ block->dir_index, block->block_index }, segment->offset,
+                                          segment->size, &(segment->buf));
     RETURN_IF_ERROR(st);
 
-    if (UNLIKELY(config::FLAGS_enable_disk_checksum && !_check_block_checksum(block, offset_in_block, *buf))) {
+    if (UNLIKELY(config::FLAGS_enable_disk_checksum && !_check_block_checksum(block, *segment))) {
         return Status::DataQualityError(
                 strings::Substitute("fail to verify checksum for cache: $0", cache_id));
     }
     return Status::OK();
 }
 
+/*
 Status DiskCache::writev_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block,
                                const std::vector<IOBuf*>& bufv) const {
     if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
@@ -100,24 +101,40 @@ Status DiskCache::readv_block(const CacheId& cache_id, DiskBlockPtr block, off_t
     }
     return Status::OK();
 }
+*/
 
-void DiskCache::_update_block_checksum(DiskBlockPtr block, off_t offset_in_block, const IOBuf& buf) const {
+void DiskCache::_update_block_checksum(DiskBlockPtr block, const BlockSegment& segment) const {
     const uint32_t slice_size = config::FLAGS_slice_size;
-    for (off_t off = 0; off < buf.size(); off += slice_size) {
-        int index = off2slice(offset_in_block + off);
+    for (off_t off = 0; off < segment.size; off += slice_size) {
+        int index = off2slice(segment.offset + off);
+        size_t size = std::min(slice_size, static_cast<uint32_t>(segment.size - off));
         IOBuf slice_buf;
-        buf.append_to(&slice_buf, slice_size, off);
+        segment.buf.append_to(&slice_buf, size, off);
         block->checksums[index] = crc32(slice_buf);
+        STAR_VLOG << "update checksum for block: " << block.get()
+                  << ", slice index: " << index
+                  << ", checksum: " << block->checksums[index]
+                  << ", buf size: " << slice_buf.size()
+                  << ", head char: " << slice_buf.to_string()[0]
+                  << ", file block index: " << block->block_index;
     }
 }
 
-bool DiskCache::_check_block_checksum(DiskBlockPtr block, off_t offset_in_block, const IOBuf& buf) const {
+bool DiskCache::_check_block_checksum(DiskBlockPtr block, const BlockSegment& segment) const {
     const uint32_t slice_size = config::FLAGS_slice_size;
-    for (off_t off = 0; off < buf.size(); off += slice_size) {
-        int index = off2slice(offset_in_block + off);
+    for (off_t off = 0; off < segment.size; off += slice_size) {
+        int index = off2slice(segment.offset + off);
+        size_t size = std::min(slice_size, static_cast<uint32_t>(segment.size - off));
         IOBuf slice_buf;
-        buf.append_to(&slice_buf, slice_size, off);
+        segment.buf.append_to(&slice_buf, size, off);
         if (block->checksums[index] != crc32(slice_buf)) {
+            LOG(ERROR) << "fail to check checksum for block: " << block.get()
+                       << ", slice index: " << index
+                       << ", expected: " << block->checksums[index]
+                       << ", real: " << crc32(slice_buf)
+                       << ", buf size: " << slice_buf.size()
+                       << ", head char: " << slice_buf.to_string()[0]
+                       << ", file block index: " << block->block_index;
             return false;
         }
     }
@@ -141,8 +158,8 @@ DiskBlockPtr DiskCache::new_block_item(const CacheId& cache_id) const {
     return block_item;
 }
 
-void DiskCache::evict_track(const CacheId& id) const {
-    _eviction_policy->add(id);
+void DiskCache::evict_track(const CacheId& id, size_t size) const {
+    _eviction_policy->add(id, size);
 }
 
 void DiskCache::evict_untrack(const CacheId& id) const {

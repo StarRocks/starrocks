@@ -29,7 +29,7 @@ public:
     virtual ~EvictionPolicy() = default;
 
 	// Add the given id to the evict component
-	virtual bool add(const T& id) = 0;
+	virtual bool add(const T& id, size_t size) = 0;
 
 	// Record the hit of the id
 	virtual HandlePtr touch(const T& id) = 0;

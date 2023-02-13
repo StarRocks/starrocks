@@ -4,12 +4,14 @@
 
 #include <gtest/gtest.h>
 #include <cstring>
+#include <butil/fast_rand.h>
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "util/logging.h"
 #include "fs/fs_util.h"
 #include "star_cache/types.h"
 #include "star_cache/common/config.h"
+#include "star_cache/sharded_lock_manager.h"
 
 namespace starrocks::starcache {
 
@@ -35,7 +37,7 @@ TEST_F(StarCacheTest, hybrid_cache) {
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t obj_size = 4 * config::FLAGS_block_size;
+    const size_t obj_size = 4 * config::FLAGS_block_size + 123;
     const size_t rounds = 10;
     const std::string cache_key = "test_file";
 
@@ -53,7 +55,7 @@ TEST_F(StarCacheTest, hybrid_cache) {
         IOBuf expect_buf = gen_iobuf(obj_size, ch);
         IOBuf buf;
         Status st = cache->get(cache_key + std::to_string(i), &buf);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.get_error_msg();
         ASSERT_EQ(buf, expect_buf);
     }
 
@@ -65,19 +67,34 @@ TEST_F(StarCacheTest, hybrid_cache) {
         IOBuf expect_buf = gen_iobuf(batch_size, ch);
         IOBuf buf;
         Status st = cache->read(cache_key + std::to_string(i), offset, batch_size, &buf);
-        ASSERT_TRUE(st.ok());
+        ASSERT_TRUE(st.ok()) << st.get_error_msg();
+        ASSERT_EQ(buf, expect_buf);
+    }
+    for (size_t i = 0; i < rounds; ++i) {
+        off_t off = butil::fast_rand_less_than(obj_size);
+        size_t size = butil::fast_rand_less_than(obj_size - off);
+        LOG(INFO) << "random read, offset: " << off << ", size: " << size;
+        if (size == 0) {
+            continue;
+        }
+        char ch = 'a' + i % 26;
+        IOBuf expect_buf = gen_iobuf(size, ch);
+        IOBuf buf;
+        Status st = cache->read(cache_key + std::to_string(i), off, size, &buf);
+        ASSERT_TRUE(st.ok()) << st.get_error_msg();
         ASSERT_EQ(buf, expect_buf);
     }
 
     // remove cache
     std::string key_to_remove = cache_key + std::to_string(0);
     status = cache->remove(key_to_remove);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
     IOBuf buf;
     status = cache->get(key_to_remove, &buf);
     ASSERT_TRUE(status.is_not_found());
 }
+
 } // namespace starrocks::starcache
 
 int main(int argc, char** argv) {

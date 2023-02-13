@@ -18,27 +18,40 @@ struct CacheItem {
     // An unique id generated internally
     // CacheId cache_id;
     // A key string passed by api
-    std::string cache_key;
+    CacheKey cache_key;
     // The block lists belong to this cache item
     BlockItem* blocks;
-    // The block count of this cache item
-    uint32_t block_count;
     // The cache object size
     size_t size;
     // The expire time of this cache item
     uint64_t expire_time;
 
     CacheItem() {}
-    CacheItem(const std::string& cache_key_, uint32_t block_count_, size_t size_, uint64_t expire_time_)
+    CacheItem(const CacheKey& cache_key_, size_t size_, uint64_t expire_time_)
         : cache_key(cache_key_)
-        , block_count(block_count_)
         , size(size_)
         , expire_time(expire_time_)
         , _state(0) {
-        blocks = new BlockItem[block_count];
+        blocks = new BlockItem[block_count()];
     }
     ~CacheItem() {
         delete[] blocks;
+    }
+
+    size_t block_count() {
+        if (size == 0) {
+            return 0;
+        }
+        return (size - 1) / config::FLAGS_block_size + 1;
+    }
+
+    size_t block_size(uint32_t block_index) {
+        int64_t tail_size = size - block_index * config::FLAGS_block_size;
+        DCHECK(tail_size >= 0);
+        if (tail_size < config::FLAGS_block_size) {
+            return tail_size;
+        }
+        return config::FLAGS_block_size;
     }
 
     void set_state(const CacheState& state) {

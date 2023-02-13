@@ -190,6 +190,7 @@ int main(int argc, char** argv) {
         cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+        cache_options.engine = starrocks::config::block_cache_engine;
         cache->init(cache_options);
     }
 #endif

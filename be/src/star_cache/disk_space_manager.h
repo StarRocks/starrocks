@@ -8,7 +8,7 @@
 #include <butil/memory/singleton.h>
 #include <boost/dynamic_bitset.hpp>
 #include "common/statusor.h"
-#include "star_cache/util.h"
+#include "star_cache/utils.h"
 #include "star_cache/block_file.h"
 
 namespace starrocks::starcache {
@@ -104,7 +104,7 @@ public:
 
 private:
     std::vector<DirWeight> _dir_weights;
-    std::shared_mutex _mutex;
+    std::mutex _mutex;
 };
 
 class DiskSpaceManager {

@@ -6,15 +6,15 @@
 
 namespace starrocks::starcache::config {
 
-DECLARE_uint32(block_size);
+DECLARE_uint64(block_size);
 DECLARE_uint64(slice_size);
 DECLARE_uint64(block_file_size);
 
 DECLARE_bool(pre_allocate_block_file);
 DECLARE_bool(enable_disk_checksum);
 
-DECLARE_uint32(mem_evict_batch);
-DECLARE_uint32(disk_evict_batch);
+DECLARE_uint32(mem_evict_times);
+DECLARE_uint32(disk_evict_times);
 
 DECLARE_uint32(max_retry_when_allocate);
 
@@ -28,5 +28,6 @@ DECLARE_uint32(io_align_unit_size);
 
 DECLARE_uint32(access_index_shard_bits);
 DECLARE_uint32(sharded_lock_shard_bits);
+DECLARE_uint32(lru_container_shard_bits);
     
 } // namespace starrocks::starcache

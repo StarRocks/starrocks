@@ -14,21 +14,35 @@ void MemSpaceManager::add_cache_zone(void* base_addr, size_t size) {
     _quota_bytes += size;
 }
 
-bool MemSpaceManager::inc_mem(size_t size) {
-    static size_t upper_threshold = _quota_bytes * 9 / 10;
-    size_t old_used_bytes = _used_bytes;
-    size_t new_used_bytes = 0;
-    do {
-        new_used_bytes = old_used_bytes + size;
-        if (new_used_bytes > upper_threshold) {
-            return false;
-        }
-    } while (!_used_bytes.compare_exchange_weak(old_used_bytes, new_used_bytes));
-    return true;
+bool MemSpaceManager::inc_mem(size_t size, bool urgent) {
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    if (urgent && _private_quota_bytes >= size) {
+        _private_quota_bytes -= size;
+        _used_bytes += size;
+        return true;
+    }
+
+    size_t public_quota_bytes = _quota_bytes - _private_quota_bytes;
+    size_t upper_threshold = public_quota_bytes * 9 / 10;
+    if (_used_bytes + size < upper_threshold) {
+        _used_bytes += size;
+        return true;
+    }
+
+    _need_bytes += size;
+    return false;
 }
 
 void MemSpaceManager::dec_mem(size_t size) {
     // TODO: free the segment from shared memory area
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    if (_need_bytes >= size) {
+        _private_quota_bytes += size;
+        _need_bytes -= size;
+    } else {
+        _private_quota_bytes += _need_bytes;
+        _need_bytes = 0;
+    }
     _used_bytes -= size;
 }
 

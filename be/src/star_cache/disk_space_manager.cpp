@@ -127,12 +127,12 @@ void CacheDirRouter::add_dir(CacheDirPtr dir) {
         .weight = dir->quota_bytes(),
         .cur_weight = 0
     };
-    std::unique_lock<std::shared_mutex> write_lock;
+    std::unique_lock<std::mutex> lck(_mutex);
     _dir_weights.emplace_back(dw);
 }
 
 void CacheDirRouter::remove_dir(uint8_t dir_index) {
-    std::unique_lock<std::shared_mutex> write_lock;
+    std::unique_lock<std::mutex> lck(_mutex);
     std::vector<DirWeight>::iterator iter = _dir_weights.begin();
     while (iter != _dir_weights.end()) {
         if (iter->index == dir_index) {
@@ -147,7 +147,7 @@ void CacheDirRouter::remove_dir(uint8_t dir_index) {
 
 // nginx smooth weighted round-robin balancing algorithm
 int CacheDirRouter::next_dir_index() {
-    std::shared_lock<std::shared_mutex> read_lock;
+    std::unique_lock<std::mutex> lck(_mutex);
     if (_dir_weights.empty()) {
         return -1;
     }
@@ -180,6 +180,7 @@ Status DiskSpaceManager::alloc_block(BlockId* block_id) {
         int dir_index = _cache_dir_router.next_dir_index();
         // all disks are full
         if (dir_index == -1) {
+            DCHECK(false);
             break;
         }
 

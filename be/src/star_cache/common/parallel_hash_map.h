@@ -8,9 +8,10 @@
 
 namespace starrocks::starcache {
 
-static const size_t hash_map_shard_bits = 5;    // 32 shards
-
-template <typename K, typename V>
+// K: key
+// V: value
+// N: shard bits of the hash map
+template <typename K, typename V, uint32_t N = 5>
 class ParallelHashMap {
 public:
     bool insert(const K& key, const V& value) {
@@ -36,7 +37,7 @@ private:
     using PMap = phmap::parallel_flat_hash_map<K, V, phmap::priv::hash_default_hash<K>,
                                                     phmap::priv::hash_default_eq<K>,
                                                     std::allocator<std::pair<const K, V>>,
-                                                    hash_map_shard_bits, std::shared_mutex>;
+                                                    N, std::shared_mutex>;
 
     PMap _kv;
 };

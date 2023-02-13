@@ -31,6 +31,8 @@ public:
     Status readv(off_t offset, const std::vector<size_t>& sizev, std::vector<IOBuf*>* bufv);
 
 private:
+    Status _report_io_error(const std::string& err_desc);
+
     std::string _file_path;
     size_t _quota_bytes;
     int _fd;

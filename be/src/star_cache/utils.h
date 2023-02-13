@@ -10,6 +10,8 @@
 
 namespace starrocks::starcache {
 
+uint64_t cachekey2id(const CacheKey& key);
+
 inline int off2block(off_t offset) {
     return offset / config::FLAGS_block_size;
 }
@@ -40,11 +42,10 @@ inline uint64_t block_shard(const BlockKey& key) {
 
 uint32_t crc32(const butil::IOBuf& buf);
 
-uint64_t cachekey2id(const std::string& key);
-
 inline uint32_t block_slice_count() {
-    static uint32_t slice_count = config::FLAGS_block_size / config::FLAGS_slice_size;
-    return slice_count;
+    return 16;
+    //static uint32_t slice_count = config::FLAGS_block_size / config::FLAGS_slice_size;
+    //return slice_count;
 }
 
 inline uint32_t file_block_count() {
@@ -52,14 +53,17 @@ inline uint32_t file_block_count() {
     return block_count;
 }
 
-inline bool mem_need_align(const void* data) {
-    if (config::FLAGS_enable_os_page_cache ||
-            boost::alignment::is_aligned(data, config::FLAGS_io_align_unit_size)) {
+inline bool mem_need_align(const void* data, size_t size) {
+    if (config::FLAGS_enable_os_page_cache) {
+        return false;
+    }
+    const size_t aligned_unit = config::FLAGS_io_align_unit_size;
+    if (boost::alignment::is_aligned(data, aligned_unit) && (size % aligned_unit == 0)) {
         return false;
     }
     return true;
 }
 
-void* align_buf(const butil::IOBuf& buf);
+size_t align_buf(const butil::IOBuf& buf, void** aligned_buf);
 
 } // namespace starrocks::starcache

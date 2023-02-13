@@ -14,10 +14,11 @@ set(CACHE_FILES
   mem_cache.cpp
   mem_space_manager.cpp
   star_cache.cpp
-  util.cpp
+  utils.cpp
   size_based_admission_policy.cpp
   capacity_based_promotion_policy.cpp
   common/config.cpp
+  common/lru_container.cpp
 )
 
 add_library(StarCache STATIC

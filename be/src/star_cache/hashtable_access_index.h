@@ -10,6 +10,8 @@
 
 namespace starrocks::starcache {
 
+const static uint32_t kHashMapShardBits = 6;
+
 class HashTableAccessIndex : public AccessIndex {
 public:
     bool insert(const CacheId& id, const CacheItemPtr& item) override;
@@ -17,7 +19,7 @@ public:
     bool remove(const CacheId& id) override;
 
 private:
-    ParallelHashMap<CacheId, CacheItemPtr> _cache_items;
+    ParallelHashMap<CacheId, CacheItemPtr, kHashMapShardBits> _cache_items;
 };
 
 } // namespace starrocks::starcache

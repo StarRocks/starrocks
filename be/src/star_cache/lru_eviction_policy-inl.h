@@ -8,28 +8,32 @@ template <typename T>
 LruEvictionPolicy<T>::~LruEvictionPolicy() {
     // We do not plan to support the persistence of the eviction policy in this period,
     // so clear the elements directly.
-    _lru_cache->prune();
+    _lru_container->prune();
 }
 
 template <typename T>
 char* makeup_key(const T& id) {
+    return reinterpret_cast<char*>(const_cast<T*>(&id));
+}
+
+template <typename T>
+char* makeup_key_old(const T& id) {
     char* key = new char[sizeof(T)];
     memcpy(key, &id, sizeof(T));
     return key;
 }
 
-inline void free_key(char* key) {
+inline void free_key_old(char* key) {
     delete[] key;
 }
 
 template <typename T>
-bool LruEvictionPolicy<T>::add(const T& id) {
-    auto deleter = [](const CacheKey& key, void* value) {};
+bool LruEvictionPolicy<T>::add(const T& id, size_t size) {
+    auto deleter = [](const LRUKey& key, void* value) {};
     char* key = makeup_key(id);
-    Cache::Handle* h = _lru_cache->insert(CacheKey(key, sizeof(T)), nullptr, 1, deleter);
-    free_key(key);
-    if (h) {
-        _lru_cache->release(h);
+    auto handle = _lru_container->insert(LRUKey(key, sizeof(T)), size, nullptr, deleter);
+    if (handle) {
+        _lru_container->release(handle);
         return true;
     }
     return false;
@@ -38,55 +42,50 @@ bool LruEvictionPolicy<T>::add(const T& id) {
 template <typename T>
 typename EvictionPolicy<T>::HandlePtr LruEvictionPolicy<T>::touch(const T& id) {
     char* key = makeup_key(id);
-    Cache::Handle* h = _lru_cache->lookup(CacheKey(key, sizeof(T)));
-    free_key(key);
-    if (h) {
-        return std::make_shared<typename EvictionPolicy<T>::Handle>(this, h);
+    auto handle = _lru_container->lookup(LRUKey(key, sizeof(T)));
+    if (handle) {
+        return std::make_shared<typename EvictionPolicy<T>::Handle>(this, handle);
     }
     return nullptr;
 }
 
 template <typename T>
-void LruEvictionPolicy<T>::evict(size_t count, std::vector<T>* evicted) {
-    std::vector<Cache::Handle*> handles;
-    _lru_cache->evict(count, &handles);
+void LruEvictionPolicy<T>::evict(size_t size, std::vector<T>* evicted) {
+    std::vector<LRUHandle*> handles;
+    _lru_container->evict(size, &handles);
     for (auto h : handles) {
-        auto lru_h = reinterpret_cast<LRUHandle*>(h);
-        T* eid = reinterpret_cast<T*>(lru_h->key_data);
+        T* eid = reinterpret_cast<T*>(h->key_data);
         evicted->push_back(*eid);
     }
 }
 
 template <typename T>
-void LruEvictionPolicy<T>::evict_for(const T& id, size_t count, std::vector<T>* evicted) {
+void LruEvictionPolicy<T>::evict_for(const T& id, size_t size, std::vector<T>* evicted) {
     char* key = makeup_key(id);
-    std::vector<Cache::Handle*> handles;
-    _lru_cache->evict_for(CacheKey(key, sizeof(T)), count, &handles);
+    std::vector<LRUHandle*> handles;
+    _lru_container->evict_for(LRUKey(key, sizeof(T)), size, &handles);
     for (auto h : handles) {
-        auto lru_h = reinterpret_cast<LRUHandle*>(h);
-        T* eid = reinterpret_cast<T*>(lru_h->key_data);
+        T* eid = reinterpret_cast<T*>(h->key_data);
         evicted->push_back(*eid);
-        lru_h->free();
+        h->free();
     }
-    free_key(key);
 }
 
 template <typename T>
 void LruEvictionPolicy<T>::release(void* hdl) {
-    auto h = reinterpret_cast<Cache::Handle*>(hdl);
-    _lru_cache->release(h);
+    auto h = reinterpret_cast<LRUHandle*>(hdl);
+    _lru_container->release(h);
 }
 
 template <typename T>
 void LruEvictionPolicy<T>::remove(const T& id) {
     char* key = makeup_key(id);
-    _lru_cache->erase(CacheKey(key, sizeof(T)));
-    free_key(key);
+    _lru_container->erase(LRUKey(key, sizeof(T)));
 }
 
 template <typename T>
 void LruEvictionPolicy<T>::clear() {
-    _lru_cache->prune();
+    _lru_container->prune();
 }
 
 } // namespace starrocks::starcache

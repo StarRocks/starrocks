@@ -15,6 +15,7 @@
 
 #include "common/config.h"
 #include "common/statusor.h"
+#include "star_cache/common/config.h"
 #include "util/random.h"
 #include "util/time.h"
 #include "util/logging.h"
@@ -27,7 +28,7 @@ const size_t KB = 1024;
 const size_t MB = KB * 1024;
 const size_t GB = MB * 1024;
 
-const std::string DISK_CACHE_PATH = "./ut_dir/block_disk_cache";
+const std::string DISK_CACHE_PATH = "./bench_dir/block_disk_cache";
 
 void delete_dir_content(const std::string& dir_path)
 {
@@ -52,6 +53,7 @@ public:
         bool pre_populate = true;
         bool check_value = false;
         bool random_read_offset = false;
+        bool random_obj_size = false;
         size_t total_op_count = 0;
         // means percentage in 100
         size_t remove_op_ratio = 0;
@@ -59,6 +61,7 @@ public:
 
     struct BenchContext {
         std::vector<std::string> obj_keys;
+        std::vector<size_t> obj_sizes;
         std::atomic<size_t> finish_op_count = 0;
 
         std::unique_ptr<bvar::LatencyRecorder> write_latency;
@@ -170,9 +173,10 @@ public:
                 continue;
             }
 
+            const size_t obj_value_size = _ctx->obj_sizes[index];
             // read
             char *value = new char[_params->read_size];
-            off_t delta = _params->obj_value_size - _params->read_size;
+            off_t delta = obj_value_size - _params->read_size;
             off_t offset = 0;
             if (_params->random_read_offset && delta > 0) {
                 offset = _ctx->rnd->Uniform(delta);
@@ -189,15 +193,15 @@ public:
                                        << ", index: " << index << ", key: " << _ctx->obj_keys[index];
                 }
             } else if (res.status().is_not_found()) {
-                std::string v = gen_obj_value(index, _params->obj_value_size, _ctx);
+                std::string v = gen_obj_value(index, obj_value_size, _ctx);
                 start_us = MonotonicMicros();
-                Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), _params->obj_value_size, 0);
+                Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), obj_value_size, 0);
                 ASSERT_TRUE(st.ok()) << "write cache failed: " << st.get_error_msg();
                 *(_ctx->write_latency) <<  MonotonicMicros() - start_us;
                 *(_ctx->write_bytes) << v.size();
                 *(_ctx->write_op_count) << 1;
 
-                char* read_value = new char[_params->obj_value_size];
+                char* read_value = new char[obj_value_size];
                 auto res = _cache->read_cache(_ctx->obj_keys[index], read_value, 0, _params->read_size);
                 delete[] read_value;
             } else {
@@ -207,15 +211,19 @@ public:
         }
     }
 
-    void do_prepare(bool pre_populate) {
+    void do_prepare(bool pre_populate, bool random_obj_size) {
         _ctx->obj_keys.reserve(_params->obj_count);
         for (size_t i = 0; i < _params->obj_count; ++i) {
             std::string key = gen_obj_key(i, _params->obj_key_size, _ctx);
+            size_t size = _params->obj_value_size;
+            if (random_obj_size) {
+                size = _ctx->rnd->Uniform(size);
+            }
             if  (pre_populate) {
-                std::string value = gen_obj_value(i, _params->obj_value_size, _ctx);
+                std::string value = gen_obj_value(i, size, _ctx);
 
                 int64_t start_us = MonotonicMicros();
-                Status st = _cache->write_cache(key, value.data(), _params->obj_value_size, 0);
+                Status st = _cache->write_cache(key, value.data(), size, 0);
                 ASSERT_OK(st);
 
                 char *read_value = new char[_params->obj_value_size];
@@ -228,6 +236,7 @@ public:
                 *(_ctx->write_op_count) << 1;
             }
             _ctx->obj_keys.push_back(key);
+            _ctx->obj_sizes.push_back(size);
         }
     }
 
@@ -251,7 +260,7 @@ static void do_bench_cache(benchmark::State& state, const CacheOptions& options,
     if (state.thread_index == 0) {
         suite = std::make_shared<BlockCacheBenchSuite>(options, params);
         suite->Setup(state);
-        suite->do_prepare(suite->params()->pre_populate);
+        suite->do_prepare(suite->params()->pre_populate, suite->params()->random_obj_size);
     }
 
     for(auto _ : state) {
@@ -287,6 +296,8 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.meta_path = DISK_CACHE_PATH;
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB });
     options.block_size = 4 * MB;
+    options.checksum = false;
+    starcache::config::FLAGS_enable_disk_checksum = false;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -294,7 +305,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     params.obj_value_size = 1 * MB;
     params.read_size = 1 * MB;
     params.total_op_count = 300000;
-    params.check_value = true;
+    params.check_value = false;
 
     return std::make_pair(options, params);
 }
@@ -305,6 +316,8 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.meta_path = DISK_CACHE_PATH;
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
     options.block_size = 4 * MB;
+    options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -323,16 +336,18 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.meta_path = DISK_CACHE_PATH;
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
     options.block_size = 4 * MB;
+    options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
     params.obj_key_size = 20;
     params.obj_value_size = 1 * MB;
     params.read_size = 1 * MB;
-    params.total_op_count = 2000;
-    params.check_value = false;
+    params.total_op_count = 500;
+    params.check_value = true;
     params.pre_populate = false;
-    params.remove_op_ratio = 30;
+    //params.remove_op_ratio = 30;
 
     return std::make_pair(options, params);
 }
@@ -340,25 +355,30 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
 [[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> random_offset_read_suite() {
     CacheOptions options;
     options.mem_space_size = 300 * MB;
+    //options.mem_space_size = 8000 * MB;
     options.meta_path = DISK_CACHE_PATH;
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
-    options.block_size = 4 * MB;
+    options.block_size = 1 * MB;
+    options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
     params.obj_key_size = 20;
-    params.obj_value_size = 1 * MB;
-    params.read_size = 256 * KB;
+    //params.obj_value_size = 1 * MB;
+    params.obj_value_size = 2 * MB + 123;
+    params.read_size = 257 * KB;
+    params.random_obj_size = true;
     params.random_read_offset = true;
-    params.total_op_count = 1000;
-    params.check_value = false;
+    params.total_op_count = 10000;
+    params.check_value = true;
 
     return std::make_pair(options, params);
 }
 
 // Read Mem 
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_mem_suite())->Threads(32);
-BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_disk, read_mem_suite())->Threads(32);
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_mem, read_mem_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_mem, read_mem_suite())->Threads(16);
 
 // Read Disk
 BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_disk_suite())->Threads(16);
@@ -369,8 +389,8 @@ BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_write_remove_disk, read_write_re
 BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_write_remove_disk, read_write_remove_disk_suite())->Threads(16);
 
 // Random offset for Read+Write+Remove Disk
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_random_offset_read_suite, random_offset_read_suite())->Threads(16);
-BENCHMARK_CAPTURE(BM_bench_starcache, bench_random_offset_read_suite, random_offset_read_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_random_offset_read, random_offset_read_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_random_offset_read, random_offset_read_suite())->Threads(16);
 
 } // namespace starrocks
 
@@ -385,6 +405,6 @@ int main(int argc, char** argv) {
     ::benchmark::RunSpecifiedBenchmarks();
     ::benchmark::Shutdown();
 
-    std::filesystem::remove_all("./ut_dir");
+    //std::filesystem::remove_all("./bench_dir");
     return 0;
 }

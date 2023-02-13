@@ -873,6 +873,8 @@ CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "true");
+// cachelib, starcache
+CONF_String(block_cache_engine, "cachelib");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

@@ -3,7 +3,8 @@
 #pragma once
 
 #include <atomic>
-#include "util/lru_cache.h"
+#include "star_cache/common/config.h"
+#include "star_cache/common/lru_container.h"
 #include "star_cache/eviction_policy.h"
 
 namespace starrocks::starcache {
@@ -13,11 +14,12 @@ class LruEvictionPolicy : public EvictionPolicy<T> {
 public:
     using HandlePtr = typename EvictionPolicy<T>::HandlePtr;
 
-    LruEvictionPolicy(size_t capacity) : _lru_cache(new_lru_cache(capacity)) {}
+    LruEvictionPolicy(size_t capacity)
+        : _lru_container(new ShardedLRUContainer(1lu << config::FLAGS_lru_container_shard_bits)) {}
 
     ~LruEvictionPolicy() override;
 
-	bool add(const T& id) override;
+	bool add(const T& id, size_t size) override;
 
 	HandlePtr touch(const T& id) override;
 
@@ -32,7 +34,7 @@ public:
 	void clear() override;
 
 private:
-    std::unique_ptr<Cache> _lru_cache = nullptr;
+    std::unique_ptr<ShardedLRUContainer> _lru_container = nullptr;
 };
 
 } // namespace starrocks::starcache

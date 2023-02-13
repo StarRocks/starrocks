@@ -6,7 +6,7 @@
 #include <shared_mutex>
 #include <butil/iobuf.h>
 #include "star_cache/macros.h"
-#include "star_cache/util.h"
+#include "star_cache/utils.h"
 
 namespace starrocks::starcache {
 
@@ -19,34 +19,41 @@ enum class BlockState : uint8_t {
 
 struct BlockSegment {
     uint32_t offset;
+    uint32_t size;
     IOBuf buf;
 
-    BlockSegment() {}
-    BlockSegment(uint32_t offset_, const IOBuf& buf_)
+    BlockSegment() : offset(0), size(0) {}
+    BlockSegment(uint32_t offset_, uint32_t size_)
         : offset(offset_)
+        , size(size_)
+    {}
+    BlockSegment(uint32_t offset_, uint32_t size_, const IOBuf& buf_)
+        : offset(offset_)
+        , size(size_)
         , buf(buf_)
     {}
 };
 
+using BlockSegmentPtr = std::shared_ptr<BlockSegment>;
+
 struct MemBlockItem {
-    BlockSegment** slices;
+    BlockSegmentPtr* slices;
     BlockState state;
 
     MemBlockItem(BlockState state_) : state(state_) {
         const size_t slice_count = block_slice_count();
-        slices = new BlockSegment*[slice_count];
-        memset(slices, 0, sizeof(BlockSegment*) * slice_count);
+        slices = new BlockSegmentPtr[slice_count];
     }
     ~MemBlockItem() {
         delete[] slices;
     }
 
-    void list_segments(std::vector<BlockSegment*> *segments) {
+    void list_segments(std::vector<BlockSegmentPtr> *segments) {
         list_segments(0, block_slice_count() - 1, segments);
     }
 
-    void list_segments(size_t start_slice, size_t end_slice, std::vector<BlockSegment*> *segments) {
-        for (size_t i = start_slice; i < end_slice; ++i) {
+    void list_segments(size_t start_slice, size_t end_slice, std::vector<BlockSegmentPtr> *segments) {
+        for (size_t i = start_slice; i <= end_slice; ++i) {
             if (slices[i] && (segments->empty() || slices[i] != segments->back())) {
                 segments->push_back(slices[i]);
             }

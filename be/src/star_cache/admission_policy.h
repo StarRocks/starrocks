@@ -12,6 +12,20 @@ enum class BlockAdmission : uint8_t {
     DELETE
 };
 
+inline std::ostream& operator<<(std::ostream& os, const BlockAdmission& admisson) {
+    switch (admisson) {
+        case BlockAdmission::FLUSH:
+            os << "flush";
+            break;
+        case BlockAdmission::SKIP:
+            os << "skip";
+            break;
+        case BlockAdmission::DELETE:
+            os << "delete";
+    }
+    return os;
+}
+
 class BlockKey;
 // The class to handle admission control logic
 class AdmissionPolicy {

@@ -12,6 +12,20 @@ enum class BlockLocation: uint8_t {
     DISK
 };
 
+inline std::ostream& operator<<(std::ostream& os, const BlockLocation& loc) {
+    switch (loc) {
+        case BlockLocation::MEM:
+            os << "memory";
+            break;
+        case BlockLocation::DISK:
+            os << "disk";
+            break;
+        default:
+            os << "none";
+    }
+    return os;
+}
+
 class BlockKey;
 // The class to decide the block location
 class PromotionPolicy {

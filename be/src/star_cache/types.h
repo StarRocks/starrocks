@@ -10,9 +10,7 @@ namespace starrocks::starcache {
 
 using IOBuf = butil::IOBuf;
 using CacheId = uint64_t;
-// As the `CacheKey` has been defined in lru_cache.cpp, 
-// we choose to use the std::string type directly.
-// using Cachekey = std::string;
+using CacheKey = std::string;
 
 struct BlockId {
     uint8_t dir_index;

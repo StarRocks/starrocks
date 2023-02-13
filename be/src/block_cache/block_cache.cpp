@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 #include "block_cache/fb_cachelib.h"
+#include "block_cache/star_cachelib.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -13,7 +14,6 @@
 namespace starrocks {
 
 BlockCache::BlockCache() {
-    _kv_cache = std::make_unique<FbCacheLib>();
 }
 
 BlockCache* BlockCache::instance() {
@@ -24,6 +24,16 @@ BlockCache* BlockCache::instance() {
 Status BlockCache::init(const CacheOptions& options) {
     // TODO: check block size limit
     _block_size = options.block_size;
+    if (options.engine == "cachelib") {
+        _kv_cache = std::make_unique<FbCacheLib>();
+        LOG(INFO) << "init cachelib block engine";
+    } else if (options.engine == "starcache") {
+        _kv_cache = std::make_unique<StarCacheLib>();
+        LOG(INFO) << "init starcache block engine";
+    } else {
+        LOG(ERROR) << "unsupported block cache engine: " << options.engine;
+        return Status::NotSupported("unsupported block cache engine");
+    }
     return _kv_cache->init(options);
 }
 

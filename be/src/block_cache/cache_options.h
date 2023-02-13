@@ -21,6 +21,8 @@ struct CacheOptions {
     // advanced
     size_t block_size;
     bool checksum;
+
+    std::string engine;
 };
 
 } // namespace starrocks
