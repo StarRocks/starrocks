@@ -1697,6 +1697,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 String currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
                 currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
             }
+
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends, currentWarehouse);
         } else if (numAliveBackends > 0) {
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);

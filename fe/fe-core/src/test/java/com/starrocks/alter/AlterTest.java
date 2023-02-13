@@ -74,6 +74,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -103,6 +104,8 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -947,7 +950,9 @@ public class AlterTest {
     }
 
     @Test
-    public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+    public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent,
+                                             @Mocked WarehouseManager warehouseMgr,
+                                             @Mocked Warehouse warehouse) throws Exception {
         Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -968,6 +973,15 @@ public class AlterTest {
         FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
+            // Mock warehouse behavior
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseMgr;
+                warehouseMgr.getWarehouse(anyString);
+                result = warehouse;
+                warehouse.getAnyAvailableCluster();
+                result = new Cluster(1L, 1L);
+            }
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
@@ -977,7 +991,7 @@ public class AlterTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryBackendIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
@@ -1031,7 +1045,9 @@ public class AlterTest {
     }
 
     @Test
-    public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+    public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent,
+                                                    @Mocked WarehouseManager warehouseMgr,
+                                                    @Mocked Warehouse warehouse) throws Exception {
         Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -1052,6 +1068,16 @@ public class AlterTest {
         FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
+            // Mock warehouse behavior
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseMgr;
+                warehouseMgr.getWarehouse(anyString);
+                result = warehouse;
+                warehouse.getAnyAvailableCluster();
+                result = new Cluster(1L, 1L);
+            }
+
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
@@ -1064,7 +1090,7 @@ public class AlterTest {
                         Lists.newArrayList(30010L, 30011L, 30012L),
                         Lists.newArrayList(30013L, 30014L, 30015L),
                         Lists.newArrayList(30016L, 30017L, 30018L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryBackendIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
@@ -1978,7 +2004,9 @@ public class AlterTest {
     }
 
     @Test
-    public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
+    public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent,
+                                                    @Mocked WarehouseManager warehouseMgr,
+                                                    @Mocked Warehouse warehouse) throws Exception {
         Config.use_staros = true;
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -1999,6 +2027,16 @@ public class AlterTest {
         FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
+            // Mock warehouse behavior
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = warehouseMgr;
+                warehouseMgr.getWarehouse(anyString);
+                result = warehouse;
+                warehouse.getAnyAvailableCluster();
+                result = new Cluster(1L, 1L);
+            }
+
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
@@ -2007,7 +2045,7 @@ public class AlterTest {
                 agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryBackendIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };

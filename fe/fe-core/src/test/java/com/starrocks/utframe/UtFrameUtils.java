@@ -164,6 +164,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setCurrentWarehouse("aaa");
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
