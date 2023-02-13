@@ -120,6 +120,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 import static java.lang.Math.min;
@@ -1687,12 +1688,14 @@ public class SchemaChangeHandler extends AlterHandler {
         if (tableProperty != null) {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 try {
-                    // TODO:
                     List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
                     List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
                     if (originalUniqueConstraints == null
                             || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {
                         hasChanged = true;
+                        String newProperty = newUniqueConstraints
+                                .stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+                        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
                     } else {
                         LOG.warn("unique constraint is the same as origin");
                     }
@@ -1704,13 +1707,15 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
                 try {
-                    // TODO: 判断更新
-                    List<ForeignKeyConstraint> newForeignKeyConstraint =
-                            PropertyAnalyzer.analyzeForeignKeyConstraint(properties, olapTable);
-                    List<ForeignKeyConstraint> originalForeignKeyConstraint = tableProperty.getForeignKeyConstraints();
-                    if (originalForeignKeyConstraint == null
-                            || !newForeignKeyConstraint.toString().equals(originalForeignKeyConstraint.toString())) {
+                    List<ForeignKeyConstraint> newForeignKeyConstraints =
+                            PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
+                    List<ForeignKeyConstraint> originalForeignKeyConstraints = tableProperty.getForeignKeyConstraints();
+                    if (originalForeignKeyConstraints == null
+                            || !newForeignKeyConstraints.toString().equals(originalForeignKeyConstraints.toString())) {
                         hasChanged = true;
+                        String newProperty = newForeignKeyConstraints
+                                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+                        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
                     } else {
                         LOG.warn("foreign constraint is the same as origin");
                     }

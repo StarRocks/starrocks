@@ -144,7 +144,7 @@ public class BaseTableInfo {
         if (isInternalCatalog(catalogName)) {
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, dbId, tableId);
         } else {
-            return Joiner.on(".").join(catalogName, dbName, tableName);
+            return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
         }
     }
 }

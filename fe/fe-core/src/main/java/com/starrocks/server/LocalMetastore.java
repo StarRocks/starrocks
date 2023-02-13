@@ -2367,10 +2367,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            processConstraint(olapTable, properties);
+            processConstraint(db, olapTable, properties);
         } catch (AnalysisException e) {
             throw new DdlException(
-                    String.format("process constraint exception when creating table:%s.", olapTable.getName()), e);
+                    String.format("processing constraint failed when creating table:%s. exception msg:%s",
+                            olapTable.getName(), e.getMessage()), e);
         }
 
         // a set to record every new tablet created when create table
@@ -2513,15 +2514,15 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void processConstraint(
-            OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
-        // TODO: convert to list
+            Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
         List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
         if (uniqueConstraints != null) {
             olapTable.setUniqueConstraints(uniqueConstraints);
         }
 
-        List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, olapTable);
-        if (foreignKeyConstraints != null) {
+        List<ForeignKeyConstraint> foreignKeyConstraints =
+                PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
+        if (foreignKeyConstraints != null && !foreignKeyConstraints.isEmpty()) {
             olapTable.setForeignKeyConstraint(foreignKeyConstraints);
         }
     }

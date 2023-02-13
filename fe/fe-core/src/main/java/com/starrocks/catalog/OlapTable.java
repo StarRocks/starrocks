@@ -2038,12 +2038,12 @@ public class OlapTable extends Table {
         tableProperty.clearBinlogAvailableVersion();
     }
 
-    public boolean hasUniqueConstraint() {
-        List<UniqueConstraint> uniqueConstraint = getUniqueConstraint();
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;
     }
 
-    public List<UniqueConstraint> getUniqueConstraint() {
+    public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {
             return null;
         }
@@ -2055,9 +2055,9 @@ public class OlapTable extends Table {
             tableProperty = new TableProperty(new HashMap<>());
         }
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, uniqueConstraints.toString());
+        String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
         tableProperty.modifyTableProperties(properties);
-        // TODO: convert to list
         tableProperty.setUniqueConstraints(uniqueConstraints);
     }
 
@@ -2073,8 +2073,9 @@ public class OlapTable extends Table {
             tableProperty = new TableProperty(new HashMap<>());
         }
         Map<String, String> properties = Maps.newHashMap();
-        // TODO: 序列化
-        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, foreignKeyConstraints.toString());
+        String newProperty = foreignKeyConstraints
+                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
         tableProperty.modifyTableProperties(properties);
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }

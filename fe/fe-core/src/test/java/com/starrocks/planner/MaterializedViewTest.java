@@ -106,44 +106,129 @@ public class MaterializedViewTest extends PlanTestBase {
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
                 .withTable(deptsTable);
-        starRocksAssert.withTable("CREATE TABLE `fifa_internal_poc` (\n" +
-                "  `experiment_id` bigint(20) NULL COMMENT \"\",\n" +
-                "  `dt` date NULL COMMENT \"\",\n" +
-                "  `hour` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `event_key` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `metric_name` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `player_id` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `player_id_type` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `game_id` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `game_id_type` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `variant_id` bigint(20) NULL COMMENT \"\",\n" +
-                "  `platform` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `country` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `additional_tracking_dimensions` json NULL COMMENT \"\",\n" +
-                "  `session_days_ltd` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `ut_session_days_ltd` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `is_active_eax_subscriber` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `favorite_team` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `preferred_game_mode` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `is_underage` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `metric_value` float NULL COMMENT \"\"\n" +
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
+                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`experiment_id`, `dt`, `hour`)\n" +
+                "DUPLICATE KEY(`lo_orderkey`)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE(`dt`)\n" +
-                "(PARTITION p202207 VALUES [(\"2022-07-01\"), (\"2022-08-01\")),\n" +
-                "PARTITION p202208 VALUES [(\"2022-08-01\"), (\"2022-09-01\")),\n" +
-                "PARTITION p202209 VALUES [(\"2022-09-01\"), (\"2022-10-01\")),\n" +
-                "PARTITION p202210 VALUES [(\"2022-10-01\"), (\"2022-11-01\")))\n" +
-                "DISTRIBUTED BY HASH(`player_id`) BUCKETS 144\n" +
+                "PARTITION BY RANGE(`lo_orderdate`)\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
+                "    PARTITION p2 VALUES [(\"19930101\"), (\"19940101\")),\n" +
+                "    PARTITION p3 VALUES [(\"19940101\"), (\"19950101\")),\n" +
+                "    PARTITION p4 VALUES [(\"19950101\"), (\"19960101\")),\n" +
+                "    PARTITION p5 VALUES [(\"19960101\"), (\"19970101\")),\n" +
+                "    PARTITION p6 VALUES [(\"19970101\"), (\"19980101\")),\n" +
+                "    PARTITION p7 VALUES [(\"19980101\"), (\"19990101\")))\n" +
+                "DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"colocate_with\" = \"g8\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"compression\" = \"LZ4\"\n" +
-                ");");
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
+                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")\n");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
+                "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_date` varchar(20) NOT NULL COMMENT \"\",\n" +
+                "    `d_dayofweek` varchar(10) NOT NULL COMMENT \"\",\n" +
+                "    `d_month` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_year` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_yearmonthnum` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_yearmonth` varchar(9) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminweek` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminmonth` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_daynuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_monthnuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_weeknuminyear` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_sellingseason` varchar(14) NOT NULL COMMENT \"\",\n" +
+                "    `d_lastdayinweekfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_lastdayinmonthfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_holidayfl` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `d_weekdayfl` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`d_datekey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"colocate_with\" = \"groupa3\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
+                "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `p_name` varchar(23) NOT NULL COMMENT \"\",\n" +
+                "    `p_mfgr` varchar(7) NOT NULL COMMENT \"\",\n" +
+                "    `p_category` varchar(8) NOT NULL COMMENT \"\",\n" +
+                "    `p_brand` varchar(10) NOT NULL COMMENT \"\",\n" +
+                "    `p_color` varchar(12) NOT NULL COMMENT \"\",\n" +
+                "    `p_type` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `p_size` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `p_container` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`p_partkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa5\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
+                "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `s_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `s_address` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `s_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `s_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `s_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `s_phone` varchar(16) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`s_suppkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
     }
 
     @AfterClass
@@ -1280,10 +1365,25 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    public void testLimit() {
-        String mv = "SELECT dt as col1, count(DISTINCT player_id) as uv from fifa_internal_poc group by dt";
-        String query = "SELECT dt, count(DISTINCT player_id) from fifa_internal_poc" +
-                " where dt >= '2022-07-01' and dt <= '2022-10-01' group by dt limit 10";
+    public void testViewDelta() {
+        String mv = "SELECT" +
+                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                "FROM `lineorder` AS `l` INNER" +
+                " JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                " INNER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                " INNER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+
+        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                "WHERE `lineorder`.`lo_orderkey` = 100;";
+
         testRewriteOK(mv, query);
     }
 }

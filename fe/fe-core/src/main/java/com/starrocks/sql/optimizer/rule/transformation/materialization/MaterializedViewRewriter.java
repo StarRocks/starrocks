@@ -289,6 +289,9 @@ public class MaterializedViewRewriter {
 
             for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
                 Collection<Table> parentTables = nameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
+                if (parentTables == null || parentTables.isEmpty()) {
+                    continue;
+                }
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
                 List<String> childKeys = columnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second).collect(Collectors.toList());
@@ -396,7 +399,7 @@ public class MaterializedViewRewriter {
                 return false;
             }
         } else if (tableKeyType == KeysType.DUP_KEYS) {
-            List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraint();
+            List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
             boolean isUnique = false;
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
                 if (uniqueConstraint.getUniqueColumns().equals(keys)) {
