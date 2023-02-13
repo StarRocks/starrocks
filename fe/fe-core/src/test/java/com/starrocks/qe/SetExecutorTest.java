@@ -33,6 +33,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -116,5 +118,13 @@ public class SetExecutorTest {
         executor.execute();
         Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
+    }
+
+    @Test
+    public void testSetDefault() throws Exception {
+        String sql = "set query_timeout=DEFAULT";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetStmtAnalyzer.analyze(stmt, ctx);
+        Assert.assertEquals("SET query_timeout = 300", AST2SQL.toString(stmt));
     }
 }

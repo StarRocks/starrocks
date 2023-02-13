@@ -38,6 +38,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -82,7 +83,14 @@ public class AST2SQL {
                 if (!setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
-                sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
+
+                sb.append(setVar.getVariable()).append(" = ");
+                if (setVar.getResolvedExpression() == null) {
+                    sb.append(VariableMgr.getDefaultValue(setVar.getVariable()));
+                } else {
+                    sb.append(setVar.getResolvedExpression().toSql());
+                }
+
                 idx++;
             }
             return sb.toString();
