@@ -1029,7 +1029,7 @@ struct TCreatePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     // for each partition column's partition values
-    4: optional list<list<string>> partitionValues
+    4: optional list<list<string>> partition_values
 }
 
 struct TCreatePartitionResult {

@@ -651,36 +651,45 @@ public class AnalyzerUtils {
         }
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
-            List<String> partitionValues, String granularity, OlapTable olapTable) throws AnalysisException {
+    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+               List<String> partitionValues, long interval, String granularity) throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
+        String partitionPrefix = "p";
         for (String partitionValue : partitionValues) {
             DateTimeFormatter beginDateTimeFormat;
             LocalDateTime beginTime;
             LocalDateTime endTime;
-
+            String partitionName;
             try {
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
+
                 switch (granularity.toLowerCase()) {
-                    case "day":
-                        endTime = beginTime.plusDays(1);
-                        break;
                     case "hour":
-                        endTime = beginTime.plusHours(1);
+                        beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                        endTime = beginTime.plusHours(interval);
+                        break;
+                    case "day":
+                        beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                        endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
-                        endTime = beginTime.plusMonths(1);
+                        beginTime = beginTime.withDayOfMonth(1);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
+                        endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
-                        endTime = beginTime.plusYears(1);
+                        beginTime = beginTime.withDayOfYear(1);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
+                        endTime = beginTime.plusYears(interval);
                         break;
                     default:
-                        throw new AnalysisException("unsupported partition granularity:" + granularity);
+                        throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
                 String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
                 String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
-                String partitionName = "p" + lowerBound;
                 PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
                         Collections.singletonList(new PartitionValue(lowerBound)),
                         Collections.singletonList(new PartitionValue(upperBound)));
