@@ -994,7 +994,7 @@ build_jasson() {
     cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
     mkdir -p build
     cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1005,7 +1005,7 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
-    $CMAKE_CMD -G "Unix Makefiles" ..
+    $CMAKE_CMD -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib/libavrocpp.so*
@@ -1017,7 +1017,7 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL    
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib64/libavro.so*
@@ -1032,6 +1032,7 @@ build_serdes() {
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavrocpp_s -lavro -lssl -lcrypto -ldl" 
     ./configure --prefix=${TP_INSTALL_DIR} \
+                --libdir=lib \
                 --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
                 --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
                 --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
