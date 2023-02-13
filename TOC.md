@@ -19,6 +19,8 @@
     + [临时分区](/table_design/Temporary_partition.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
 + 导入数据
+  + 概念介绍
+    + [严格模式](/loading/load_concept/strict_mode.md)
   + [导入总览](/loading/Loading_intro.md)
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
