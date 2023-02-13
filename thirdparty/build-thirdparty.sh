@@ -999,18 +999,6 @@ build_jasson() {
     ${BUILD_SYSTEM} install
 }
 
-# avro-cpp
-build_avro_cpp() {
-    check_if_source_exist $AVRO_SOURCE
-    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
-    mkdir -p build
-    cd build
-    $CMAKE_CMD -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib ..
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
-    rm ${TP_INSTALL_DIR}/lib/libavrocpp.so*
-}
-
 # avro-c
 build_avro_c() {
     check_if_source_exist $AVRO_SOURCE
@@ -1097,7 +1085,6 @@ build_fast_float
 build_cachelib
 build_streamvbyte
 build_jasson
-build_avro_cpp
 build_avro_c
 build_serdes
 

@@ -330,9 +330,6 @@ set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(avro STATIC IMPORTED GLOBAL)
 set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
 
-add_library(avro-cpp STATIC IMPORTED GLOBAL)
-set_target_properties(avro-cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libavrocpp_s.a)
-
 add_library(serdes STATIC IMPORTED GLOBAL)
 set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
 
@@ -702,7 +699,6 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_exporter_jaeger_trace
     jansson
     avro
-    avrocpp_s
     serdes
     ${WL_END_GROUP}
 )
