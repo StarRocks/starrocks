@@ -38,8 +38,8 @@ Explanation:
 
 | Name| Default| Description|
 | --- | --- | --- |
-| exec_mem_limit| 2147483648| Memory limit of a single instance |
-| load_mem_limit| 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
+| query_mem_limit| 0| Memory limit of a query on each backend node |
+| load_mem_limit | 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
 
 ## View memory usage
 
