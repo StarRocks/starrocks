@@ -38,7 +38,6 @@ set(EXEC_FILES
     es/es_query_builder.cpp
     es/es_scroll_parser.cpp
     local_file_writer.cpp
-    broker_writer.cpp
     plain_text_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
