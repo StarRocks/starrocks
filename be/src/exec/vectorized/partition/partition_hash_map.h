@@ -63,7 +63,12 @@ template <PhmapSeed seed>
 using FixedSize16SlicePartitionHashMap =
         phmap::flat_hash_map<SliceKey16, PartitionChunks*, FixedSizeSliceKeyHash<SliceKey16, seed>>;
 
+template <bool IsNullable, bool IsFixedLengthSlice>
 struct PartitionHashMapBase {
+    // For constexpr condition
+    static constexpr bool is_nullable = IsNullable;
+    static constexpr bool is_fixed_length_slice = IsFixedLengthSlice;
+
     const int32_t chunk_size;
     bool is_downgrade = false;
 
@@ -317,8 +322,13 @@ protected:
     }
 };
 
+<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
 template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
+=======
+template <LogicalType primitive_type, typename HashMap>
+struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, false> {
+>>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/partition/partition_hash_map.h
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
@@ -341,8 +351,13 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     }
 };
 
+<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
 template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
+=======
+template <LogicalType primitive_type, typename HashMap>
+struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<true, false> {
+>>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/partition/partition_hash_map.h
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
@@ -367,7 +382,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
 
@@ -392,7 +407,7 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
+struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<true, false> {
     using Iterator = typename HashMap::iterator;
     HashMap hash_map;
     PartitionChunks null_key_value{kNullKeyPartitionIdx};
@@ -420,7 +435,7 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
+struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
     using KeyType = typename HashMap::key_type;
 
@@ -486,7 +501,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase {
 };
 
 template <typename HashMap>
-struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase {
+struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<false, true> {
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
 
