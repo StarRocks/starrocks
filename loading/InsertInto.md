@@ -47,7 +47,7 @@ CREATE TABLE insert_wiki_edit
     added INT SUM DEFAULT '0',
     deleted INT SUM DEFAULT '0'
 )
-AGGREGATE KEY
+DUPLICATE KEY
 (
     event_time,
     channel,
@@ -81,7 +81,7 @@ CREATE TABLE source_wiki_edit
     added INT SUM DEFAULT '0',
     deleted INT SUM DEFAULT '0'
 )
-AGGREGATE KEY
+DUPLICATE KEY
 (
     event_time,
     channel,
