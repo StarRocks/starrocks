@@ -311,7 +311,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
-    
+
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -778,6 +780,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
