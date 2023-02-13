@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.leader;
 
 import com.google.common.collect.Lists;
@@ -140,18 +139,18 @@ public class ReportHandlerTest {
     @Test
     public void testHandleResourceUsageReport() {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
-        Backend backend = new Backend();
-        long backendId = 0;
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
+
+        Backend backend = new Backend(0, "127.0.0.1", 80);
+        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backendId) {
+                if (id == backend.getId()) {
                     return backend;
+                }
+                if (id == computeNode.getId()) {
+                    return computeNode;
                 }
                 return null;
             }
@@ -160,17 +159,35 @@ public class ReportHandlerTest {
         new Expectations(queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
-                times = 1;
+                times = 2;
             }
         };
 
+        int numRunningQueries = 1;
+        long memLimitBytes = 3;
+        long memUsedBytes = 2;
+        int cpuUsedPermille = 300;
         TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        // Sync to FE followers and notify pending queries.
-        ReportHandler.testHandleResourceUsageReport(backendId, resourceUsage);
+
+        // For backend, sync to FE followers and notify pending queries.
+        ReportHandler.testHandleResourceUsageReport(backend.getId(), resourceUsage);
         Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
         Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
         Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+
+        // For compute node, sync to FE followers and notify pending queries.
+        numRunningQueries = 10;
+        memLimitBytes = 30;
+        memUsedBytes = 20;
+        cpuUsedPermille = 310;
+        resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+        ReportHandler.testHandleResourceUsageReport(computeNode.getId(), resourceUsage);
+        Assert.assertEquals(numRunningQueries, computeNode.getNumRunningQueries());
+        Assert.assertEquals(memLimitBytes, computeNode.getMemLimitBytes());
+        Assert.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+
         // Don't sync and notify, because this BE doesn't exist.
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
     }

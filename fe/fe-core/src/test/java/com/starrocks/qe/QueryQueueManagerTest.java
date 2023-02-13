@@ -236,7 +236,7 @@ public class QueryQueueManagerTest {
         ComputeNode be1 = new Backend();
         be1.setAlive(true);
         be1.setId(1);
-        ComputeNode be2 = new Backend();
+        ComputeNode be2 = new ComputeNode();
         be2.setAlive(true);
         be2.setId(2);
 

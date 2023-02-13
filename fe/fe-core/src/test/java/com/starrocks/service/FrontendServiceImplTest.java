@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
-
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.catalog.Database;
@@ -52,6 +50,7 @@ public class FrontendServiceImplTest {
 
     @Mocked
     ExecuteEnv exeEnv;
+
     private TUpdateResourceUsageRequest genUpdateResourceUsageRequest(
             long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes, int cpuUsedPermille) {
         TResourceUsage usage = new TResourceUsage();
@@ -70,17 +69,19 @@ public class FrontendServiceImplTest {
     @Test
     public void testUpdateResourceUsage() throws TException {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
-        Backend backend = new Backend();
-        long backendId = 0;
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        Backend backend = new Backend(0, "127.0.0.1", 80);
+        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
+
         new MockUp<SystemInfoService>() {
             @Mock
             public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backendId) {
+                if (id == backend.getId()) {
                     return backend;
+                }
+                if (id == computeNode.getId()) {
+                    return computeNode;
                 }
                 return null;
             }
@@ -88,20 +89,38 @@ public class FrontendServiceImplTest {
         new Expectations(queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
-                times = 1;
+                times = 2;
             }
         };
 
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        long backendId = 0;
+        int numRunningQueries = 1;
+        long memLimitBytes = 3;
+        long memUsedBytes = 2;
+        int cpuUsedPermille = 300;
         TUpdateResourceUsageRequest request = genUpdateResourceUsageRequest(
                 backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
 
-        // Notify pending queries.
+        // For backend, notify pending queries.
         impl.updateResourceUsage(request);
         Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
         Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
         Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+
+        // For compute node, notify pending queries.
+        numRunningQueries = 10;
+        memLimitBytes = 30;
+        memUsedBytes = 20;
+        cpuUsedPermille = 310;
+        request = genUpdateResourceUsageRequest(
+                backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+        impl.updateResourceUsage(request);
+        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
+        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
+        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+
         // Don't notify, because this BE doesn't exist.
         request.setBackend_id(/* Not Exist */ 1);
         impl.updateResourceUsage(request);
