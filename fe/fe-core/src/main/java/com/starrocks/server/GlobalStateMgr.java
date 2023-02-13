@@ -2725,7 +2725,7 @@ public class GlobalStateMgr {
         return journal;
     }
 
-    // Get the next available, need't lock because of nextId is atomic.
+    // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
     }
@@ -3233,6 +3233,10 @@ public class GlobalStateMgr {
 
     public void createView(CreateViewStmt stmt) throws DdlException {
         localMetastore.createView(stmt);
+    }
+
+    public void triggerNewImage() {
+        journalWriter.setForceRollJournal();
     }
 
     /**

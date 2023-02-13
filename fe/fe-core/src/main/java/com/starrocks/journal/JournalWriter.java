@@ -54,6 +54,13 @@ public class JournalWriter {
     // batch size in bytes
     private long uncommittedEstimatedBytes;
 
+    /**
+     * If this flag is set true, we will roll journal,
+     * i.e. create a new database in BDB immediately after
+     * current journal batch has been written.
+     */
+    private boolean forceRollJournal;
+
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
@@ -218,9 +225,23 @@ public class JournalWriter {
         }
     }
 
+    public void setForceRollJournal() {
+        forceRollJournal = true;
+    }
+
+    private boolean needForceRollJournal() {
+        if (forceRollJournal) {
+            // Reset flag, alter system create image only trigger new image once
+            forceRollJournal = false;
+            return true;
+        }
+
+        return false;
+    }
+
     private void rollJournalAfterBatch() {
         rollJournalCounter += currentBatchTasks.size();
-        if (rollJournalCounter >= Config.edit_log_roll_num) {
+        if (rollJournalCounter >= Config.edit_log_roll_num || needForceRollJournal()) {
             try {
                 journal.rollJournal(nextVisibleJournalId);
             } catch (JournalException e) {
@@ -230,8 +251,14 @@ public class JournalWriter {
                 // TODO exit gracefully
                 System.exit(-1);
             }
-            LOG.info("rolled edig log because rollEditCounter {} >= edit_log_roll_num {}.",
-                    rollJournalCounter, Config.edit_log_roll_num);
+            String reason;
+            if (rollJournalCounter >= Config.edit_log_roll_num) {
+                reason = String.format("rollEditCounter {} >= edit_log_roll_num {}",
+                        rollJournalCounter, Config.edit_log_roll_num);
+            } else {
+                reason = "triggering a new checkpoint manually";
+            }
+            LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
         }
     }

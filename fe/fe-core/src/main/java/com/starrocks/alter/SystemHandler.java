@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
@@ -187,6 +188,8 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
+        } else if (alterClause instanceof CreateImageClause) {
+            GlobalStateMgr.getCurrentState().triggerNewImage();
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }
