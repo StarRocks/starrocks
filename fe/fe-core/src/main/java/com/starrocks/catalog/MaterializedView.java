@@ -40,6 +40,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -573,6 +574,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 }
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
+
+                if (!table.isLocalTable()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                            baseTableInfo.getTableIdentifier(),
+                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                    Sets.newHashSet(mvId)).build()
+                    );
+                }
             }
         }
         analyzePartitionInfo();
@@ -906,9 +916,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             mvPartitionMap.remove(deleted);
         }
         needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : partitionDiff.getAdds().entrySet()) {
-            mvPartitionMap.put(addEntry.getKey(), addEntry.getValue());
-        }
+        mvPartitionMap.putAll(partitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(basePartitionMap, mvPartitionMap);

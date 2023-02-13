@@ -41,6 +41,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -129,6 +130,8 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
@@ -246,7 +249,7 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -460,6 +463,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
+    private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
@@ -648,8 +653,11 @@ public class GlobalStateMgr {
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
+        this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+
+
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
@@ -870,6 +878,10 @@ public class GlobalStateMgr {
         return warehouseMgr;
     }
 
+    public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
+        return connectorTblMetaInfoMgr;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1011,6 +1023,14 @@ public class GlobalStateMgr {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
+
+                // For follower/observer, defer setting auth to null when we have replayed all the journal,
+                // because we may encounter old auth journal when replaying log in which case we still
+                // need the auth object.
+                if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
+                    // already upgraded, set auth = null
+                    auth = null;
+                }
                 break;
             }
 
@@ -1082,7 +1102,7 @@ public class GlobalStateMgr {
 
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
-                // if isFirstTimeStartUp is true, frontends must contains this Node.
+                // if isFirstTimeStartUp is true, frontends must contain this Node.
                 Frontend self = nodeMgr.getMySelf();
                 Preconditions.checkNotNull(self);
                 // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
@@ -1099,12 +1119,14 @@ public class GlobalStateMgr {
 
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
+                    reInitializeNewPrivilegeOnUpgrade();
                     AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
-                    usingNewPrivilege.set(true);
                 }
+                LOG.info("set usingNewPrivilege to true after transfer to leader");
+                usingNewPrivilege.set(true);
                 auth = null;  // remove references to useless objects to release memory
             }
 
@@ -1131,7 +1153,7 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
-                VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
+                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
                                 SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
@@ -1228,7 +1250,7 @@ public class GlobalStateMgr {
         esRepository.start();
         starRocksRepository.start();
         // materialized view active checker
-        mvActiveChecker.start();
+        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1243,10 +1265,6 @@ public class GlobalStateMgr {
 
     private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
-        if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
-            // already upgraded, set auth = null
-            auth = null;
-        }
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
@@ -1401,6 +1419,12 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
+                    if (!table.isLocalTable()) {
+                        connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                        Sets.newHashSet(mvId)).build());
+                    }
                 }
             }
         }
@@ -1477,7 +1501,7 @@ public class GlobalStateMgr {
     }
 
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
-        if (isUsingNewPrivilege()) {
+        if (USING_NEW_PRIVILEGE) {
             this.authenticationManager = AuthenticationManager.load(dis);
             this.privilegeManager = PrivilegeManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
@@ -1704,7 +1728,7 @@ public class GlobalStateMgr {
     }
 
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
-        if (isUsingNewPrivilege()) {
+        if (USING_NEW_PRIVILEGE) {
             this.authenticationManager.save(dos);
             this.privilegeManager.save(dos);
         }
@@ -3467,6 +3491,16 @@ public class GlobalStateMgr {
         if (USING_NEW_PRIVILEGE) {
             LOG.warn("replay old auth journal right after restart, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
+            // If we still need to replay old auth journal, it means that,
+            // 1. either no new privilege image has been generated, and some old auth journal haven't been compacted
+            //    into old auth image
+            // 2. or new privilege image has already been generated, and we roll back to old version, make some user or
+            //    privilege operation, then generate old auth journal
+            // in both cases, we need a definite upgrade, so we mark the managers of
+            // new privilege framework as unloaded to trigger upgrade process.
+            LOG.info("set authenticationManager and privilegeManager as unloaded because of old auth journal");
+            authenticationManager.setLoaded(false);
+            privilegeManager.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3524,16 +3558,24 @@ public class GlobalStateMgr {
 
     }
 
+    private void reInitializeNewPrivilegeOnUpgrade() {
+        // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
+        // we may already load the image from last upgrade, in this case we should
+        // discard the privilege data from last upgrade and only use the data from
+        // current image to upgrade, so we initialize a new PrivilegeManager and AuthenticationManger
+        // instance here
+        LOG.info("reinitialize privilege info before upgrade");
+        this.authenticationManager = new AuthenticationManager();
+        this.privilegeManager = new PrivilegeManager(this, null);
+    }
+
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        if (GlobalStateMgr.getCurrentState().needUpgradedToNewPrivilege()) {
-            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-            upgrader.replayUpgrade(info.getRoleNameToId());
-            usingNewPrivilege.set(true);
-            domainResolver.setAuthenticationManager(authenticationManager);
-            if (!isCheckpointThread()) {
-                this.auth = null;
-            }
-        }
+        reInitializeNewPrivilegeOnUpgrade();
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        upgrader.replayUpgrade(info.getRoleNameToId());
+        LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
+        usingNewPrivilege.set(true);
+        domainResolver.setAuthenticationManager(authenticationManager);
     }
 
     // entry of checking tablets operation

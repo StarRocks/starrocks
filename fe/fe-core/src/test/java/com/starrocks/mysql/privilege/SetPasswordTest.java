@@ -34,6 +34,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
@@ -47,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -59,6 +61,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Collections;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
@@ -108,7 +112,7 @@ public class SetPasswordTest {
     public void test() throws DdlException {
         UserIdentity userIdentity = new UserIdentity("cmy", "%");
         userIdentity.setIsAnalyzed();
-        CreateUserStmt stmt = new CreateUserStmt(new UserDesc(userIdentity));
+        CreateUserStmt stmt = new CreateUserStmt(false, new UserDesc(userIdentity), Collections.emptyList());
         auth.createUser(stmt);
 
         ConnectContext ctx = new ConnectContext(null);
@@ -122,7 +126,7 @@ public class SetPasswordTest {
         user1.setIsAnalyzed();
         SetPassVar setPassVar = new SetPassVar(user1, null);
         try {
-            setPassVar.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -131,7 +135,7 @@ public class SetPasswordTest {
         // set password without for
         SetPassVar setPassVar2 = new SetPassVar(null, null);
         try {
-            setPassVar2.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar2)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -140,7 +144,7 @@ public class SetPasswordTest {
         // create user cmy2@'192.168.1.1'
         UserIdentity userIdentity2 = new UserIdentity("cmy2", "192.168.1.1");
         userIdentity2.setIsAnalyzed();
-        stmt = new CreateUserStmt(new UserDesc(userIdentity2));
+        stmt = new CreateUserStmt(false, new UserDesc(userIdentity2), Collections.emptyList());
         auth.createUser(stmt);
 
         UserIdentity currentUser2 = new UserIdentity("cmy2", "192.168.1.1");
@@ -151,7 +155,7 @@ public class SetPasswordTest {
         // set password without for
         SetPassVar setPassVar3 = new SetPassVar(null, null);
         try {
-            setPassVar3.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar3)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
@@ -162,7 +166,7 @@ public class SetPasswordTest {
         user2.setIsAnalyzed();
         SetPassVar setPassVar4 = new SetPassVar(user2, null);
         try {
-            setPassVar4.analyze();
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar4)), ctx);
         } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();

@@ -31,7 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -39,6 +38,7 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -59,6 +59,7 @@ import org.apache.commons.lang3.EnumUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -103,15 +104,8 @@ public class PrivilegeStmtAnalyzerV2 {
          * check if role name valid and get full role name
          */
         private void validRoleName(String roleName, String errMsg, boolean checkExist) {
-            try {
-                // always set to true, we can validate if it's allowed to operation on admin later
-                FeNameFormat.checkRoleName(roleName, true, errMsg);
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            // always set to true, we can validate if it's allowed to operation on admin later
+            FeNameFormat.checkRoleName(roleName, true, errMsg);
             // check if role exists
             if (checkExist && !privilegeManager.checkRoleExists(roleName)) {
                 throw new SemanticException(errMsg + ": cannot find role " + roleName + "!");
@@ -137,10 +131,10 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         @Override
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
-            String authPluginUsing = null;
+            String authPluginUsing;
             if (stmt.getAuthPlugin() == null) {
                 authPluginUsing = authenticationManager.getDefaultPlugin();
                 stmt.setScramblePassword(
@@ -178,8 +172,8 @@ public class PrivilegeStmtAnalyzerV2 {
                 throw exception;
             }
 
-            if (stmt.hasRole()) {
-                throw new SemanticException("role not supported!");
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
             return null;
         }
@@ -210,12 +204,12 @@ public class PrivilegeStmtAnalyzerV2 {
 
         private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
                 throws PrivilegeException, AnalysisException {
-            stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
+            stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
             String[] name = stmt.getFunctionName().split("\\.");
             FunctionName functionName;
-            if (stmt.getTypeId() == ObjectType.GLOBAL_FUNCTION.getId()) {
+            if (stmt.getObjectType() == ObjectType.GLOBAL_FUNCTION) {
                 if (name.length != 1) {
-                    throw new AnalysisException("global function has no database");
+                    throw new SemanticException("global function has no database");
                 }
                 functionName = new FunctionName(name[0]);
                 functionName.setAsGlobalFunction();
@@ -225,7 +219,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 } else {
                     String dbName = ConnectContext.get().getDatabase();
                     if (dbName.equals("")) {
-                        throw new AnalysisException("database not selected");
+                        throw new SemanticException("database not selected");
                     }
                     functionName = new FunctionName(dbName, name[0]);
                 }
@@ -241,12 +235,12 @@ public class PrivilegeStmtAnalyzerV2 {
                         .getFunction(searchDesc);
                 if (function == null) {
                     return privilegeManager.analyzeObject(
-                            stmt.getObjectTypeUnResolved(),
-                            Arrays.asList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
+                            analyzeObjectType(stmt.getObjectTypeUnResolved()),
+                            Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
                     return privilegeManager.analyzeObject(
-                            stmt.getObjectTypeUnResolved(),
-                            Arrays.asList(function.signatureString())
+                            analyzeObjectType(stmt.getObjectTypeUnResolved()),
+                            Collections.singletonList(function.signatureString())
                     );
                 }
             }
@@ -255,22 +249,34 @@ public class PrivilegeStmtAnalyzerV2 {
             Function function = db.getFunction(searchDesc);
             if (null == function) {
                 return privilegeManager.analyzeObject(
-                        stmt.getObjectTypeUnResolved(),
+                        analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
                 return privilegeManager.analyzeObject(
-                        stmt.getObjectTypeUnResolved(),
+                        analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
             }
         }
 
-        private ObjectType analyzePrivObjectType(String objTypeString) {
-            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, objTypeString)) {
-                throw new SemanticException("cannot find privilege object type " + objTypeString);
+        private ObjectType analyzeObjectType(String objectTypeUnResolved) {
+            if (!EnumUtils.isValidEnumIgnoreCase(ObjectType.class, objectTypeUnResolved)) {
+                throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
             }
-            return ObjectType.valueOf(objTypeString);
+            return ObjectType.valueOf(objectTypeUnResolved);
+        }
+
+        private PrivilegeType analyzePrivType(ObjectType objectType, String privTypeString) {
+            if (!EnumUtils.isValidEnumIgnoreCase(PrivilegeType.class, privTypeString)) {
+                throw new SemanticException("cannot find privilege type " + privTypeString);
+            }
+
+            PrivilegeType privilegeType = PrivilegeType.valueOf(privTypeString);
+            if (!privilegeManager.isAvailablePirvType(objectType, privilegeType)) {
+                throw new SemanticException("Cant grant " + privTypeString + " to object " + objectType);
+            }
+            return privilegeType;
         }
 
         @Override
@@ -287,14 +293,14 @@ public class PrivilegeStmtAnalyzerV2 {
                     List<PEntryObject> objectList = new ArrayList<>();
                     if (stmt.getUserPrivilegeObjectList() != null) {
                         // objects are user
-                        stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
+                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectTypeUnResolved(), userIdentity));
+                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
-                        stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
+                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                             if (tokens.size() < 1 || tokens.size() > 2) {
                                 throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
@@ -311,10 +317,10 @@ public class PrivilegeStmtAnalyzerV2 {
                                 }
 
                                 tokensWithDatabase.add(tokens.get(0));
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectTypeUnResolved(),
+                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(),
                                         tokensWithDatabase));
                             } else {
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectTypeUnResolved(), tokens));
+                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(), tokens));
                             }
                         }
                     } else if (stmt.getFunctionArgsDef() != null) {
@@ -329,10 +335,10 @@ public class PrivilegeStmtAnalyzerV2 {
                     } else {
                         // all statement
                         // TABLES -> TABLE
-                        String objectTypeString = privilegeManager.analyzeTypeInPlural(stmt.getObjectTypeUnResolved());
+                        ObjectType objectType = privilegeManager.getObjectByPlural(stmt.getObjectTypeUnResolved());
 
                         // TABLE -> 0/1
-                        stmt.setObjectType(analyzePrivObjectType(objectTypeString));
+                        stmt.setObjectType(objectType);
 
                         if (stmt.getTokens().size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
                                 stmt.getObjectType().equals(ObjectType.VIEW) ||
@@ -345,19 +351,30 @@ public class PrivilegeStmtAnalyzerV2 {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
-                                objectList.add(privilegeManager.analyzeUserObject(objectTypeString, null));
+                                objectList.add(privilegeManager.analyzeUserObject(objectType, null));
                             }
                         } else {
-                            objectList.add(privilegeManager.analyzeObject(objectTypeString, stmt.getTokens()));
+                            objectList.add(privilegeManager.analyzeObject(objectType, stmt.getTokens()));
                         }
                     }
                     stmt.setObjectList(objectList);
                 } else {
-                    stmt.setObjectType(analyzePrivObjectType(stmt.getObjectTypeUnResolved()));
+                    stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                     stmt.setObjectList(null);
                 }
-                privilegeManager.validateGrant(stmt.getObjectTypeUnResolved(), stmt.getPrivList(), stmt.getObjectList());
-                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
+
+                List<PrivilegeType> privilegeTypes = new ArrayList<>();
+                for (String privTypeUnResolved : stmt.getPrivilegeTypeUnResolved()) {
+                    if (privTypeUnResolved.equals("ALL")) {
+                        privilegeTypes.addAll(privilegeManager.getAvailablePrivType(stmt.getObjectType()));
+                    } else {
+                        privilegeTypes.add(analyzePrivType(stmt.getObjectType(), privTypeUnResolved));
+                    }
+                }
+
+                stmt.setPrivilegeTypes(privilegeTypes);
+
+                privilegeManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList());
             } catch (PrivilegeException | AnalysisException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
@@ -376,6 +393,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdentifier(), true);
             for (String roleName : stmt.getRoles()) {
                 validRoleName(roleName, "Cannot set role", true);
             }

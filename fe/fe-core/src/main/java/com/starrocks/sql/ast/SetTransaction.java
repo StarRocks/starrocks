@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-public class SetTransaction extends SetVar {
-    public void analyze() {
-
-    }
+public class SetTransaction extends SetListItem {
 }

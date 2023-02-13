@@ -18,7 +18,6 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.common.MetaUtils;

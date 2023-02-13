@@ -117,6 +117,7 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -199,11 +200,11 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -3396,7 +3397,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null && !optHints.isEmpty()) {
                 SessionVariable sessionVariable = VariableMgr.newSessionVariable();
                 for (String key : optHints.keySet()) {
-                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                    VariableMgr.setSystemVariable(sessionVariable,
+                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
                 }
             }
         }
@@ -3591,6 +3593,15 @@ public class LocalMetastore implements ConnectorMetadata {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
                         baseTable.removeRelatedMaterializedView(mvId);
+                        if (!baseTable.isLocalTable()) {
+                            // remove relatedMaterializedViews for connector table
+                            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                                    removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                            baseTableInfo.getDbName(),
+                                            baseTableInfo.getTableIdentifier(),
+                                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                                    Sets.newHashSet(mvId)).build());
+                        }
                     }
                 }
             }

@@ -117,38 +117,70 @@ public class MaterializedViewTest extends PlanTestBase {
         }
     }
 
-    private boolean testRewrite(String mv, String query) {
-        // Get a faked distribution name
-        try {
-            LOG.info("start to create mv:" + mv);
-            ExecPlan mvPlan = getExecPlan(mv);
-            List<String> outputNames = mvPlan.getColNames();
-            String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                    "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                    " AS " +
-                    mv;
-            starRocksAssert.withMaterializedView(mvSQL);
-            String rewritePlan = getFragmentPlan(query);
-            System.out.println(rewritePlan);
-            return rewritePlan.contains("TABLE: mv0");
-        } catch (Exception e) {
-            LOG.warn("test rewwrite failed:", e);
-        } finally {
-            try {
-                starRocksAssert.dropMaterializedView("mv0");
-            } catch (Exception e) {
-                LOG.warn("drop materialized view failed:", e);
-            }
+    class MaterializedViewTestFixture {
+        private final String mv;
+        private final String query;
+
+        private String rewritePlan;
+        private Exception exception;
+        public MaterializedViewTestFixture(String mv, String query) {
+            this.mv = mv;
+            this.query = query;
         }
-        return false;
+        public MaterializedViewTestFixture rewrite() {
+            // Get a faked distribution name
+            this.exception = null;
+            this.rewritePlan = "";
+
+            try {
+                LOG.info("start to create mv:" + mv);
+                ExecPlan mvPlan = getExecPlan(mv);
+                List<String> outputNames = mvPlan.getColNames();
+                String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
+                        "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
+                        " AS " +
+                        mv;
+                starRocksAssert.withMaterializedView(mvSQL);
+                this.rewritePlan = getFragmentPlan(query);
+                System.out.println(rewritePlan);
+            } catch (Exception e) {
+                LOG.warn("test rewwrite failed:", e);
+                this.exception = e;
+            } finally {
+                try {
+                    starRocksAssert.dropMaterializedView("mv0");
+                } catch (Exception e) {
+                    LOG.warn("drop materialized view failed:", e);
+                }
+            }
+            return this;
+        }
+
+        public MaterializedViewTestFixture ok() {
+            Assert.assertTrue(this.exception == null);
+            Assert.assertTrue(this.rewritePlan.contains("TABLE: mv0"));
+            return this;
+        }
+
+        public MaterializedViewTestFixture nonMatch() {
+            Assert.assertTrue(!this.rewritePlan.contains("TABLE: mv0"));
+            return this;
+        }
+
+        public MaterializedViewTestFixture contains(String expect) {
+            Assert.assertTrue(this.rewritePlan.contains(expect));
+            return this;
+        }
     }
 
-    private void testRewriteOK(String mv, String query) {
-        Assert.assertTrue(testRewrite(mv, query));
+    private MaterializedViewTestFixture testRewriteOK(String mv, String query) {
+        MaterializedViewTestFixture fixture = new MaterializedViewTestFixture(mv, query);
+        return fixture.rewrite().ok();
     }
 
-    private void testRewriteFail(String mv, String query) {
-        Assert.assertFalse(testRewrite(mv, query));
+    private MaterializedViewTestFixture testRewriteFail(String mv, String query) {
+        MaterializedViewTestFixture fixture = new MaterializedViewTestFixture(mv, query);
+        return fixture.rewrite().nonMatch();
     }
 
     @Test
@@ -277,7 +309,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregate0() {
         testRewriteOK("select deptno, count(*) as c, empid + 2 as d, sum(empid) as s "
                         + "from emps group by empid, deptno",
@@ -292,7 +323,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregate2() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps group by empid, deptno",
@@ -309,7 +339,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregate4() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -318,7 +347,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregate5() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -327,7 +355,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregate6() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -364,7 +391,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateWithAggExpr() {
         // support agg expr: empid -> abs(empid)
         testRewriteOK("select empid, deptno," +
@@ -379,14 +405,21 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     public void testAggregateWithGroupByKeyExpr() {
-        testRewriteFail("select empid, deptno," +
+        testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
-                "select abs(empid), sum(salary) from emps group by abs(empid), deptno");
+                "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
+                .contains("  0:OlapScanNode\n" +
+                        "     TABLE: mv0")
+                .contains("  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total)\n" +
+                        "  |  group by: 14: abs, 10: deptno");
     }
 
     @Test
     @Ignore
+    // TODO: Remove const group by keys
     public void testAggregateWithContGroupByKey() {
         testRewriteOK("select empid, floor(cast('1997-01-20 12:34:56' as DATETIME)), "
                         + "count(*) + 1 as c, sum(empid) as s\n"
@@ -397,7 +430,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateRollup() {
         String mv = "select deptno, count(*) as c, sum(empid) as s from emps group by locationid, deptno";
         testRewriteOK(mv, "select count(*) as c, deptno from emps group by deptno");
@@ -428,7 +460,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateProject() {
         testRewriteOK("select deptno, count(*) as c, empid + 2, sum(empid) as s "
                         + "from emps group by empid, deptno",
@@ -506,7 +537,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateMaterializationAggregateFuncs2() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps group by empid, deptno",
@@ -523,7 +553,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateMaterializationAggregateFuncs4() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -532,7 +561,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -549,7 +577,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateMaterializationAggregateFuncs7() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -557,8 +584,8 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "from emps where deptno > 10 group by deptno");
     }
 
-    @Test
     @Ignore
+    // TODO: Support deptno + 1 rewrite to deptno
     public void testAggregateMaterializationAggregateFuncs8() {
         testRewriteOK("select empid, deptno + 1, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps where deptno >= 10 group by empid, deptno",
@@ -568,6 +595,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     @Ignore
+    // TODO: Remove const group by keys
     public void testAggregateMaterializationAggregateFuncsWithConstGroupByKeys() {
         testRewriteOK("select empid, floor(cast('1997-01-20 12:34:56' as DATETIME)), "
                         + "count(*) + 1 as c, sum(empid) as s\n"
@@ -622,7 +650,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testAggregateMaterializationAggregateFuncs18() {
         testRewriteOK("select empid, deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps group by empid, deptno",
@@ -630,7 +657,7 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "from emps group by empid*deptno");
     }
 
-    @Ignore
+
     @Test
     public void testAggregateMaterializationAggregateFuncs19() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
@@ -639,8 +666,9 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "from emps group by empid + 10");
     }
 
+
+    // TODO: Don't support group by position.
     @Ignore
-    @Test
     public void testAggregateMaterializationAggregateFuncs20() {
         testRewriteOK("select 11 as empno, 22 as sal, count(*) from emps group by 11",
                 "select * from\n"
@@ -661,7 +689,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testJoinAggregateMaterializationNoAggregateFuncs2() {
         testRewriteOK("select depts.deptno, empid from depts\n"
                         + "join emps using (deptno) where depts.deptno > 10\n"
@@ -714,6 +741,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     @Ignore
+    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs7() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -751,6 +779,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     @Ignore
+    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs9() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -769,7 +798,6 @@ public class MaterializedViewTest extends PlanTestBase {
     }
 
     @Test
-    @Ignore
     public void testJoinAggregateMaterializationNoAggregateFuncs10() {
         testRewriteOK("select depts.name, dependents.name as name2, "
                         + "emps.deptno, depts.deptno as deptno2, "
@@ -787,9 +815,10 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "group by dependents.empid");
     }
 
-    @Ignore
+
     @Test
-    // This test relies on FK-UK relationship
+    @Ignore
+    // TODO: This test relies on FK-UK relationship
     public void testJoinAggregateMaterializationAggregateFuncs1() {
         testRewriteOK("select empid, depts.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -810,7 +839,7 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Ignore
     @Test
-    // This test relies on FK-UK relationship
+    // TODO: This test relies on FK-UK relationship
     public void testJoinAggregateMaterializationAggregateFuncs3() {
         testRewriteOK("select empid, depts.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1040,20 +1069,18 @@ public class MaterializedViewTest extends PlanTestBase {
 
     @Test
     @Ignore
+    // TODO: Need add no-loss-cast in lineage factory.
     public void testJoinMaterialization5() {
         testRewriteOK("select cast(empid as BIGINT) as a from emps\n"
                         + "join depts using (deptno)",
-                "select empid deptno from emps\n"
+                "select empid from emps\n"
                         + "join depts using (deptno) where empid > 1");
     }
 
     @Test
     @Ignore
+    // TODO: Need add no-loss-cast in lineage factory.
     public void testJoinMaterialization6() {
-        testRewriteOK("select empid from emps\n"
-                        + "join depts using (deptno)",
-                "select empid deptno from emps\n"
-                        + "join depts using (deptno) where empid = 1");
         testRewriteOK("select cast(empid as BIGINT) as a from emps\n"
                         + "join depts using (deptno)",
                 "select empid deptno from emps\n"
@@ -1094,19 +1121,10 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "join emps on (emps.deptno = depts.deptno)");
     }
 
-    @Ignore
+
     @Test
+    @Ignore
     public void testJoinMaterialization10() {
-        testRewriteOK("select depts.deptno, dependents.empid\n"
-                        + "from depts\n"
-                        + "join dependents on (depts.name = dependents.name)\n"
-                        + "join emps on (emps.deptno = depts.deptno)\n"
-                        + "where depts.deptno > 10",
-                "select dependents.empid\n"
-                        + "from depts\n"
-                        + "join dependents on (depts.name = dependents.name)\n"
-                        + "join emps on (emps.deptno = depts.deptno)\n"
-                        + "where depts.deptno > 30");
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
                         + "join dependents on (depts.name = dependents.name)\n"
@@ -1127,8 +1145,8 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "where deptno in (select deptno from depts)");
     }
 
-    @Ignore
     @Test
+    @Ignore
     public void testJoinMaterialization12() {
         testRewriteOK("select empid, emps.name as a, emps.deptno, depts.name as b \n"
                         + "from emps join depts using (deptno)\n"
@@ -1141,8 +1159,10 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "(depts.name is not null and emps.name = 'b')");
     }
 
-    @Ignore
+
     @Test
+    @Ignore
+    // TODO: agg push down below Join
     public void testAggregateOnJoinKeys() {
         testRewriteOK("select deptno, empid, salary "
                         + "from emps\n"
@@ -1152,10 +1172,11 @@ public class MaterializedViewTest extends PlanTestBase {
                         + "join depts on depts.deptno = empid group by empid, depts.deptno");
     }
 
-    @Ignore
+
     @Test
+    @Ignore
+    // TODO: agg need push down below join
     public void testAggregateOnJoinKeys2() {
-        // TODO: sum need push down join
         testRewriteOK("select deptno, empid, salary, sum(1) as c "
                         + "from emps\n"
                         + "group by deptno, empid, salary",

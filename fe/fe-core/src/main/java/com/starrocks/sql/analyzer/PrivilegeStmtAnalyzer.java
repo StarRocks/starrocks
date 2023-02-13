@@ -25,7 +25,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -99,14 +98,7 @@ public class PrivilegeStmtAnalyzer {
          * check if role name valid
          */
         private void validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
-            try {
-                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
         }
 
         /**
@@ -136,7 +128,7 @@ public class PrivilegeStmtAnalyzer {
             }
 
             // parse privilege actions to PrivBitSet
-            PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
+            PrivBitSet privs = getPrivBitSet(stmt.getPrivilegeTypeUnResolved());
             String privType = stmt.getObjectTypeUnResolved();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
                 if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
@@ -149,7 +141,7 @@ public class PrivilegeStmtAnalyzer {
                 }
                 analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("USER")) {
-                if (stmt.getPrivList().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
+                if (stmt.getPrivilegeTypeUnResolved().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
                     throw new SemanticException("only IMPERSONATE can only be granted on user");
                 }
                 if (stmt.getUserPrivilegeObjectList().size() != 1) {
@@ -275,7 +267,7 @@ public class PrivilegeStmtAnalyzer {
             }
         }
 
-        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
@@ -308,12 +300,14 @@ public class PrivilegeStmtAnalyzer {
                 }
             }
 
-            if (stmt.hasRole()) {
-                if (stmt.getQualifiedRole().equalsIgnoreCase("SUPERUSER")) {
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                String role = stmt.getDefaultRoles().get(0);
+
+                if (role.equalsIgnoreCase("SUPERUSER")) {
                     // for forward compatibility
-                    stmt.setRole(Role.ADMIN_ROLE);
+                    stmt.getDefaultRoles().set(0, Role.ADMIN_ROLE);
                 }
-                analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user");
+                analyseRoleName(role, session, true, "Can not granted/revoke role to user");
             }
             return null;
         }

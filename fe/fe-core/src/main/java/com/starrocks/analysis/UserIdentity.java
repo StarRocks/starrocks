@@ -41,12 +41,12 @@ import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;

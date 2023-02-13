@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -55,13 +56,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.privilege.Action;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
-import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
@@ -69,11 +69,13 @@ import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -93,14 +95,15 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
@@ -110,7 +113,7 @@ import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -129,42 +132,301 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+
+        // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+        @Override
+        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (statement instanceof CreateUserStmt) {
+                sb.append("CREATE");
+            } else {
+                sb.append("ALTER");
+            }
+
+            sb.append(" USER ").append(statement.getUserIdent());
+            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
+                if (statement.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                }
+            }
+
+            if (!Strings.isNullOrEmpty(statement.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(statement.getAuthString())) {
+                    if (statement.isPasswordPlain()) {
+                        sb.append(" BY '");
+                    } else {
+                        sb.append(" AS '");
+                    }
+                    sb.append(statement.getAuthString()).append("'");
+                }
+            }
+
+            if (!statement.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+
+                List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
+                sb.append(Joiner.on(", ").join(privList));
+                sb.append(" ON ");
+
+                String plural;
+                try {
+                    plural = GlobalStateMgr.getCurrentState().getPrivilegeManager().getObjectTypePlural(stmt.getObjectType());
+                } catch (PrivilegeException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                switch (stmt.getObjectType()) {
+                    case TABLE:
+                    case VIEW:
+                    case MATERIALIZED_VIEW: {
+                        TablePEntryObject tablePEntryObject = (TablePEntryObject) stmt.getObjectList().get(0);
+                        if (Objects.equals(tablePEntryObject.getDatabaseUUID(), TablePEntryObject.ALL_DATABASE_UUID)) {
+                            sb.append("ALL ").append(plural).append(" IN ALL DATABASES");
+                        } else {
+                            // TODO(yiming): change it for external catalog
+                            Database database = GlobalStateMgr.getCurrentState()
+                                    .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
+                            if (Objects.equals(tablePEntryObject.getTableUUID(), TablePEntryObject.ALL_TABLES_UUID)) {
+                                sb.append("ALL TABLES ");
+                                sb.append("IN DATABASE ").append(database.getFullName());
+                            } else {
+                                sb.append(stmt.getObjectType().name()).append(" ");
+                                List<String> objectString = new ArrayList<>();
+                                for (PEntryObject pEntryObject : stmt.getObjectList()) {
+
+                                    TablePEntryObject tp = (TablePEntryObject) pEntryObject;
+                                    // TODO(yiming): change it for external catalog
+                                    Table table = database.getTable(Long.parseLong(tp.getTableUUID()));
+                                    objectString.add(database.getFullName() + "." + table.getName());
+                                }
+                                sb.append(Joiner.on(", ").join(objectString));
+                            }
+                        }
+                        break;
+                    }
+                    case DATABASE: {
+                        DbPEntryObject dbPEntryObject = (DbPEntryObject) stmt.getObjectList().get(0);
+                        if (Objects.equals(dbPEntryObject.getUUID(), DbPEntryObject.ALL_DATABASES_UUID)) {
+                            sb.append("ALL DATABASES");
+                        } else {
+                            sb.append(stmt.getObjectType().name()).append(" ");
+                            // TODO(yiming): change it for external catalog
+                            Database database =
+                                    GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
+                            sb.append(database.getFullName());
+                        }
+                        break;
+                    }
+                    case SYSTEM: {
+                        sb.append(stmt.getObjectType().name());
+                        break;
+                    }
+                    case USER: {
+                        UserPEntryObject userPEntryObject = (UserPEntryObject) stmt.getObjectList().get(0);
+                        if (userPEntryObject.getUserIdentity() == null) {
+                            sb.append("ALL USERS");
+                        } else {
+                            sb.append(stmt.getObjectType().name());
+                            sb.append(Joiner.on(",").join(stmt.getObjectList().stream()
+                                    .map(pEntryObject -> ((UserPEntryObject) pEntryObject).getUserIdentity().toString())
+                                    .collect(toList())));
+                        }
+                        break;
+                    }
+                    case RESOURCE: {
+                        ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) stmt.getObjectList().get(0);
+                        if (resourcePEntryObject.getName() == null) {
+                            sb.append("ALL ").append(plural);
+                        } else {
+                            sb.append(stmt.getObjectType().name()).append(" ");
+                            sb.append(resourcePEntryObject.getName());
+                        }
+                        break;
+                    }
+                    case CATALOG: {
+                        CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) stmt.getObjectList().get(0);
+                        if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
+                            sb.append("ALL CATALOGS");
+                        } else {
+                            sb.append(stmt.getObjectType().name()).append(" ");
+
+                            List<Catalog> catalogs =
+                                    new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
+                            Optional<Catalog> catalogOptional = catalogs.stream().filter(
+                                    catalog -> catalog.getId() == catalogPEntryObject.getId()
+                            ).findFirst();
+                            if (!catalogOptional.isPresent()) {
+                                throw new SemanticException("can't find catalog");
+                            }
+                            Catalog catalog = catalogOptional.get();
+                            sb.append(catalog.getName());
+                        }
+                        break;
+                    }
+                    case FUNCTION: {
+                        FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) stmt.getObjectList().get(0);
+
+                        if (functionPEntryObject.getDatabaseId() == FunctionPEntryObject.ALL_DATABASE_ID) {
+                            sb.append("ALL FUNCTIONS ");
+                            sb.append("IN ALL DATABASES");
+                        } else {
+                            String functionSig = functionPEntryObject.getFunctionSig();
+                            Database database = GlobalStateMgr.getCurrentState().getDb(functionPEntryObject.getDatabaseId());
+
+                            if (functionSig.equals(FunctionPEntryObject.ALL_FUNCTIONS_SIG)) {
+                                sb.append("ALL FUNCTIONS ");
+                                sb.append("IN DATABASE ");
+                                sb.append(database.getFullName());
+                            } else {
+                                sb.append(stmt.getObjectType().name()).append(" ");
+                                sb.append(functionSig);
+                                sb.append(" IN DATABASE ").append(database.getFullName());
+                            }
+
+                            sb.append(functionPEntryObject.getFunctionSig());
+                        }
+                        break;
+                    }
+                    case RESOURCE_GROUP: {
+                        ResourceGroupPEntryObject resourceGroupPEntryObject =
+                                (ResourceGroupPEntryObject) stmt.getObjectList().get(0);
+                        if (resourceGroupPEntryObject.getId() == ResourceGroupPEntryObject.ALL_RESOURCE_GROUP_ID) {
+                            sb.append("ALL RESOURCE_GROUPS");
+                        } else {
+                            sb.append(stmt.getObjectType().name()).append(" ");
+                            sb.append(GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                                    .getResourceGroup(resourceGroupPEntryObject.getId()));
+                        }
+
+                        break;
+                    }
+                    case GLOBAL_FUNCTION: {
+                        GlobalFunctionPEntryObject globalFunctionPEntryObject =
+                                (GlobalFunctionPEntryObject) stmt.getObjectList().get(0);
+                        if (globalFunctionPEntryObject.getFunctionSig()
+                                .equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
+                            sb.append("ALL ").append(plural);
+                        } else {
+                            sb.append(stmt.getObjectType().name()).append(" ");
+                            sb.append(globalFunctionPEntryObject.getFunctionSig());
+                        }
+                        break;
+                    }
+                }
+
+            } else {
+                boolean firstLine = true;
+                for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
+                    if (firstLine) {
+                        firstLine = false;
+                    } else {
+                        sb.append(", ");
+                    }
+                    String priv = privilege.toString().toUpperCase();
+                    sb.append(priv, 0, priv.length() - 5);
+                }
+                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
+                    sb.append(" ON ").append(stmt.getTblPattern());
+                } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
+                    sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
+                } else {
+                    sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
+                }
+
+            }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '").append(stmt.getRole()).append("'");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("GRANT ");
+            } else {
+                sqlBuilder.append("REVOKE ");
+            }
+
+            sqlBuilder.append(Joiner.on(", ")
+                    .join(statement.getGranteeRole().stream().map(r -> "'" + r + "'").collect(toList())));
+            sqlBuilder.append(" ");
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("TO ");
+            } else {
+                sqlBuilder.append("FROM ");
+            }
+            if (statement.getRole() != null) {
+                sqlBuilder.append(" ROLE ").append(statement.getRole());
+            } else {
+                sqlBuilder.append(statement.getUserIdent());
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        // --------------------------------------------Set Statement -------------------------------------------------------
+
         @Override
         public String visitSetStatement(SetStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("SET ");
 
             List<String> setVarList = new ArrayList<>();
-            for (SetVar setVar : stmt.getSetVars()) {
-                if (setVar instanceof SetPassVar) {
-                    StringBuilder tmp = new StringBuilder();
-                    tmp.append("PASSWORD FOR ")
-                            .append(((SetPassVar) setVar).getUserIdent().toString())
-                            .append(" = PASSWORD('***')");
-                    setVarList.add(tmp.toString());
-                    continue;
-                }
-                String setVarSql = "";
+            for (SetListItem setVar : stmt.getSetListItems()) {
+                if (setVar instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += systemVariable.getType().toString() + " ";
+                    setVarSql += "`" + systemVariable.getVariable() + "`";
+                    setVarSql += " = ";
+                    setVarSql += visit(systemVariable.getResolvedExpression());
 
-                // `SET DEFAULT` is not supported
-                if (!setVar.getType().equals(SetType.DEFAULT)) {
-                    if (setVar.getType().equals(SetType.USER)) {
-                        setVarSql += "@";
-                    } else {
-                        setVarSql += setVar.getType().toString() + " ";
-                    }
-                }
-                setVarSql += "`" + setVar.getVariable() + "`";
-                setVarSql += " = ";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof UserVariable) {
+                    UserVariable userVariable = (UserVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += "@";
+                    setVarSql += "`" + userVariable.getVariable() + "`";
+                    setVarSql += " = ";
 
-                if (setVar instanceof UserVariable) {
-                    setVarSql += "cast (" + visit(setVar.getResolvedExpression())
-                            + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
-                } else {
-                    setVarSql += visit(setVar.getExpression());
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof SetPassVar) {
+                    String tmp = "PASSWORD FOR " +
+                            ((SetPassVar) setVar).getUserIdent().toString() +
+                            " = PASSWORD('***')";
+                    setVarList.add(tmp);
                 }
-
-                setVarList.add(setVarSql);
             }
 
             return sb.append(Joiner.on(",").join(setVarList)).toString();
@@ -179,7 +441,7 @@ public class AstToStringBuilder {
                 if (idx != 0) {
                     sb.append(", ");
                 }
-                sb.append(stringStringPair.first + " = " + stringStringPair.second);
+                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
                 idx++;
             }
             return sb.toString();
@@ -308,219 +570,6 @@ public class AstToStringBuilder {
                 sb.append(")");
             }
             return sb.toString();
-        }
-        // ------------------------------------------- Privilege Statement ---------------------------------------------
-
-        @Override
-        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append("GRANT ");
-            } else {
-                sb.append("REVOKE ");
-            }
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-
-                List<String> privList = new ArrayList<>();
-                for (Map.Entry<String, Action> actionEntry : stmt.getObjectType().getActionMap().entrySet()) {
-                    if (stmt.getActionList().contains(actionEntry.getValue())) {
-                        privList.add(actionEntry.getValue().getName());
-                    }
-                }
-                sb.append(Joiner.on(", ").join(privList));
-                sb.append(" ON ");
-
-                switch (stmt.getObjectType()) {
-                    case TABLE:
-                    case VIEW:
-                    case MATERIALIZED_VIEW: {
-                        TablePEntryObject tablePEntryObject = (TablePEntryObject) stmt.getObjectList().get(0);
-                        if (tablePEntryObject.getDatabaseId() == TablePEntryObject.ALL_DATABASE_ID) {
-                            sb.append("ALL ").append(stmt.getObjectType().getPlural()).append(" IN ALL DATABASES");
-                        } else {
-                            Database database = GlobalStateMgr.getCurrentState().getDb(tablePEntryObject.getDatabaseId());
-                            if (tablePEntryObject.getTableId() == TablePEntryObject.ALL_TABLES_ID) {
-                                sb.append("ALL TABLES ");
-                                sb.append("IN DATABASE ").append(database.getFullName());
-                            } else {
-                                sb.append(stmt.getObjectType().name()).append(" ");
-
-                                List<String> objectString = new ArrayList<>();
-                                for (PEntryObject pEntryObject : stmt.getObjectList()) {
-                                    TablePEntryObject tp = (TablePEntryObject) pEntryObject;
-                                    Table table = database.getTable(tp.getTableId());
-                                    objectString.add(database.getFullName() + "." + table.getName());
-                                }
-                                sb.append(Joiner.on(", ").join(objectString));
-                            }
-                        }
-                        break;
-                    }
-                    case DATABASE: {
-                        DbPEntryObject dbPEntryObject = (DbPEntryObject) stmt.getObjectList().get(0);
-                        if (dbPEntryObject.getId() == DbPEntryObject.ALL_DATABASE_ID) {
-                            sb.append("ALL DATABASES");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            Database database = GlobalStateMgr.getCurrentState().getDb(dbPEntryObject.getId());
-                            sb.append(database.getFullName());
-                        }
-                        break;
-                    }
-                    case SYSTEM: {
-                        sb.append(stmt.getObjectType().name());
-                        break;
-                    }
-                    case USER: {
-                        UserPEntryObject userPEntryObject = (UserPEntryObject) stmt.getObjectList().get(0);
-                        if (userPEntryObject.getUserIdentity() == null) {
-                            sb.append("ALL USERS");
-                        } else {
-                            sb.append(stmt.getObjectType().name());
-                            sb.append(Joiner.on(",").join(stmt.getObjectList().stream()
-                                    .map(pEntryObject -> ((UserPEntryObject) pEntryObject).getUserIdentity().toString())
-                                    .collect(toList())));
-                        }
-                        break;
-                    }
-                    case RESOURCE: {
-                        ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) stmt.getObjectList().get(0);
-                        if (resourcePEntryObject.getName() == null) {
-                            sb.append("ALL ").append(stmt.getObjectType().getPlural());
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(resourcePEntryObject.getName());
-                        }
-                        break;
-                    }
-                    case CATALOG: {
-                        CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) stmt.getObjectList().get(0);
-                        if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
-                            sb.append("ALL CATALOGS");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-
-                            List<Catalog> catalogs =
-                                    new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
-                            Optional<Catalog> catalogOptional = catalogs.stream().filter(
-                                    catalog -> catalog.getId() == catalogPEntryObject.getId()
-                            ).findFirst();
-                            if (!catalogOptional.isPresent()) {
-                                throw new SemanticException("can't find catalog");
-                            }
-                            Catalog catalog = catalogOptional.get();
-                            sb.append(catalog.getName());
-                        }
-                        break;
-                    }
-                    case FUNCTION: {
-                        FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) stmt.getObjectList().get(0);
-
-                        if (functionPEntryObject.getDatabaseId() == FunctionPEntryObject.ALL_DATABASE_ID) {
-                            sb.append("ALL FUNCTIONS ");
-                            sb.append("IN ALL DATABASES");
-                        } else {
-                            String functionSig = functionPEntryObject.getFunctionSig();
-                            Database database = GlobalStateMgr.getCurrentState().getDb(functionPEntryObject.getDatabaseId());
-
-                            if (functionSig.equals(FunctionPEntryObject.ALL_FUNCTIONS_SIG)) {
-                                sb.append("ALL FUNCTIONS ");
-                                sb.append("IN DATABASE ");
-                                sb.append(database.getFullName());
-                            } else {
-                                sb.append(stmt.getObjectType().name()).append(" ");
-                                sb.append(functionSig);
-                                sb.append(" IN DATABASE ").append(database.getFullName());
-                            }
-
-                            sb.append(functionPEntryObject.getFunctionSig());
-                        }
-                        break;
-                    }
-                    case RESOURCE_GROUP: {
-                        ResourceGroupPEntryObject resourceGroupPEntryObject =
-                                (ResourceGroupPEntryObject) stmt.getObjectList().get(0);
-                        if (resourceGroupPEntryObject.getId() == ResourceGroupPEntryObject.ALL_RESOURCE_GROUP_ID) {
-                            sb.append("ALL RESOURCE_GROUPS");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                                    .getResourceGroup(resourceGroupPEntryObject.getId()));
-                        }
-
-                        break;
-                    }
-                    case GLOBAL_FUNCTION: {
-                        GlobalFunctionPEntryObject globalFunctionPEntryObject =
-                                (GlobalFunctionPEntryObject) stmt.getObjectList().get(0);
-                        if (globalFunctionPEntryObject.getFunctionSig()
-                                .equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
-                            sb.append("ALL ").append(ObjectType.GLOBAL_FUNCTION.getPlural());
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(globalFunctionPEntryObject.getFunctionSig());
-                        }
-                        break;
-                    }
-                }
-
-            } else {
-                boolean firstLine = true;
-                for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
-                    if (firstLine) {
-                        firstLine = false;
-                    } else {
-                        sb.append(", ");
-                    }
-                    String priv = privilege.toString().toUpperCase();
-                    sb.append(priv, 0, priv.length() - 5);
-                }
-                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
-                    sb.append(" ON ").append(stmt.getTblPattern());
-                } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
-                    sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
-                } else {
-                    sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
-                }
-
-            }
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append(" TO ");
-            } else {
-                sb.append(" FROM ");
-            }
-            if (stmt.getUserIdentity() != null) {
-                sb.append(stmt.getUserIdentity());
-            } else {
-                sb.append("ROLE '").append(stmt.getRole()).append("'");
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public String visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, Void context) {
-            StringBuilder sqlBuilder = new StringBuilder();
-            if (statement instanceof GrantRoleStmt) {
-                sqlBuilder.append("GRANT ");
-            } else {
-                sqlBuilder.append("REVOKE ");
-            }
-
-            sqlBuilder.append(Joiner.on(", ")
-                    .join(statement.getGranteeRole().stream().map(r -> "'" + r + "'").collect(toList())));
-            sqlBuilder.append(" ");
-            if (statement instanceof GrantRoleStmt) {
-                sqlBuilder.append("TO ");
-            } else {
-                sqlBuilder.append("FROM ");
-            }
-            if (statement.getRole() != null) {
-                sqlBuilder.append(" ROLE ").append(statement.getRole());
-            } else {
-                sqlBuilder.append(statement.getUserIdent());
-            }
-
-            return sqlBuilder.toString();
         }
 
         @Override

@@ -14,33 +14,46 @@
 
 package com.starrocks.privilege;
 
+import com.google.gson.annotations.SerializedName;
+
 public enum PrivilegeType {
-    GRANT,
-    NODE,
-    OPERATE,
+    GRANT(1),
+    NODE(2),
+    OPERATE(3),
 
-    DELETE,
-    DROP,
-    INSERT,
-    SELECT,
-    ALTER,
-    EXPORT,
-    UPDATE,
-    USAGE,
-    PLUGIN,
-    FILE,
-    BLACKLIST,
-    REPOSITORY,
-    REFRESH,
-    IMPERSONATE,
+    DELETE(4),
+    DROP(5),
+    INSERT(6),
+    SELECT(7),
+    ALTER(8),
+    EXPORT(9),
+    UPDATE(10),
+    USAGE(11),
+    PLUGIN(12),
+    FILE(13),
+    BLACKLIST(14),
+    REPOSITORY(15),
+    REFRESH(16),
+    IMPERSONATE(17),
 
-    CREATE_DATABASE,
-    CREATE_TABLE,
-    CREATE_VIEW,
-    CREATE_FUNCTION,
-    CREATE_GLOBAL_FUNCTION,
-    CREATE_MATERIALIZED_VIEW,
-    CREATE_RESOURCE,
-    CREATE_RESOURCE_GROUP,
-    CREATE_EXTERNAL_CATALOG,
+    CREATE_DATABASE(18),
+    CREATE_TABLE(19),
+    CREATE_VIEW(20),
+    CREATE_FUNCTION(21),
+    CREATE_GLOBAL_FUNCTION(22),
+    CREATE_MATERIALIZED_VIEW(23),
+    CREATE_RESOURCE(24),
+    CREATE_RESOURCE_GROUP(25),
+    CREATE_EXTERNAL_CATALOG(26);
+
+    @SerializedName("i")
+    private final int id;
+
+    PrivilegeType(int id) {
+        this.id = id;
+    }
+
+    public int getId() {
+        return id;
+    }
 }
