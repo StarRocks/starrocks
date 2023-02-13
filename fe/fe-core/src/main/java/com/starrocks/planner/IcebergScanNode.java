@@ -37,8 +37,10 @@ import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -234,65 +236,122 @@ public class IcebergScanNode extends ScanNode {
             LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
             return;
         }
+        int datafilesize = snapshot.get().dataManifests(srIcebergTable.getIcebergTable().io()).size();
+        int deletefilesize = snapshot.get().deleteManifests(srIcebergTable.getIcebergTable().io()).size();
+        for (int i = 0; i < datafilesize; i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.DataManifestsSize")) {
+                IcebergUtil.add(0);
+            }
+        }
+        for (int i = 0; i < deletefilesize; i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.DeleteManifestsSize")) {
+                IcebergUtil.add(0);
+            }
+        }
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getAllFileIO().set(0);
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCache().set(0);
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCacheHit().set(0);
         // partition -> partitionId
         Map<StructLike, Long> partitionMap = Maps.newHashMap();
+        Map<String, Integer> partitionFileSize = Maps.newHashMap();
 
-        for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
-            for (FileScanTask task : combinedScanTask.files()) {
-                DataFile file = task.file();
-                LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
-                if (file.fileSizeInBytes() == 0) {
-                    continue;
-                }
-
-                StructLike partition = task.file().partition();
-                if (!partitionMap.containsKey(partition)) {
-                    long partitionId = nextPartitionId();
-                    partitionMap.put(partition, partitionId);
-                }
-
-                TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-
-                THdfsScanRange hdfsScanRange = new THdfsScanRange();
-                hdfsScanRange.setFull_path(file.path().toString());
-                hdfsScanRange.setOffset(task.start());
-                hdfsScanRange.setLength(task.length());
-                // For iceberg table we do not need partition id
-                hdfsScanRange.setPartition_id(-1);
-                hdfsScanRange.setFile_length(file.fileSizeInBytes());
-                hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
-
-                hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
-                    TIcebergDeleteFile target = new TIcebergDeleteFile();
-                    target.setFull_path(source.path().toString());
-                    target.setFile_content(
-                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
-                                    TIcebergFileContent.POSITION_DELETES);
-                    target.setLength(source.fileSizeInBytes());
-
-                    if (source.content() == FileContent.EQUALITY_DELETES) {
-                        source.equalityFieldIds().forEach(fieldId -> {
-                            equalityDeleteColumns.add(
-                                    srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
-                        });
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.ScanSetup.PlanTime")) {
+            for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
+                    srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
+                for (FileScanTask task : combinedScanTask.files()) {
+                    DataFile file = task.file();
+                    LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
+                    if (file.fileSizeInBytes() == 0) {
+                        continue;
                     }
 
-                    return target;
-                }).collect(Collectors.toList()));
-                TScanRange scanRange = new TScanRange();
-                scanRange.setHdfs_scan_range(hdfsScanRange);
-                scanRangeLocations.setScan_range(scanRange);
+                    StructLike partition = task.file().partition();
+                    if (!partitionMap.containsKey(partition)) {
+                        long partitionId = nextPartitionId();
+                        partitionMap.put(partition, partitionId);
+                    }
 
-                // TODO: get hdfs block location information for scheduling, use iceberg meta cache
-                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
-                scanRangeLocations.addToLocations(scanRangeLocation);
+                    String partitionName = IcebergUtil.convertIcebergPartitionToPartitionName(
+                            srIcebergTable.getIcebergTable().spec(), partition);
+                    if (partitionFileSize.containsKey(partitionName)) {
+                        partitionFileSize.merge(partitionName, 1, Integer::sum);
+                    } else {
+                        partitionFileSize.put(partitionName, 1);
+                    }
 
-                result.add(scanRangeLocations);
+                    TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+                    THdfsScanRange hdfsScanRange = new THdfsScanRange();
+                    hdfsScanRange.setFull_path(file.path().toString());
+                    hdfsScanRange.setOffset(task.start());
+                    hdfsScanRange.setLength(task.length());
+                    // For iceberg table we do not need partition id
+                    hdfsScanRange.setPartition_id(-1);
+                    hdfsScanRange.setFile_length(file.fileSizeInBytes());
+                    hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
+
+                    hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
+                        TIcebergDeleteFile target = new TIcebergDeleteFile();
+                        target.setFull_path(source.path().toString());
+                        target.setFile_content(
+                                source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
+                                        TIcebergFileContent.POSITION_DELETES);
+                        target.setLength(source.fileSizeInBytes());
+
+                        if (source.content() == FileContent.EQUALITY_DELETES) {
+                            source.equalityFieldIds().forEach(fieldId -> {
+                                equalityDeleteColumns.add(
+                                        srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
+                            });
+                        }
+
+                        return target;
+                    }).collect(Collectors.toList()));
+                    TScanRange scanRange = new TScanRange();
+                    scanRange.setHdfs_scan_range(hdfsScanRange);
+                    scanRangeLocations.setScan_range(scanRange);
+
+                    // TODO: get hdfs block location information for scheduling, use iceberg meta cache
+                    TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+                    scanRangeLocations.addToLocations(scanRangeLocation);
+
+                    result.add(scanRangeLocations);
+                }
+            }
+        }
+
+        for (Map.Entry<String, Integer> entry : partitionFileSize.entrySet()) {
+            for (int i = 0; i < entry.getValue(); i++) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("PartitionFile." + entry.getKey())) {
+                    IcebergUtil.add(0);
+                }
             }
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionMap.values());
+
+        for (int i = 0; i < ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getAllFileIO().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.ScanSetup.AllFileIO")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        for (int i = 0; i < ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCache().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.ScanSetup.FileIOWithCache")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        for (int i = 0; i < ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCacheHit().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.ScanSetup.FileIOWithCacheHit")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getAllFileIO().set(0);
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCache().set(0);
+        ((IcebergCachingFileIO) srIcebergTable.getIcebergTable().io()).getFileIOWithCacheHit().set(0);
+
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {

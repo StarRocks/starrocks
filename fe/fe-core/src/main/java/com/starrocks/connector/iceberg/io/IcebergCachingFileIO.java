@@ -68,6 +68,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 /**
@@ -83,6 +84,18 @@ public class IcebergCachingFileIO implements FileIO {
 
     private ContentCache fileContentCache;
     private FileIO wrappedIO;
+
+    public AtomicInteger getAllFileIO() {
+        return fileContentCache.getAllFileIO();
+    }
+
+    public AtomicInteger getFileIOWithCache() {
+        return fileContentCache.getFileIOWithCache();
+    }
+
+    public AtomicInteger getFileIOWithCacheHit() {
+        return fileContentCache.getFileIOWithCacheHit();
+    }
 
     public IcebergCachingFileIO(FileIO io) {
         this.wrappedIO = io;
@@ -126,6 +139,22 @@ public class IcebergCachingFileIO implements FileIO {
         private final long maxTotalBytes;
         private final long maxContentLength;
         private final Cache<String, CacheEntry> cache;
+        private AtomicInteger fileIOWithCacheHit = new AtomicInteger(0);
+        private AtomicInteger allFileIO = new AtomicInteger(0);
+        private AtomicInteger fileIOWithCache = new AtomicInteger(0);
+
+        public AtomicInteger getAllFileIO() {
+            return allFileIO;
+        }
+
+        public AtomicInteger getFileIOWithCache() {
+            return fileIOWithCache;
+        }
+
+        public AtomicInteger getFileIOWithCacheHit() {
+            return fileIOWithCacheHit;
+        }
+
 
         private ContentCache(long maxContentLength, long maxTotalBytes) {
             this.maxTotalBytes = maxTotalBytes;
@@ -146,6 +175,9 @@ public class IcebergCachingFileIO implements FileIO {
         }
 
         public CacheEntry get(String key, Function<String, CacheEntry> mappingFunction) {
+            if (cache.getIfPresent(key) != null) {
+                fileIOWithCacheHit.getAndAdd(1);
+            }
             return cache.get(key, mappingFunction);
         }
 
@@ -176,8 +208,11 @@ public class IcebergCachingFileIO implements FileIO {
         @Override
         public SeekableInputStream newStream() {
             try {
+                contentCache.getAllFileIO().getAndAdd(1);
+
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
                 if (getLength() <= contentCache.maxContentLength()) {
+                    contentCache.getFileIOWithCache().getAndAdd(1);
                     return cachedStream();
                 }
 
