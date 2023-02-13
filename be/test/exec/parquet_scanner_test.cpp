@@ -169,7 +169,6 @@ class ParquetScannerTest : public ::testing::Test {
             ASSERT_TRUE(chunk->num_rows() > 0);
             num_rows += chunk->num_rows();
             check_func(chunk);
-            break;
         }
         scanner->close();
     }
@@ -217,7 +216,8 @@ class ParquetScannerTest : public ::testing::Test {
                 // Convert struct->JSON->string
                 {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-        };
+                {"issue_17693_c0",
+                 TypeDescriptor::create_array_type(TypeDescriptor::from_primtive_type(TYPE_VARCHAR))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -292,7 +292,7 @@ class ParquetScannerTest : public ::testing::Test {
             }
             result = chunk;
         };
-        validate(scanner, 36865, check);
+        validate(scanner, 3, check);
 
         return result;
     }
@@ -326,6 +326,9 @@ class ParquetScannerTest : public ::testing::Test {
                                        772472, /*"/test_data/parquet_data/data_8192.parquet",*/
                                        775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
         _runtime_state = _obj_pool.add(new RuntimeState(TQueryGlobals()));
+        _issue_16475_file_names =
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17693_1.parquet",
+                                         test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
     }
 
 private:
@@ -335,6 +338,7 @@ private:
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
     std::vector<int> _file_sizes;
+    std::vector<std::string> _issue_16475_file_names;
 };
 
 TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
@@ -353,6 +357,23 @@ TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+}
+
+TEST_F(ParquetScannerTest, test_issue_17693) {
+    auto column_names = std::vector<std::string>{
+            "issue_17693_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_issue_16475_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 2000, check);
 }
 
 TEST_F(ParquetScannerTest, test_parquet_data) {
