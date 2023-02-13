@@ -17,7 +17,8 @@ jobs:
   modify-branch-label:
     runs-on: ubuntu-latest
     if: >
-      startsWith(github.event.pull_request.title, '[BugFix]') &&
+      (startsWith(github.event.pull_request.title, '[BugFix]') ||
+       startsWith(github.event.pull_request.title, '[Enhancement]'))&&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
@@ -71,7 +72,8 @@ jobs:
 
       - name: check-done
         if: >
-          startsWith(github.event.pull_request.title, '[BugFix]') &&
+          (startsWith(github.event.pull_request.title, '[BugFix]') ||
+           startsWith(github.event.pull_request.title, '[Enhancement]'))&&
           !contains(github.event.pull_request.title, 'cherry-pick') &&
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
