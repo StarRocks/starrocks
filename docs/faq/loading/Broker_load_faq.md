@@ -8,16 +8,15 @@ A successfully executed cannot be executed again. To execute the task again, you
 
 Issue description:
 
-The import reports errors. Corresponding url errors show content garbles.
+The load job reports errors. When you use the provided URL to view the error data, you can find garbles like below:
 
 ```SQL
-Reason: column count mismatch, expect=6 real=1. src line: [$交通];
-zcI~跟团+v];   count mismatch, expect=6 real=2. src line: [租e�rD��食休闲娱乐
+Reason: column count mismatch, expect=6 real=1. src line: [��I have a pen,I have an apple];
 ```
 
 **Solution:**
 
-Wrong specification for format as. Change file type and reload the task.
+The source data is not in UTF-8 encoding format, but StarRocks supports loading only data in UTF-8 encoding format. Convert the source data into UTF-8 encoding format and try again.
 
 ## In Broker Load, hdfs data import exceptional date fields (+8h)
 
