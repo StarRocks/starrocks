@@ -33,6 +33,10 @@
 
 namespace starrocks::pipeline {
 
+#define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op)                          \
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_is_profile_enabled ? op->mem_tracker() \
+                                                               : _runtime_state->instance_mem_tracker())
+
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
@@ -41,6 +45,7 @@ PipelineDriver::~PipelineDriver() noexcept {
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
+    _is_profile_enabled = _runtime_state->query_ctx()->is_report_profile();
 
     auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
     SCOPED_TIMER(prepare_timer);
@@ -246,7 +251,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(curr_op->mem_tracker());
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(curr_op);
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
@@ -268,7 +273,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         size_t row_num = maybe_chunk.value()->num_rows();
                         total_rows_moved += row_num;
                         {
-                            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(next_op->mem_tracker());
+                            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -522,7 +527,7 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op);
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -540,7 +545,7 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op);
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -563,7 +568,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op);
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -584,7 +589,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(op->mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER_FOR_OP(op);
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");

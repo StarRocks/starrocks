@@ -473,6 +473,8 @@ protected:
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
 
+    bool _is_profile_enabled = false;
+
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;

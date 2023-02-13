@@ -120,11 +120,7 @@ public:
     }
 
     // used for single mem_tracker
-    void set(int64_t bytes) {
-        _consumption->set(bytes);
-        _allocation->set(bytes);
-        _deallocation->set(0L);
-    }
+    void set(int64_t bytes) { _consumption->set(bytes); }
 
     void update_allocation(int64_t bytes) {
         if (bytes <= 0) return;
@@ -147,7 +143,6 @@ public:
         }
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(bytes);
-            tracker->_allocation->update(bytes);
         }
     }
 
@@ -156,7 +151,6 @@ public:
         if (bytes != 0) {
             for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
                 _all_trackers[i]->_consumption->add(-bytes);
-                _all_trackers[i]->_deallocation->update(bytes);
             }
         }
     }
@@ -198,16 +192,13 @@ public:
             const int64_t limit = tracker->limit();
             if (limit < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
-                tracker->_allocation->update(bytes);
             } else {
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
-                    tracker->_allocation->update(bytes);
                     continue;
                 } else {
                     // Failed for this mem tracker. Roll back the ones that succeeded.
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
                         _all_trackers[j]->_consumption->add(-bytes);
-                        _all_trackers[j]->_allocation->update(-bytes);
                     }
                     return tracker;
                 }
@@ -226,7 +217,6 @@ public:
         }
         for (auto* tracker : _all_trackers) {
             tracker->_consumption->add(-bytes);
-            tracker->_deallocation->update(bytes);
         }
     }
 
@@ -345,12 +335,14 @@ private:
     RuntimeProfile::HighWaterMarkCounter _local_consumption_counter;
 
     /// in bytes; not owned. Only record allocation but ignore deallocation
+    /// And for sake of performance, it can only be updated through `update_allocation`
     RuntimeProfile::Counter* _allocation;
 
     /// holds _allocation counter if not tied to a profile
     RuntimeProfile::Counter _local_allocation_counter;
 
     /// in bytes; not owned. Only record deallocation but ignore allocation
+    /// And for sake of performance, it can only be updated through `update_deallocation`
     RuntimeProfile::Counter* _deallocation;
 
     /// holds _deallocation counter if not tied to a profile
