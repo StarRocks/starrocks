@@ -6,14 +6,14 @@ Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的�
 
 ## 2. Broker Load 导入时出现内容乱码应该怎么处理？
 
-通过错误 URL 查看内容乱码，如下所示：
+通过错误 URL 查看内容发现乱码，如下所示：
 
 ```SQL
 Reason: column count mismatch, expect=6 real=1. src line: [$交通];
 zcI~跟团+v];   count mismatch, expect=6 real=2. src line: [租e�rD��食休闲娱乐
 ```
 
-出现内容乱码是因为导入作业请求中的 `FORMAT AS` 参数指定错误。修改 `FORMAT AS` 参数取值，改为待导入数据文件对应的文件类型，然后重试导入作业。
+出现内容乱码是因为源数据的编码格式不是 UTF-8，而 StarRocks 仅支持导入 UTF-8 编码格式的数据。把源数据的编码格式转换为 UTF-8 以后，再尝试重新导入。
 
 ## 3. Broker Load 导入 HDFS 数据时，为什么数据的导入日期字段会出现异常，比正确的日期时间多加了 8 小时？这种情况应该怎么处理？
 
