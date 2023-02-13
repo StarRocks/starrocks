@@ -62,16 +62,10 @@ public:
             }
         }
 
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                   \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                   \
-        TRY_CATCH_BAD_ALLOC(_split_chunk_by_partition<typename decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, chunk, std::forward<NewPartitionCallback>(new_partition_cb),           \
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer)));                               \
-    }
-        APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
+            _split_chunk_by_partition(*hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
+                                      std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+        }));
 
         return Status::OK();
     }
@@ -89,26 +83,15 @@ public:
     template <typename Consumer>
     Status consume_from_hash_map(Consumer&& consumer) {
         // First, fetch chunks from hash map
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                     \
-        TRY_CATCH_BAD_ALLOC(_fetch_chunks_from_hash_map<typename decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, consumer));                                                              \
-    }
-        APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit(
+                [&](auto& hash_map_with_key) { _fetch_chunks_from_hash_map(*hash_map_with_key, consumer); }));
 
         // Second, fetch chunks from null_key_value if any
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                          \
-        TRY_CATCH_BAD_ALLOC(fetch_chunks_from_null_key_value<typename decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, consumer));                                                                   \
-    }
-        APPLY_FOR_PARTITION_VARIANT_NULL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
+            if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_nullable) {
+                fetch_chunks_from_null_key_value(*hash_map_with_key, consumer);
+            }
+        }));
 
         return Status::OK();
     }
