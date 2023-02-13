@@ -38,7 +38,6 @@
 #include <sstream>
 
 #include "column/column.h"
-#include "exec/broker_writer.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
 #include "fs/fs_broker.h"
