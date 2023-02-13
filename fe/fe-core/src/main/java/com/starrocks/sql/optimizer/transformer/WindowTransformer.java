@@ -16,6 +16,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -270,9 +271,13 @@ public class WindowTransformer {
             // Each LogicalWindowOperator will belong to a SortGroup,
             // so we need to record sortProperty to ensure that only one SortNode is enforced
             List<Ordering> sortEnforceProperty = new ArrayList<>();
-            partitions.forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, true)));
+            ConnectContext session = ConnectContext.get();
+            if (!session.getSessionVariable().isEnablePipelineEngine() || !orderings.isEmpty()) {
+                partitions.forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, true)));
+            }
             for (Ordering ordering : orderings) {
-                if (sortEnforceProperty.stream().noneMatch(sp -> sp.getColumnRef().equals(ordering.getColumnRef()))) {
+                if (sortEnforceProperty.stream()
+                        .noneMatch(sp -> sp.getColumnRef().equals(ordering.getColumnRef()))) {
                     sortEnforceProperty.add(ordering);
                 }
             }
