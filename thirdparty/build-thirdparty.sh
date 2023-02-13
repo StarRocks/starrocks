@@ -1020,7 +1020,7 @@ build_serdes() {
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavrocpp_s -lavro -lssl -lcrypto -ldl" 
     ./configure --prefix=${TP_INSTALL_DIR} \
-                --libdir=lib \
+                --libdir=${TP_INSTALL_DIR}/lib \
                 --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
                 --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
                 --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
