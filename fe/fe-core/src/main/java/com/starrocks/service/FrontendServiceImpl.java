@@ -40,9 +40,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
@@ -218,7 +218,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -1578,64 +1577,95 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         OlapTable olapTable = (OlapTable) table;
 
-        if (request.partitionValues == null) {
+        if (request.partition_values == null) {
             result.setStatus(errorStatus);
-            result.setErr_msg("partitionValues should not null.");
+            result.setErr_msg("partition_values should not null.");
             return result;
         }
         // Now only supports the case of automatically creating single partition
-        if (request.partitionValues.size() != 1) {
+        if (request.partition_values.size() != 1) {
             result.setStatus(errorStatus);
-            result.setErr_msg("only support single partition, partitionValues size should equal 1.");
+            result.setErr_msg("automatic partition only support single partition, partition_values size should equal 1.");
             return result;
         }
-        List<String> partitionValues = request.partitionValues.get(0);
+        List<String> partitionValues = request.partition_values.get(0);
 
-        Set<String> partitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             result.setStatus(errorStatus);
-            result.setErr_msg("only support expression range partition.");
+            result.setErr_msg("automatic partition only support expression range partition.");
             return result;
         }
         List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
         if (partitionExprs.size() != 1) {
             result.setStatus(errorStatus);
-            result.setErr_msg("only support one expression partitionExpr.");
+            result.setErr_msg("automatic partition only support one expression partitionExpr.");
             return result;
         }
         Expr expr = partitionExprs.get(0);
         if (!(expr instanceof FunctionCallExpr)) {
             result.setStatus(errorStatus);
-            result.setErr_msg("only support FunctionCallExpr");
+            result.setErr_msg("automatic partition only support FunctionCallExpr");
             return result;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         String fnName = functionCallExpr.getFnName().getFunction();
-        if (!fnName.equals(FunctionSet.DATE_TRUNC)) {
+        long interval =  1;
+        String granularity;
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 2) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("date_trunc params exprs size should be 2.");
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(0);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("date_trunc granularity is not string literal.");
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            granularity = granularityLiteral.getStringValue();
+        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 4) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("time_slice params exprs size should be 4.");
+                return result;
+            }
+            Expr intervalExpr = paramsExprs.get(1);
+            if (!(intervalExpr instanceof IntLiteral)) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("time_slice interval is not int literal.");
+                return result;
+            }
+            Expr granularityExpr = paramsExprs.get(2);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("time_slice granularity is not string literal.");
+                return result;
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
+            granularity = granularityLiteral.getStringValue();
+            interval = intervalLiteral.getLongValue();
+            if (interval != 1) {
+                result.setStatus(errorStatus);
+                result.setErr_msg("time_slice interval only support 1 currently.");
+                return result;
+            }
+        } else {
             result.setStatus(errorStatus);
-            result.setErr_msg("only support data_trunc function.");
+            result.setErr_msg("automatic partition only support data_trunc function.");
             return result;
         }
-        List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
-        if (paramsExprs.size() != 2) {
-            result.setStatus(errorStatus);
-            result.setErr_msg("params exprs size should be 2.");
-            return result;
-        }
-        Expr granularityExpr = paramsExprs.get(0);
-        if (!(granularityExpr instanceof StringLiteral)) {
-            result.setStatus(errorStatus);
-            result.setErr_msg("granularity is not string literal.");
-            return result;
-        }
-        StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
-        String granularity = granularityLiteral.getStringValue();
+
 
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(partitionValues,
-                    granularity, olapTable);
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+                    partitionValues, interval, granularity);
         } catch (AnalysisException ex) {
             result.setStatus(errorStatus);
             result.setErr_msg(ex.getMessage());
@@ -1649,7 +1679,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (DdlException | AnalysisException e) {
                 LOG.warn(e);
                 result.setStatus(errorStatus);
-                result.setErr_msg(String.format("create partition failed. error:%s", e.getMessage()));
+                result.setErr_msg(String.format("automatic create partition failed. error:%s", e.getMessage()));
                 return result;
             }
         }

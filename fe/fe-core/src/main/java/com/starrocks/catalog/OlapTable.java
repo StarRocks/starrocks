@@ -1705,6 +1705,11 @@ public class OlapTable extends Table {
         return false;
     }
 
+    // Determine which situation supports importing and automatically creating partitions
+    public Boolean supportedAutomaticPartition() {
+        return partitionInfo.getType() == PartitionType.EXPR_RANGE;
+    }
+
     public Boolean isBinlogEnabled() {
         if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
             return false;

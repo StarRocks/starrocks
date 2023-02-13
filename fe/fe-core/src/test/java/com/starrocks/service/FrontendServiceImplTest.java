@@ -123,7 +123,7 @@ public class FrontendServiceImplTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE site_access(\n" +
+                .withTable("CREATE TABLE site_access_day (\n" +
                         "    event_day DATE,\n" +
                         "    site_id INT DEFAULT '10',\n" +
                         "    city_code VARCHAR(100),\n" +
@@ -138,7 +138,21 @@ public class FrontendServiceImplTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");")
-                .withTable("CREATE TABLE site_access_2(\n" +
+                .withTable("CREATE TABLE site_access_month (\n" +
+                        "    event_day DATE,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day) (\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
+                .withTable("CREATE TABLE site_access_slice (\n" +
                         "    event_day datetime,\n" +
                         "    site_id INT DEFAULT '10',\n" +
                         "    city_code VARCHAR(100),\n" +
@@ -146,7 +160,7 @@ public class FrontendServiceImplTest {
                         "    pv BIGINT DEFAULT '0'\n" +
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                        "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
+                        "PARTITION BY time_slice(event_day, interval 1 day) (\n" +
                         "START (\"2015-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
@@ -171,7 +185,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testCreatePartitionApi() throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = db.getTable("site_access");
+        Table table = db.getTable("site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
@@ -181,12 +195,93 @@ public class FrontendServiceImplTest {
         TCreatePartitionRequest request = new TCreatePartitionRequest();
         request.setDb_id(db.getId());
         request.setTable_id(table.getId());
-        request.setPartitionValues(partitionValues);
+        request.setPartition_values(partitionValues);
         TCreatePartitionResult partition = impl.createPartition(request);
 
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
         Partition p19900424 = table.getPartition("p19900424");
         Assert.assertNotNull(p19900424);
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionApiSlice() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_slice");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Partition p19900424 = table.getPartition("p19900424");
+        Assert.assertNotNull(p19900424);
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionApiMultiValues() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        values.add("1990-04-24");
+        values.add("1989-11-02");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Partition p19891102 = table.getPartition("p19891102");
+        Assert.assertNotNull(p19891102);
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(2, partition.partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionApiMonth() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        values.add("1990-04-30");
+        values.add("1990-04-01");
+        values.add("1990-04-25");
+        values.add("1989-11-02");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+        Partition p199004 = table.getPartition("p199004");
+        Assert.assertNotNull(p199004);
+
+        partition = impl.createPartition(request);
+        Assert.assertEquals(2, partition.partitions.size());
     }
 
 }
