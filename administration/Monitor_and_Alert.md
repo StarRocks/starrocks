@@ -200,10 +200,11 @@ Data Source 配置项简介
 
 下载  Dashboard 模版。
 
-> 说明：StarRocks-1.19.0 版本及其之后的版本监控 Metric Name 有调整，需要下载下面 StarRocks-1.19.0+ 版本 DashBoard 模版。
+> 说明：StarRocks 1.19.0 和 2.4.0 版本的监控 Metric Name 有调整，需要下载下面对应版本 DashBoard 模版。
 
 * [StarRocks-1.19.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
-* [StarRocks-1.19.0 及其之后版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
+* [StarRocks-1.19.0 开始到 StarRocks-2.4.0 之前版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
+* [StarRocks-2.4.0 及其之后版本 DashBoard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24.json)
 
 > 说明：Dashboard 模版会不定期更新。同时我们也欢迎您提供更优的 Dashboard 模板。
 
