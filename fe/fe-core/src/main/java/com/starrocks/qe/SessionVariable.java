@@ -311,7 +311,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+<<<<<<< HEAD
     
+=======
+
+    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
+
+>>>>>>> 10cd19849 ([Enhancement] Add group_concat_max_len session variable (#17755))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -779,6 +787,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
+    private String activateAllRolesOnLogin = "OFF";
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
+
+    public boolean isActivateAllRolesOnLogin() {
+        if (activateAllRolesOnLogin.equals("ON")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+>>>>>>> 10cd19849 ([Enhancement] Add group_concat_max_len session variable (#17755))
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
