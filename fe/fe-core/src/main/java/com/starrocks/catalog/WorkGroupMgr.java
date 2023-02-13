@@ -466,6 +466,19 @@ public class WorkGroupMgr implements Writable {
             String user = getUnqualifiedUser(ctx);
             String role = getUnqualifiedRole(ctx);
             String remoteIp = ctx.getRemoteIP();
+
+            // check short query first
+            if (shortQueryResourceGroup != null) {
+                List<WorkGroupClassifier> shortQueryClassifierList =
+                        shortQueryResourceGroup.classifiers.stream().filter(
+                                        f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                                .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
+                                .collect(Collectors.toList());
+                if (!shortQueryClassifierList.isEmpty()) {
+                    return shortQueryResourceGroup.toThrift();
+                }
+            }
+
             List<WorkGroupClassifier> classifierList =
                     classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
                             .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
