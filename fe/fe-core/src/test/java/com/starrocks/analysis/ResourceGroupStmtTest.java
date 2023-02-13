@@ -128,6 +128,16 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
+    private String createRtRg1Sql = "create resource group rt_rg1\n" +
+            "to\n" +
+            "     (user='rt_rg_user')\n" +
+            "with (\n" +
+            "    'cpu_core_limit' = '25',\n" +
+            "    'mem_limit' = '80%',\n" +
+            "    'concurrency_limit' = '10',\n" +
+            "    'type' = 'short_query'\n" +
+            ");";
+
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -163,14 +173,14 @@ public class ResourceGroupStmtTest {
 
     private void createResourceGroups() throws Exception {
         String[] sqls = new String[] {createRg1Sql, createRg2Sql,
-                createRg3Sql, createRg4Sql, createRg5Sql, createRg6Sql};
+                createRg3Sql, createRg4Sql, createRg5Sql, createRg6Sql, createRtRg1Sql};
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
-        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5", "rg6"};
+        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5", "rg6", "rt_rg1"};
         for (String name : rgNames) {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
@@ -206,7 +216,8 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -592,7 +603,8 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -646,7 +658,7 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
-    public void testShortQueryResourceGroup() throws Exception {
+    public void testCreateShortQueryResourceGroup() throws Exception {
         String createRtRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
                 "to\n" +
                 "     (`db`='db1')\n" +
@@ -712,5 +724,25 @@ public class ResourceGroupStmtTest {
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
+    }
+
+
+    @Test
+    public void testChooseShortQueryResourceGroup() throws Exception {
+        createResourceGroups();
+
+        // Prefer the short query group regardless its classifier weight is the lowest.
+        String qualifiedUser = "rt_rg_user";
+        long dbId = GlobalStateMgr.getCurrentState().getDb("db1").getId();
+        Set<Long> dbs = ImmutableSet.of(dbId);
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                starRocksAssert.getCtx(),
+                ResourceGroupClassifier.QueryType.SELECT,
+                dbs);
+        Assert.assertEquals("rt_rg1", wg.getName());
+
+        dropResourceGroups();
     }
 }
