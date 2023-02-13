@@ -471,6 +471,19 @@ public class ResourceGroupMgr implements Writable {
             String user = getUnqualifiedUser(ctx);
             String role = getUnqualifiedRole(ctx);
             String remoteIp = ctx.getRemoteIP();
+
+            // check short query first
+            if (shortQueryResourceGroup != null) {
+                List<ResourceGroupClassifier> shortQueryClassifierList =
+                        shortQueryResourceGroup.classifiers.stream().filter(
+                                f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                                .collect(Collectors.toList());
+                if (!shortQueryClassifierList.isEmpty()) {
+                    return shortQueryResourceGroup.toThrift();
+                }
+            }
+
             List<ResourceGroupClassifier> classifierList =
                     classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
                             .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
