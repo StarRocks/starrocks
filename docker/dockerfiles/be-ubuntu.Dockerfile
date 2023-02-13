@@ -26,7 +26,7 @@ FROM ubuntu:22.04
 
 RUN apt-get update -y \
         && apt-get install -y --no-install-recommends binutils-dev default-jdk python2 \
-           mysql-client curl vim tree net-tools \
+           mysql-client curl vim tree net-tools less \
         && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/lib/jvm/default-java
