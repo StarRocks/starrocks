@@ -93,6 +93,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SystemInfoService {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
@@ -450,6 +451,14 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
+    public ComputeNode getBackendOrComputeNode(long idx) {
+        ComputeNode backend = idToBackendRef.get(idx);
+        if (backend == null) {
+            backend =  idToComputeNodeRef.get(idx);
+        }
+        return backend;
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -638,6 +647,10 @@ public class SystemInfoService {
 
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
+    }
+
+    public Stream<ComputeNode> backendAndComputeNodeStream() {
+        return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
