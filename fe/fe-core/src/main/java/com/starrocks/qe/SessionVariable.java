@@ -280,6 +280,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
+
     // In most cases, the partition statistics obtained from the hive metastore are empty.
     // Because we get partition statistics asynchronously for the first query of a table or partition,
     // if the gc of any service is caused, you can set the value to 100 for testing.
@@ -344,6 +346,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -431,7 +435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
-    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
+    @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
@@ -737,6 +741,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
 
+    @VarAttr(name = DEFAULT_TABLE_COMPRESSION)
+    private String defaultTableCompressionAlgorithm = "lz4_frame";
+
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
     private boolean enableAdaptiveSinkDop = false;
 
@@ -862,6 +869,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private String activateAllRolesOnLogin = "OFF";
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
 
     public boolean isActivateAllRolesOnLogin() {
         if (activateAllRolesOnLogin.equals("ON")) {
@@ -1646,6 +1656,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public String getDefaultTableCompression() {
+        return defaultTableCompressionAlgorithm;
+    }
+
+    public void setDefaultTableCompression(String compression) {
+        this.defaultTableCompressionAlgorithm = compression;
     }
 
     // Serialize to thrift object

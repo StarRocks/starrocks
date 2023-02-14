@@ -38,7 +38,6 @@ set(EXEC_FILES
     es/es_query_builder.cpp
     es/es_scroll_parser.cpp
     local_file_writer.cpp
-    broker_writer.cpp
     plain_text_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
@@ -49,6 +48,7 @@ set(EXEC_FILES
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
     partition/chunks_partitioner.cpp
+    partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
     csv_scanner.cpp
