@@ -145,6 +145,7 @@ public class MvUtils {
             getAllJoinOperators(child, joinOperators);
         }
     }
+
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
         List<LogicalScanOperator> scanOperators = Lists.newArrayList();
         getScanOperator(root, scanOperators);
@@ -222,7 +223,7 @@ public class MvUtils {
     }
 
     /**
-     *  Whether `root` and its children are Select/Project/Join ops.
+     * Whether `root` and its children are Select/Project/Join ops.
      */
     public static boolean isLogicalSPJ(OptExpression root) {
         if (root == null) {
