@@ -297,11 +297,11 @@ public:
     }
 
     // combine keys into fixed size key by column.
-    template <LogicalType PT>
+    template <LogicalType LT>
     static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column,
                                                 uint32_t start, uint32_t count) {
-        using CppType = typename RunTimeTypeTraits<PT>::CppType;
-        using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+        using CppType = typename RunTimeTypeTraits<LT>::CppType;
+        using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
         auto& data = reinterpret_cast<ColumnType*>(fixed_size_key_column)->get_data();
         auto* buf = reinterpret_cast<uint8_t*>(&data[start]);
@@ -315,11 +315,11 @@ public:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class JoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
@@ -327,11 +327,11 @@ public:
                                      HashTableProbeState* probe_state);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class DirectMappingJoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
@@ -339,11 +339,11 @@ public:
                                      HashTableProbeState* probe_state);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class FixedSizeJoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
 
@@ -378,11 +378,11 @@ private:
                                         uint32_t count, uint8_t** ptr);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class JoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
@@ -390,11 +390,11 @@ public:
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class DirectMappingJoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
@@ -402,11 +402,11 @@ public:
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class FixedSizeJoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
         probe_state->is_nulls.resize(state->chunk_size());
@@ -541,10 +541,10 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-template <LogicalType PT, class BuildFunc, class ProbeFunc>
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 class JoinHashMap {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
 
     explicit JoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
@@ -664,10 +664,10 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-#define JoinHashMapForOneKey(PT) JoinHashMap<PT, JoinBuildFunc<PT>, JoinProbeFunc<PT>>
-#define JoinHashMapForDirectMapping(PT) JoinHashMap<PT, DirectMappingJoinBuildFunc<PT>, DirectMappingJoinProbeFunc<PT>>
-#define JoinHashMapForFixedSizeKey(PT) JoinHashMap<PT, FixedSizeJoinBuildFunc<PT>, FixedSizeJoinProbeFunc<PT>>
-#define JoinHashMapForSerializedKey(PT) JoinHashMap<PT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
+#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinBuildFunc<LT>, JoinProbeFunc<LT>>
+#define JoinHashMapForDirectMapping(LT) JoinHashMap<LT, DirectMappingJoinBuildFunc<LT>, DirectMappingJoinProbeFunc<LT>>
+#define JoinHashMapForFixedSizeKey(LT) JoinHashMap<LT, FixedSizeJoinBuildFunc<LT>, FixedSizeJoinProbeFunc<LT>>
+#define JoinHashMapForSerializedKey(LT) JoinHashMap<LT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
 
 class JoinHashTable {
 public:

@@ -30,26 +30,26 @@
 
 namespace starrocks {
 
-template <LogicalType PT, typename = guard::Guard>
-struct MaxAggregateDataRetractable : public StreamDetailState<PT> {};
+template <LogicalType LT, typename = guard::Guard>
+struct MaxAggregateDataRetractable : public StreamDetailState<LT> {};
 
-template <LogicalType PT>
-struct MaxAggregateDataRetractable<PT, FixedLengthPTGuard<PT>> : public StreamDetailState<PT> {
-    using T = RunTimeCppType<PT>;
+template <LogicalType LT>
+struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDetailState<LT> {
+    using T = RunTimeCppType<LT>;
 
     MaxAggregateDataRetractable() {}
 
-    T result = RunTimeTypeLimits<PT>::min_value();
-    void reset_result() { result = RunTimeTypeLimits<PT>::min_value(); }
+    T result = RunTimeTypeLimits<LT>::min_value();
+    void reset_result() { result = RunTimeTypeLimits<LT>::min_value(); }
 
     void reset() {
-        StreamDetailState<PT>::reset();
+        StreamDetailState<LT>::reset();
         reset_result();
     }
 };
 
-template <LogicalType PT>
-struct MaxAggregateDataRetractable<PT, StringPTGuard<PT>> : public StreamDetailState<PT> {
+template <LogicalType LT>
+struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
     int32_t size = -1;
     raw::RawVector<uint8_t> buffer;
 
@@ -62,27 +62,27 @@ struct MaxAggregateDataRetractable<PT, StringPTGuard<PT>> : public StreamDetailS
         size = -1;
     }
     void reset() {
-        StreamDetailState<PT>::reset();
+        StreamDetailState<LT>::reset();
         reset_result();
     }
 };
 
-template <LogicalType PT, typename = guard::Guard>
-struct MinAggregateDataRetractable : public StreamDetailState<PT> {};
-template <LogicalType PT>
-struct MinAggregateDataRetractable<PT, FixedLengthPTGuard<PT>> : public StreamDetailState<PT> {
-    using T = RunTimeCppType<PT>;
+template <LogicalType LT, typename = guard::Guard>
+struct MinAggregateDataRetractable : public StreamDetailState<LT> {};
+template <LogicalType LT>
+struct MinAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDetailState<LT> {
+    using T = RunTimeCppType<LT>;
 
-    T result = RunTimeTypeLimits<PT>::max_value();
-    void reset_result() { result = RunTimeTypeLimits<PT>::max_value(); }
+    T result = RunTimeTypeLimits<LT>::max_value();
+    void reset_result() { result = RunTimeTypeLimits<LT>::max_value(); }
     void reset() {
-        StreamDetailState<PT>::reset();
+        StreamDetailState<LT>::reset();
         reset_result();
     }
 };
 
-template <LogicalType PT>
-struct MinAggregateDataRetractable<PT, StringPTGuard<PT>> : public StreamDetailState<PT> {
+template <LogicalType LT>
+struct MinAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
 
@@ -95,16 +95,16 @@ struct MinAggregateDataRetractable<PT, StringPTGuard<PT>> : public StreamDetailS
         size = -1;
     }
     void reset() {
-        StreamDetailState<PT>::reset();
+        StreamDetailState<LT>::reset();
         reset_result();
     }
 };
 
-template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>>
 class MaxMinAggregateFunctionRetractable final
-        : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunctionRetractable<PT, State, OP, T>> {
+        : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunctionRetractable<LT, State, OP, T>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
+    using InputColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).reset();
@@ -124,7 +124,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             DCHECK(to->is_binary());
             auto* column = down_cast<BinaryColumn*>(to);
             column->append(this->data(state).slice());
@@ -140,7 +140,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             DCHECK(to->is_binary());
             auto* column = down_cast<BinaryColumn*>(to);
             column->append(this->data(state).slice());
@@ -153,7 +153,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             auto* column = down_cast<BinaryColumn*>(dst);
             for (size_t i = start; i < end; ++i) {
                 column->append(this->data(state).slice());
@@ -177,7 +177,7 @@ public:
     }
 
     T get_row_value(const Column* column, size_t row_num) const {
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             DCHECK(column->is_binary());
             return column->get(row_num).get_slice();
         } else {
@@ -237,7 +237,7 @@ public:
 
         // sync previous records from detail state table
         InputColumnType* column;
-        if constexpr (!pt_is_string<PT>) {
+        if constexpr (!lt_is_string<LT>) {
             column = down_cast<InputColumnType*>(columns[0].get());
         }
         DCHECK((*columns[1]).is_numeric());
@@ -260,7 +260,7 @@ public:
 
     void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& to,
                        Column* count) const override {
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             DCHECK((*to[0]).is_binary());
         } else {
             DCHECK((*to[0]).is_numeric());

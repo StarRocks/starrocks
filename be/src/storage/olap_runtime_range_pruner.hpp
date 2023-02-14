@@ -29,31 +29,31 @@
 namespace starrocks {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
                                                                        PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
         // keep consistent with ColumnRangeBuilder
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
-                      pt_is_binary<ptype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
             DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {
             std::vector<std::unique_ptr<ColumnPredicate>> preds;
 
             // Treat tinyint and boolean as int
-            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
 
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
-            RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
-                                 RunTimeTypeLimits<ptype>::max_value());
-            if constexpr (pt_is_decimal<limit_type>) {
+            RangeType full_range(col_name, ltype, RunTimeTypeLimits<ltype>::min_value(),
+                                 RunTimeTypeLimits<ltype>::max_value());
+            if constexpr (lt_is_decimal<limit_type>) {
                 full_range.set_precision(slot->type().precision);
                 full_range.set_scale(slot->type().scale);
             }
@@ -64,7 +64,7 @@ struct RuntimeColumnPredicateBuilder {
             const JoinRuntimeFilter* rf = desc->runtime_filter();
 
             // applied global-dict optimized column
-            if constexpr (ptype == TYPE_VARCHAR) {
+            if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
                     _build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,

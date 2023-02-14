@@ -366,9 +366,9 @@ public:
     }
 
     std::string debug_string() const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ptype << ", bfsize = " << _size << ", has_null = " << _has_null;
+        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
                 ss << ", _min = " << _min << ", _max = " << _max;
@@ -401,10 +401,10 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(data + offset, &ptype, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(data + offset, &ltype, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::serialize(data + offset);
         memcpy(data + offset, &_has_min_max, sizeof(_has_min_max));
         offset += sizeof(_has_min_max);
@@ -434,10 +434,10 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        LogicalType ptype = Type;
+        LogicalType ltype = Type;
         size_t offset = 0;
-        memcpy(&ptype, data + offset, sizeof(ptype));
-        offset += sizeof(ptype);
+        memcpy(&ltype, data + offset, sizeof(ltype));
+        offset += sizeof(ltype);
         offset += JoinRuntimeFilter::deserialize(data + offset);
 
         bool has_min_max = false;

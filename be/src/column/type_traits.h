@@ -54,42 +54,42 @@ inline constexpr bool IsDateTime<DateValue> = true;
 template <typename T>
 using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
 
-// If isArithmeticPT is true, means this type support +,-,*,/
-template <LogicalType primitive_type>
-constexpr bool isArithmeticPT = true;
+// If isArithmeticLT is true, means this type support +,-,*,/
+template <LogicalType logical_type>
+constexpr bool isArithmeticLT = true;
 
 template <>
-inline constexpr bool isArithmeticPT<TYPE_CHAR> = false;
+inline constexpr bool isArithmeticLT<TYPE_CHAR> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_VARCHAR> = false;
+inline constexpr bool isArithmeticLT<TYPE_VARCHAR> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_DATE> = false;
+inline constexpr bool isArithmeticLT<TYPE_DATE> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_DATETIME> = false;
+inline constexpr bool isArithmeticLT<TYPE_DATETIME> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_HLL> = false;
+inline constexpr bool isArithmeticLT<TYPE_HLL> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_OBJECT> = false;
+inline constexpr bool isArithmeticLT<TYPE_OBJECT> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_PERCENTILE> = false;
+inline constexpr bool isArithmeticLT<TYPE_PERCENTILE> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_JSON> = false;
+inline constexpr bool isArithmeticLT<TYPE_JSON> = false;
 template <>
-inline constexpr bool isArithmeticPT<TYPE_VARBINARY> = false;
+inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 
-template <LogicalType primitive_type>
-constexpr bool isSlicePT = false;
-
-template <>
-inline constexpr bool isSlicePT<TYPE_CHAR> = true;
+template <LogicalType logical_type>
+constexpr bool isSliceLT = false;
 
 template <>
-inline constexpr bool isSlicePT<TYPE_VARCHAR> = true;
+inline constexpr bool isSliceLT<TYPE_CHAR> = true;
 
 template <>
-inline constexpr bool isSlicePT<TYPE_VARBINARY> = true;
+inline constexpr bool isSliceLT<TYPE_VARCHAR> = true;
 
-template <LogicalType primitive_type>
+template <>
+inline constexpr bool isSliceLT<TYPE_VARBINARY> = true;
+
+template <LogicalType logical_type>
 struct RunTimeTypeTraits {};
 
 template <>
@@ -309,23 +309,23 @@ struct ColumnTraits<TimestampValue> {
 };
 
 // Length of fixed-length type, 0 for dynamic-length type
-template <LogicalType ptype, typename = guard::Guard>
+template <LogicalType ltype, typename = guard::Guard>
 struct RunTimeFixedTypeLength {
     static constexpr size_t value = 0;
 };
 
-template <LogicalType ptype>
-struct RunTimeFixedTypeLength<ptype, FixedLengthPTGuard<ptype>> {
-    static constexpr size_t value = sizeof(RunTimeCppType<ptype>);
+template <LogicalType ltype>
+struct RunTimeFixedTypeLength<ltype, FixedLengthLTGuard<ltype>> {
+    static constexpr size_t value = sizeof(RunTimeCppType<ltype>);
 };
 
-template <LogicalType ptype, typename = guard::Guard>
+template <LogicalType ltype, typename = guard::Guard>
 struct RunTimeTypeLimits {};
 
-template <LogicalType ptype>
-struct RunTimeTypeLimits<ptype, ArithmeticPTGuard<ptype>> {
-    // Cpp type of this primitive type
-    using value_type = RunTimeCppType<ptype>;
+template <LogicalType ltype>
+struct RunTimeTypeLimits<ltype, ArithmeticLTGuard<ltype>> {
+    // Cpp type of this logical type
+    using value_type = RunTimeCppType<ltype>;
 
     static constexpr value_type min_value() { return std::numeric_limits<value_type>::lowest(); }
     static constexpr value_type max_value() { return std::numeric_limits<value_type>::max(); }
@@ -339,9 +339,9 @@ struct RunTimeTypeLimits<TYPE_LARGEINT> {
     static constexpr value_type max_value() { return MAX_INT128; }
 };
 
-template <LogicalType ptype>
-struct RunTimeTypeLimits<ptype, StringPTGuard<ptype>> {
-    using value_type = RunTimeCppType<ptype>;
+template <LogicalType ltype>
+struct RunTimeTypeLimits<ltype, StringLTGuard<ltype>> {
+    using value_type = RunTimeCppType<ltype>;
 
     static constexpr value_type min_value() { return Slice(&_min, 0); }
     static constexpr value_type max_value() { return Slice(&_max, 1); }
@@ -375,9 +375,9 @@ struct RunTimeTypeLimits<TYPE_DECIMALV2> {
     static value_type max_value() { return DecimalV2Value::get_max_decimal(); }
 };
 
-template <LogicalType ptype>
-struct RunTimeTypeLimits<ptype, DecimalPTGuard<ptype>> {
-    using value_type = RunTimeCppType<ptype>;
+template <LogicalType ltype>
+struct RunTimeTypeLimits<ltype, DecimalLTGuard<ltype>> {
+    using value_type = RunTimeCppType<ltype>;
 
     static constexpr value_type min_value() { return get_min_decimal<value_type>(); }
     static constexpr value_type max_value() { return get_max_decimal<value_type>(); }

@@ -25,9 +25,9 @@
 
 namespace starrocks {
 
-template <LogicalType ptype>
+template <LogicalType ltype>
 struct PredicateCmpType {
-    using CmpType = RunTimeCppType<ptype>;
+    using CmpType = RunTimeCppType<ltype>;
 };
 
 template <>
@@ -36,18 +36,18 @@ struct PredicateCmpType<TYPE_JSON> {
 };
 
 // The evaluator for LogicalType
-template <LogicalType ptype>
-using EvalEq = std::equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <LogicalType ptype>
-using EvalNe = std::not_equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <LogicalType ptype>
-using EvalLt = std::less<typename PredicateCmpType<ptype>::CmpType>;
-template <LogicalType ptype>
-using EvalLe = std::less_equal<typename PredicateCmpType<ptype>::CmpType>;
-template <LogicalType ptype>
-using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
-template <LogicalType ptype>
-using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
+template <LogicalType ltype>
+using EvalEq = std::equal_to<typename PredicateCmpType<ltype>::CmpType>;
+template <LogicalType ltype>
+using EvalNe = std::not_equal_to<typename PredicateCmpType<ltype>::CmpType>;
+template <LogicalType ltype>
+using EvalLt = std::less<typename PredicateCmpType<ltype>::CmpType>;
+template <LogicalType ltype>
+using EvalLe = std::less_equal<typename PredicateCmpType<ltype>::CmpType>;
+template <LogicalType ltype>
+using EvalGt = std::greater<typename PredicateCmpType<ltype>::CmpType>;
+template <LogicalType ltype>
+using EvalGe = std::greater_equal<typename PredicateCmpType<ltype>::CmpType>;
 
 struct EvalCmpZero {
     TExprOpcode::type op;

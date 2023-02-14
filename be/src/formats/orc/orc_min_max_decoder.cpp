@@ -48,7 +48,7 @@ namespace starrocks {
         return Status::OK();                                   \
     } while (0)
 
-static Status decode_int_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_int_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                  const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_intstatistics() && colStats.intstatistics().has_minimum() &&
         colStats.intstatistics().has_maximum()) {
@@ -56,7 +56,7 @@ static Status decode_int_min_max(LogicalType ptype, const orc::proto::ColumnStat
         int64_t min = stats.minimum();
         int64_t max = stats.maximum();
 
-        switch (ptype) {
+        switch (ltype) {
         case LogicalType::TYPE_TINYINT:
             DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_TINYINT);
         case LogicalType::TYPE_SMALLINT:
@@ -72,14 +72,14 @@ static Status decode_int_min_max(LogicalType ptype, const orc::proto::ColumnStat
     return Status::NotFound("int column stats not found");
 }
 
-static Status decode_double_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_double_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                     const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_doublestatistics() && colStats.doublestatistics().has_minimum() &&
         colStats.doublestatistics().has_maximum()) {
         const auto& stats = colStats.doublestatistics();
         double min = stats.minimum();
         double max = stats.maximum();
-        switch (ptype) {
+        switch (ltype) {
         case LogicalType::TYPE_FLOAT:
             DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_FLOAT);
         case LogicalType::TYPE_DOUBLE:
@@ -90,7 +90,7 @@ static Status decode_double_min_max(LogicalType ptype, const orc::proto::ColumnS
     }
     return Status::NotFound("double column stats not found");
 }
-static Status decode_string_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_string_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                     const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_stringstatistics() && colStats.stringstatistics().has_minimum() &&
         colStats.stringstatistics().has_maximum()) {
@@ -99,13 +99,13 @@ static Status decode_string_min_max(LogicalType ptype, const orc::proto::ColumnS
         const std::string& max_value = stats.maximum();
         size_t min_value_size = min_value.size();
         size_t max_value_size = max_value.size();
-        if (ptype == TYPE_CHAR) {
+        if (ltype == TYPE_CHAR) {
             min_value_size = remove_trailing_spaces(min_value.c_str(), min_value_size);
             max_value_size = remove_trailing_spaces(max_value.c_str(), max_value_size);
         }
         const Slice min(min_value.c_str(), min_value_size);
         const Slice max(max_value.c_str(), max_value_size);
-        switch (ptype) {
+        switch (ltype) {
         case LogicalType::TYPE_VARCHAR:
             DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_VARCHAR);
         case LogicalType::TYPE_CHAR:
@@ -117,7 +117,7 @@ static Status decode_string_min_max(LogicalType ptype, const orc::proto::ColumnS
     return Status::NotFound("string column stats not found");
 }
 
-static Status decode_date_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_date_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                   const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
         colStats.datestatistics().has_maximum()) {
@@ -133,7 +133,7 @@ static Status decode_date_min_max(LogicalType ptype, const orc::proto::ColumnSta
 // It's quite odd that, timestamp statistics stores milliseconds since unix epoch time.
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
-static Status decode_datetime_min_max(LogicalType ptype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                       int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
                                       const ColumnPtr& max_col) {
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
@@ -178,32 +178,32 @@ Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnSt
         min_col = a->data_column();
         max_col = b->data_column();
     }
-    LogicalType ptype = slot->type().type;
-    switch (ptype) {
+    LogicalType ltype = slot->type().type;
+    switch (ltype) {
     case LogicalType::TYPE_TINYINT:
     case LogicalType::TYPE_SMALLINT:
     case LogicalType::TYPE_INT:
     case LogicalType::TYPE_BIGINT:
         // case LogicalType::TYPE_LARGEINT:
-        return decode_int_min_max(ptype, stats, min_col, max_col);
+        return decode_int_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_FLOAT:
     case LogicalType::TYPE_DOUBLE:
-        return decode_double_min_max(ptype, stats, min_col, max_col);
+        return decode_double_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_VARCHAR:
     case LogicalType::TYPE_CHAR:
-        return decode_string_min_max(ptype, stats, min_col, max_col);
+        return decode_string_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_DATE:
-        return decode_date_min_max(ptype, stats, min_col, max_col);
+        return decode_date_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_DATETIME:
-        return decode_datetime_min_max(ptype, stats, tz_offset_in_seconds, min_col, max_col);
+        return decode_datetime_min_max(ltype, stats, tz_offset_in_seconds, min_col, max_col);
 
     default:
         return Status::NotSupported("Not support to decode min/max from orc column stats. type = " +
-                                    std::to_string(ptype));
+                                    std::to_string(ltype));
     }
 }
 

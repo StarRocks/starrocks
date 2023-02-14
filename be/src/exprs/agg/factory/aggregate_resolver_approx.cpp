@@ -22,21 +22,21 @@
 namespace starrocks {
 
 struct HLLUnionBuilder {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_fixedlength<pt> || pt_is_string<pt>) {
-            resolver->add_aggregate_mapping<pt, TYPE_HLL, HyperLogLog>(
-                    "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<pt>());
+        if constexpr (lt_is_fixedlength<lt> || lt_is_string<lt>) {
+            resolver->add_aggregate_mapping<lt, TYPE_HLL, HyperLogLog>(
+                    "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<lt>());
 
-            using IntersectCountState = BitmapIntersectAggregateState<BitmapRuntimeCppType<pt>>;
-            resolver->add_aggregate_mapping_variadic<pt, TYPE_BIGINT, IntersectCountState>(
-                    "intersect_count", false, AggregateFactory::MakeIntersectCountAggregateFunction<pt>());
+            using IntersectCountState = BitmapIntersectAggregateState<BitmapRuntimeCppType<lt>>;
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, IntersectCountState>(
+                    "intersect_count", false, AggregateFactory::MakeIntersectCountAggregateFunction<lt>());
 
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, HyperLogLog>(
-                    "ndv", false, AggregateFactory::MakeHllNdvAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
+                    "ndv", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
 
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, HyperLogLog>(
-                    "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
+                    "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
         }
     }
 };

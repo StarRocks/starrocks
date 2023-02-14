@@ -64,14 +64,14 @@ static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_el
     return array;
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter) {
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_array<ArrowType>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(AT, PT, false, false);
+    auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -84,15 +84,15 @@ void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter) {
     ASSERT_TRUE(column->is_nullable());
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_array<ArrowType, true>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(AT, PT, true, false);
+    auto conv_func = get_arrow_converter(AT, LT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
     auto* nullable_column = down_cast<NullableColumn*>(column);
     auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
@@ -232,14 +232,14 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
     return std::static_pointer_cast<arrow::Array>(array);
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
                                 bool strict_mode, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_binary_array<ArrowType, false>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(AT, PT, false, strict_mode);
+    auto conv_func = get_arrow_converter(AT, LT, false, strict_mode);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -263,9 +263,9 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
 template <typename T>
 using TestCaseArray = std::vector<std::tuple<size_t, T, bool>>;
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto col = ColumnType::create();
     col->reserve(4096);
     size_t counter = 0;
@@ -273,19 +273,19 @@ void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_arrow_to_binary_column<AT, PT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
+        add_arrow_to_binary_column<AT, LT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
                                                                     strict_mode, fail);
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
                                          bool strict_mode, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_binary_array<ArrowType, true>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(AT, PT, true, strict_mode);
+    auto conv_func = get_arrow_converter(AT, LT, true, strict_mode);
     ASSERT_TRUE(conv_func != nullptr);
 
     auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -317,9 +317,9 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
     auto col = NullableColumn::create(binary_column, null_column);
@@ -331,7 +331,7 @@ void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool st
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
         expect_num_rows += num_elements;
-        add_arrow_to_nullable_binary_column<AT, PT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
+        add_arrow_to_nullable_binary_column<AT, LT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
                                                                              strict_mode, fail);
     }
     ASSERT_EQ(binary_column->size(), expect_num_rows);
@@ -407,7 +407,7 @@ PARALLEL_TEST(ArrowConverterTest, test_nullable_binary_nonstrict) {
     test_nullable_binary_with_strict_mode(test_cases, false);
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 void convert_binary_fail(size_t limit, bool strict_mode) {
     auto test_cases_pass = TestCaseArray<std::string>{
             {7, std::string(limit, 'x'), false},
@@ -415,16 +415,16 @@ void convert_binary_fail(size_t limit, bool strict_mode) {
             {9, std::string(limit, 'x'), false},
             {10, std::string(limit + 2, 'x'), true},
     };
-    test_nullable_binary<ArrowTypeId::STRING, PT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
-    test_nullable_binary<ArrowTypeId::BINARY, PT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
-    test_nullable_binary<ArrowTypeId::LARGE_STRING, PT, arrow::LargeStringType, std::string>(test_cases_pass,
+    test_nullable_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
+    test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
+    test_nullable_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass,
                                                                                              strict_mode);
-    test_nullable_binary<ArrowTypeId::LARGE_BINARY, PT, arrow::LargeBinaryType, std::string>(test_cases_pass,
+    test_nullable_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass,
                                                                                              strict_mode);
-    test_binary<ArrowTypeId::STRING, PT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::BINARY, PT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::LARGE_STRING, PT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::LARGE_BINARY, PT, arrow::LargeBinaryType, std::string>(test_cases_pass, strict_mode);
+    test_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
+    test_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
+    test_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode);
+    test_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass, strict_mode);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_char_fail_strict) {
@@ -472,14 +472,14 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
     return std::static_pointer_cast<arrow::Array>(array);
 }
 
-template <int bytes_width, LogicalType PT>
+template <int bytes_width, LogicalType LT>
 void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_elements, const std::string& value,
                                                   size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_fixed_size_binary_array<bytes_width, false>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, PT, false, false);
+    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -502,14 +502,14 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     }
 }
 
-template <int bytes_width, LogicalType PT>
+template <int bytes_width, LogicalType LT>
 void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_t num_elements,
                                                            const std::string& value, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_fixed_size_binary_array<bytes_width, true>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, PT, true, false);
+    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
 
     auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -542,9 +542,9 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     }
 }
 
-template <int bytes_width, LogicalType PT>
+template <int bytes_width, LogicalType LT>
 void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto col = ColumnType::create();
     col->reserve(4096);
     size_t counter = 0;
@@ -552,13 +552,13 @@ void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases)
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_binary_column<bytes_width, PT>(col.get(), num_elements, value, counter, fail);
+        add_fixed_size_binary_array_to_binary_column<bytes_width, LT>(col.get(), num_elements, value, counter, fail);
     }
 }
 
-template <int bytes_width, LogicalType PT>
+template <int bytes_width, LogicalType LT>
 void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_cases) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
     auto col = NullableColumn::create(binary_column, null_column);
@@ -568,7 +568,7 @@ void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_case
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, PT>(col.get(), num_elements, value, counter,
+        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, LT>(col.get(), num_elements, value, counter,
                                                                                fail);
     }
 }
@@ -674,29 +674,29 @@ ArrowCppType string_to_arrow_datetime(std::shared_ptr<ArrowType> type, const std
     return datetime_value;
 }
 
-template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
 CppType string_to_datetime(const std::string& value) {
-    if constexpr (pt_is_date<PT>) {
+    if constexpr (lt_is_date<LT>) {
         DateValue dv;
         dv.from_string(value.c_str(), value.size());
         return dv;
-    } else if constexpr (pt_is_datetime<PT>) {
+    } else if constexpr (lt_is_datetime<LT>) {
         TimestampValue tv;
         tv.from_string(value.c_str(), value.size());
         return tv;
     } else {
-        static_assert(pt_is_date_or_datetime<PT>, "Invalid type times");
+        static_assert(lt_is_date_or_datetime<LT>, "Invalid type times");
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
-          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType,
+          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<LT>>
 void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                   ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_datetime_array<ArrowType, false>(num_elements, arrow_datetime, type, counter);
-    auto conv_func = get_arrow_converter(AT, PT, false, false);
+    auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -715,14 +715,14 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
-          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType,
+          typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<LT>>
 void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                            ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_datetime_array<ArrowType, true>(num_elements, arrow_datetime, type, counter);
-    auto conv_func = get_arrow_converter(AT, PT, true, false);
+    auto conv_func = get_arrow_converter(AT, LT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
 
     ASSERT_TRUE(column->is_nullable());
@@ -753,10 +753,10 @@ void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Colu
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType>
 void test_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::string>& test_cases) {
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     using ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType;
     auto col = ColumnType::create();
     col->reserve(4096);
@@ -766,15 +766,15 @@ void test_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::str
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
         ArrowCppType arrow_datetime = string_to_arrow_datetime<AT, ArrowType>(type, value);
-        CppType datetime = string_to_datetime<PT>(value);
-        add_arrow_to_datetime_column<AT, PT>(type, col.get(), num_elements, arrow_datetime, datetime, counter, fail);
+        CppType datetime = string_to_datetime<LT>(value);
+        add_arrow_to_datetime_column<AT, LT>(type, col.get(), num_elements, arrow_datetime, datetime, counter, fail);
     }
 }
 
-template <ArrowTypeId AT, LogicalType PT, typename ArrowType>
+template <ArrowTypeId AT, LogicalType LT, typename ArrowType>
 void test_nullable_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::string>& test_cases) {
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     using ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType;
     auto datetime_column = ColumnType::create();
     auto null_column = NullColumn::create();
@@ -786,8 +786,8 @@ void test_nullable_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
         ArrowCppType arrow_datetime = string_to_arrow_datetime<AT, ArrowType>(type, value);
-        CppType datetime = string_to_datetime<PT>(value);
-        add_arrow_to_nullable_datetime_column<AT, PT>(type, col.get(), num_elements, arrow_datetime, datetime, counter,
+        CppType datetime = string_to_datetime<LT>(value);
+        add_arrow_to_nullable_datetime_column<AT, LT>(type, col.get(), num_elements, arrow_datetime, datetime, counter,
                                                       fail);
     }
 }
@@ -910,14 +910,14 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     counter += num_elements;
     return array;
 }
-template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
 void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
                                  size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
                                  bool fail) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     ASSERT_EQ(column->size(), counter);
     auto array = create_const_decimal_array<false>(num_elements, std::move(type), value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, false, false);
+    auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -937,14 +937,14 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
     }
 }
 
-template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
 void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
                                           size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
                                           bool fail) {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
     ASSERT_EQ(column->size(), counter);
     auto array = create_const_decimal_array<true>(num_elements, std::move(type), value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, true, false);
+    auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, LT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
     auto* nullable_column = down_cast<NullableColumn*>(column);
     auto* decimal_column = down_cast<ColumnType*>(nullable_column->data_column().get());
@@ -970,8 +970,8 @@ void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal12
     }
 }
 
-template <LogicalType FromPT, LogicalType ToPT, typename FromCppType = RunTimeCppType<FromPT>,
-          typename ToCppType = RunTimeCppType<ToPT>>
+template <LogicalType FromLT, LogicalType ToLT, typename FromCppType = RunTimeCppType<FromLT>,
+          typename ToCppType = RunTimeCppType<ToLT>>
 bool decimal_to_decimal(FromCppType from_value, ToCppType* to_value, int adjust_scale) {
     if (adjust_scale == 0) {
         return DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, true>(from_value, to_value);
@@ -986,13 +986,13 @@ bool decimal_to_decimal(FromCppType from_value, ToCppType* to_value, int adjust_
     }
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 void test_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArray<std::string>& test_cases,
                   int precision, int scale) {
-    using ColumnType = RunTimeColumnType<PT>;
-    using CppType = RunTimeCppType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using CppType = RunTimeCppType<LT>;
     ColumnPtr col;
-    if constexpr (pt_is_decimalv2<PT>) {
+    if constexpr (lt_is_decimalv2<LT>) {
         col = ColumnType::create();
     } else {
         col = ColumnType::create(precision, scale);
@@ -1008,24 +1008,24 @@ void test_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArr
         ASSERT_FALSE(has_error);
         CppType expect_value;
         bool overflow;
-        if constexpr (pt_is_decimalv2<PT>) {
+        if constexpr (lt_is_decimalv2<LT>) {
             int128_t v;
             overflow = decimal_to_decimal<TYPE_DECIMAL128, TYPE_DECIMAL128>(value, &v, 9 - type->scale());
             expect_value.set_value(v);
         } else {
-            overflow = decimal_to_decimal<TYPE_DECIMAL128, PT>(value, &expect_value, scale - type->scale());
+            overflow = decimal_to_decimal<TYPE_DECIMAL128, LT>(value, &expect_value, scale - type->scale());
         }
-        add_arrow_to_decimal_column<PT>(type, col.get(), num_elements, value, expect_value, counter, overflow);
+        add_arrow_to_decimal_column<LT>(type, col.get(), num_elements, value, expect_value, counter, overflow);
     }
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 void test_nullable_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArray<std::string>& test_cases,
                            int precision, int scale) {
-    using ColumnType = RunTimeColumnType<PT>;
-    using CppType = RunTimeCppType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using CppType = RunTimeCppType<LT>;
     ColumnPtr decimal_column;
-    if constexpr (pt_is_decimalv2<PT>) {
+    if constexpr (lt_is_decimalv2<LT>) {
         decimal_column = ColumnType::create();
     } else {
         decimal_column = ColumnType::create(precision, scale);
@@ -1043,14 +1043,14 @@ void test_nullable_decimal(std::shared_ptr<arrow::Decimal128Type> type, const Te
         ASSERT_FALSE(has_error);
         CppType expect_value;
         bool overflow;
-        if constexpr (pt_is_decimalv2<PT>) {
+        if constexpr (lt_is_decimalv2<LT>) {
             int128_t v;
             overflow = decimal_to_decimal<TYPE_DECIMAL128, TYPE_DECIMAL128>(value, &v, 9 - type->scale());
             expect_value.set_value(v);
         } else {
-            overflow = decimal_to_decimal<TYPE_DECIMAL128, PT>(value, &expect_value, scale - type->scale());
+            overflow = decimal_to_decimal<TYPE_DECIMAL128, LT>(value, &expect_value, scale - type->scale());
         }
-        add_arrow_to_nullable_decimal_column<PT>(type, col.get(), num_elements, value, expect_value, counter, overflow);
+        add_arrow_to_nullable_decimal_column<LT>(type, col.get(), num_elements, value, expect_value, counter, overflow);
     }
 }
 
