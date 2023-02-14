@@ -40,6 +40,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -50,6 +51,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -217,6 +219,24 @@ public class RangePartitionInfo extends PartitionInfo {
         idToReplicationNum.put(partitionId, desc.getReplicationNum());
         idToInMemory.put(partitionId, desc.isInMemory());
         idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
+        return range;
+    }
+
+    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+        Range<PartitionKey> range = null;
+        try {
+            PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
+            range = Range.closedOpen(shadowPartitionKey, shadowPartitionKey);
+            setRangeInternal(partitionId, false, range);
+        } catch (IllegalArgumentException e) {
+            // Range.closedOpen may throw this if (lower > upper)
+            throw new DdlException("Invalid key range: " + e.getMessage());
+        }
+        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
+        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToInMemory.put(partitionId, false);
+        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
+                Config.lake_default_storage_cache_ttl_seconds, false));
         return range;
     }
 
