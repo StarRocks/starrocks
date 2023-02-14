@@ -5,7 +5,7 @@
 #include "column/json_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "types/date_value.hpp"
+#include "runtime/date_value.hpp"
 
 namespace starrocks::vectorized::csv {
 
