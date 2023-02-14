@@ -101,6 +101,16 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     return Status::OK();
 }
 
+Status read_page(RandomAccessFile* file, size_t offset, size_t size, Slice* body, PageFooterPB* footer) {
+    char* page_mem = new char[size];
+    auto res = file->read_at_fully(offset, page_mem, size);
+    if (!res.ok()) {
+        std::cout << "Read page failed: " << res.to_string() << std::endl;
+        return res;
+    }
+    size -= 4;
+}
+
 void show_segment_footer(const std::string& file_name) {
     auto res = Env::Default()->new_random_access_file(file_name);
     if (!res.ok()) {
