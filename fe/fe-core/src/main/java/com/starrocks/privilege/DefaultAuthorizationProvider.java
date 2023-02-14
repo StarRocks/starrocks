@@ -116,11 +116,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     );
 
     private static final Map<String, ObjectType> PLURAL_TO_TYPE = new HashMap<>();
-    private static final Map<ObjectType, String> TYPE_TO_PLURAL = new HashMap<>();
 
     static {
         for (Pair<ObjectType, String> pair : OBJECT_TO_PLURAL) {
-            TYPE_TO_PLURAL.put(pair.first, pair.second);
             PLURAL_TO_TYPE.put(pair.second, pair.first);
         }
     }
@@ -164,16 +162,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         }
         return ret;
     }
-
-    @Override
-    public String getPlural(ObjectType objectType) throws PrivilegeException {
-        String plural = TYPE_TO_PLURAL.get(objectType);
-        if (plural == null) {
-            throw new PrivilegeException("invalid plural privilege type " + plural);
-        }
-        return plural;
-    }
-
 
     @Override
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)

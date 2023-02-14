@@ -118,4 +118,13 @@ public class ResourcePEntryObject implements PEntryObject {
     public int hashCode() {
         return Objects.hash(name);
     }
+
+    @Override
+    public String toString() {
+        if (name == null) {
+            return "ALL RESOURCES";
+        } else {
+            return name;
+        }
+    }
 }
