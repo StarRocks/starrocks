@@ -2,13 +2,15 @@
 
 This topic describes the working principles of Local Cache and how to enable Local Cache to improve query performance on external data.
 
-In data lake analytics, StarRocks scans data files stored in external storage systems, such as HDFS and Amazon S3. The I/O overhead of an external storage system is affected by the amount of scanned data. The larger the amount of data scanned, the more I/O overhead it causes. In addition, in some Ad Hoc (instant query) scenarios, locality of reference causes duplicate I/O overhead for an external storage system.
+In data lake analytics, StarRocks works as an OLAP engine to scan data files stored in external storage systems, such as HDFS and Amazon S3. The I/O overhead increases as the number of files to scan increases. In addition, in some ad hoc scenarios, frequent access to the same data doubles I/O overhead.
 
-To optimize the query performance in these scenarios, StarRocks 2.5 and later versions provide the Local Cache feature. This feature accelerates queries and analysis by caching hot data from external storage systems into blocks. Local cache only works when you query data from external storage systems by using external tables (except for external tables for JDBC-compatible databases) or external catalogs. It does not work when you query native tables stored in StarRocks.
+To optimize the query performance in these scenarios, StarRocks 2.5 provides the Local Cache feature. This feature splits data in an external storage system into multiple blocks based on predefined policies and caches the data on StarRocks backends (BEs). This eliminates the need to pull data from external systems for each access request and accelerates queries and analysis on hot data. Local Cache only works when you query data from external storage systems by using external catalogs or external tables (excluding external tables for JDBC-compatible databases). It does not work when you query StarRocks native tables.
 
 ## How it works
 
-For example, if you query a Parquet data file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks (By default, the size of each block is 1 MB and we recommend you retain the default setting). The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
+StarRocks splits data in an external storage system into multiple blocks of the same size (1 MB by default), and caches the data on BEs. Block is the smallest unit of data cache.
+
+For example, if you query a Parquet file of 128 MB from Amazon S3, StarRocks splits the file into 128 blocks (1 MB for each block, recommended setting). The blocks are [0, 1 MB), [1 MB, 2 MB), [2 MB, 3 MB) ... [127 MB, 128 MB). StarRocks assigns a globally unique ID to each block, called a cache key. A cache key consists of the following three parts.
 
 ```Plain
 hash(filename) + filesize + blockId
@@ -19,7 +21,7 @@ The following table provides descriptions of each part.
 | **Component item** | **Description**                                              |
 | ------------------ | ------------------------------------------------------------ |
 | filename           | The name of the data file.                                   |
-| filesize           | The size of the data file, such as 1MB.                      |
+| filesize           | The size of the data file, 1 MB by default.                  |
 | blockId            | The ID that StarRocks assigns to a block when splitting the data file. The ID is unique under the same data file but is not unique within your StarRocks cluster. |
 
 If the query hits the [1 MB, 2 MB) block, StarRocks performs the following operations:
@@ -27,7 +29,7 @@ If the query hits the [1 MB, 2 MB) block, StarRocks performs the following opera
 1. Check whether the block exists in the cache.
 2. If the block exists, StarRocks reads the block from the cache. If the block does not exist, StarRocks reads the block from Amazon S3 and caches it on a BE.
 
-By default, StarRocks caches data blocks read from external storage systems. If you do not want to cache data blocks read from external storage systems, run the following command.
+By default, StarRocks caches data blocks read from external storage systems. If you do not want to cache data blocks read from external storage systems, run the following command to disable data cache.
 
 ```SQL
 SET enable_populate_block_cache = false;
@@ -37,11 +39,11 @@ For more information about `enable_populate_block_cache`, see [System variables]
 
 ## Storage media of blocks
 
-By default, StarRocks uses the memory of BE machines to cache blocks. It also supports using both the memory and disks as the storage media of blocks. If BE machines are equipped with disks, such as NVMe drives or SSDs, you can use both the memory and disks to cache blocks. If you use cloud storage, such as Amazon EBS, for BE machines, we recommend that you use only the memory to cache blocks.
+By default, StarRocks uses the memory of BE machines to cache blocks. It also supports using both the memory and disks as hybrid storage media of blocks. If BE machines are equipped with disks, such as NVMe drives or SSDs, you can use both the memory and disks to cache blocks. If you use cloud storage, such as Amazon EBS, for BE machines, we recommend that you use only the memory to cache blocks.
 
 ## Cache replacement policies
 
-In Local Cache, blocks are the smallest unit that StarRocks uses to cache and discard data. StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
+StarRocks uses the [least recently used](https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_recently_used_(LRU)) (LRU) policy to cache and discard data.
 
 - StarRocks reads data from memory, and then from disks if the data is not found in memory. Data read from disks is loaded into memory.
 - Data deleted from memory is written into disks. Data removed from disks is discarded.
@@ -85,9 +87,10 @@ Examples of setting these parameters.
 # Enable Local Cache.
 block_cache_enable = true  
 
-# The BE machine is equipped with two disks.
-block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/ 
+# Configure the disk path. Assume the BE machine is equipped with two disks.
+block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/
 
+# Configure the metadata storage path.
 block_cache_meta_path = /home/disk1/sr/dla_cache_meta/ 
 
 # Set block_cache_mem_size to 2 GB.
