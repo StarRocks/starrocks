@@ -23,11 +23,11 @@
 
 namespace starrocks {
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class BitmapUnionIntAggregateFunction final
-        : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<PT, T>> {
+        : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<LT, T>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
+    using InputColumnType = RunTimeColumnType<LT>;
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         DCHECK((*columns[0]).is_numeric());
         if constexpr (std::is_integral_v<T>) {

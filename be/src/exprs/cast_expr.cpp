@@ -147,19 +147,19 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
         JsonValue value;
         bool overflow = false;
-        if constexpr (pt_is_integer<FromType>) {
+        if constexpr (lt_is_integer<FromType>) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_int(viewer.value(row));
-        } else if constexpr (pt_is_float<FromType>) {
+        } else if constexpr (lt_is_float<FromType>) {
             constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
             constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_double(viewer.value(row));
-        } else if constexpr (pt_is_boolean<FromType>) {
+        } else if constexpr (lt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_string<FromType>) {
+        } else if constexpr (lt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
                 value = maybe.value();
@@ -202,20 +202,20 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
         }
 
         JsonValue* json = viewer.value(row);
-        if constexpr (pt_is_arithmetic<ToType>) {
+        if constexpr (lt_is_arithmetic<ToType>) {
             [[maybe_unused]] constexpr auto min = RunTimeTypeLimits<ToType>::min_value();
             [[maybe_unused]] constexpr auto max = RunTimeTypeLimits<ToType>::max_value();
             RunTimeCppType<ToType> cpp_value{};
             bool ok = true;
-            if constexpr (pt_is_integer<ToType>) {
+            if constexpr (lt_is_integer<ToType>) {
                 auto res = json->get_int();
                 ok = res.ok() && min <= res.value() && res.value() <= max;
                 cpp_value = ok ? res.value() : cpp_value;
-            } else if constexpr (pt_is_float<ToType>) {
+            } else if constexpr (lt_is_float<ToType>) {
                 auto res = json->get_double();
                 ok = res.ok() && min <= res.value() && res.value() <= max;
                 cpp_value = ok ? res.value() : cpp_value;
-            } else if constexpr (pt_is_boolean<ToType>) {
+            } else if constexpr (lt_is_boolean<ToType>) {
                 auto res = json->get_bool();
                 ok = res.ok();
                 cpp_value = ok ? res.value() : cpp_value;
@@ -234,7 +234,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 }
                 builder.append_null();
             }
-        } else if constexpr (pt_is_string<ToType>) {
+        } else if constexpr (lt_is_string<ToType>) {
             // if the json already a string value, get the string directly
             // else cast it to string representation
             if (json->get_type() == JsonType::JSON_STRING) {
@@ -1076,19 +1076,19 @@ public:
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
-            if constexpr (pt_is_decimal<FromType>) {
+            if constexpr (lt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(double_column);
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
             }
-        } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
+        } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
                     column, to_type.precision, to_type.scale);
-        } else if constexpr (pt_is_decimal<FromType>) {
+        } else if constexpr (lt_is_decimal<FromType>) {
             return VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, ToType>(column);
-        } else if constexpr (pt_is_decimal<ToType>) {
+        } else if constexpr (lt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
@@ -1266,7 +1266,7 @@ public:
             return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(column);
         }
 
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             return VectorizedUnaryFunction<DecimalTo<true>>::evaluate<Type, TYPE_VARCHAR>(column);
         }
 

@@ -167,8 +167,8 @@ LogicalType thrift_to_type(TPrimitiveType::type ttype) {
     return TYPE_UNKNOWN;
 }
 
-TPrimitiveType::type to_thrift(LogicalType ptype) {
-    switch (ptype) {
+TPrimitiveType::type to_thrift(LogicalType ltype) {
+    switch (ltype) {
         // TODO(mofei) rename these two type
     case TYPE_UNSIGNED_TINYINT:
     case TYPE_UNSIGNED_SMALLINT:
@@ -246,9 +246,9 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val) {
     return type_desc;
 }
 
-class ScalarFieldTypeToPrimitiveTypeMapping {
+class ScalarFieldTypeToLogicalTypeMapping {
 public:
-    ScalarFieldTypeToPrimitiveTypeMapping() {
+    ScalarFieldTypeToLogicalTypeMapping() {
         for (auto& i : _data) {
             i = TYPE_UNKNOWN;
         }
@@ -274,29 +274,29 @@ public:
         _data[TYPE_JSON] = TYPE_JSON;
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
     }
-    LogicalType get_primitive_type(LogicalType field_type) { return _data[field_type]; }
+    LogicalType get_logical_type(LogicalType field_type) { return _data[field_type]; }
 
 private:
     LogicalType _data[TYPE_MAX_VALUE];
 };
 
-static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
+static ScalarFieldTypeToLogicalTypeMapping g_scalar_ftype_to_ltype;
 
-LogicalType scalar_field_type_to_primitive_type(LogicalType field_type) {
-    LogicalType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
-    DCHECK(ptype != TYPE_UNKNOWN);
-    return ptype;
+LogicalType scalar_field_type_to_logical_type(LogicalType field_type) {
+    LogicalType ltype = g_scalar_ftype_to_ltype.get_logical_type(field_type);
+    DCHECK(ltype != TYPE_UNKNOWN);
+    return ltype;
 }
 
 struct FixedLengthTypeGetter {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     size_t operator()() {
-        return RunTimeFixedTypeLength<ptype>::value;
+        return RunTimeFixedTypeLength<ltype>::value;
     }
 };
 
-size_t get_size_of_fixed_length_type(LogicalType ptype) {
-    return type_dispatch_all(ptype, FixedLengthTypeGetter());
+size_t get_size_of_fixed_length_type(LogicalType ltype) {
+    return type_dispatch_all(ltype, FixedLengthTypeGetter());
 }
 
 } // namespace starrocks

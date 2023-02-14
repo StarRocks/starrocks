@@ -711,8 +711,8 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(LogicalType ptype) {
-    switch (ptype) {
+size_t _estimate_type_bytes(LogicalType ltype) {
+    switch (ltype) {
     case TYPE_VARCHAR:
     case TYPE_CHAR:
     case TYPE_ARRAY:

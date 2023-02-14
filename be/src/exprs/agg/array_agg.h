@@ -23,9 +23,9 @@
 
 namespace starrocks {
 
-template <LogicalType PT>
+template <LogicalType LT>
 struct ArrayAggAggregateState {
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     void update(const ColumnType& column, size_t offset, size_t count) { data_column.append(column, offset, count); }
 
@@ -36,11 +36,11 @@ struct ArrayAggAggregateState {
     size_t null_count = 0;
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayAggAggregateFunction
-        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<PT>, ArrayAggAggregateFunction<PT>> {
+        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT>, ArrayAggAggregateFunction<LT>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
+    using InputColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

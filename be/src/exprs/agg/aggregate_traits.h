@@ -27,7 +27,7 @@ template <LogicalType lt, typename = guard::Guard>
 struct AggDataTypeTraits {};
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
+struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
@@ -45,7 +45,7 @@ struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
 
 // For pointer ref types
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
+struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
@@ -63,7 +63,7 @@ struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
 };
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
+struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;

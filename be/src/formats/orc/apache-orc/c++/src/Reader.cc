@@ -156,7 +156,7 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
             columns.pop_back();
         }
     } else {
-        // other non-primitive type
+        // other non-logical type
         for (size_t j = 0; j < type->getSubtypeCount(); ++j) {
             buildTypeNameIdMap(type->getSubtype(j));
         }

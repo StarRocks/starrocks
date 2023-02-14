@@ -80,7 +80,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
         }
     } else if (desc.is_map_type()) {
         if (!desc.children[0].is_unknown_type()) {
-            // Map's key must be primitive type, we just include it.
+            // Map's key must be logical type, we just include it.
             column_id_list->push_back(mapping->get_column_id_or_child_mapping(0).orc_column_id);
         }
         if (!desc.children[1].is_unknown_type()) {
@@ -136,7 +136,7 @@ Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc:
         can_convert = slot_target_type.is_struct_type();
     }
 
-    //TODO Other primitive type not check now!
+    //TODO Other logical type not check now!
 
     if (!can_convert) {
         return Status::NotSupported("Not support to convert orc's type: " + orc_source_type.toString() +
@@ -328,7 +328,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         size_t need_add_value_column_id = orc_type.getSubtype(1)->getColumnId();
         OrcMappingPtr need_add_vaule_child_mapping = nullptr;
 
-        // Map's key must be primitive type, so we only consider value.
+        // Map's key must be logical type, so we only consider value.
         const TypeDescriptor& origin_child_type = origin_type.children[1];
 
         if (origin_child_type.is_complex_type()) {

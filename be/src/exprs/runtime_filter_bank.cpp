@@ -37,9 +37,9 @@ namespace starrocks {
 static const uint8_t RF_VERSION = 0x2;
 
 struct FilterBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     JoinRuntimeFilter* operator()() {
-        return new RuntimeBloomFilter<ptype>();
+        return new RuntimeBloomFilter<ltype>();
     }
 };
 
@@ -81,7 +81,7 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
         return;
     }
 
-    // peek primitive type.
+    // peek logical type.
     LogicalType type;
     memcpy(&type, data + offset, sizeof(type));
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
@@ -99,10 +99,10 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
 }
 
 struct FilterIniter {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
-        using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
-        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
+        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
@@ -165,12 +165,12 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
 }
 
 struct FilterZoneMapWithMinMaxOp {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
-        using CppType = RunTimeCppType<ptype>;
-        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
-        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(min_column);
-        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(max_column);
+        using CppType = RunTimeCppType<ltype>;
+        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
+        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(min_column);
+        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(max_column);
         return filter->filter_zonemap_with_min_max(min_value, max_value);
     }
 };
@@ -718,11 +718,11 @@ public:
     MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
             : _pool(pool), _slot_id(slot_id), _filter(filter) {}
 
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     Expr* operator()() {
-        auto* bloom_filter = (RuntimeBloomFilter<ptype>*)(_filter);
-        MinMaxPredicate<ptype>* p =
-                _pool->add(new MinMaxPredicate<ptype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value()));
+        auto* bloom_filter = (RuntimeBloomFilter<ltype>*)(_filter);
+        MinMaxPredicate<ltype>* p =
+                _pool->add(new MinMaxPredicate<ltype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value()));
         return p;
     }
 

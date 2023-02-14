@@ -20,31 +20,31 @@
 #include "util/phmap/phmap.h"
 namespace starrocks {
 
-template <LogicalType PT, typename = guard::Guard>
+template <LogicalType LT, typename = guard::Guard>
 struct DetailStateMap {};
 
-template <LogicalType PT>
-struct DetailStateMap<PT, FixedLengthPTGuard<PT>> {
-    using CppType = RunTimeCppValueType<PT>;
+template <LogicalType LT>
+struct DetailStateMap<LT, FixedLengthLTGuard<LT>> {
+    using CppType = RunTimeCppValueType<LT>;
     using KeyType = CppType;
     using HashMap = phmap::flat_hash_map<KeyType, int64_t, StdHash<CppType>>;
 };
 
-template <LogicalType PT>
-struct DetailStateMap<PT, StringPTGuard<PT>> {
-    using CppType = RunTimeCppValueType<PT>;
+template <LogicalType LT>
+struct DetailStateMap<LT, StringLTGuard<LT>> {
+    using CppType = RunTimeCppValueType<LT>;
     using KeyType = std::string;
     using HashMap = phmap::flat_hash_map<KeyType, int64_t, SliceHash>;
 };
 
 // TODO: Support detail agg state reusable between different agg stats.
 // TODO: How to handle count=0's key-value?
-template <LogicalType PT>
+template <LogicalType LT>
 class StreamDetailState {
 public:
-    using CppType = RunTimeCppType<PT>;
-    using StateHashMap = typename DetailStateMap<PT>::HashMap;
-    using HashMapKeyType = typename DetailStateMap<PT>::KeyType;
+    using CppType = RunTimeCppType<LT>;
+    using StateHashMap = typename DetailStateMap<LT>::HashMap;
+    using HashMapKeyType = typename DetailStateMap<LT>::KeyType;
 
     StreamDetailState() = default;
     ~StreamDetailState() = default;
@@ -83,7 +83,7 @@ public:
 
 private:
     HashMapKeyType _convert_to_key_type(CppType v) {
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             return std::string(v.data, v.size);
         } else {
             return v;

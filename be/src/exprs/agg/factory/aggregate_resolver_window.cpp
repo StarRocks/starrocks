@@ -22,29 +22,29 @@
 namespace starrocks {
 
 struct WindowDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || is_object_type(pt)) {
-            resolver->add_aggregate_mapping_notnull<pt, pt>(
-                    "first_value", true, AggregateFactory::MakeFirstValueWindowFunction<pt, false>());
+        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt> || is_object_type(lt)) {
+            resolver->add_aggregate_mapping_notnull<lt, lt>(
+                    "first_value", true, AggregateFactory::MakeFirstValueWindowFunction<lt, false>());
             // use first_value_in for first_value with ingnore nulls.
-            resolver->add_aggregate_mapping_notnull<pt, pt>("first_value_in", true,
-                                                            AggregateFactory::MakeFirstValueWindowFunction<pt, true>());
-            resolver->add_aggregate_mapping_notnull<pt, pt>("last_value", true,
-                                                            AggregateFactory::MakeLastValueWindowFunction<pt, false>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>("first_value_in", true,
+                                                            AggregateFactory::MakeFirstValueWindowFunction<lt, true>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>("last_value", true,
+                                                            AggregateFactory::MakeLastValueWindowFunction<lt, false>());
             // use last_value_in for last_value with ingnore nulls.
-            resolver->add_aggregate_mapping_notnull<pt, pt>("last_value_in", true,
-                                                            AggregateFactory::MakeLastValueWindowFunction<pt, true>());
-            resolver->add_aggregate_mapping_notnull<pt, pt>(
-                    "lead", true, AggregateFactory::MakeLeadLagWindowFunction<pt, false, false>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>("last_value_in", true,
+                                                            AggregateFactory::MakeLastValueWindowFunction<lt, true>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>(
+                    "lead", true, AggregateFactory::MakeLeadLagWindowFunction<lt, false, false>());
             // use lead_in for lead with ingnore nulls.
-            resolver->add_aggregate_mapping_notnull<pt, pt>(
-                    "lead_in", true, AggregateFactory::MakeLeadLagWindowFunction<pt, true, false>());
-            resolver->add_aggregate_mapping_notnull<pt, pt>(
-                    "lag", true, AggregateFactory::MakeLeadLagWindowFunction<pt, false, true>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>(
+                    "lead_in", true, AggregateFactory::MakeLeadLagWindowFunction<lt, true, false>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>(
+                    "lag", true, AggregateFactory::MakeLeadLagWindowFunction<lt, false, true>());
             // use lag_in for lag with ingnore nulls.
-            resolver->add_aggregate_mapping_notnull<pt, pt>(
-                    "lag_in", true, AggregateFactory::MakeLeadLagWindowFunction<pt, true, true>());
+            resolver->add_aggregate_mapping_notnull<lt, lt>(
+                    "lag_in", true, AggregateFactory::MakeLeadLagWindowFunction<lt, true, true>());
         }
     }
 };

@@ -363,8 +363,8 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
         auto len = (int)orc_type->getMaximumLength();
-        auto iter = g_orc_starrocks_primitive_type_mapping.find(kind);
-        if (iter == g_orc_starrocks_primitive_type_mapping.end()) {
+        auto iter = g_orc_starrocks_logical_type_mapping.find(kind);
+        if (iter == g_orc_starrocks_logical_type_mapping.end()) {
             return Status::NotSupported("Unsupported ORC type: " + orc_type->toString());
         }
         result->type = iter->second;
@@ -395,8 +395,8 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     } else if (is_integer_type(t1) && is_integer_type(t2)) {
         from->type = t2;
     } else if (is_decimal_type(t1) && is_decimal_type(t2)) {
-        // if target type is decimal v3 type, the from->type should be assigned to an correct
-        // primitive type according to the precision in original orc files so that the invariant
+        // if target type is decimal v3 type, the from->type should be assigned to a correct
+        // logical type according to the precision in original orc files so that the invariant
         // 0 <= scale <= precision <= decimal_precision_limit<RuntimeCppType<from_type>> is not
         // violated during creating a DecimalV3Column via ColumnHelper::create(...).
         if (t2 == LogicalType::TYPE_DECIMALV2) {
@@ -706,7 +706,7 @@ static std::unordered_set<TExprNodeType::type> _supported_expr_node_types = {
         TExprNodeType::type::LARGE_INT_LITERAL,
 };
 
-static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_primitive_types = {
+static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logical_types = {
         {LogicalType::TYPE_BOOLEAN, orc::PredicateDataType::BOOLEAN},
         {LogicalType::TYPE_TINYINT, orc::PredicateDataType::LONG},
         {LogicalType::TYPE_SMALLINT, orc::PredicateDataType::LONG},
@@ -756,7 +756,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     }
 
     // supported one level. first child is slot, and others are literal values.
-    // and only support some of primitive types.
+    // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
         node_type == TExprNodeType::IS_NULL_PRED) {
         // first child should be slot
@@ -790,8 +790,8 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         }
         for (int i = 0; i < conjunct->get_num_children(); i++) {
             Expr* expr = conjunct->get_child(i);
-            LogicalType pt = expr->type().type;
-            if (_supported_primitive_types.find(pt) == _supported_primitive_types.end()) {
+            LogicalType lt = expr->type().type;
+            if (_supported_logical_types.find(lt) == _supported_logical_types.end()) {
                 return false;
             }
         }
@@ -807,7 +807,7 @@ static inline orc::Int128 to_orc128(int128_t value) {
 
 static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::PredicateDataType pred_type) {
     TExprNodeType::type node_type = lit->node_type();
-    LogicalType ptype = lit->type().type;
+    LogicalType ltype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
         return {pred_type};
     }
@@ -819,7 +819,7 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     }
 
     const Datum& datum = ptr->get(0);
-    switch (ptype) {
+    switch (ltype) {
     case LogicalType::TYPE_BOOLEAN:
         return {bool(datum.get_int8())};
     case LogicalType::TYPE_TINYINT:
@@ -854,7 +854,7 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     case LogicalType::TYPE_DECIMAL128:
         return orc::Literal{to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
-        CHECK(false) << "failed to handle primitive type = " << std::to_string(ptype);
+        CHECK(false) << "failed to handle logical type = " << std::to_string(ltype);
     }
 }
 
@@ -901,7 +901,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     auto* ref = down_cast<ColumnRef*>(slot);
     SlotId slot_id = ref->slot_id();
     std::string name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
+    orc::PredicateDataType pred_type = _supported_logical_types[slot->type().type];
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
@@ -1053,11 +1053,11 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
 
 bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
-    LogicalType ptype = slot->type().type;
-    auto type_it = _supported_primitive_types.find(ptype);
-    if (type_it == _supported_primitive_types.end()) return false;
+    LogicalType ltype = slot->type().type;
+    auto type_it = _supported_logical_types.find(ltype);
+    if (type_it == _supported_logical_types.end()) return false;
     orc::PredicateDataType pred_type = type_it->second;
-    switch (ptype) {
+    switch (ltype) {
         ADD_RF_BOOLEAN_TYPE(LogicalType::TYPE_BOOLEAN);
         ADD_RF_INT_TYPE(LogicalType::TYPE_TINYINT);
         ADD_RF_INT_TYPE(LogicalType::TYPE_SMALLINT);

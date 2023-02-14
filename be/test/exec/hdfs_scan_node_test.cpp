@@ -68,10 +68,10 @@ private:
 ChunkPtr HdfsScanNodeTest::_create_chunk() {
     ChunkPtr chunk = std::make_shared<Chunk>();
 
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT), true);
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT), true);
-    auto col3 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR), true);
-    auto col4 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME), true);
+    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true);
+    auto col4 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME), true);
     chunk->append_column(col1, 0);
     chunk->append_column(col2, 1);
     chunk->append_column(col3, 2);

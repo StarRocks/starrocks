@@ -148,7 +148,7 @@ public:
 private:
     void _init(int size) {
         std::uniform_int_distribution<int64_t> u(0, 4096);
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();

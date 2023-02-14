@@ -1042,9 +1042,9 @@ public:
 
                 has_data = true;
                 auto& value = elements_ptr[offset + j];
-                if constexpr (pt_is_datetime<value_type>) {
+                if constexpr (lt_is_datetime<value_type>) {
                     sum += value.to_unix_second();
-                } else if constexpr (pt_is_date<value_type>) {
+                } else if constexpr (lt_is_date<value_type>) {
                     sum += value.julian();
                 } else {
                     sum += value;
@@ -1052,24 +1052,24 @@ public:
             }
 
             if (has_data) {
-                if constexpr (pt_is_decimalv2<value_type>) {
+                if constexpr (lt_is_decimalv2<value_type>) {
                     if constexpr (type == ArithmeticType::SUM) {
                         result_column->append(sum);
                     } else {
                         result_column->append(sum / DecimalV2Value(array_size, 0));
                     }
-                } else if constexpr (pt_is_arithmetic<value_type> || pt_is_decimal<value_type>) {
+                } else if constexpr (lt_is_arithmetic<value_type> || lt_is_decimal<value_type>) {
                     if constexpr (type == ArithmeticType::SUM) {
                         result_column->append(sum);
                     } else {
                         result_column->append(sum / array_size);
                     }
-                } else if constexpr (pt_is_datetime<value_type>) {
+                } else if constexpr (lt_is_datetime<value_type>) {
                     static_assert(type == ArithmeticType::AVG);
                     TimestampValue value;
                     value.from_unix_second(sum / array_size);
                     result_column->append(value);
-                } else if constexpr (pt_is_date<value_type>) {
+                } else if constexpr (lt_is_date<value_type>) {
                     static_assert(type == ArithmeticType::AVG);
                     DateValue value;
                     value._julian = sum / array_size;
@@ -1113,7 +1113,7 @@ public:
                 ResultType result;
 
                 size_t index;
-                if constexpr (!pt_is_string<value_type>) {
+                if constexpr (!lt_is_string<value_type>) {
                     if constexpr (is_min) {
                         result = RunTimeTypeLimits<value_type>::max_value();
                     } else {
@@ -1155,7 +1155,7 @@ public:
                     }
                 }
 
-                if constexpr (!pt_is_string<value_type>) {
+                if constexpr (!lt_is_string<value_type>) {
                     if (has_data) {
                         result_column->append(result);
                     } else {

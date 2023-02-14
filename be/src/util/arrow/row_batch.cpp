@@ -103,7 +103,7 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         *result = std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
         break;
     default:
-        return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", type.type));
+        return Status::InvalidArgument(strings::Substitute("Unknown logical type($0)", type.type));
     }
     return Status::OK();
 }

@@ -23,11 +23,11 @@
 namespace starrocks {
 
 struct HistogramDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt>) {
-            resolver->add_aggregate_mapping_notnull<pt, TYPE_VARCHAR>(
-                    "histogram", false, AggregateFactory::MakeHistogramAggregationFunction<pt>());
+        if constexpr (lt_is_aggregate<lt>) {
+            resolver->add_aggregate_mapping_notnull<lt, TYPE_VARCHAR>(
+                    "histogram", false, AggregateFactory::MakeHistogramAggregationFunction<lt>());
         }
     }
 };

@@ -35,7 +35,7 @@
 namespace starrocks {
 
 // NOLINTNEXTLINE
-const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_primitive_type_mapping = {
+const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_type_mapping = {
         {orc::BOOLEAN, starrocks::TYPE_BOOLEAN},
         {orc::BYTE, starrocks::TYPE_TINYINT},
         {orc::SHORT, starrocks::TYPE_SMALLINT},

@@ -262,9 +262,9 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ptype) {
+        switch (ltype) {
         case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
@@ -272,7 +272,7 @@ struct ColumnBuilder {
         case TYPE_STRUCT:
         case TYPE_ARRAY:
         case TYPE_MAP:
-            LOG(FATAL) << "Unsupported column type" << ptype;
+            LOG(FATAL) << "Unsupported column type" << ltype;
         case TYPE_DECIMAL32:
             return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL64:
@@ -280,7 +280,7 @@ struct ColumnBuilder {
         case TYPE_DECIMAL128:
             return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
         default:
-            return RunTimeColumnType<ptype>::create(size);
+            return RunTimeColumnType<ltype>::create(size);
         }
     }
 };

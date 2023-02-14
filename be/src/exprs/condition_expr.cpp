@@ -191,15 +191,15 @@ public:
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
-            if (bhs->is_constant() || !isArithmeticPT<Type>) {
+            if (bhs->is_constant() || !isArithmeticLT<Type>) {
                 return _evaluate_general<false>(list);
-            } else if constexpr (isArithmeticPT<Type>) {
+            } else if constexpr (isArithmeticLT<Type>) {
                 return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
             } else {
                 __builtin_unreachable();
             }
         } else {
-            if constexpr (isArithmeticPT<Type>) {
+            if constexpr (isArithmeticLT<Type>) {
                 // SIMD branch
                 size_t num_rows = list[0]->size();
                 // get null data
