@@ -15,6 +15,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.MutableGraph;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.ExecPlan;
@@ -276,6 +279,54 @@ public class MaterializedViewTest extends PlanTestBase {
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
                 "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
+                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c5\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
+                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c5\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
+                "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c2` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c3` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa4\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
                 "    \"storage_format\" = \"DEFAULT\"\n" +
                 ")");
     }
@@ -1497,6 +1548,29 @@ public class MaterializedViewTest extends PlanTestBase {
                 "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
                 " group by lo_orderkey";
 
+        testRewriteOK(mv, query);
+    }
+
+    // mv: t1, t2, t2
+    // query: t1, t2
+    @Test
+    public void testViewDeltaJoinUKFK1() {
+        String mv = "select c1 as col1, c2, c3, l.c6, r.c7" +
+                " from t1 join t2 l on t1.c2 = l.c5" +
+                " join t2 r on t1.c3 = r.c5";
+        String query = "select c1, c2, c3, c6 from t1 join t2 on t1.c2 = t2.c5";
+        testRewriteOK(mv, query);
+    }
+
+    // mv: t1, t3, t2, t2
+    // query: t1, t3
+    @Test
+    public void testViewDeltaJoinUKFK2() {
+        String mv = "select c1 as col1, c2, c3, l.c6, r.c7" +
+                " from t1 join t2 l on t1.c2 = l.c5" +
+                " join t2 r on t1.c3 = r.c5" +
+                " join t3 on t1.c2 = t3.c5";
+        String query = "select c1, c2, c3, t3.c5 from t1 join t3 on t1.c2 = t3.c5";
         testRewriteOK(mv, query);
     }
 }
