@@ -41,7 +41,7 @@ public interface IHiveMetastore {
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
-    default void refreshTable(String hiveDbName, String hiveTblName) {
+    default void refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
     }
 
     default void refreshPartition(List<HivePartitionName> partitionNames) {
