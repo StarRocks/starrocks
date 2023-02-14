@@ -23,10 +23,10 @@ PROPERTIES ("key"="value", ...)
 
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
-| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only warehouse for the new cluster and only grant it RESTORE permissions.|
+| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only repository for the new cluster and only grant it RESTORE permissions.|
 | repository_name     | Repository name.                                             |
 | repository_location | Location of the repository in the remote storage system.     |
-| PROPERTIES          | Username/password or credential/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
+| PROPERTIES          |The credential method for accessing the remote storage system. |
 
 **PROPERTIES**:
 
