@@ -41,6 +41,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class PrivilegeStmtAnalyzerV2Test {
@@ -590,12 +591,70 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testGrantMultiObject() {
         String sql = "grant SELECT on TABLE test.t0 to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assert.assertEquals("GRANT SELECT ON TABLE test.t0 TO 'test_user'@'%'",
+        Assert.assertEquals("GRANT SELECT ON TABLE test.t0 TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "GRANT SELECT on TABLE test.t0, test.t1 to role public";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
         Assert.assertEquals("GRANT SELECT ON TABLE test.t0, test.t1 TO ROLE 'public'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+    }
+
+    @Test
+    public void testGrantRevokePriv() {
+        String sql = "grant SELECT, INSERT on table test.t0 to role public";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT, INSERT ON TABLE test.t0 TO ROLE 'public'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALL PRIVILEGES on table test.t0 to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE " +
+                        "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in all databases to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in database test to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN DATABASE test TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALTER on database test to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT ALTER ON DATABASE test TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant ALTER on all databases to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT ALTER ON ALL DATABASES TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant GRANT on system to user test_user";
+        analyzeFail(sql, "cannot grant/revoke system privilege: GRANT");
+
+        sql = "revoke GRANT on system from role root";
+        analyzeFail(sql, "cannot grant/revoke system privilege: GRANT");
+
+        sql = "grant NODE on system to user test_user";
+        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+
+        sql = "revoke NODE on system from role root";
+        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+
+        sql = "grant CREATE_RESOURCE on system to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT CREATE_RESOURCE ON SYSTEM TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant NODE, CREATE_RESOURCE on system to user test_user";
+        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+
+        sql = "grant IMPERSONATE on user test_user to user test_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT IMPERSONATE ON USER 'test_user'@'%' TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
     }
 }

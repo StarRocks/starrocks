@@ -1879,9 +1879,13 @@ public class ShowExecutor {
                                 privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                         parentRoleNameList.add(parentRolePriv.getName());
 
-                        List<String> info = Lists.newArrayList(showStmt.getRole(), null,
-                                AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, showStmt.getRole())));
-                        infos.add(info);
+                        try {
+                            List<String> info = Lists.newArrayList(showStmt.getRole(), null,
+                                    AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, showStmt.getRole())));
+                            infos.add(info);
+                        } catch (com.starrocks.sql.common.MetaNotFoundException e) {
+                            //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                        }
                     }
 
                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
@@ -1988,9 +1992,13 @@ public class ShowExecutor {
                             grantPrivilegeStmt.setPrivilegeTypes(privList);
 
                             grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-                            info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
 
-                            infos.add(info);
+                            try {
+                                info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+                                infos.add(info);
+                            } catch (com.starrocks.sql.common.MetaNotFoundException e) {
+                                //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                            }
                         }
                     }
 

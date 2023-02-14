@@ -2020,7 +2020,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
-        Assert.assertEquals("GRANT SELECT ON information_schema.* TO 'user1'@'%'", infos.get(0).get(1));
+        Assert.assertEquals("GRANT SELECT ON information_schema.* TO USER 'user1'@'%'", infos.get(0).get(1));
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
@@ -2030,7 +2030,7 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
-        String expectSQL = "GRANT SELECT ON testdb.table1 TO 'user2'@'%'";
+        String expectSQL = "GRANT SELECT ON testdb.table1 TO USER 'user2'@'%'";
         Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
 
         // 3. grant resource & table & global & impersonate to manyPrivilegeUser
@@ -2038,16 +2038,16 @@ public class AuthTest {
         TablePattern db = new TablePattern("testdb", "*");
         db.analyze();
         auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
-        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT SELECT, LOAD ON testdb.* TO USER 'user3'@'%'");
         TablePattern global = new TablePattern("*", "*");
         global.analyze();
         auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
-        expectSQLs.add("GRANT GRANT ON *.* TO 'user3'@'%'");
+        expectSQLs.add("GRANT GRANT ON *.* TO USER 'user3'@'%'");
         ResourcePattern resourcePattern = new ResourcePattern("test_resource");
         resourcePattern.analyze();
         auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
-        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO 'user3'@'%'");
-        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO 'user3'@'%'";
+        expectSQLs.add("GRANT USAGE ON RESOURCE test_resource TO USER 'user3'@'%'");
+        String sql = "GRANT IMPERSONATE ON USER 'user1'@'%' TO USER 'user3'@'%'";
         auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         expectSQLs.add(sql);
         infos = auth.getGrantsSQLs(manyPrivilegeUser);
