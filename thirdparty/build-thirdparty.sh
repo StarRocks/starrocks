@@ -988,8 +988,8 @@ build_streamvbyte() {
     make install
 }
 
-# jasson
-build_jasson() {
+# jansson
+build_jansson() {
     check_if_source_exist $JANSSON_SOURCE
     cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
     mkdir -p build
@@ -1084,7 +1084,7 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
-build_jasson
+build_jansson
 build_avro_c
 build_serdes
 
