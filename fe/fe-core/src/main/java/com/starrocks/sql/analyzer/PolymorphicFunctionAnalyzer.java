@@ -224,9 +224,8 @@ public class PolymorphicFunctionAnalyzer {
      * declaration constrains the actual first argument to be an array type, and allows the parser to infer the
      * correct result type from the actual first argument's type.
      * </p>
-     * TODO(zhuming): throws an exception on error, instead of return null.
      */
-    public static Function checkPolymorphicFunction(Function fn, Type[] paramTypes) {
+    public static Function generatePolymorphicFunction(Function fn, Type[] paramTypes) {
         if (!fn.isPolymorphic()) {
             return fn;
         }

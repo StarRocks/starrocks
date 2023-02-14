@@ -3290,8 +3290,7 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     length_column->append(3);
     length_column->append(3);
 
-    ArraySlice<LogicalType::TYPE_INT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 8);
     _check_array<int32_t>({(int32_t)5}, dest_column->get(0).get_array());
@@ -3327,8 +3326,7 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_BIGINT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int64_t>({(int64_t)5}, dest_column->get(0).get_array());
@@ -3361,8 +3359,7 @@ TEST_F(ArrayFunctionsTest, array_slice_float) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_FLOAT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<float>({(float)5}, dest_column->get(0).get_array());
@@ -3395,8 +3392,7 @@ TEST_F(ArrayFunctionsTest, array_slice_double) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_DOUBLE> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<double>({(double)5}, dest_column->get(0).get_array());
@@ -3429,8 +3425,7 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_VARCHAR> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column, length_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<Slice>({Slice("5")}, dest_column->get(0).get_array());
@@ -3456,8 +3451,7 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_BIGINT> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6}, dest_column->get(0).get_array());
@@ -3484,8 +3478,7 @@ TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_DOUBLE> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<double>({(double)5, (double)3, (double)6}, dest_column->get(0).get_array());
@@ -3512,8 +3505,7 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<LogicalType::TYPE_VARCHAR> slice;
-    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+    auto dest_column = ArrayFunctions::array_slice(nullptr, {src_column, offset_column}).value();
 
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array());

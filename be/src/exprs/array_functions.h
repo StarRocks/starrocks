@@ -31,6 +31,11 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_distinct(FunctionContext* context, const Columns& columns) {
+        return ArrayDistinct<type>::process(context, columns);
+    }
+
 #define APPLY_COMMONE_TYPES_FOR_ARRAY(M)      \
     M(boolean, LogicalType::TYPE_BOOLEAN)     \
     M(tinyint, LogicalType::TYPE_TINYINT)     \
@@ -45,13 +50,6 @@ public:
     M(decimalv2, LogicalType::TYPE_DECIMALV2) \
     M(datetime, LogicalType::TYPE_DATETIME)   \
     M(date, LogicalType::TYPE_DATE)
-
-#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDistinct<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_DISTINCT_FN)
-#undef DEFINE_ARRAY_DISTINCT_FN
 
 #define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                               \
     static StatusOr<ColumnPtr> array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
@@ -70,13 +68,7 @@ public:
 
 #undef DEFINE_ARRAY_DIFFERENCE_FN
 
-#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                               \
-    static StatusOr<ColumnPtr> array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySlice<PT>::process(context, columns);                                             \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
-    DEFINE_ARRAY_SLICE_FN(json, LogicalType::TYPE_JSON)
-#undef DEFINE_ARRAY_SLICE_FN
+    DEFINE_VECTORIZED_FN(array_slice);
 
 #define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                               \
     static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
