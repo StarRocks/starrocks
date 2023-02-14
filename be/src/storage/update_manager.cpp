@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
@@ -35,8 +36,14 @@ Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, Del
     return StorageEngine::instance()->update_manager()->get_del_vec(_meta, tsid, version, pdelvec);
 }
 
+Status LocalDeltaColumnGroupLoader::load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList& pdcgs) {
+    return StorageEngine::instance()->update_manager()->get_delta_column_group(_meta, tsid, version, pdcgs);
+}
+
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
-        : _index_cache(std::numeric_limits<size_t>::max()), _update_state_cache(std::numeric_limits<size_t>::max()) {
+        : _index_cache(std::numeric_limits<size_t>::max()),
+          _update_state_cache(std::numeric_limits<size_t>::max()),
+          _update_column_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
     _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
@@ -45,6 +52,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+    _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 }
 
 UpdateManager::~UpdateManager() {
@@ -84,6 +92,11 @@ Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
 }
 
+Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                             DeltaColumnGroupList& dcgs) {
+    return TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, version, dcgs);
+}
+
 Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
@@ -120,6 +133,7 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
 
 void UpdateManager::clear_cache() {
     _update_state_cache.clear();
+    _update_column_state_cache.clear();
     if (_update_state_mem_tracker) {
         _update_state_mem_tracker->release(_update_state_mem_tracker->consumption());
     }
@@ -163,6 +177,7 @@ void UpdateManager::expire_cache() {
     }
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
         _update_state_cache.clear_expired();
+        _update_column_state_cache.clear_expired();
 
         ssize_t orig_size = _index_cache.size();
         ssize_t orig_obj_size = _index_cache.object_size();
@@ -275,17 +290,35 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // so apply can run faster. Since those resources are in cache, they can get evicted
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
-    auto state_entry =
-            _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
-    auto st = state_entry->value().load(tablet, rowset);
-    state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
-    _update_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
-    if (st.ok()) {
-        _update_state_cache.release(state_entry);
+
+    Status st;
+
+    if (rowset->is_column_mode_partial_update()) {
+        auto state_entry = _update_column_state_cache.get_or_create(
+                strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        auto st = state_entry->value().load(tablet, rowset);
+        state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
+        _update_column_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
+        if (st.ok()) {
+            _update_column_state_cache.release(state_entry);
+        } else {
+            LOG(WARNING) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            _update_column_state_cache.remove(state_entry);
+        }
     } else {
-        LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
-        _update_state_cache.remove(state_entry);
+        auto state_entry =
+                _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        st = state_entry->value().load(tablet, rowset);
+        state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
+        _update_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
+        if (st.ok()) {
+            _update_state_cache.release(state_entry);
+        } else {
+            LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            _update_state_cache.remove(state_entry);
+        }
     }
+
     if (st.ok()) {
         auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
         st = index_entry->value().load(tablet);
@@ -307,9 +340,17 @@ void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
     VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
-    auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
-    if (state_entry != nullptr) {
-        _update_state_cache.remove(state_entry);
+    if (rowset->is_column_mode_partial_update()) {
+        auto column_state_entry =
+                _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (column_state_entry != nullptr) {
+            _update_column_state_cache.remove(column_state_entry);
+        }
+    } else {
+        auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+        if (state_entry != nullptr) {
+            _update_state_cache.remove(state_entry);
+        }
     }
 }
 

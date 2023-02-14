@@ -305,6 +305,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
+        jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
         if (stmt.getMergeConditionStr() != null) {
@@ -520,6 +521,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             return false;
         }
         return Boolean.valueOf(value);
+    }
+
+    public String getPartialUpdateMode() {
+        return jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
     }
 
     public RoutineLoadProgress getProgress() {

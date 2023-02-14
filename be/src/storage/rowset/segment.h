@@ -44,6 +44,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -163,6 +164,9 @@ public:
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
+    StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t cid,
+                                                                      std::string* filename);
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
 private:
@@ -236,6 +240,9 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
+
+    // used for store delta column group's segment
+    std::vector<std::shared_ptr<Segment>> _dcg_segments;
 };
 
 } // namespace starrocks

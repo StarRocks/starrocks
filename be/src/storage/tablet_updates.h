@@ -307,6 +307,11 @@ private:
 
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
+    // used for normal update or row-mode partial update
+    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    // used for column-mode partial update
+    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 
     RowsetSharedPtr _get_rowset(uint32_t rowset_id);
@@ -359,6 +364,8 @@ private:
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
+
+    Status _check_conflict_with_partial_update(CompactionInfo* info, int64_t output_version);
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
