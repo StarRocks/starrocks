@@ -139,7 +139,7 @@ public class BrokerFileGroup implements Writable {
         if (csvFormat != null) {
             this.csvFormat = csvFormat;
         } else {
-            this.csvFormat = new CsvFormat(0, 0, 0, false);
+            this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         }
     }
 
