@@ -403,8 +403,6 @@ public class BDBEnvironment {
 
     public void refreshLog(InsufficientLogException insufficientLogEx) {
         try {
-            // If the repImpl property in InsufficientLogException is null, it will report npe when init it.
-            insufficientLogEx.setRepImpl(RepInternal.getRepImpl(replicatedEnvironment));
             NetworkRestore restore = new NetworkRestore();
             NetworkRestoreConfig config = new NetworkRestoreConfig();
             config.setRetainLogFiles(false); // delete obsolete log files.
