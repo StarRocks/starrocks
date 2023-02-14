@@ -16,9 +16,9 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;

@@ -362,10 +362,6 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         return localMetaStore;
     }
 
-    public boolean isConnected() {
-        return isConnected;
-    }
-
     @Override
     public boolean isCompatibleWith(Configuration conf) {
         // Make a copy of currentMetaVars, there is a race condition that
@@ -402,11 +398,10 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                     " at the client level.");
         } else {
             close();
-
-            if (uriResolverHook != null) {
-                //for dynamic uris, re-lookup if there are new metastore locations
-                resolveUris();
-            }
+            // If the user passes in an address of 'hive.metastore.uris' similar to nginx, fe may only resolve to one url.
+            // If the user's ip changes, thrift client can't use other url to access. Therefore, we need to resolve uris
+            // for each reconnect. After all, reconnect is a rare behavior.
+            resolveUris();
 
             if (MetastoreConf.getVar(conf, ConfVars.THRIFT_URI_SELECTION).equalsIgnoreCase("RANDOM")) {
                 // Swap the first element of the metastoreUris[] with a random element from the rest

@@ -26,7 +26,6 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -77,6 +76,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -362,8 +362,11 @@ public class ShowStmtAnalyzer {
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
                                                 column.getDisplayName(),
-                                                column.getType().canonicalName(),
-                                                column.isAllowNull() ? "Yes" : "No",
+                                                // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                                // If you do not follow this specification, it may cause the BI system,
+                                                // such as superset, to fail to recognize the column type.
+                                                column.getType().canonicalName().toLowerCase(),
+                                                column.isAllowNull() ? "YES" : "NO",
                                                 ((Boolean) column.isKey()).toString(),
                                                 defaultStr,
                                                 extraStr);
@@ -438,8 +441,11 @@ public class ShowStmtAnalyzer {
                                 List<String> row = Arrays.asList("",
                                         "",
                                         column.getDisplayName(),
-                                        column.getType().canonicalName(),
-                                        column.isAllowNull() ? "Yes" : "No",
+                                        // In Mysql, the Type column should lowercase, and the Null column should uppercase.
+                                        // If you do not follow this specification, it may cause the BI system,
+                                        // such as superset, to fail to recognize the column type.
+                                        column.getType().canonicalName().toLowerCase(),
+                                        column.isAllowNull() ? "YES" : "NO",
                                         ((Boolean) column.isKey()).toString(),
                                         defaultStr,
                                         extraStr);

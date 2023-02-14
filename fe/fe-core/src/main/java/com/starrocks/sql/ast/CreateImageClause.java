@@ -14,26 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.alter.AlterOpType;
 
-/**
- * TODO this class is merely a wrapper of UserIdentity,
- * they should be merged after all statement migrate to the new framework
- */
-public class UserIdentifier implements ParseNode {
-    private final UserIdentity userIdentity;
-
-    public UserIdentifier(String name, String host, boolean isDomain) {
-        userIdentity = new UserIdentity(name, host, isDomain);
-    }
-
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+public class CreateImageClause extends AlterClause {
+    public CreateImageClause() {
+        super(AlterOpType.ALTER_OTHER);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
+        return visitor.visitCreateImageClause(this, context);
     }
 }

@@ -169,14 +169,11 @@ void ChunksPartitioner::_init_hash_map_variant() {
     }
     _hash_map_variant.init(_state, type);
 
-#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                       \
-    if (type == PartitionHashMapVariant::Type::TYPE) {             \
-        _hash_map_variant.TYPE->has_null_column = has_null_column; \
-        _hash_map_variant.TYPE->fixed_byte_size = fixed_byte_size; \
-    }
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx4);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
-#undef SET_FIXED_SLICE_HASH_MAP_FIELD
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_fixed_length_slice) {
+            hash_map_with_key->has_null_column = has_null_column;
+            hash_map_with_key->fixed_byte_size = fixed_byte_size;
+        }
+    });
 }
 } // namespace starrocks

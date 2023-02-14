@@ -69,7 +69,7 @@ public class DescribeStmtTest {
                         "DISTRIBUTED BY HASH(`store_id`) BUCKETS 10 \n" +
                         "REFRESH ASYNC\n" +
                         " AS\n" +
-                        "SELECT store_id, SUM(sale_amt) as sum\n" +
+                        "SELECT store_id, SUM(sale_amt) as sale_amt\n" +
                         "FROM sales_records\n" +
                         "GROUP BY store_id;");
     }
@@ -101,6 +101,16 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(3).getName());
         Assert.assertEquals("Default", columns.get(4).getName());
         Assert.assertEquals("Extra", columns.get(5).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("record_id", resultRows.get(0).get(0));
+        Assert.assertEquals("int", resultRows.get(0).get(1));
+        Assert.assertEquals("YES", resultRows.get(0).get(2));
+
+        Assert.assertEquals("sale_date", resultRows.get(3).get(0));
+        Assert.assertEquals("date", resultRows.get(3).get(1));
+        Assert.assertEquals("YES", resultRows.get(3).get(2));
+
     }
 
     @Test
@@ -120,6 +130,15 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(5).getName());
         Assert.assertEquals("Default", columns.get(6).getName());
         Assert.assertEquals("Extra", columns.get(7).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("record_id", resultRows.get(0).get(2));
+        Assert.assertEquals("int", resultRows.get(0).get(3));
+        Assert.assertEquals("YES", resultRows.get(0).get(4));
+
+        Assert.assertEquals("sale_date", resultRows.get(3).get(2));
+        Assert.assertEquals("date", resultRows.get(3).get(3));
+        Assert.assertEquals("YES", resultRows.get(3).get(4));
     }
 
     @Test
@@ -137,6 +156,15 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(3).getName());
         Assert.assertEquals("Default", columns.get(4).getName());
         Assert.assertEquals("Extra", columns.get(5).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("store_id", resultRows.get(0).get(0));
+        Assert.assertEquals("int", resultRows.get(0).get(1));
+        Assert.assertEquals("YES", resultRows.get(0).get(2));
+
+        Assert.assertEquals("sale_amt", resultRows.get(1).get(0));
+        Assert.assertEquals("bigint", resultRows.get(1).get(1));
+        Assert.assertEquals("YES", resultRows.get(1).get(2));
     }
 
     @Test
@@ -154,6 +182,15 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(3).getName());
         Assert.assertEquals("Default", columns.get(4).getName());
         Assert.assertEquals("Extra", columns.get(5).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("store_id", resultRows.get(0).get(0));
+        Assert.assertEquals("int", resultRows.get(0).get(1));
+        Assert.assertEquals("YES", resultRows.get(0).get(2));
+
+        Assert.assertEquals("sale_amt", resultRows.get(1).get(0));
+        Assert.assertEquals("bigint", resultRows.get(1).get(1));
+        Assert.assertEquals("YES", resultRows.get(1).get(2));
     }
 
     @Test
@@ -171,6 +208,15 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(3).getName());
         Assert.assertEquals("Default", columns.get(4).getName());
         Assert.assertEquals("Extra", columns.get(5).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("store_id", resultRows.get(0).get(0));
+        Assert.assertEquals("int", resultRows.get(0).get(1));
+        Assert.assertEquals("YES", resultRows.get(0).get(2));
+
+        Assert.assertEquals("sale_amt", resultRows.get(1).get(0));
+        Assert.assertEquals("bigint", resultRows.get(1).get(1));
+        Assert.assertEquals("YES", resultRows.get(1).get(2));
     }
 
     @Test
@@ -190,5 +236,14 @@ public class DescribeStmtTest {
         Assert.assertEquals("Key", columns.get(5).getName());
         Assert.assertEquals("Default", columns.get(6).getName());
         Assert.assertEquals("Extra", columns.get(7).getName());
+
+        List<List<String>> resultRows = execute.getResultRows();
+        Assert.assertEquals("store_id", resultRows.get(0).get(2));
+        Assert.assertEquals("int", resultRows.get(0).get(3));
+        Assert.assertEquals("YES", resultRows.get(0).get(4));
+
+        Assert.assertEquals("sale_amt", resultRows.get(1).get(2));
+        Assert.assertEquals("bigint", resultRows.get(1).get(3));
+        Assert.assertEquals("YES", resultRows.get(1).get(4));
     }
 }

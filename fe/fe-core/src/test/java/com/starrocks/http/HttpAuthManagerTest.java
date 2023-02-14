@@ -17,8 +17,8 @@
 
 package com.starrocks.http;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.http.HttpAuthManager.SessionValue;
+import com.starrocks.sql.ast.UserIdentity;
 import org.junit.Assert;
 import org.junit.Test;
 

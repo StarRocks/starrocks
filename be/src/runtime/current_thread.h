@@ -53,20 +53,18 @@ public:
     CurrentThread() { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
-    void commit() {
+    void commit(bool is_ctx_shift) {
         MemTracker* cur_tracker = mem_tracker();
         if (cur_tracker != nullptr) {
             cur_tracker->consume(_cache_size);
-            if (_cache_size > 0) {
-                _allocated_cache_size -= _cache_size;
-            } else {
-                _deallocated_cache_size += _cache_size;
-            }
-            cur_tracker->update_allocation(_allocated_cache_size);
-            cur_tracker->update_deallocation(_deallocated_cache_size);
             _cache_size = 0;
-            _allocated_cache_size = 0;
-            _deallocated_cache_size = 0;
+            if (is_ctx_shift) {
+                // Flush all cached info
+                cur_tracker->update_allocation(_allocated_cache_size);
+                cur_tracker->update_deallocation(_deallocated_cache_size);
+                _allocated_cache_size = 0;
+                _deallocated_cache_size = 0;
+            }
         }
     }
 
@@ -82,7 +80,7 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        commit();
+        commit(true);
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
         return prev;
@@ -115,7 +113,7 @@ public:
         _allocated_cache_size += size;
         _total_consumed_bytes += size;
         if (_cache_size >= BATCH_SIZE) {
-            commit();
+            commit(false);
         }
     }
 
@@ -127,16 +125,7 @@ public:
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
             MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
             if (LIKELY(limit_tracker == nullptr)) {
-                if (_cache_size > 0) {
-                    _allocated_cache_size -= _cache_size;
-                } else {
-                    _deallocated_cache_size += _cache_size;
-                }
-                cur_tracker->update_allocation(_allocated_cache_size);
-                cur_tracker->update_deallocation(_deallocated_cache_size);
                 _cache_size = 0;
-                _allocated_cache_size = 0;
-                _deallocated_cache_size = 0;
                 return true;
             } else {
                 _cache_size -= size;
@@ -173,7 +162,7 @@ public:
         _cache_size -= size;
         _deallocated_cache_size += size;
         if (_cache_size <= -BATCH_SIZE) {
-            commit();
+            commit(false);
         }
     }
 
@@ -216,10 +205,18 @@ inline thread_local CurrentThread tls_thread_status;
 class CurrentThreadMemTrackerSetter {
 public:
     explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.set_mem_tracker(new_mem_tracker);
+        _old_mem_tracker = tls_thread_status.mem_tracker();
+        _is_same = (_old_mem_tracker == new_mem_tracker);
+        if (!_is_same) {
+            tls_thread_status.set_mem_tracker(new_mem_tracker);
+        }
     }
 
-    ~CurrentThreadMemTrackerSetter() { (void)tls_thread_status.set_mem_tracker(_old_mem_tracker); }
+    ~CurrentThreadMemTrackerSetter() {
+        if (!_is_same) {
+            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
+        }
+    }
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;
@@ -228,6 +225,7 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
+    bool _is_same;
 };
 
 class CurrentThreadCheckMemLimitSetter {

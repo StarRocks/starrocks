@@ -40,6 +40,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -58,7 +59,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -2221,6 +2221,19 @@ public class CreateMaterializedViewTest {
             starRocksAssert.withMaterializedView(sql2);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
+        }
+    }
+
+    @Test
+    public void testCollectAllTableAndView() {
+        String sql = "select k2,v1 from test.tbl1 where k2 > 0 and v1 not in (select v1 from test.tbl2 where k2 > 0);";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Map<TableName, Table> result = AnalyzerUtils.collectAllTableAndView(statementBase);
+            Assert.assertEquals(result.size(), 2);
+        } catch (Exception e) {
+            LOG.error("Test CollectAllTableAndView failed", e);
+            Assert.fail();
         }
     }
 }

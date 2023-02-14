@@ -67,6 +67,7 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -144,6 +145,7 @@ public class MvUtils {
             getAllJoinOperators(child, joinOperators);
         }
     }
+
     public static List<LogicalScanOperator> getScanOperator(OptExpression root) {
         List<LogicalScanOperator> scanOperators = Lists.newArrayList();
         getScanOperator(root, scanOperators);
@@ -221,7 +223,7 @@ public class MvUtils {
     }
 
     /**
-     *  Whether `root` and its children are Select/Project/Join ops.
+     * Whether `root` and its children are Select/Project/Join ops.
      */
     public static boolean isLogicalSPJ(OptExpression root) {
         if (root == null) {
@@ -339,7 +341,7 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
-        if (!targetItems.containsAll(srcItems)) {
+        if (!new HashSet<>(targetItems).containsAll(srcItems)) {
             return null;
         }
         targetItems.removeAll(srcItems);
@@ -377,11 +379,8 @@ public class MvUtils {
             return true;
         }
 
-        if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN &&
-                isColumnEqualPredicate(joinOperator.getOnPredicate())) {
-            return true;
-        }
-        return false;
+        return joinOperator.getJoinType() == JoinOperator.INNER_JOIN &&
+                isColumnEqualPredicate(joinOperator.getOnPredicate());
     }
 
     public static boolean isColumnEqualPredicate(ScalarOperator predicate) {
@@ -514,8 +513,7 @@ public class MvUtils {
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
-        for (int i = 0; i < ranges.size(); i++) {
-            Range<PartitionKey> currentRange = ranges.get(i);
+        for (Range<PartitionKey> currentRange : ranges) {
             boolean merged = false;
             for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
