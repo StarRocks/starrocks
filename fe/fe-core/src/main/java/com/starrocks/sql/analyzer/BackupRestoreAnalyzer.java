@@ -58,7 +58,7 @@ public class BackupRestoreAnalyzer {
         @Override
         public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext context) {
             String dbName = getDbName(backupStmt.getDbName(), context);
-            Database database = getDatabase(dbName, context);
+            Database database = getDatabase(dbName, context, false);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             List<TableRef> tableRefs = backupStmt.getTableRefs();
@@ -130,7 +130,7 @@ public class BackupRestoreAnalyzer {
         public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
             String dbName = getDbName(showBackupStmt.getDbName(), context);
             showBackupStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            getDatabase(dbName, context, showBackupStmt.getAll());
             return null;
         }
 
@@ -233,7 +233,7 @@ public class BackupRestoreAnalyzer {
         public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
             String dbName = getDbName(showRestoreStmt.getDbName(), context);
             showRestoreStmt.setDbName(dbName);
-            getDatabase(dbName, context);
+            getDatabase(dbName, context, showRestoreStmt.getAll());
             return null;
         }
     }
@@ -251,9 +251,9 @@ public class BackupRestoreAnalyzer {
         return dbName;
     }
 
-    public static Database getDatabase(String dbName, ConnectContext context) {
+    public static Database getDatabase(String dbName, ConnectContext context, boolean all) {
         Database db = context.getGlobalStateMgr().getDb(dbName);
-        if (db == null) {
+        if (db == null && !all) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         return db;

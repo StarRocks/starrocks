@@ -21,10 +21,12 @@ public class ShowRestoreStmt extends ShowStmt {
     private String dbName;
     private Expr where;
     private String label;
+    private boolean all;
 
-    public ShowRestoreStmt(String dbName, Expr where) {
+    public ShowRestoreStmt(String dbName, Expr where, boolean all) {
         this.dbName = dbName;
         this.where = where;
+        this.all = all;
     }
 
     public String getDbName() {
@@ -37,6 +39,10 @@ public class ShowRestoreStmt extends ShowStmt {
 
     public void setDbName(String dbName) {
         this.dbName = dbName;
+    }
+
+    public boolean getAll() {
+        return this.all;
     }
 
     @Override

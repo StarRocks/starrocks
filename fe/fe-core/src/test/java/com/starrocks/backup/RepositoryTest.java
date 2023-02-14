@@ -26,6 +26,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import mockit.Delegate;
@@ -69,6 +70,8 @@ public class RepositoryTest {
         files.add("1.hdr");
         files.add("1.idx");
         info = new SnapshotInfo(1, 2, 3, 4, 5, 6, 7, "/path/to/tablet/snapshot/", files);
+
+        MetricRepo.init();
 
         new MockUp<FrontendOptions>() {
             @Mock
@@ -298,7 +301,7 @@ public class RepositoryTest {
         String snapshotName = "";
         String timestamp = "";
         try {
-            List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp);
+            List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
             Assert.assertEquals(2, infos.size());
 
         } catch (AnalysisException e) {

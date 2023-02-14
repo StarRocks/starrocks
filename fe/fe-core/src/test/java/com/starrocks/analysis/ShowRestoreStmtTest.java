@@ -11,7 +11,7 @@ public class ShowRestoreStmtTest {
     
     @Test
     public void checkShowRestoreStmtRedirectStatus() {
-        ShowRestoreStmt stmt = new ShowRestoreStmt("", null);
+        ShowRestoreStmt stmt = new ShowRestoreStmt("", null, false);
         assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
     }
 }

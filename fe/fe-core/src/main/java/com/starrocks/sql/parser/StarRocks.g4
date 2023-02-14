@@ -1291,6 +1291,7 @@ cancelBackupStatement
 
 showBackupStatement
     : SHOW BACKUP ((FROM | IN) identifier)?
+    | SHOW ALL BACKUP
     ;
 
 restoreStatement
@@ -1306,6 +1307,7 @@ cancelRestoreStatement
 
 showRestoreStatement
     : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    | SHOW ALL RESTORE
     ;
 
 showSnapshotStatement

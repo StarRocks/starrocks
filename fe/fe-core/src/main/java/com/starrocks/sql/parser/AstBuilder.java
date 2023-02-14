@@ -2357,10 +2357,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowBackupStatement(StarRocksParser.ShowBackupStatementContext context) {
+        boolean all = context.ALL() != null ? true : false;
         if (context.identifier() == null) {
-            return new ShowBackupStmt(null);
+            return new ShowBackupStmt(null, all);
         }
-        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue());
+        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue(), all);
     }
 
     @Override
@@ -2406,14 +2407,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowRestoreStatement(StarRocksParser.ShowRestoreStatementContext context) {
+        boolean all = context.ALL() != null ? true : false;
         if (context.identifier() == null) {
-            return new ShowRestoreStmt(null, null);
+            return new ShowRestoreStmt(null, null, all);
         }
         if (context.expression() != null) {
             return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(),
-                    (Expr) visit(context.expression()));
+                    (Expr) visit(context.expression()), all);
         } else {
-            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null);
+            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null, all);
         }
     }
 

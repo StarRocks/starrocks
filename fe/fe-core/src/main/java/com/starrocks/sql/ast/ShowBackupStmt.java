@@ -16,9 +16,11 @@ public class ShowBackupStmt extends ShowStmt {
             .build();
 
     private String dbName;
+    private boolean all;
 
-    public ShowBackupStmt(String dbName) {
+    public ShowBackupStmt(String dbName, boolean all) {
         this.dbName = dbName;
+        this.all = all;
     }
 
     public String getDbName() {
@@ -27,6 +29,10 @@ public class ShowBackupStmt extends ShowStmt {
 
     public void setDbName(String dbName) {
         this.dbName = dbName;
+    }
+
+    public boolean getAll() {
+        return this.all;
     }
 
     @Override
