@@ -105,10 +105,7 @@ public class BrokerFileGroup implements Writable {
     private boolean isLoadFromTable = false;
     
     // for csv
-    private boolean trimspace = false;
-    private long skipHeader = 0;
-    private byte enclose = 0;
-    private byte escape = 0;
+    private CsvFormat csvFormat;
 
     public static final String ESCAPE = "escape";
     public static final String ENCLOSE = "enclose";
@@ -140,15 +137,9 @@ public class BrokerFileGroup implements Writable {
     public void parseFormatProperties(DataDescription dataDescription) {
         CsvFormat csvFormat = dataDescription.getCsvFormat();
         if (csvFormat != null) {
-            escape = csvFormat.getEscape();
-            enclose = csvFormat.getEnclose();
-            skipHeader = csvFormat.getSkipheader();
-            trimspace = csvFormat.isTrimspace();
+            this.csvFormat = csvFormat;
         } else {
-            escape = 0;
-            enclose = 0;
-            skipHeader = 0;
-            trimspace = false;
+            this.csvFormat = new CsvFormat(0, 0, 0, false);
         }
     }
 
@@ -332,19 +323,19 @@ public class BrokerFileGroup implements Writable {
     }
 
     public long getSkipHeader() {
-        return skipHeader;
+        return csvFormat.getSkipheader();
     }
 
     public byte getEnclose() {
-        return enclose;
+        return csvFormat.getEnclose();
     }
 
     public byte getEscape() {
-        return escape;
+        return csvFormat.getEscape();
     }
 
     public boolean isTrimspace() {
-        return trimspace;
+        return csvFormat.isTrimspace();
     }
 
     @Override

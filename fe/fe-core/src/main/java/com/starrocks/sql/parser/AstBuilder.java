@@ -2112,6 +2112,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             long skipheader = 0;
             if (formatPropsContext.INTEGER_VALUE() != null) {
                 skipheader = Long.parseLong(formatPropsContext.INTEGER_VALUE().getText());
+                if (skipheader < 0) {
+                    skipheader = 0;
+                }
             }
             boolean trimspace = false;
             if (formatPropsContext.booleanValue() != null) {
