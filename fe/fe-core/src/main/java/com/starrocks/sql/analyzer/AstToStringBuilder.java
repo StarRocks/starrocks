@@ -49,23 +49,12 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.GlobalFunctionPEntryObject;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -112,8 +101,6 @@ import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -182,154 +169,23 @@ public class AstToStringBuilder {
                 sb.append("REVOKE ");
             }
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-
                 List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
                 sb.append(Joiner.on(", ").join(privList));
                 sb.append(" ON ");
 
-                String plural;
-                try {
-                    plural = GlobalStateMgr.getCurrentState().getPrivilegeManager().getObjectTypePlural(stmt.getObjectType());
-                } catch (PrivilegeException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+                if (stmt.getObjectType() == ObjectType.SYSTEM) {
+                    sb.append(stmt.getObjectType().name());
+                } else {
+                    if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                        sb.append(stmt.getObjectList().get(0).toString());
+                    } else {
+                        sb.append(stmt.getObjectType().name()).append(" ");
 
-                switch (stmt.getObjectType()) {
-                    case TABLE:
-                    case VIEW:
-                    case MATERIALIZED_VIEW: {
-                        TablePEntryObject tablePEntryObject = (TablePEntryObject) stmt.getObjectList().get(0);
-                        if (Objects.equals(tablePEntryObject.getDatabaseUUID(), TablePEntryObject.ALL_DATABASE_UUID)) {
-                            sb.append("ALL ").append(plural).append(" IN ALL DATABASES");
-                        } else {
-                            // TODO(yiming): change it for external catalog
-                            Database database = GlobalStateMgr.getCurrentState()
-                                    .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
-                            if (Objects.equals(tablePEntryObject.getTableUUID(), TablePEntryObject.ALL_TABLES_UUID)) {
-                                sb.append("ALL TABLES ");
-                                sb.append("IN DATABASE ").append(database.getFullName());
-                            } else {
-                                sb.append(stmt.getObjectType().name()).append(" ");
-                                List<String> objectString = new ArrayList<>();
-                                for (PEntryObject pEntryObject : stmt.getObjectList()) {
-
-                                    TablePEntryObject tp = (TablePEntryObject) pEntryObject;
-                                    // TODO(yiming): change it for external catalog
-                                    Table table = database.getTable(Long.parseLong(tp.getTableUUID()));
-                                    objectString.add(database.getFullName() + "." + table.getName());
-                                }
-                                sb.append(Joiner.on(", ").join(objectString));
-                            }
+                        List<String> objectString = new ArrayList<>();
+                        for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                            objectString.add(tablePEntryObject.toString());
                         }
-                        break;
-                    }
-                    case DATABASE: {
-                        DbPEntryObject dbPEntryObject = (DbPEntryObject) stmt.getObjectList().get(0);
-                        if (Objects.equals(dbPEntryObject.getUUID(), DbPEntryObject.ALL_DATABASES_UUID)) {
-                            sb.append("ALL DATABASES");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            // TODO(yiming): change it for external catalog
-                            Database database =
-                                    GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
-                            sb.append(database.getFullName());
-                        }
-                        break;
-                    }
-                    case SYSTEM: {
-                        sb.append(stmt.getObjectType().name());
-                        break;
-                    }
-                    case USER: {
-                        UserPEntryObject userPEntryObject = (UserPEntryObject) stmt.getObjectList().get(0);
-                        if (userPEntryObject.getUserIdentity() == null) {
-                            sb.append("ALL USERS");
-                        } else {
-                            sb.append(stmt.getObjectType().name());
-                            sb.append(Joiner.on(",").join(stmt.getObjectList().stream()
-                                    .map(pEntryObject -> ((UserPEntryObject) pEntryObject).getUserIdentity().toString())
-                                    .collect(toList())));
-                        }
-                        break;
-                    }
-                    case RESOURCE: {
-                        ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) stmt.getObjectList().get(0);
-                        if (resourcePEntryObject.getName() == null) {
-                            sb.append("ALL ").append(plural);
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(resourcePEntryObject.getName());
-                        }
-                        break;
-                    }
-                    case CATALOG: {
-                        CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) stmt.getObjectList().get(0);
-                        if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
-                            sb.append("ALL CATALOGS");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-
-                            List<Catalog> catalogs =
-                                    new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
-                            Optional<Catalog> catalogOptional = catalogs.stream().filter(
-                                    catalog -> catalog.getId() == catalogPEntryObject.getId()
-                            ).findFirst();
-                            if (!catalogOptional.isPresent()) {
-                                throw new SemanticException("can't find catalog");
-                            }
-                            Catalog catalog = catalogOptional.get();
-                            sb.append(catalog.getName());
-                        }
-                        break;
-                    }
-                    case FUNCTION: {
-                        FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) stmt.getObjectList().get(0);
-
-                        if (functionPEntryObject.getDatabaseId() == FunctionPEntryObject.ALL_DATABASE_ID) {
-                            sb.append("ALL FUNCTIONS ");
-                            sb.append("IN ALL DATABASES");
-                        } else {
-                            String functionSig = functionPEntryObject.getFunctionSig();
-                            Database database = GlobalStateMgr.getCurrentState().getDb(functionPEntryObject.getDatabaseId());
-
-                            if (functionSig.equals(FunctionPEntryObject.ALL_FUNCTIONS_SIG)) {
-                                sb.append("ALL FUNCTIONS ");
-                                sb.append("IN DATABASE ");
-                                sb.append(database.getFullName());
-                            } else {
-                                sb.append(stmt.getObjectType().name()).append(" ");
-                                sb.append(functionSig);
-                                sb.append(" IN DATABASE ").append(database.getFullName());
-                            }
-
-                            sb.append(functionPEntryObject.getFunctionSig());
-                        }
-                        break;
-                    }
-                    case RESOURCE_GROUP: {
-                        ResourceGroupPEntryObject resourceGroupPEntryObject =
-                                (ResourceGroupPEntryObject) stmt.getObjectList().get(0);
-                        if (resourceGroupPEntryObject.getId() == ResourceGroupPEntryObject.ALL_RESOURCE_GROUP_ID) {
-                            sb.append("ALL RESOURCE_GROUPS");
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                                    .getResourceGroup(resourceGroupPEntryObject.getId()));
-                        }
-
-                        break;
-                    }
-                    case GLOBAL_FUNCTION: {
-                        GlobalFunctionPEntryObject globalFunctionPEntryObject =
-                                (GlobalFunctionPEntryObject) stmt.getObjectList().get(0);
-                        if (globalFunctionPEntryObject.getFunctionSig()
-                                .equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
-                            sb.append("ALL ").append(plural);
-                        } else {
-                            sb.append(stmt.getObjectType().name()).append(" ");
-                            sb.append(globalFunctionPEntryObject.getFunctionSig());
-                        }
-                        break;
+                        sb.append(Joiner.on(", ").join(objectString));
                     }
                 }
 
@@ -351,7 +207,6 @@ public class AstToStringBuilder {
                 } else {
                     sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
                 }
-
             }
             if (stmt instanceof GrantPrivilegeStmt) {
                 sb.append(" TO ");
@@ -359,7 +214,7 @@ public class AstToStringBuilder {
                 sb.append(" FROM ");
             }
             if (stmt.getUserIdentity() != null) {
-                sb.append(stmt.getUserIdentity());
+                sb.append("USER ").append(stmt.getUserIdentity());
             } else {
                 sb.append("ROLE '").append(stmt.getRole()).append("'");
             }

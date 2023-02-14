@@ -184,17 +184,22 @@ public class PrivilegeCollection {
             objects.add(null);
         }
         for (PEntryObject object : objects) {
-            PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
-            if (entry != null) {
-                removeAction(privilegeEntryList, entry, new ActionSet(privilegeTypes));
+            PrivilegeEntry entry1 = findEntry(privilegeEntryList, object, isGrant);
+            if (entry1 != null) {
+                removeAction(privilegeEntryList, entry1, new ActionSet(privilegeTypes));
             }
-            // some of the actions may not be granted
-            entry = findEntry(privilegeEntryList, object, !isGrant);
-            if (entry != null) {
+            // some actions may not be granted
+            PrivilegeEntry entry2 = findEntry(privilegeEntryList, object, !isGrant);
+            if (entry2 != null) {
                 // 1. intend to revoke with grant option but already grant object without grant option
                 // 2. intend to revoke without grant option but already grant object with grant option
                 // either way, we should remove the action here
-                removeAction(privilegeEntryList, entry, new ActionSet(privilegeTypes));
+                removeAction(privilegeEntryList, entry2, new ActionSet(privilegeTypes));
+            }
+
+            if (entry1 == null && entry2 == null) {
+                String msg = object.isFuzzyMatching() ? object.toString() : objectType.name() + " " + object;
+                throw new PrivilegeException("There is no such grant defined on " + msg);
             }
         }
         if (privilegeEntryList.isEmpty()) {

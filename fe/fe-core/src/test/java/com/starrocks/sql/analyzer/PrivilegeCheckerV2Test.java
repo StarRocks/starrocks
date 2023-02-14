@@ -2402,4 +2402,40 @@ public class PrivilegeCheckerV2Test {
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
     }
+
+    @Test
+    public void testGrantRevokeBuiltinRole() throws Exception {
+        String sql = "create role r1";
+        PrivilegeManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        ctxToRoot();
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        ctxToTestUser();
+        try {
+            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                    "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Can not grant/revoke root or cluster_admin role except root user", e.getMessage());
+        }
+
+        try {
+            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                    "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Can not grant/revoke root or cluster_admin role except root user", e.getMessage());
+        }
+
+        sql = "drop role r1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
 }

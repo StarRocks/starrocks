@@ -58,4 +58,9 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
 
         return new MaterializedViewPEntryObject(dbUUID, tblUUID);
     }
+
+    @Override
+    public String toString() {
+        return toStringImpl("MATERIALIZED_VIEWS");
+    }
 }

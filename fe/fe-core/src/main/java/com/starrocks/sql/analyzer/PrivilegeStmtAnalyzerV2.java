@@ -234,11 +234,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
                         .getFunction(searchDesc);
                 if (function == null) {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
-                    return privilegeManager.analyzeObject(
+                    return privilegeManager.generateObject(
                             analyzeObjectType(stmt.getObjectTypeUnResolved()),
                             Collections.singletonList(function.signatureString())
                     );
@@ -248,12 +248,12 @@ public class PrivilegeStmtAnalyzerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(name.getDb());
             Function function = db.getFunction(searchDesc);
             if (null == function) {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(db.getFullName(), FunctionPEntryObject.FUNC_NOT_FOUND)
                 );
             } else {
-                return privilegeManager.analyzeObject(
+                return privilegeManager.generateObject(
                         analyzeObjectType(stmt.getObjectTypeUnResolved()),
                         Arrays.asList(function.dbName(), function.signatureString())
                 );
@@ -296,7 +296,7 @@ public class PrivilegeStmtAnalyzerV2 {
                         stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
                         for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
                             analyseUser(userIdentity, true);
-                            objectList.add(privilegeManager.analyzeUserObject(stmt.getObjectType(), userIdentity));
+                            objectList.add(privilegeManager.generateUserObject(stmt.getObjectType(), userIdentity));
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
@@ -317,10 +317,10 @@ public class PrivilegeStmtAnalyzerV2 {
                                 }
 
                                 tokensWithDatabase.add(tokens.get(0));
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(),
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(),
                                         tokensWithDatabase));
                             } else {
-                                objectList.add(privilegeManager.analyzeObject(stmt.getObjectType(), tokens));
+                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
                             }
                         }
                     } else if (stmt.getFunctionArgsDef() != null) {
@@ -351,10 +351,10 @@ public class PrivilegeStmtAnalyzerV2 {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
-                                objectList.add(privilegeManager.analyzeUserObject(objectType, null));
+                                objectList.add(privilegeManager.generateUserObject(objectType, null));
                             }
                         } else {
-                            objectList.add(privilegeManager.analyzeObject(objectType, stmt.getTokens()));
+                            objectList.add(privilegeManager.generateObject(objectType, stmt.getTokens()));
                         }
                     }
                     stmt.setObjectList(objectList);

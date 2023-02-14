@@ -59,4 +59,9 @@ public class ViewPEntryObject extends TablePEntryObject {
 
         return new ViewPEntryObject(dbUUID, tblUUID);
     }
+
+    @Override
+    public String toString() {
+        return toStringImpl("VIEWS");
+    }
 }
