@@ -31,6 +31,7 @@
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
 #include "storage/rowset/binary_plain_page.h"
+#include "storage/short_key_index.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_schema_map.h"
 #include "util/coding.h"
@@ -49,34 +50,6 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=dump_data --file=/path/to/segment/file\n";
     return ss.str();
-}
-
-void dump_data(const std::string& file_name) {
-    auto res = Env::Default()->new_random_access_file(file_name);
-
-    /*
-    size_t file_size = std::filesystem::file_size(path);
-    size_t footer_offset = file_size - 12;
-    uint32_t footer_length;
-    uint32_t checksum;
-    uint32_t magic_number;
-
-    std::ifstream fs(path, std::ios::in);
-    if (!fs.is_open()) {
-        std::cout << "open failed: " << path << std::endl;
-        return;
-    }
-
-    char footer_header_buf[12];
-    fs.seekg(static_cast<long>(footer_offset), std::ios::beg);
-    fs.read(footer_header_buf, 12);
-
-    footer_length = UNALIGNED_LOAD32(footer_header_buf);
-    checksum = UNALIGNED_LOAD32(footer_header_buf + 4);
-    magic_number = UNALIGNED_LOAD32(footer_header_buf + 8);
-
-    std::cout<<"RESULT: "<< footer_length <<":"<<checksum<<":"<<magic_number<<std::endl;
-    */
 }
 
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
@@ -149,6 +122,67 @@ void show_segment_footer(const std::string& file_name) {
     }
     std::cout << json_footer << std::endl;
 }
+
+void dump_data(const std::string& file_name) {
+    auto res = Env::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+
+    auto input_file = std::move(res).value();
+    SegmentFooterPB footer;
+    auto st = get_segment_footer(input_file.get(), &footer);
+    if (!st.ok()) {
+        std::cout << "get segment footer failed: " << st.to_string() << std::endl;
+        return;
+    }
+
+    const PagePointerPB& page = footer.short_key_index_page();
+    std::cout << "OFFSET: " << page.offset() << ":" << page.size() << std::endl;
+    char* sk_ptr = new char[page.size()];
+
+    st = input_file->read_at_fully(static_cast<int64_t>(page.offset()), sk_ptr, page.size());
+    if (!st.ok()) {
+        std::cout << "read short key index failed: " << st.to_string() << std::endl;
+        return;
+    }
+    Slice sk_page{sk_ptr, page.size()};
+
+    uint32_t expect = decode_fixed32_le((uint8_t*)sk_page.data + sk_page.size - 4);
+    uint32_t actual = crc32c::Value(sk_page.data, sk_page.size - 4);
+    if (expect != actual) {
+        std::cout << "invalid checksum" << std::endl;
+        return;
+    } else {
+        std::cout << "checksum success" << std::endl;
+    }
+
+    PageFooterPB page_footer;
+    sk_page.size = sk_page.size - 4;
+    uint32_t footer_size = decode_fixed32_le((uint8_t*)sk_page.data + sk_page.size - 4);
+    std::cout << "Short key footer size: " << footer_size << std::endl;
+
+    bool succ =
+            page_footer.ParseFromArray(sk_page.data + sk_page.size - 4 - footer_size, static_cast<int>(footer_size));
+    if (!succ) {
+        std::cout << "Parse page footer failed" << std::endl;
+        return;
+    }
+
+    sk_page.size = sk_page.size - 4 - footer_size;
+    auto sk_index_decode = std::make_unique<ShortKeyIndexDecoder>();
+    st = sk_index_decode->parse(sk_page, page_footer.short_key_page_footer());
+    if (!st.ok()) {
+        std::cout << "Short key page decode failed: " << st.to_string() << std::endl;
+        return;
+    } else {
+        std::cout << "Decode ShortKeyIndex success" << std::endl;
+    }
+
+    delete[] sk_ptr;
+}
+
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
