@@ -39,6 +39,7 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -52,7 +53,6 @@ public class CreateUserStmtTest {
         ctx.setQualifiedUser("root");
         ctx.setRemoteIP("192.168.1.1");
         UserIdentity currentUserIdentity = new UserIdentity("root", "192.168.1.1");
-        currentUserIdentity.setIsAnalyzed();
         ctx.setCurrentUserIdentity(currentUserIdentity);
         ctx.setThreadLocalInfo();
     }

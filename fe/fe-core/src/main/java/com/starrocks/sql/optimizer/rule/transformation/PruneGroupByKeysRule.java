@@ -175,8 +175,8 @@ public class PruneGroupByKeysRule extends TransformationRule {
         LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjections);
 
         OptExpression result = OptExpression.create(newPostAggProjectOperator,
-                    OptExpression.create(newAggOperator,
-                            OptExpression.create(newProjectOperator, input.getInputs().get(0).getInputs())));
+                OptExpression.create(newAggOperator,
+                        OptExpression.create(newProjectOperator, input.getInputs().get(0).getInputs())));
 
         return Lists.newArrayList(result);
     }

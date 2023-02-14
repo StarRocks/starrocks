@@ -102,7 +102,7 @@ public class ShowStreamLoadStmt extends ShowStmt {
     }
 
     public ShowStreamLoadStmt(LabelName labelName, boolean includeHistory, Expr expr,
-                               List<OrderByElement> orderElements, LimitElement limitElement) {
+                              List<OrderByElement> orderElements, LimitElement limitElement) {
         this(labelName, includeHistory);
         this.whereClause = expr;
         this.orderElements = orderElements;

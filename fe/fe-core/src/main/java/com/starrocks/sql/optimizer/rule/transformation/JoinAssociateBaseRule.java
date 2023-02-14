@@ -63,9 +63,9 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     }
 
     public abstract ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
-                                                  ScalarOperator newTopOnCondition,
-                                                  ColumnRefSet newBotJoinOutputCols,
-                                                  ColumnRefFactory columnRefFactory);
+                                                            ScalarOperator newTopOnCondition,
+                                                            ColumnRefSet newBotJoinOutputCols,
+                                                            ColumnRefFactory columnRefFactory);
 
     public abstract OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                                        OptExpression newBotJoinExpr);
@@ -166,7 +166,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 .build();
 
         OptExpression newTopJoinExpr = createNewTopJoinExpr(newTopJoin, newTopJoinChild, newBotJoinExpr);
-        
+
         return Lists.newArrayList(newTopJoinExpr);
     }
 
@@ -241,7 +241,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     }
 
     protected void splitCondition(ScalarOperator onCondition, ColumnRefSet columnRefSet,
-            List<ScalarOperator> intersect, List<ScalarOperator> nonIntersect) {
+                                  List<ScalarOperator> intersect, List<ScalarOperator> nonIntersect) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onCondition);
         for (ScalarOperator conjunct : conjuncts) {
             if (columnRefSet.isIntersect(conjunct.getUsedColumns())) {
@@ -286,7 +286,6 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         // save columnOutputInfo which is constant
         List<ColumnOutputInfo> constCols = Lists.newArrayList();
-
 
 
         public ProjectionSplitter(OptExpression input, ScalarOperator newBotJoinOnCondition) {

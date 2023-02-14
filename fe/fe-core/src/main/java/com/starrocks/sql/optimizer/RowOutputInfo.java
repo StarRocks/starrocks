@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * It consists of a set of columnOutputInfo. Because of the Projection field in Operator,
  * an operator with a not null projection may take the original output of this operator
  * and project it to a new output.
- *
+ * <p>
  * To unify the output info of an operator, we use the RowOutputInfo to describe the output
  * row of this operator.
  * When an operator with a not null projection, the RowOutputInfo records the set of

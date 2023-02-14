@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.UserIdentity;
 
 // EXECUTE AS XX WITH NO REVERT
 public class ExecuteAsStmt extends StatementBase {
