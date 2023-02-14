@@ -34,6 +34,7 @@
 
 package com.starrocks.common;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -44,11 +45,15 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.text.SimpleDateFormat;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -191,5 +196,25 @@ public class PropertyAnalyzerTest {
         long end = System.currentTimeMillis();
         Assert.assertTrue(dataProperty.getCooldownTimeMs() >= start + 600 * 1000L &&
                 dataProperty.getCooldownTimeMs() <= end + 600 * 1000L);
+    }
+
+    @Test
+    public void testDefaultTableCompression() throws AnalysisException {
+        // No session
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+
+        // Default in the session
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+
+        // Set in the session
+        ctx.getSessionVariable().setDefaultTableCompression("zstd");
+        Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+
+        // Set in the property
+        Map<String, String> property = new HashMap<>();
+        property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
+        Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property)));
     }
 }
