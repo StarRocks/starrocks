@@ -1547,7 +1547,7 @@ public class PrivilegeCheckerV2 {
             List<TableRef> tableRefs = statement.getTableRefs();
             if (tableRefs.size() == 0) {
                 String dBName = statement.getDbName();
-                throw new SemanticException("Database: {} is empty", dBName);
+                throw new SemanticException("Database: %s is empty", dBName);
             }
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
