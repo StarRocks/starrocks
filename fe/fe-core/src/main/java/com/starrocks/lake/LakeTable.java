@@ -170,7 +170,8 @@ public class LakeTable extends OlapTable {
 
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, replicationNum, fsInfo, cacheInfo,
+            // Ignore the parameter replicationNum
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, 1, fsInfo, cacheInfo,
                     shardGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
@@ -185,9 +186,7 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Short getDefaultReplicationNum() {
-        if (tableProperty != null) {
-            return tableProperty.getReplicationNum();
-        }
+        // Unlike OlapTable, LakeTable will ignore the user provided "replication_num" parameter.
         return 1;
     }
 
