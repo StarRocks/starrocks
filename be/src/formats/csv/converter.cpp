@@ -10,6 +10,7 @@
 #include "formats/csv/decimalv2_converter.h"
 #include "formats/csv/decimalv3_converter.h"
 #include "formats/csv/float_converter.h"
+#include "formats/csv/json_converter.h"
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
 #include "runtime/types.h"
@@ -51,6 +52,8 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DecimalV3Converter<int64_t>>(t.precision, t.scale);
     case TYPE_DECIMAL128:
         return std::make_unique<DecimalV3Converter<int128_t>>(t.precision, t.scale);
+    case TYPE_JSON:
+        return std::make_unique<JsonConverter>();
     case TYPE_DECIMAL:
     case INVALID_TYPE:
     case TYPE_NULL:
@@ -61,7 +64,6 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_PERCENTILE:
     case TYPE_TIME:
     case TYPE_OBJECT:
-    case TYPE_JSON:
         break;
     }
     return nullptr;
