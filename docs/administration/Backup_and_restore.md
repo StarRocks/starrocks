@@ -36,45 +36,45 @@ PROPERTIES(
 
 - Create a repository in AWS S3
 
-    You can choose Access Key and Secret Key, Instance Profile, or Assumed Role as the credential method for accessing AWS S3.
+  You can choose Access Key and Secret Key, Instance Profile, or Assumed Role as the credential method for accessing AWS S3.
 
-    - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Access Key and Secret Key as the credential method.
+  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Access Key and Secret Key as the credential method.
 
-    ```SQL
-    CREATE REPOSITORY test_repo
-    WITH BROKER
-    ON LOCATION "s3a://bucket_s3/backup"
-    PROPERTIES(
-        "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
-        "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyyyyyy",
-        "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
-    );
-    ```
+  ```SQL
+  CREATE REPOSITORY test_repo
+  WITH BROKER
+  ON LOCATION "s3a://bucket_s3/backup"
+  PROPERTIES(
+      "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
+      "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyyyyyy",
+      "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
+  );
+  ```
 
-    - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Instance Profile as the credential method.
+  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Instance Profile as the credential method.
 
-    ```SQL
-    CREATE REPOSITORY test_repo
-    WITH BROKER
-    ON LOCATION "s3a://bucket_s3/backup"
-    PROPERTIES(
-        "aws.s3.use_instance_profile" = "true",
-        "aws.s3.region" = "us-east-1"
-    );
-    ```
+  ```SQL
+  CREATE REPOSITORY test_repo
+  WITH BROKER
+  ON LOCATION "s3a://bucket_s3/backup"
+  PROPERTIES(
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-east-1"
+  );
+  ```
 
-    - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Assumed Role as the credential method.
+  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Assumed Role as the credential method.
 
-    ```SQL
-    CREATE REPOSITORY test_repo
-    WITH BROKER
-    ON LOCATION "s3a://bucket_s3/backup"
-    PROPERTIES(
-        "aws.s3.use_instance_profile" = "true",
-        "aws.s3.iam_role_arn" = "arn:aws:iam::xxxxxxxxxx:role/yyyyyyyy",
-        "aws.s3.region" = "us-east-1"
-    );
-    ```
+  ```SQL
+  CREATE REPOSITORY test_repo
+  WITH BROKER
+  ON LOCATION "s3a://bucket_s3/backup"
+  PROPERTIES(
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::xxxxxxxxxx:role/yyyyyyyy",
+      "aws.s3.region" = "us-east-1"
+  );
+  ```
 
 > **NOTE**
 >
