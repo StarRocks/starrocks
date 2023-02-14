@@ -440,6 +440,11 @@ public class LocalSystemInfoService extends SystemInfoService {
     }
 
     @Override
+    public Boolean checkWorkerHealthy(long workerId) {
+        throw new SemanticException("not implemented");
+    }
+
+    @Override
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
