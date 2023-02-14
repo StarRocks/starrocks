@@ -52,7 +52,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -609,7 +608,7 @@ public class FunctionSet {
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_IDENTICAL) {
@@ -619,7 +618,7 @@ public class FunctionSet {
         // Next check for indistinguishable
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_INDISTINGUISHABLE)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_INDISTINGUISHABLE) {
@@ -629,7 +628,7 @@ public class FunctionSet {
         // Next check for strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         if (mode == Function.CompareMode.IS_SUPERTYPE_OF) {
@@ -639,7 +638,7 @@ public class FunctionSet {
         // Finally, check for non-strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
-                return PolymorphicFunctionAnalyzer.checkPolymorphicFunction(f, desc.getArgs());
+                return PolymorphicFunctionAnalyzer.generatePolymorphicFunction(f, desc.getArgs());
             }
         }
         return null;
