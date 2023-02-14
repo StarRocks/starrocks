@@ -164,8 +164,8 @@ inline bool is_type_compatible(LogicalType lhs, LogicalType rhs) {
     return lhs == rhs;
 }
 
-constexpr bool is_scalar_primitive_type(LogicalType ptype) {
-    switch (ptype) {
+constexpr bool is_scalar_logical_type(LogicalType ltype) {
+    switch (ltype) {
     case TYPE_BOOLEAN:  /* 2 */
     case TYPE_TINYINT:  /* 3 */
     case TYPE_SMALLINT: /* 4 */
@@ -194,70 +194,70 @@ constexpr bool is_scalar_primitive_type(LogicalType ptype) {
     }
 }
 
-VALUE_GUARD(LogicalType, BigIntPTGuard, pt_is_bigint, TYPE_BIGINT)
-VALUE_GUARD(LogicalType, BooleanPTGuard, pt_is_boolean, TYPE_BOOLEAN)
-VALUE_GUARD(LogicalType, LargeIntPTGuard, pt_is_largeint, TYPE_LARGEINT)
-VALUE_GUARD(LogicalType, IntegerPTGuard, pt_is_integer, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT,
+VALUE_GUARD(LogicalType, BigIntLTGuard, lt_is_bigint, TYPE_BIGINT)
+VALUE_GUARD(LogicalType, BooleanLTGuard, lt_is_boolean, TYPE_BOOLEAN)
+VALUE_GUARD(LogicalType, LargeIntLTGuard, lt_is_largeint, TYPE_LARGEINT)
+VALUE_GUARD(LogicalType, IntegerLTGuard, lt_is_integer, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT,
             TYPE_LARGEINT)
-VALUE_GUARD(LogicalType, SumBigIntPTGuard, pt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+VALUE_GUARD(LogicalType, SumBigIntLTGuard, lt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
             TYPE_BIGINT)
-VALUE_GUARD(LogicalType, FloatPTGuard, pt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
-VALUE_GUARD(LogicalType, Decimal32PTGuard, pt_is_decimal32, TYPE_DECIMAL32)
-VALUE_GUARD(LogicalType, Decimal64PTGuard, pt_is_decimal64, TYPE_DECIMAL64)
-VALUE_GUARD(LogicalType, Decimal128PTGuard, pt_is_decimal128, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, DecimalPTGuard, pt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
-VALUE_GUARD(LogicalType, HllPTGuard, pt_is_hll, TYPE_HLL)
-VALUE_GUARD(LogicalType, ObjectPTGuard, pt_is_object, TYPE_OBJECT)
-VALUE_GUARD(LogicalType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
-VALUE_GUARD(LogicalType, BinaryPTGuard, pt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
-VALUE_GUARD(LogicalType, JsonGuard, pt_is_json, TYPE_JSON)
-VALUE_GUARD(LogicalType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
-VALUE_GUARD(LogicalType, ObjectFamilyPTGuard, pt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
+VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
+VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
+VALUE_GUARD(LogicalType, Decimal128LTGuard, lt_is_decimal128, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, SumDecimal64LTGuard, lt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
+VALUE_GUARD(LogicalType, HllLTGuard, lt_is_hll, TYPE_HLL)
+VALUE_GUARD(LogicalType, ObjectLTGuard, lt_is_object, TYPE_OBJECT)
+VALUE_GUARD(LogicalType, StringLTGuard, lt_is_string, TYPE_CHAR, TYPE_VARCHAR)
+VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
+VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
+VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
+VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
 
-VALUE_GUARD(LogicalType, DatePTGuard, pt_is_date, TYPE_DATE)
-VALUE_GUARD(LogicalType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)
-VALUE_GUARD(LogicalType, TimePTGuard, pt_is_time, TYPE_TIME)
-VALUE_GUARD(LogicalType, DecimalV2PTGuard, pt_is_decimalv2, TYPE_DECIMALV2)
-VALUE_GUARD(LogicalType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
+VALUE_GUARD(LogicalType, DateLTGuard, lt_is_date, TYPE_DATE)
+VALUE_GUARD(LogicalType, DateTimeLTGuard, lt_is_datetime, TYPE_DATETIME)
+VALUE_GUARD(LogicalType, TimeLTGuard, lt_is_time, TYPE_TIME)
+VALUE_GUARD(LogicalType, DecimalV2LTGuard, lt_is_decimalv2, TYPE_DECIMALV2)
+VALUE_GUARD(LogicalType, DecimalOfAnyVersionLTGuard, lt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, DateOrDateTimePTGuard, pt_is_date_or_datetime, TYPE_DATE, TYPE_DATETIME)
+VALUE_GUARD(LogicalType, DateOrDateTimeLTGuard, lt_is_date_or_datetime, TYPE_DATE, TYPE_DATETIME)
 
-UNION_VALUE_GUARD(LogicalType, IntegralPTGuard, pt_is_integral, pt_is_boolean_struct, pt_is_integer_struct)
+UNION_VALUE_GUARD(LogicalType, IntegralLTGuard, lt_is_integral, lt_is_boolean_struct, lt_is_integer_struct)
 
-UNION_VALUE_GUARD(LogicalType, ArithmeticPTGuard, pt_is_arithmetic, pt_is_boolean_struct, pt_is_integer_struct,
-                  pt_is_float_struct)
+UNION_VALUE_GUARD(LogicalType, ArithmeticLTGuard, lt_is_arithmetic, lt_is_boolean_struct, lt_is_integer_struct,
+                  lt_is_float_struct)
 
-UNION_VALUE_GUARD(LogicalType, AvgDoublePTGuard, pt_is_avg_double, pt_is_boolean_struct, pt_is_integer_struct,
-                  pt_is_float_struct, pt_is_date_or_datetime_struct)
+UNION_VALUE_GUARD(LogicalType, AvgDoubleLTGuard, lt_is_avg_double, lt_is_boolean_struct, lt_is_integer_struct,
+                  lt_is_float_struct, lt_is_date_or_datetime_struct)
 
-UNION_VALUE_GUARD(LogicalType, AvgDecimal64PTGuard, pt_is_avg_decimal64, pt_is_sum_decimal64_struct)
+UNION_VALUE_GUARD(LogicalType, AvgDecimal64LTGuard, lt_is_avg_decimal64, lt_is_sum_decimal64_struct)
 
-UNION_VALUE_GUARD(LogicalType, NumberPTGuard, pt_is_number, pt_is_boolean_struct, pt_is_integer_struct,
-                  pt_is_float_struct)
+UNION_VALUE_GUARD(LogicalType, NumberLTGuard, lt_is_number, lt_is_boolean_struct, lt_is_integer_struct,
+                  lt_is_float_struct)
 
-UNION_VALUE_GUARD(LogicalType, NumericPTGuard, pt_is_numeric, pt_is_number_struct, pt_is_decimal_struct)
+UNION_VALUE_GUARD(LogicalType, NumericLTGuard, lt_is_numeric, lt_is_number_struct, lt_is_decimal_struct)
 
-UNION_VALUE_GUARD(LogicalType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
-                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
-UNION_VALUE_GUARD(LogicalType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
-                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct)
+UNION_VALUE_GUARD(LogicalType, FixedLengthLTGuard, lt_is_fixedlength, lt_is_arithmetic_struct, lt_is_decimalv2_struct,
+                  lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct, lt_is_time_struct)
+UNION_VALUE_GUARD(LogicalType, AggregateLTGuard, lt_is_aggregate, lt_is_arithmetic_struct, lt_is_decimalv2_struct,
+                  lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct)
 // TODO support more complex type as aggregate function
-UNION_VALUE_GUARD(LogicalType, AggregateComplexPTGuard, pt_is_complex_aggregate, pt_is_arithmetic_struct,
-                  pt_is_decimalv2_struct, pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct,
-                  pt_is_json_struct)
+UNION_VALUE_GUARD(LogicalType, AggregateComplexLTGuard, lt_is_complex_aggregate, lt_is_arithmetic_struct,
+                  lt_is_decimalv2_struct, lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct,
+                  lt_is_json_struct)
 
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);
-TPrimitiveType::type to_thrift(LogicalType ptype);
+TPrimitiveType::type to_thrift(LogicalType ltype);
 std::string type_to_string(LogicalType t);
 std::string type_to_string_v2(LogicalType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 
-LogicalType scalar_field_type_to_primitive_type(LogicalType field_type);
+LogicalType scalar_field_type_to_logical_type(LogicalType field_type);
 
 // Return length of fixed-length type, return 0 for dynamic length type
-size_t get_size_of_fixed_length_type(LogicalType ptype);
+size_t get_size_of_fixed_length_type(LogicalType ltype);
 
 } // namespace starrocks
 

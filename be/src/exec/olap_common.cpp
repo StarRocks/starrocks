@@ -108,13 +108,13 @@ inline std::string cast_to_string<TimestampValue>(TimestampValue value) {
 // for decimal32/64/128, their underlying type is int32/64/128, so the decimal point
 // depends on precision and scale when they are casted into strings
 template <class T>
-inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType pt, [[maybe_unused]] int precision,
+inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType lt, [[maybe_unused]] int precision,
                                   [[maybe_unused]] int scale) {
     // According to https://rules.sonarsource.com/cpp/RSPEC-5275, it is better
     // to use static_cast to cast from integral/float/bool type to integral type, otherwise
     // reinterpret_cast may produce undefined behavior
     constexpr bool use_static_cast = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>;
-    switch (pt) {
+    switch (lt) {
     case TYPE_DECIMAL32: {
         using CppType = RunTimeCppType<TYPE_DECIMAL32>;
         if constexpr (use_static_cast) {

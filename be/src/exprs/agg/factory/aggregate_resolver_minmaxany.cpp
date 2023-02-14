@@ -41,15 +41,15 @@ void AggregateFuncResolver::register_bitmap() {
 }
 
 struct MinMaxAnyDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_json<pt>) {
-            resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
-                    "min", true, AggregateFactory::MakeMinAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, MaxAggregateData<pt>>(
-                    "max", true, AggregateFactory::MakeMaxAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
-                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
+        if constexpr (lt_is_aggregate<lt> || lt_is_string<lt> || lt_is_json<lt>) {
+            resolver->add_aggregate_mapping<lt, lt, MinAggregateData<lt>>(
+                    "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
+                    "max", true, AggregateFactory::MakeMaxAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
+                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
         }
     }
 };
@@ -58,8 +58,8 @@ template <LogicalType ret_type>
 struct MaxByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type> || pt_is_json<arg_type>)&&(
-                              pt_is_aggregate<ret_type> || pt_is_string<ret_type> || pt_is_json<ret_type>)) {
+        if constexpr ((lt_is_aggregate<arg_type> || lt_is_string<arg_type> || lt_is_json<arg_type>)&&(
+                              lt_is_aggregate<ret_type> || lt_is_string<ret_type> || lt_is_json<ret_type>)) {
             resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
         }
@@ -67,9 +67,9 @@ struct MaxByDispatcherInner {
 };
 
 struct MaxByDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver, LogicalType ret_type) {
-        type_dispatch_all(ret_type, MaxByDispatcherInner<pt>(), resolver);
+        type_dispatch_all(ret_type, MaxByDispatcherInner<lt>(), resolver);
     }
 };
 
