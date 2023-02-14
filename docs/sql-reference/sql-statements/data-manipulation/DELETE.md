@@ -41,7 +41,11 @@ This statement may reduce query efficiency for a period of time after execution.
     WHERE k1 >= 3 AND k2 = "abc";
     ```
 
+<<<<<<< HEAD
 3. Delete data rows whose k2 column value is "abc" or "cba"in all partitions of my_table partition p1,p2
+=======
+- The conditions that you specify are in AND relations. If you want to specify conditions that are in OR relations, you must specify each condition by using one DELETE statement.
+>>>>>>> bcd37d5b3 (fix typo (#17781))
 
     ```sql
     DELETE FROM my_table
