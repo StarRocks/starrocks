@@ -105,7 +105,7 @@ public class CTASAnalyzer {
             Type type = AnalyzerUtils.transformType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                        null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+                    null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
             if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                 columnDef.setAllowNull(false);
             }

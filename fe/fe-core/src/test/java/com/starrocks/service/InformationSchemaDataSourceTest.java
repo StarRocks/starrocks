@@ -16,9 +16,9 @@
 package com.starrocks.service;
 
 import com.google.gson.Gson;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
@@ -35,10 +35,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class InformationSchemaDataSourceTest {
-    
+
     @Mocked
     ExecuteEnv exeEnv;
-    
+
     @Test
     public void testGetTablesConfig() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -49,19 +49,19 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");
         Config.enable_experimental_mv = true;
         String createTblStmtStr = "CREATE TABLE db1.tbl1 (`k1` int,`k2` int,`k3` int,`v1` int,`v2` int,`v3` int) " +
-                                  "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
-                                  "COMMENT \"OLAP\" " +
-                                  "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 " +
-                                  "ORDER BY(`v2`, `v3`) " +
-                                  "PROPERTIES ('replication_num' = '1');";
+                "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
+                "COMMENT \"OLAP\" " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 " +
+                "ORDER BY(`v2`, `v3`) " +
+                "PROPERTIES ('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
 
         String createMvStmtStr = "CREATE MATERIALIZED VIEW db1.mv1 " +
-                                 "DISTRIBUTED BY HASH(k1) BUCKETS 10 " +
-                                 "REFRESH ASYNC " +
-                                 "AS SELECT k1, k2 " +
-                                 "FROM db1.tbl1 ";
-        
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10 " +
+                "REFRESH ASYNC " +
+                "AS SELECT k1, k2 " +
+                "FROM db1.tbl1 ";
+
         starRocksAssert.withMaterializedView(createMvStmtStr);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
@@ -94,12 +94,12 @@ public class InformationSchemaDataSourceTest {
     }
 
     @Test
-    public void testTransferTableTypeToAdaptMysql() throws NoSuchMethodException, 
-                                                            SecurityException, 
-                                                            IllegalAccessException,
-                                                            IllegalArgumentException, 
-                                                            InvocationTargetException, 
-                                                            ClassNotFoundException {
+    public void testTransferTableTypeToAdaptMysql() throws NoSuchMethodException,
+            SecurityException,
+            IllegalAccessException,
+            IllegalArgumentException,
+            InvocationTargetException,
+            ClassNotFoundException {
 
         Class<?> clazz = Class.forName(InformationSchemaDataSource.class.getName());
         Method m = clazz.getDeclaredMethod("transferTableTypeToAdaptMysql", TableType.class);

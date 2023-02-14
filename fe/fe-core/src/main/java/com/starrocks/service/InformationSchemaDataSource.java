@@ -18,7 +18,6 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -41,6 +40,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -259,7 +259,7 @@ public class InformationSchemaDataSource {
         }
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
-                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
+                || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");

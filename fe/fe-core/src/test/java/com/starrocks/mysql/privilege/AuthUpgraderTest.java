@@ -16,7 +16,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.clearspring.analytics.util.Lists;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
@@ -30,6 +29,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
@@ -391,7 +391,6 @@ public class AuthUpgraderTest {
     private void checkPasswordEquals(String username, String pass) {
         AuthenticationManager authenticationManager = ctx.getGlobalStateMgr().getAuthenticationManager();
         UserIdentity userIdentity = new UserIdentity(username, "%");
-        userIdentity.setIsAnalyzed();
         UserAuthenticationInfo info =
                 authenticationManager.getUserToAuthenticationInfo().get(userIdentity);
         System.out.println(info.getPassword().length);

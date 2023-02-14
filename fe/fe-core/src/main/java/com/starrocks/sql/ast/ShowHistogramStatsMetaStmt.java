@@ -47,7 +47,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
                     .build();
 
     public static List<String> showHistogramStatsMeta(ConnectContext context,
-            HistogramStatsMeta histogramStatsMeta) throws MetaNotFoundException {
+                                                      HistogramStatsMeta histogramStatsMeta) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "", "", "", "");
         long dbId = histogramStatsMeta.getDbId();
         long tableId = histogramStatsMeta.getTableId();

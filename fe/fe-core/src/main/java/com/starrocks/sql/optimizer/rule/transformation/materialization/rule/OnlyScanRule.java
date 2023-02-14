@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 /**
  * Materialized View Rewrite Rule for pattern:
- *  - Scan
+ * - Scan
  */
 public class OnlyScanRule extends SingleTableRewriteBaseRule {
     private static final OnlyScanRule INSTANCE = new OnlyScanRule();

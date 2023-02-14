@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -44,6 +43,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;

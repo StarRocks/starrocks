@@ -16,7 +16,6 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
@@ -24,12 +23,13 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class CreateUserInfo  implements Writable {
+public class CreateUserInfo implements Writable {
     @SerializedName(value = "u")
     UserIdentity userIdentity;
     @SerializedName(value = "a")

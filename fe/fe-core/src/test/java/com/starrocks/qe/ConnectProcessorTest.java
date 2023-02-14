@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCapability;
@@ -49,6 +48,7 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;

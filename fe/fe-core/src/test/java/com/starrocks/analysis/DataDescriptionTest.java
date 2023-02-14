@@ -42,6 +42,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

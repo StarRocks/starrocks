@@ -16,9 +16,9 @@ package com.starrocks.privilege;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.Arrays;

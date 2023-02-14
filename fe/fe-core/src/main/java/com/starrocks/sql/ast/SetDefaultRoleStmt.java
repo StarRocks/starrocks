@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.List;

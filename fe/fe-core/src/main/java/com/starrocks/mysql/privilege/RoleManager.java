@@ -39,11 +39,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -255,6 +255,7 @@ public class RoleManager implements Writable {
             roles.put(role.getRoleName(), role);
         }
     }
+
     protected void loadImpersonateRoleToUser(Map<String, Set<UserIdentity>> impersonateRoleToUser) {
         for (Map.Entry<String, Set<UserIdentity>> entry : impersonateRoleToUser.entrySet()) {
             Role role = getRole(entry.getKey());

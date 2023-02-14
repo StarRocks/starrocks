@@ -194,7 +194,7 @@ public class PartitionPruneRule extends TransformationRule {
                 columnToNullPartitions, scalarOperatorList);
         try {
             List<Long> prune = partitionPruner.prune();
-            if (prune == null && isTemporaryPartitionPrune)  {
+            if (prune == null && isTemporaryPartitionPrune) {
                 return partitionIds;
             } else {
                 return prune;

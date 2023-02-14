@@ -16,10 +16,10 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.UserIdentity;
 
 public class ImpersonateUserPrivEntry extends PrivEntry {
     @SerializedName(value = "securedUserIdentity")
