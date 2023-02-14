@@ -99,7 +99,7 @@ FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>[,<kafka_broker2_ip>:<kafka_broker2_port>...]",
     "kafka_topic" = "<topic_name>"
-);
+)
 ```
 
 这里以 Apache Kafka® 数据源为例。有关 Routine Load 的语法和参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
@@ -121,7 +121,7 @@ WITH RESOURCE <resource_name>
 PROPERTIES
 (
     "strict_mode" = "true | false"   
-);
+)
 ```
 
 这里以 HDFS 数据源为例。有关 Spark Load 的语法和参数说明，请参见 [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)。
@@ -130,7 +130,7 @@ PROPERTIES
 
 ```SQL
 SET enable_insert_strict = true | false;
-INSERT INTO <table_name> ...;
+INSERT INTO <table_name> ...
 ```
 
 有关 INSERT 的语法和参数说明，请参见 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md)。
