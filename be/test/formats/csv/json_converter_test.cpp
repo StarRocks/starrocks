@@ -9,7 +9,7 @@
 #include "runtime/types.h"
 #include "util/json.h"
 
-namespace starrocks::csv {
+namespace starrocks::vectorized::csv {
 
 class JsonConverterTest : public ::testing::Test {
 public:
@@ -82,4 +82,4 @@ TEST_F(JsonConverterTest, test_write_string) {
             buff2.as_string());
 }
 
-} // namespace starrocks::csv
+} // namespace starrocks::vectorized::csv
