@@ -27,31 +27,31 @@
 
 namespace starrocks {
 
-// AvgResultPT for final result
-template <LogicalType PT, typename = guard::Guard>
-inline constexpr LogicalType PercentileResultPT = PT;
+// AvgResultLT for final result
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType PercentileResultLT = LT;
 
-template <LogicalType PT>
-inline constexpr LogicalType PercentileResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType LT>
+inline constexpr LogicalType PercentileResultLT<LT, ArithmeticLTGuard<LT>> = TYPE_DOUBLE;
 
-template <LogicalType PT, typename = guard::Guard>
+template <LogicalType LT, typename = guard::Guard>
 struct PercentileContState {
-    using CppType = RunTimeCppType<PT>;
+    using CppType = RunTimeCppType<LT>;
     void update(CppType item) { items.emplace_back(item); }
 
     std::vector<CppType> items;
     double rate = 0.0;
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class PercentileContAggregateFunction final
-        : public AggregateFunctionBatchHelper<PercentileContState<PT>, PercentileContAggregateFunction<PT>> {
+        : public AggregateFunctionBatchHelper<PercentileContState<LT>, PercentileContAggregateFunction<LT>> {
 public:
-    using InputCppType = RunTimeCppType<PT>;
-    using InputColumnType = RunTimeColumnType<PT>;
-    static constexpr auto ResultPT = PercentileResultPT<PT>;
-    using ResultType = RunTimeCppType<ResultPT>;
-    using ResultColumnType = RunTimeColumnType<ResultPT>;
+    using InputCppType = RunTimeCppType<LT>;
+    using InputColumnType = RunTimeColumnType<LT>;
+    static constexpr auto ResultLT = PercentileResultLT<LT>;
+    using ResultType = RunTimeCppType<ResultLT>;
+    using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
@@ -109,7 +109,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        using CppType = RunTimeCppType<PT>;
+        using CppType = RunTimeCppType<LT>;
         std::vector<CppType> new_vector = this->data(state).items;
         pdqsort(false, new_vector.begin(), new_vector.end());
         const double& rate = this->data(state).rate;
@@ -127,17 +127,17 @@ public:
         int index = (int)u;
 
         [[maybe_unused]] ResultType result;
-        if constexpr (pt_is_datetime<PT>) {
+        if constexpr (lt_is_datetime<LT>) {
             result.from_unix_second(
                     new_vector[index].to_unix_second() +
                     (u - (float)index) * (new_vector[index + 1].to_unix_second() - new_vector[index].to_unix_second()));
-        } else if constexpr (pt_is_date<PT>) {
+        } else if constexpr (lt_is_date<LT>) {
             result._julian = new_vector[index]._julian +
                              (u - (double)index) * (new_vector[index + 1]._julian - new_vector[index]._julian);
-        } else if constexpr (pt_is_arithmetic<PT>) {
+        } else if constexpr (lt_is_arithmetic<LT>) {
             result = new_vector[index] + (u - (double)index) * (new_vector[index + 1] - new_vector[index]);
         } else {
-            LOG(ERROR) << "Invalid PrimitiveTypes for percentile_cont function";
+            LOG(ERROR) << "Invalid LogicalTypes for percentile_cont function";
             return;
         }
 

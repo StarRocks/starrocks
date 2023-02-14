@@ -27,24 +27,24 @@
 
 namespace starrocks {
 
-template <LogicalType PT, typename = guard::Guard>
+template <LogicalType LT, typename = guard::Guard>
 struct MaxByAggregateData {};
 
-template <LogicalType PT>
-struct MaxByAggregateData<PT, AggregateComplexPTGuard<PT>> {
-    using T = AggDataValueType<PT>;
+template <LogicalType LT>
+struct MaxByAggregateData<LT, AggregateComplexLTGuard<LT>> {
+    using T = AggDataValueType<LT>;
     raw::RawVector<uint8_t> buffer_result;
-    T max = RunTimeTypeLimits<PT>::min_value();
+    T max = RunTimeTypeLimits<LT>::min_value();
 
     void reset() {
         buffer_result.clear();
-        max = RunTimeTypeLimits<PT>::min_value();
+        max = RunTimeTypeLimits<LT>::min_value();
     }
 };
 
-template <LogicalType PT, typename State, typename = guard::Guard>
+template <LogicalType LT, typename State, typename = guard::Guard>
 struct MaxByElement {
-    using T = RunTimeCppType<PT>;
+    using T = RunTimeCppType<LT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
         if (right > state.max) {
             state.max = right;
@@ -61,28 +61,28 @@ struct MaxByElement {
     }
 };
 
-template <LogicalType PT, typename State>
-struct MaxByElement<PT, State, JsonGuard<PT>> {
-    using T = RunTimeCppType<PT>;
+template <LogicalType LT, typename State>
+struct MaxByElement<LT, State, JsonGuard<LT>> {
+    using T = RunTimeCppType<LT>;
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
         if (*right > state.max) {
-            AggDataTypeTraits<PT>::assign_value(state.max, right);
+            AggDataTypeTraits<LT>::assign_value(state.max, right);
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
         }
     }
     void operator()(State& state, const char* buffer, size_t size, const T& right) const {
         if (*right > state.max) {
-            AggDataTypeTraits<PT>::assign_value(state.max, right);
+            AggDataTypeTraits<LT>::assign_value(state.max, right);
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
         }
     }
 };
 
-template <LogicalType PT>
-struct MaxByAggregateData<PT, StringPTGuard<PT>> {
+template <LogicalType LT>
+struct MaxByAggregateData<LT, StringLTGuard<LT>> {
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer_max;
     int32_t size = -1;
@@ -95,8 +95,8 @@ struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <LogicalType PT, typename State>
-struct MaxByElement<PT, State, StringPTGuard<PT>> {
+template <LogicalType LT, typename State>
+struct MaxByElement<LT, State, StringLTGuard<LT>> {
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(col->serialize_size(row_num));
@@ -118,11 +118,11 @@ struct MaxByElement<PT, State, StringPTGuard<PT>> {
     }
 };
 
-template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>, typename = guard::Guard>
 class MaxByAggregateFunction final
-        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, T>> {
+        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<LT, State, OP, T>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
+    using InputColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).reset();
@@ -163,7 +163,7 @@ public:
             src = binary_column->get_slice(row_num);
         }
 
-        if constexpr (PT != TYPE_JSON) {
+        if constexpr (LT != TYPE_JSON) {
             T max;
             memcpy(&max, src.data, sizeof(T));
             OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), max);
@@ -176,7 +176,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         raw::RawVector<uint8_t> buffer;
-        if constexpr (PT != TYPE_JSON) {
+        if constexpr (LT != TYPE_JSON) {
             size_t value_size = sizeof(T);
             buffer.resize(this->data(state).buffer_result.size() + value_size);
             memcpy(buffer.data(), &(this->data(state).max), value_size);
@@ -241,7 +241,7 @@ public:
                 size_t serde_size = src[0]->serialize_size(i);
                 T value = col_max->get_data()[i];
                 size_t new_size;
-                if constexpr (PT != TYPE_JSON) {
+                if constexpr (LT != TYPE_JSON) {
                     new_size = old_size + sizeof(T) + serde_size;
                     bytes.resize(new_size);
                     memcpy(bytes.data() + old_size, &value, sizeof(T));
@@ -269,9 +269,9 @@ public:
     std::string get_name() const override { return "max_by"; }
 };
 
-template <LogicalType PT, typename State, class OP>
-class MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
-        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
+template <LogicalType LT, typename State, class OP>
+class MaxByAggregateFunction<LT, State, OP, RunTimeCppType<LT>, StringLTGuard<LT>> final
+        : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<LT, State, OP, RunTimeCppType<LT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).reset();

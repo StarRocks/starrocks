@@ -485,9 +485,9 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     return Status::OK();
 }
 
-template <LogicalType PT, typename CppType>
+template <LogicalType LT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
-    using ColumnType = typename starrocks::RunTimeColumnType<PT>;
+    using ColumnType = typename starrocks::RunTimeColumnType<LT>;
 
     auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);

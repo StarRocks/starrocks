@@ -495,7 +495,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
-    static_assert(pt_is_decimal<Type>, "Invalid decimal type");
+    static_assert(lt_is_decimal<Type>, "Invalid decimal type");
     auto money_viewer = ColumnViewer<Type>(columns[0]);
     const auto& type = context->get_arg_type(0);
     int scale = type->scale;
