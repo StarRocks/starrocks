@@ -199,6 +199,23 @@ public class AlterTest {
                         "    'in_memory' = 'false',\n" +
                         "    'storage_medium' = 'SSD',\n" +
                         "    'storage_cooldown_time' = '9999-12-31 00:00:00'\n" +
+                        ");")
+                .withTable("CREATE TABLE t_recharge_detail(\n" +
+                        "    id bigint  ,\n" +
+                        "    user_id  bigint  ,\n" +
+                        "    recharge_money decimal(32,2) , \n" +
+                        "    province varchar(20) not null,\n" +
+                        "    dt varchar(20) not null\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (dt,province) (\n" +
+                        "   PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\")),\n" +
+                        "   PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
 
@@ -2365,5 +2382,13 @@ public class AlterTest {
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
+    }
+
+    @Test
+    public void testDropListPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 }
