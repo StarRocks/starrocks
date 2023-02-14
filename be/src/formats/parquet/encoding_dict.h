@@ -199,7 +199,12 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+=======
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+        _indexes.reserve(count);
+>>>>>>> c00e7b3ab ([BugFix] Fix parquet DictDecoder<Slice> array out of bounds access (#17788))
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
         switch (content_type) {
