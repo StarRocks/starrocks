@@ -125,7 +125,6 @@ public class ExpressionAnalyzer {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
@@ -139,7 +138,8 @@ public class ExpressionAnalyzer {
 
     private boolean isMapHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
                 return true;
             }
         }
@@ -150,7 +150,7 @@ public class ExpressionAnalyzer {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
-    private Expr rewriteHighOrderFunction(Expr expr) {
+    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
         if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
@@ -163,7 +163,7 @@ public class ExpressionAnalyzer {
             functionCallExpr.clearChildren();
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
         } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
                 && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
             // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
@@ -174,9 +174,21 @@ public class ExpressionAnalyzer {
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
             functionCallExpr.setType(arr1.getType());
-            return arrayMap;
+            visitor.visit(arrayMap, scope);
+        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
+            FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            Expr map = functionCallExpr.getChild(1);
+            visitor.visit(mapApply, scope);
+
+            FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(mapApply));
+            visitor.visit(mapValues, scope);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(map);
+            functionCallExpr.addChild(mapValues);
         }
-        return null;
     }
 
     // only high-order functions can use lambda functions.
@@ -219,8 +231,11 @@ public class ExpressionAnalyzer {
                 scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
             }
         } else {
+            Preconditions.checkState(expression instanceof FunctionCallExpr);
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
             // map_apply(func, map)
-            if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY) &&
+                    !(expression.getChild(0).getChild(0) instanceof MapExpr)) {
                 throw new SemanticException("The right part of map lambda function (" +
                         expression.getChild(0).toSql() + ") should have key and value arguments");
             }
@@ -248,13 +263,19 @@ public class ExpressionAnalyzer {
             }
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
+
+            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER))) {
+                // (k,v) -> expr => (k,v) -> (k,expr)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(slotRef,
+                        lambdaFunc.getChild(0))));
+            }
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
-        Expr res = rewriteHighOrderFunction(expression);
-        if (res != null) {
-            visitor.visit(res, scope);
-        }
+        rewriteHighOrderFunction(expression, visitor, scope);
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
