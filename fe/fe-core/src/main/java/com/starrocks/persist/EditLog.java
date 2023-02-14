@@ -54,6 +54,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -65,6 +66,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
+import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.LoadErrorHub;
@@ -101,6 +103,7 @@ import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -109,6 +112,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -418,6 +422,10 @@ public class EditLog {
                     ExportJob.StateTransfer op = (ExportJob.StateTransfer) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
+                    break;
+                case OperationType.OP_EXPORT_UPDATE_INFO:
+                    ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
+                    globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
                     break;
                 case OperationType.OP_FINISH_DELETE: {
                     DeleteInfo info = (DeleteInfo) journal.getData();
@@ -1398,9 +1406,12 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_CREATE, job);
     }
 
-    public void logExportUpdateState(long jobId, ExportJob.JobState newState) {
-        ExportJob.StateTransfer transfer = new ExportJob.StateTransfer(jobId, newState);
-        logEdit(OperationType.OP_EXPORT_UPDATE_STATE, transfer);
+    public void logExportUpdateState(long jobId, ExportJob.JobState newState, 
+            List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
+            Set<String> exportedFiles, ExportFailMsg failMsg) {
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, 
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
 
     public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {

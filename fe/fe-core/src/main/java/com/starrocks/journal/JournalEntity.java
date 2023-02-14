@@ -364,6 +364,10 @@ public class JournalEntity implements Writable {
                 ((ExportJob.StateTransfer) data).readFields(in);
                 isRead = true;
                 break;
+            case OperationType.OP_EXPORT_UPDATE_INFO:
+                data = ExportJob.ExportUpdateInfo.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_FINISH_DELETE:
                 data = new DeleteInfo();
                 ((DeleteInfo) data).readFields(in);
