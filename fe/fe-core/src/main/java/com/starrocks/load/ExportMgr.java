@@ -377,6 +377,24 @@ public class ExportMgr {
         }
     }
 
+    public void replayUpdateJobInfo(ExportJob.ExportUpdateInfo info) {
+        writeLock();
+        try {
+            ExportJob job = idToJob.get(info.jobId);
+            job.updateState(info.state, true);
+            if (isJobExpired(job, System.currentTimeMillis())) {
+                LOG.info("remove expired job: {}", job);
+                idToJob.remove(info.jobId);
+            }
+            job.setSnapshotPaths(info.snapshotPaths);
+            job.setExportTempPath(info.exportTempPath);
+            job.setExportedFiles(info.exportedFiles);
+            job.setFailMsg(info.failMsg);
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public long getJobNum(ExportJob.JobState state, long dbId) {
         int size = 0;
         readLock();
