@@ -49,6 +49,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
@@ -556,17 +557,21 @@ public class PropertyAnalyzer {
 
     // analyzeCompressionType will parse the compression type from properties
     public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
-        String compressionType;
-        if (properties == null || !properties.containsKey(PROPERTIES_COMPRESSION)) {
-            return TCompressionType.LZ4_FRAME;
+        TCompressionType compressionType = TCompressionType.LZ4_FRAME;
+        if (ConnectContext.get() != null) {
+            String defaultCompression = ConnectContext.get().getSessionVariable().getDefaultTableCompression();
+            compressionType = CompressionUtils.getCompressTypeByName(defaultCompression);
         }
-        compressionType = properties.get(PROPERTIES_COMPRESSION);
+        if (properties == null || !properties.containsKey(PROPERTIES_COMPRESSION)) {
+            return compressionType;
+        }
+        String compressionName = properties.get(PROPERTIES_COMPRESSION);
         properties.remove(PROPERTIES_COMPRESSION);
 
-        if (CompressionUtils.getCompressTypeByName(compressionType) != null) {
-            return CompressionUtils.getCompressTypeByName(compressionType);
+        if (CompressionUtils.getCompressTypeByName(compressionName) != null) {
+            return CompressionUtils.getCompressTypeByName(compressionName);
         } else {
-            throw new AnalysisException("unknown compression type: " + compressionType);
+            throw new AnalysisException("unknown compression type: " + compressionName);
         }
     }
 
