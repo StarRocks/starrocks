@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
-const static int DEFAULT_TIMEOUT_MS = 10000;
+const static int DEFAULT_TIMEOUT_MS = config::broker_write_timeout_seconds * 1000;
 
 class TBrokerFileStatus;
 class TFileBrokerServiceClient;
