@@ -104,6 +104,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
 
+* default_table_compression
+
+  Set the default compression algorithm for table storage, supported compression algorithms are: `snappy, lz4, zlib, zstd`.
+
 * disable_colocate_join
 
   Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
