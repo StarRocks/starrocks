@@ -99,6 +99,7 @@ BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
 
 function_list = list()
 function_set = set()
+function_signature_set = set()
 
 def add_function(fn_data):
     entry = dict()
@@ -108,10 +109,20 @@ def add_function(fn_data):
         print("=================================================================")
         exit(1)
     function_set.add(fn_data[0])
+
     entry["id"] = fn_data[0]
     entry["name"] = fn_data[1]
     entry["ret"] = fn_data[2]
     entry["args"] = fn_data[3]
+
+    function_signature = "%s#%s#(%s)" % (entry["ret"], entry["name"], ", ".join(entry["args"]))
+
+    if function_signature in function_signature_set:
+        print("=================================================================")
+        print("Duplicated function signature: " + function_signature)
+        print("=================================================================")
+        exit(1)
+    function_signature_set.add(function_signature)
 
     if "..." in fn_data[3]:
         assert 2 <= len(fn_data[3]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
