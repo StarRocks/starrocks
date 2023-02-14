@@ -263,7 +263,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             Table table = tablePair.second;
             if (!table.isLocalTable()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList());
+                        baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
         }
         // External table support cache meta for query level (refer to CachingHiveMetastore::createQueryLevelInstance),
