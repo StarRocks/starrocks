@@ -184,7 +184,7 @@ public class SplitAggregateRule extends TransformationRule {
         }
 
         // do two stage agg if without distinct agg
-        if (distinctAggCallOperator.size() == 0) {
+        if (CollectionUtils.isEmpty(distinctAggCallOperator)) {
             return implementTwoStageAgg(input, operator);
         }
 
