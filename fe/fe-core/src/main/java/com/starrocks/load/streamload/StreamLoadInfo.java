@@ -35,6 +35,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -79,6 +80,7 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -137,6 +139,10 @@ public class StreamLoadInfo {
 
     public String getMergeConditionStr() {
         return mergeConditionStr;
+    }
+
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
     }
 
     public ColumnSeparator getColumnSeparator() {
@@ -314,6 +320,15 @@ public class StreamLoadInfo {
         if (context.loadDop != -1) {
             loadParallelRequestNum = context.loadDop;
         }
+        if (context.partialUpdateMode != null) {
+            if (context.partialUpdateMode.equals("column")) {
+                partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
+            } else if (context.partialUpdateMode.equals("auto")) {
+                partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+            } else if (context.partialUpdateMode.equals("row")) {
+                partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+            }
+        }
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
@@ -388,9 +403,6 @@ public class StreamLoadInfo {
             }
             stripOuterArray = request.isStrip_outer_array();
         }
-        if (request.isSetPartial_update()) {
-            partialUpdate = request.isPartial_update();
-        }
         if (request.isSetTransmission_compression_type()) {
             compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
         }
@@ -408,6 +420,14 @@ public class StreamLoadInfo {
 
         if (request.isSetLog_rejected_record_num()) {
             logRejectedRecordNum = request.getLog_rejected_record_num();
+        }
+        
+        if (request.isSetPartial_update()) {
+            partialUpdate = request.isPartial_update();
+        }
+
+        if (request.isSetPartial_update_mode()) {
+            partialUpdateMode = request.getPartial_update_mode();
         }
     }
 
@@ -449,6 +469,13 @@ public class StreamLoadInfo {
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();
+        if (routineLoadJob.getPartialUpdateMode().equals("column")) {
+            partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
+        } else if (routineLoadJob.getPartialUpdateMode().equals("auto")) {
+            partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+        } else if (routineLoadJob.getPartialUpdateMode().equals("row")) {
+            partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+        }
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.EXEC_MEM_LIMIT)) {
             execMemLimit = Long.parseLong(routineLoadJob.getSessionVariables().get(SessionVariable.EXEC_MEM_LIMIT));
         } else {

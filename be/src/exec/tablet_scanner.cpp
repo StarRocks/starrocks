@@ -339,6 +339,7 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_parent->_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;
