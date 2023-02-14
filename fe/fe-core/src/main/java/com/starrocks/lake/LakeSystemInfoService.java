@@ -130,6 +130,15 @@ public class LakeSystemInfoService extends SystemInfoService {
     }
 
     @Override
+    public Boolean checkWorkerHealthy(long workerId) {
+        try {
+            return agent.checkWorkerHealthy(workerId);
+        } catch (UserException e) {
+            throw new SemanticException(e.getMessage());
+        }
+    }
+
+    @Override
     public ComputeNode getComputeNode(long computeNodeId) {
         return null;
     }

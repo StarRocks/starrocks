@@ -450,11 +450,6 @@ public class LocalSystemInfoService extends SystemInfoService {
     }
 
     @Override
-    public Boolean checkWorkerHealthy(long workerId) {
-        throw new SemanticException("not implemented");
-    }
-
-    @Override
     public ComputeNode getComputeNode(long computeNodeId) {
         return idToComputeNodeRef.get(computeNodeId);
     }
