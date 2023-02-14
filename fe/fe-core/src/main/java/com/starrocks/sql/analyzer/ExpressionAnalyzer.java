@@ -899,13 +899,24 @@ public class ExpressionAnalyzer {
                 throw unsupportedException("Table function cannot be used in expression");
             }
 
-            // check params type, don't check var args type
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
                     throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                            node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                            node.getParams().isStar() ? "*" :
+                                    Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+                }
+            }
+
+            if (fn.hasVarArgs()) {
+                Type varType = fn.getArgs()[fn.getNumArgs() - 1];
+                for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
+                    if (!argumentTypes[i].matchesType(varType) &&
+                            !Type.canCastToAsFunctionParameter(argumentTypes[i], varType)) {
+                        throw new SemanticException("Variadic function %s(%s) can't support type: %s", fnName,
+                                Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
+                                argumentTypes[i]);
+                    }
                 }
             }
 
