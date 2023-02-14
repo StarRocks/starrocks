@@ -35,7 +35,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -46,6 +45,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.io.DataInput;
@@ -86,7 +86,8 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, Gson
 
     private transient UserIdentity userIdentity;
 
-    protected PrivEntry() {}
+    protected PrivEntry() {
+    }
 
     protected PrivEntry(String origHost, String origUser, boolean isDomain, PrivBitSet privSet) {
         this.origHost = origHost;
@@ -99,7 +100,8 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, Gson
         if (origHost.equals(ANY_HOST)) {
             isAnyHost = true;
         }
-        this.hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());;
+        this.hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
+
         if (realOrigUser.equals(ANY_USER)) {
             isAnyUser = true;
         }
@@ -221,7 +223,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, Gson
 
             return privEntry;
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException
-                | SecurityException | IllegalArgumentException | InvocationTargetException e) {
+                 | SecurityException | IllegalArgumentException | InvocationTargetException e) {
             throw new IOException("failed read PrivEntry", e);
         }
     }

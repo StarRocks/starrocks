@@ -23,6 +23,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -30,8 +31,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import javax.xml.crypto.Data;
 
 public class UseDbStmtTest {
     private static StarRocksAssert starRocksAssert;

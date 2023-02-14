@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
-
 import java.util.List;
 
 // REVOKE Role 'role' FROM 'user'

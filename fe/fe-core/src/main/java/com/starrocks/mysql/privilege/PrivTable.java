@@ -35,13 +35,13 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -260,7 +260,7 @@ public abstract class PrivTable implements Writable {
 
             return privTable;
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException
-                | SecurityException | IllegalArgumentException | InvocationTargetException e) {
+                 | SecurityException | IllegalArgumentException | InvocationTargetException e) {
             throw new IOException("failed read PrivTable", e);
         }
     }

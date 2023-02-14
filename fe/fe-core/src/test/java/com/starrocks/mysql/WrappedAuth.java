@@ -17,8 +17,8 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
 

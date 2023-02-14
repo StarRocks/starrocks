@@ -16,8 +16,8 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Objects;
 

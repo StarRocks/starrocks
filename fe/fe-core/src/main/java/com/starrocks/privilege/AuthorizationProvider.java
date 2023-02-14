@@ -14,8 +14,8 @@
 
 package com.starrocks.privilege;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
 import java.util.Set;

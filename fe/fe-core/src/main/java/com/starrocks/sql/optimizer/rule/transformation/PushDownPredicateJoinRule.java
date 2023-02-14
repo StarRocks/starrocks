@@ -184,7 +184,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
      * 1: Replace the column of nullColumns in expression to NULL literal
      * 2: Call the ScalarOperatorRewriter function to perform constant folding
      * 3: If the result of constant folding is NULL or false,
-     *    it proves that the expression can filter the NULL value in nullColumns
+     * it proves that the expression can filter the NULL value in nullColumns
      * 4: Return true to prove that NULL values can be eliminated, and vice versa
      */
     private boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {

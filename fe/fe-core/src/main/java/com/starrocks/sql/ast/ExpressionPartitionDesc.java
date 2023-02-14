@@ -91,7 +91,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
 
         boolean hasExprAnalyze = false;
         for (ColumnDef columnDef : columnDefs) {
-            if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName()))  {
+            if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName())) {
                 PartitionExprAnalyzer.analyzePartitionExpr(this.expr, columnDef.getType());
                 slotRef.setType(columnDef.getType());
                 hasExprAnalyze = true;
@@ -107,7 +107,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                                          boolean isTemp, boolean isExprPartition)
             throws DdlException {
         PartitionType partitionType = PartitionType.RANGE;
-        if (isExprPartition)  {
+        if (isExprPartition) {
             partitionType = PartitionType.EXPR_RANGE;
         }
         // we will support other PartitionInto in the future

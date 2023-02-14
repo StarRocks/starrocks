@@ -206,6 +206,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.selectedPartitionId = selectedPartitionId;
             return this;
         }
+
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
             this.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;

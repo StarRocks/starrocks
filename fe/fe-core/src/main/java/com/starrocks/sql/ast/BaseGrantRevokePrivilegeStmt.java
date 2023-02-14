@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;

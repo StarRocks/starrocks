@@ -44,8 +44,8 @@ public class PredicateSplit {
     }
 
     public static PredicateSplit of(ScalarOperator equalPredicates,
-                             ScalarOperator rangePredicates,
-                             ScalarOperator residualPredicates) {
+                                    ScalarOperator rangePredicates,
+                                    ScalarOperator residualPredicates) {
         return new PredicateSplit(equalPredicates, rangePredicates, residualPredicates);
     }
 

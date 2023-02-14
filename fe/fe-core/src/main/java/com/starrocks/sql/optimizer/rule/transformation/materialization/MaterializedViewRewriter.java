@@ -635,8 +635,8 @@ public class MaterializedViewRewriter {
     // MV   : deptno + 1
     // Query: deptno > 10
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr,
-                                                 Multimap<ScalarOperator, ColumnRefOperator> exprMap,
-                                                 Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
+                                                   Multimap<ScalarOperator, ColumnRefOperator> exprMap,
+                                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
             @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {

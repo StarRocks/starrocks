@@ -171,10 +171,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum,
-            List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum,
+                       List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -204,10 +204,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
-            StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
+                       StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
         this(loadJobId, loadId, txnId, dbId, dbName, destTable, strictMode, timezone, partialUpdate, context,
                 sessionVariables, loadMemLimit, execMemLimit, routimeStreamLoadNegative, parallelInstanceNum,
                 columnDescs, streamLoadInfo);

@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -64,6 +63,7 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -374,7 +374,7 @@ public class ConnectProcessor {
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         }
-        
+
         // audit after exec
         // replace '\n' to '\\n' to make string in one line
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.

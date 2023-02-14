@@ -15,9 +15,9 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.sql.ast.UserIdentity;
 import org.junit.Assert;
 import org.junit.Test;
 

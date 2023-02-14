@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
-
 public class DropUserStmt extends DdlStmt {
     private final UserIdentity userIdent;
 

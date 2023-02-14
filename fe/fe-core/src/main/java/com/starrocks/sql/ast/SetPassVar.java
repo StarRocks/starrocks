@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
-
 public class SetPassVar extends SetListItem {
     private UserIdentity userIdent;
     private final String passwdParam;

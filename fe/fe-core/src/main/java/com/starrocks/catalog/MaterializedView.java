@@ -31,7 +31,6 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -52,6 +51,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -475,6 +475,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
     }
+
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
         if (!base.isLocalTable()) {
             // TODO(ywb): support external table refresh according to partition later
@@ -660,7 +661,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (tableProperty == null) {
             return true;
         }
-        List<TableName> excludedTriggerTables =  tableProperty.getExcludedTriggerTables();
+        List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
         if (excludedTriggerTables == null) {
             return true;
         }
@@ -787,12 +788,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     static {
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-        .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-        .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-        .build();
+                .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                .build();
     }
 
     public Map<String, String> getMaterializedViewPropMap() {

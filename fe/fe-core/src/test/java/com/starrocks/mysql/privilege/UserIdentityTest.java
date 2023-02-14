@@ -17,7 +17,7 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.ast.UserIdentity;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,7 +26,6 @@ public class UserIdentityTest {
     @Test
     public void test() {
         UserIdentity userIdent = new UserIdentity("cmy", "192.%");
-        userIdent.setIsAnalyzed();
 
         String str = "'" + "cmy" + "'@'192.%'";
         Assert.assertEquals(str, userIdent.toString());
@@ -38,7 +37,6 @@ public class UserIdentityTest {
         userIdent = UserIdentity.fromString(str2);
         Assert.assertNotNull(userIdent);
         Assert.assertTrue(userIdent.isDomain());
-        userIdent.setIsAnalyzed();
         Assert.assertEquals(str2, userIdent.toString());
     }
 

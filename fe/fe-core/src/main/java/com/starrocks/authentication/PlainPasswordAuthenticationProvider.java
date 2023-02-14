@@ -15,10 +15,10 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
 
@@ -27,7 +27,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
 
     /**
      * check password complexity if `enable_validate_password` is set
-     *
+     * <p>
      * The rules are hard-coded for temporary, will change to a plugin config later
      **/
     protected void validatePassword(String password) throws AuthenticationException {

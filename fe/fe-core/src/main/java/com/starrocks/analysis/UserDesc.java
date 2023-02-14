@@ -34,6 +34,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.UserIdentity;
+
 // Description of user in SQL statement
 public class UserDesc {
     private final UserIdentity userIdent;

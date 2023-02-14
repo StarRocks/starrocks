@@ -37,7 +37,6 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -49,6 +48,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 

@@ -51,8 +51,8 @@ import java.util.Map;
 public class RewriteSumByAssociativeRule extends TransformationRule {
     public RewriteSumByAssociativeRule() {
         super(RuleType.TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
-                        Pattern.create(OperatorType.LOGICAL_AGGR)
-                                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
+                Pattern.create(OperatorType.LOGICAL_AGGR)
+                        .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
     }
 
     @Override
@@ -200,10 +200,10 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
         private Map<ScalarOperator, ColumnRefOperator> commonArguments;
 
         public AggFunctionRewriter(Map<ColumnRefOperator, CallOperator> oldAggregations,
-                                 Map<ColumnRefOperator, ScalarOperator> oldPreAggProjections,
-                                 ColumnRefFactory columnRefFactory,
-                                 Map<ColumnRefOperator, ScalarOperator> newPreAggProjections,
-                                 Map<ColumnRefOperator, ScalarOperator> newPostAggProjections) {
+                                   Map<ColumnRefOperator, ScalarOperator> oldPreAggProjections,
+                                   ColumnRefFactory columnRefFactory,
+                                   Map<ColumnRefOperator, ScalarOperator> newPreAggProjections,
+                                   Map<ColumnRefOperator, ScalarOperator> newPostAggProjections) {
             this.oldAggregations = oldAggregations;
             this.oldPreAggProjections = oldPreAggProjections;
             this.columnRefFactory = columnRefFactory;

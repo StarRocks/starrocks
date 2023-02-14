@@ -35,7 +35,7 @@ public class PartitionExprAnalyzer {
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             }
-            if (builtinFunction  == null) {
+            if (builtinFunction == null) {
                 throw new SemanticException("Unsupported partition type %s for function %s", targetColType,
                         functionCallExpr.toSql());
             }
