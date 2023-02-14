@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 
@@ -154,5 +155,29 @@ public class FunctionPEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new FunctionPEntryObject(databaseId, functionSig);
+    }
+
+    @Override
+    public String toString() {
+        if (databaseId == FunctionPEntryObject.ALL_DATABASE_ID) {
+            return "ALL FUNCTIONS IN ALL DATABASES";
+        } else {
+            String functionSig = getFunctionSig();
+            Database database = GlobalStateMgr.getCurrentState().getDb(getDatabaseId());
+            if (database == null) {
+                throw new MetaNotFoundException("Can't find database : " + databaseId);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            if (functionSig.equals(FunctionPEntryObject.ALL_FUNCTIONS_SIG)) {
+                sb.append("ALL FUNCTIONS ");
+                sb.append("IN DATABASE ");
+                sb.append(database.getFullName());
+            } else {
+                sb.append(functionSig);
+                sb.append(" IN DATABASE ").append(database.getFullName());
+            }
+            return sb.toString();
+        }
     }
 }

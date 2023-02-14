@@ -18,6 +18,7 @@ package com.starrocks.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
@@ -130,5 +131,19 @@ public class DbPEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(uuid);
+    }
+
+    @Override
+    public String toString() {
+        if (uuid.equalsIgnoreCase(ALL_DATABASES_UUID)) {
+            return "ALL DATABASES";
+        } else {
+            // TODO(yiming): change it for external catalog
+            Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(uuid));
+            if (database == null) {
+                throw new MetaNotFoundException("Can't find database : " + uuid);
+            }
+            return database.getFullName();
+        }
     }
 }

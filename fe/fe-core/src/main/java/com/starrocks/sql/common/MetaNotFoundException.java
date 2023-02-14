@@ -11,22 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.sql.common;
 
-public enum ErrorType {
-    USER_ERROR(0),
-    INTERNAL_ERROR(1),
-    UNSUPPORTED(2),
-    META_NOT_FOUND(3);
-
-    private final int code;
-
-    ErrorType(int code) {
-        this.code = code;
-    }
-
-    public int getCode() {
-        return code;
+public class MetaNotFoundException extends StarRocksPlannerException {
+    public MetaNotFoundException(String formatString) {
+        super(formatString, ErrorType.META_NOT_FOUND);
     }
 }

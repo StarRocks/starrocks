@@ -119,4 +119,13 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
     public PEntryObject clone() {
         return new GlobalFunctionPEntryObject(functionSig);
     }
+
+    @Override
+    public String toString() {
+        if (getFunctionSig().equals(GlobalFunctionPEntryObject.ALL_GLOBAL_FUNCTION_SIGS)) {
+            return "ALL GLOBAL_FUNCTIONS";
+        } else {
+            return getFunctionSig();
+        }
+    }
 }

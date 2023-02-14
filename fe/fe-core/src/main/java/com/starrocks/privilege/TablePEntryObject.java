@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
@@ -162,5 +163,37 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new TablePEntryObject(databaseUUID, tableUUID);
+    }
+
+    public String toStringImpl(String plural) {
+        StringBuilder sb = new StringBuilder();
+
+        if (Objects.equals(getDatabaseUUID(), TablePEntryObject.ALL_DATABASE_UUID)) {
+            sb.append("ALL ").append(plural).append(" IN ALL DATABASES");
+        } else {
+            // TODO(yiming): change it for external catalog
+            Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(getDatabaseUUID()));
+
+            if (database == null) {
+                throw new MetaNotFoundException("Can't find database : " + databaseUUID);
+            }
+
+            if (Objects.equals(getTableUUID(), TablePEntryObject.ALL_TABLES_UUID)) {
+                sb.append("ALL ").append(plural).append(" IN DATABASE ").append(database.getFullName());
+            } else {
+                // TODO(yiming): change it for external catalog
+                Table table = database.getTable(Long.parseLong(getTableUUID()));
+                if (table == null) {
+                    throw new MetaNotFoundException("Can't find table : " + tableUUID);
+                }
+                sb.append(database.getFullName()).append(".").append(table.getName());
+            }
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toStringImpl("TABLES");
     }
 }

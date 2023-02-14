@@ -382,12 +382,12 @@ public class PrivilegeManager {
                         stmt.getUserIdentity());
             }
         } catch (PrivilegeException e) {
-            throw new DdlException("failed to revoke: " + e.getMessage(), e);
+            throw new DdlException(e.getMessage());
         }
     }
 
     protected void revokeFromUser(
-            ObjectType type,
+            ObjectType objectType,
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
             boolean isGrant,
@@ -395,7 +395,7 @@ public class PrivilegeManager {
         userWriteLock();
         try {
             UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            collection.revoke(type, privilegeTypes, objects, isGrant);
+            collection.revoke(objectType, privilegeTypes, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(userIdentity);
@@ -405,7 +405,7 @@ public class PrivilegeManager {
     }
 
     protected void revokeFromRole(
-            ObjectType type,
+            ObjectType objectType,
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
             boolean isGrant,
@@ -413,9 +413,9 @@ public class PrivilegeManager {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
-            invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-            collection.revoke(type, privilegeTypes, objects, isGrant);
+            collection.revoke(objectType, privilegeTypes, objects, isGrant);
+            invalidateRolesInCacheRoleUnlocked(roleId);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     roleId, collection, provider.getPluginId(), provider.getPluginVersion());
         } finally {
@@ -1402,10 +1402,6 @@ public class PrivilegeManager {
         return provider.getTypeNameByPlural(plural);
     }
 
-    public String getObjectTypePlural(ObjectType objectType) throws PrivilegeException {
-        return provider.getPlural(objectType);
-    }
-
     public boolean isAvailablePirvType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
     }
@@ -1608,14 +1604,14 @@ public class PrivilegeManager {
         return roleId;
     }
 
-    public PEntryObject analyzeObject(ObjectType objectType, List<String> objectTokenList) throws PrivilegeException {
+    public PEntryObject generateObject(ObjectType objectType, List<String> objectTokenList) throws PrivilegeException {
         if (objectTokenList == null) {
             return null;
         }
         return this.provider.generateObject(objectType, objectTokenList, globalStateMgr);
     }
 
-    public PEntryObject analyzeUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException {
+    public PEntryObject generateUserObject(ObjectType objectType, UserIdentity user) throws PrivilegeException {
         return this.provider.generateUserObject(objectType, user, globalStateMgr);
     }
 

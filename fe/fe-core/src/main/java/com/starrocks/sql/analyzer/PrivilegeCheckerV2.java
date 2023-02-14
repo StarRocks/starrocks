@@ -1108,6 +1108,14 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(
+                    r -> r.equalsIgnoreCase("root") || r.equalsIgnoreCase("cluster_admin"))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant/revoke root or cluster_admin role except root user");
+                }
+            }
+
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }

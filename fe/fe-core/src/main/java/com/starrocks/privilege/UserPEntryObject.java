@@ -126,4 +126,13 @@ public class UserPEntryObject implements PEntryObject {
     public PEntryObject clone() {
         return new UserPEntryObject(userIdentity);
     }
+
+    @Override
+    public String toString() {
+        if (userIdentity == null) {
+            return "ALL USERS";
+        } else {
+            return userIdentity.toString();
+        }
+    }
 }

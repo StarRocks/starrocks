@@ -1468,4 +1468,30 @@ public class PrivilegeManagerTest {
             Assert.assertTrue(e.getMessage().contains("cannot find table db in db db"));
         }
     }
+
+    @Test
+    public void testPartialRevoke() throws Exception {
+        String sql = "grant select on table db.tbl0 to test_user";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+
+        sql = "grant select on table db.* to test_user";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+
+        try {
+            StatementBase statementBase =
+                    UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl1 from test_user", ctx);
+            DDLStmtExecutor.execute(statementBase, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("There is no such grant defined on TABLE db.tbl1"));
+        }
+
+        StatementBase statementBase =
+                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.* from test_user", ctx);
+
+        statementBase =
+                UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
+        statementBase =
+                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
+    }
 }

@@ -20,9 +20,12 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Currently there is only one internal catalog, i.e. `default_catalog`,
@@ -128,5 +131,23 @@ public class CatalogPEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        if (id == ALL_CATALOG_ID) {
+            return "ALL CATALOGS";
+        } else {
+            List<Catalog> catalogs =
+                    new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
+            Optional<Catalog> catalogOptional = catalogs.stream().filter(
+                    catalog -> catalog.getId() == id
+            ).findFirst();
+            if (!catalogOptional.isPresent()) {
+                throw new MetaNotFoundException("Can't find catalog : " + id);
+            }
+            Catalog catalog = catalogOptional.get();
+            return catalog.getName();
+        }
     }
 }
