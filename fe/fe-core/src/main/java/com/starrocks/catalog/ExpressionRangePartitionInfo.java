@@ -36,6 +36,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +48,10 @@ import static java.util.stream.Collectors.toList;
  * 1. no overwrite old serialized method: read、write and readFields, because we use gson now
  */
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
+
+
+    public static final String AUTOMATIC_SHADOW_PARTITION_NAME = "$shadow_automatic_partition";
+    public static final String SHADOW_PARTITION_PREFIX = "$";
 
     @SerializedName(value = "partitionExprs")
     private List<Expr> partitionExprs;
@@ -102,6 +107,14 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
             return sb.toString();
         }
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+
+        Collection<Partition> partitions = table.getPartitions();
+
+        if (partitions.size() == 1 && partitions.iterator().next().getName()
+                .equals(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME)) {
+            return sb.toString();
+        }
+
         sb.append("\n(");
         // sort range
         List<Map.Entry<Long, Range<PartitionKey>>> entries = new ArrayList<>(getIdToRange(false).entrySet());
@@ -121,6 +134,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         for (Map.Entry<Long, Range<PartitionKey>> entry : entries) {
             Partition partition = table.getPartition(entry.getKey());
             String partitionName = partition.getName();
+            // show create table does not show hidden partitions
+            if (partitionName.startsWith(SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+
             Range<PartitionKey> range = entry.getValue();
 
             // print all partitions' range is fixed range, even if some of them is created by less than range
