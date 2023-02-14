@@ -36,7 +36,7 @@ enum JsonFunctionType {
     JSON_FUN_UNKOWN //The last
 };
 
-template <LogicalType primitive_type>
+template <LogicalType logical_type>
 struct JsonTypeTraits {};
 
 template <>

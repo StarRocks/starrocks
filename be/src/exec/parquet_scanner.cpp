@@ -155,33 +155,33 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
 
 // when first batch is accumulated into a column whose propre type must be
 // selected. Two concepts used to depict this selection is explained at first:
-// 1. arrow-column convertible:  a arrow type can convert to a column directly, e.g. HalfFloatArray -> FloatColumn
+// 1. arrow-column convertible:  an arrow type can convert to a column directly, e.g. HalfFloatArray -> FloatColumn
 // 2. inter-column convertible:  a column can convert to another column, e.g. BinaryColumn -> FloatColumn
-// A arrow type AT loading into column type PT is undergoes this steps:
-// AT ===[arrow-column convert]===> PT0 ===[inter-column convert]===> PT
+// An arrow type AT loading into column type LT is undergoes this steps:
+// AT ===[arrow-column convert]===> LT0 ===[inter-column convert]===> LT
 //
-// case#0: if PT is TYPE_ARRAY, then convert AT to PT directly
+// case#0: if LT is TYPE_ARRAY, then convert AT to LT directly
 //  ListArray ===[array_conv] ===> TYPE_ARRAY === [ColumnRef expr] ===> TYPE_ARRAY
-// case#1: if an optimized conv_func provided for AT converting to PT, then convert AT to PT directly
-//  AT ===[conv_func] ===> PT ===[ColumnRef expr]===> PT
-// case#2: if no optimized conv_func is provided, then convert AT to a strict PT, then use CastExpr for
+// case#1: if an optimized conv_func provided for AT converting to LT, then convert AT to LT directly
+//  AT ===[conv_func] ===> LT ===[ColumnRef expr]===> LT
+// case#2: if no optimized conv_func is provided, then convert AT to a strict LT, then use CastExpr for
 //  inter-column converting.
-//  AT ===[conv_func]===> strict PT ===[VectorizedCastExpr]===> PT
-// case#3: otherwise, AT to PT is inconvertible and InterError is reported.
+//  AT ===[conv_func]===> strict LT ===[VectorizedCastExpr]===> LT
+// case#3: otherwise, AT to LT is inconvertible and InterError is reported.
 
 Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
                                   ConvertFunc* conv_func, Expr** expr) {
     auto& type_desc = slot_desc->type();
     auto at = arrow_type->id();
-    auto pt = type_desc.type;
+    auto lt = type_desc.type;
 
-    if (pt == TYPE_ARRAY) {
+    if (lt == TYPE_ARRAY) {
         (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
         *expr = _pool.add(new ColumnRef(slot_desc));
         return Status::OK();
     }
 
-    auto optimized_conv_func = get_arrow_converter(at, pt, slot_desc->is_nullable(), _strict_mode);
+    auto optimized_conv_func = get_arrow_converter(at, lt, slot_desc->is_nullable(), _strict_mode);
     if (optimized_conv_func != nullptr) {
         (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
         *expr = _pool.add(new ColumnRef(slot_desc));

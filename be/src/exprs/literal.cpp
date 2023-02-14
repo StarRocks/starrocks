@@ -32,10 +32,10 @@ namespace starrocks {
         break;                                                                              \
     }
 
-template <LogicalType PT>
-static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
-    static_assert(pt_is_decimal<PT>);
-    RunTimeCppType<PT> value;
+template <LogicalType LT>
+static RunTimeCppType<LT> unpack_decimal(const std::string& s) {
+    static_assert(lt_is_decimal<LT>);
+    RunTimeCppType<LT> value;
 #ifdef IS_LITTLE_ENDIAN
     strings::memcpy_inlined(&value, &s.front(), sizeof(value));
 #else
@@ -44,7 +44,7 @@ static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     return value;
 }
 
-template <LogicalType DecimalType, typename = DecimalPTGuard<DecimalType>>
+template <LogicalType DecimalType, typename = DecimalLTGuard<DecimalType>>
 static ColumnPtr const_column_from_literal(const TExprNode& node, int precision, int scale) {
     using CppType = RunTimeCppType<DecimalType>;
     using ColumnType = RunTimeColumnType<DecimalType>;

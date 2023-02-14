@@ -43,10 +43,10 @@ Status illegal_converting_error(const std::string& arrow_type_name, const std::s
                                                      arrow_type_name, type_name));
 }
 
-DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, ArrowTypeId, AT, LogicalType, PT)
-#define IS_DIRECTLY_COPYABLE_CTOR(AT, PT) DEF_PRED_CASE_CTOR(is_directly_copyable, AT, PT)
-#define IS_DIRECTLY_COPYABLE_R(PT, ...) \
-    DEF_BINARY_RELATION_ENTRY_SEP_NONE_R(IS_DIRECTLY_COPYABLE_CTOR, PT, ##__VA_ARGS__)
+DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, ArrowTypeId, AT, LogicalType, LT)
+#define IS_DIRECTLY_COPYABLE_CTOR(AT, LT) DEF_PRED_CASE_CTOR(is_directly_copyable, AT, LT)
+#define IS_DIRECTLY_COPYABLE_R(LT, ...) \
+    DEF_BINARY_RELATION_ENTRY_SEP_NONE_R(IS_DIRECTLY_COPYABLE_CTOR, LT, ##__VA_ARGS__)
 
 IS_DIRECTLY_COPYABLE_R(TYPE_TINYINT, ArrowTypeId::INT8, ArrowTypeId::UINT8)
 IS_DIRECTLY_COPYABLE_R(TYPE_SMALLINT, ArrowTypeId::INT16, ArrowTypeId::UINT16)
@@ -55,8 +55,8 @@ IS_DIRECTLY_COPYABLE_R(TYPE_BIGINT, ArrowTypeId::INT64, ArrowTypeId::UINT64)
 IS_DIRECTLY_COPYABLE_R(TYPE_FLOAT, ArrowTypeId::FLOAT)
 IS_DIRECTLY_COPYABLE_R(TYPE_DOUBLE, ArrowTypeId::DOUBLE)
 
-DEF_PRED_GUARD(AssignableGuard, is_assignable, ArrowTypeId, AT, LogicalType, PT)
-#define IS_ASSIGNABLE_CTOR(AT, PT) DEF_PRED_CASE_CTOR(is_assignable, AT, PT)
+DEF_PRED_GUARD(AssignableGuard, is_assignable, ArrowTypeId, AT, LogicalType, LT)
+#define IS_ASSIGNABLE_CTOR(AT, LT) DEF_PRED_CASE_CTOR(is_assignable, AT, LT)
 #define IS_ASSIGNABLE(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_ASSIGNABLE_CTOR, AT, ##__VA_ARGS__)
 
 IS_ASSIGNABLE(ArrowTypeId::BOOL, TYPE_BOOLEAN)
@@ -94,13 +94,13 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 }
 // A general arrow converter for fixed length type
 //
-// case#1: is_directly_copy(AT, PT>==true
+// case#1: is_directly_copy(AT, LT>==true
 // if underlying types are identical, the copy the whole memory by calling memcpy
 // e.g.
 // UINT8 or INT8 in arrow convert to TYPE_TINYINT in StarRocks
 // FLOAT in arrow convert to TYPE_FLOAT
 //
-// case#2: is_assignable<AT, PT>==true
+// case#2: is_assignable<AT, LT>==true
 // if underlying type in arrow is narrower than its counterpart in StarRocks and
 // assignment operation is lossless, then copy one by one element from arrow to StarRocks
 //e.g.
@@ -110,13 +110,13 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 // If is_strict is true, invalid rows are saved in filter_data, and discarded finally after an
 // entire chunk is generated; otherwise, invalid rows are regarded as null values.
 
-template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict, typename = guard::Guard,
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict, typename = guard::Guard,
           typename = guard::Guard>
 struct ArrowConverter {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
@@ -125,16 +125,16 @@ struct ArrowConverter {
         auto concrete_column = down_cast<ColumnType*>(column);
         concrete_column->resize(column->size() + num_elements);
         CppType* data = &concrete_column->get_data().front() + column_start_idx;
-        if constexpr (is_directly_copyable<AT, PT>) {
+        if constexpr (is_directly_copyable<AT, LT>) {
             static_assert(sizeof(CppType) == sizeof(ArrowCppType));
             const ArrowCppType* array_data = concrete_array->raw_values() + array_start_idx;
             strings::memcpy_inlined(data, array_data, num_elements * sizeof(CppType));
-        } else if constexpr (is_assignable<AT, PT>) {
+        } else if constexpr (is_assignable<AT, LT>) {
             for (size_t i = 0; i < num_elements; ++i) {
                 data[i] = static_cast<CppType>(concrete_array->Value(array_start_idx + i));
             }
         } else {
-            static_assert(is_directly_copyable<AT, PT> || is_assignable<AT, PT>);
+            static_assert(is_directly_copyable<AT, LT> || is_assignable<AT, LT>);
         }
         return Status::OK();
     }
@@ -190,16 +190,16 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
     }
 }
 
-template <LogicalType PT, typename = StringPTGuard<PT>>
-static inline constexpr uint32_t binary_max_length = (PT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
+template <LogicalType LT, typename = StringLTGuard<LT>>
+static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                                           : TypeDescriptor::MAX_CHAR_LENGTH;
 
-template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringPTGuard<PT>> {
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringLTGuard<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     static void optimize_not_nullable_fixed_size_binary(const ArrowArrayType* array, size_t array_start_idx,
                                                         size_t num_elements, ColumnType* column,
                                                         size_t column_start_idx) {
@@ -271,7 +271,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringP
     }
 
     static Status length_exceeds_limit_error(int length, int limit) {
-        std::string s = (PT == TYPE_VARCHAR) ? "varchar" : "char";
+        std::string s = (LT == TYPE_VARCHAR) ? "varchar" : "char";
         return Status::InternalError(strings::Substitute("Length($0) exceeds limit($1) of $2", length, limit, s));
     }
 
@@ -281,7 +281,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringP
         auto concrete_array = down_cast<const ArrowArrayType*>(array);
         auto concrete_column = down_cast<ColumnType*>(column);
 
-        size_t max_length = binary_max_length<PT>;
+        size_t max_length = binary_max_length<LT>;
         if (ctx != nullptr) {
             size_t type_len = ctx->current_slot->type().len;
             if (type_len > 0) {
@@ -307,7 +307,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringP
                     if (ctx != nullptr) {
                         std::string raw_data = "arrow data is fixed size binary type";
                         std::string reason = strings::Substitute("type length $0 exceeds max length $1", width,
-                                                                 binary_max_length<PT>);
+                                                                 binary_max_length<LT>);
                         ctx->report_error_message(reason, raw_data);
                     }
                 }
@@ -380,18 +380,18 @@ struct RectifyDecimalType<DecimalV2Value> {
 
 template <typename T>
 using rectify_decimal_type = typename RectifyDecimalType<T>::type;
-VALUE_GUARD(LogicalType, ArrowDecimalOfAnyVersionPTGuard, arrow_pt_is_decimal_of_any_version, TYPE_DECIMAL,
+VALUE_GUARD(LogicalType, ArrowDecimalOfAnyVersionLTGuard, arrow_lt_is_decimal_of_any_version, TYPE_DECIMAL,
             TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
-template <LogicalType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::Guard,
-                      ArrowDecimalOfAnyVersionPTGuard<PT>> {
+template <LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::Guard,
+                      ArrowDecimalOfAnyVersionLTGuard<LT>> {
     static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     static void optimize_decimal128_with_same_scale(const arrow::Decimal128Array* array, size_t array_start_idx,
                                                     size_t num_elements, ColumnType* column, size_t column_start_idx) {
@@ -487,12 +487,12 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::G
         const auto src_scale = concrete_type->scale();
 
         auto dst_scale = 9;
-        if constexpr (pt_is_decimal<PT>) {
+        if constexpr (lt_is_decimal<LT>) {
             dst_scale = concrete_column->scale();
         }
 
         if constexpr (!is_nullable) {
-            if constexpr (pt_is_decimal128<PT> || pt_is_decimalv2<PT>) {
+            if constexpr (lt_is_decimal128<LT> || lt_is_decimalv2<LT>) {
                 if (src_scale == dst_scale) {
                     optimize_decimal128_with_same_scale(concrete_array, array_start_idx, num_elements, concrete_column,
                                                         column_start_idx);
@@ -524,13 +524,13 @@ VALUE_GUARD(ArrowTypeId, DateATGuard, at_is_date, ArrowTypeId::DATE32, ArrowType
 VALUE_GUARD(ArrowTypeId, DateOrDateTimeATGuard, at_is_date_or_datetime, ArrowTypeId::DATE32, ArrowTypeId::DATE64,
             ArrowTypeId::TIMESTAMP)
 
-template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>, DateOrDateTimePTGuard<PT>> {
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>, DateOrDateTimeLTGuard<LT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     static void convert_date(CppType& datum, const ArrowCppType& arrow_datum) {
         int64_t timestamp;
@@ -541,14 +541,14 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         } else {
             static_assert(at_is_date<AT>, "Invalid arrow type");
         }
-        if constexpr (pt_is_date<PT>) {
+        if constexpr (lt_is_date<LT>) {
             TimestampValue ts;
             ts.from_unix_second(timestamp);
             datum = (DateValue)ts;
-        } else if constexpr (pt_is_datetime<PT>) {
+        } else if constexpr (lt_is_datetime<LT>) {
             datum.from_unix_second(timestamp);
         } else {
-            static_assert(pt_is_date_or_datetime<PT>, "Invalid starrocks type");
+            static_assert(lt_is_date_or_datetime<LT>, "Invalid starrocks type");
         }
     }
 
@@ -579,9 +579,9 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         if (UNLIKELY(!dtv.from_unixtime(timestamp, ctz))) {
             return true;
         }
-        if constexpr (pt_is_date<PT>) {
+        if constexpr (lt_is_date<LT>) {
             datum.from_date(dtv.year(), dtv.month(), dtv.day());
-        } else if constexpr (pt_is_datetime<PT>) {
+        } else if constexpr (lt_is_datetime<LT>) {
             datum.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
         }
         return false;
@@ -599,9 +599,9 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                     // In stream/broker load, the data for null date/datetime is DefaultValueGenerator,
                     // here we also set it to be DefaultValueGenerator for spark load, otherwise it will raise
                     // a problem in issue #9496
-                    if constexpr (pt_is_date<PT>) {
+                    if constexpr (lt_is_date<LT>) {
                         data[i] = DefaultValueGenerator<DateValue>::next_value();
-                    } else if constexpr (pt_is_datetime<PT>) {
+                    } else if constexpr (lt_is_datetime<LT>) {
                         data[i] = DefaultValueGenerator<TimestampValue>::next_value();
                     }
                     continue;
@@ -638,9 +638,9 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 // a problem in issue #9496
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) {
-                        if constexpr (pt_is_date<PT>) {
+                        if constexpr (lt_is_date<LT>) {
                             data[i] = DefaultValueGenerator<DateValue>::next_value();
-                        } else if constexpr (pt_is_datetime<PT>) {
+                        } else if constexpr (lt_is_datetime<LT>) {
                             data[i] = DefaultValueGenerator<TimestampValue>::next_value();
                         }
                         continue;
@@ -671,8 +671,8 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 Status convert_arrow_to_json(const arrow::Array* array, JsonColumn* output, size_t array_start_idx,
                              size_t num_elements);
 
-template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, JsonGuard<LT>> {
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
                         [[maybe_unused]] uint8_t* filter_data, ArrowConvertContext* ctx) {
@@ -683,8 +683,8 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
     }
 };
 
-constexpr int32_t convert_idx(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict) {
-    return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
+constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
+    return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
 
 #define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) \
@@ -753,8 +753,8 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
-ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict) {
-    auto optimized_idx = convert_idx(at, pt, is_nullable, is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
+    auto optimized_idx = convert_idx(at, lt, is_nullable, is_strict);
     auto it = global_optimized_arrow_conv_table.find(optimized_idx);
     if (it != global_optimized_arrow_conv_table.end()) {
         return it->second;
@@ -763,9 +763,9 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable
 }
 
 LogicalType get_strict_type(ArrowTypeId at) {
-    auto pt_it = global_strict_arrow_conv_table.find(at);
-    if (pt_it != global_strict_arrow_conv_table.end()) {
-        return pt_it->second;
+    auto lt_it = global_strict_arrow_conv_table.find(at);
+    if (lt_it != global_strict_arrow_conv_table.end()) {
+        return lt_it->second;
     }
     return TYPE_UNKNOWN;
 }

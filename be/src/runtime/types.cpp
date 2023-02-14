@@ -285,12 +285,12 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
         ftype = type_info->type();
     }
 
-    LogicalType ptype = scalar_field_type_to_primitive_type(ftype);
-    DCHECK(ptype != TYPE_UNKNOWN);
+    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
+    DCHECK(ltype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();
     int scale = type_info->scale();
-    TypeDescriptor ret = TypeDescriptor::from_primtive_type(ptype, len, precision, scale);
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, len, precision, scale);
 
     if (is_array) {
         TypeDescriptor arr;

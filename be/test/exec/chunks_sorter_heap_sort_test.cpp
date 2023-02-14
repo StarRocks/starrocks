@@ -70,7 +70,7 @@ template <LogicalType TYPE>
 struct ColumnRandomAppender {
     static bool append(ColumnPtr& col, int sz) {
         auto* spec_col = ColumnHelper::cast_to_raw<TYPE>(col);
-        if constexpr (isArithmeticPT<TYPE>) {
+        if constexpr (isArithmeticLT<TYPE>) {
             auto& container = spec_col->get_data();
             container.resize(sz);
             for (int i = 0; i < sz; ++i) {

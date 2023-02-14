@@ -307,7 +307,7 @@ public:
     Status reset_epoch(RuntimeState* state);
 
 private:
-    template <LogicalType PT>
+    template <LogicalType LT>
     void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection

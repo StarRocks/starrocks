@@ -138,17 +138,17 @@ struct AggHashMapWithKey {
 // ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
-template <LogicalType primitive_type, typename HashMap, bool is_nullable>
+template <LogicalType logical_type, typename HashMap, bool is_nullable>
 struct AggHashMapWithOneNumberKeyWithNullable
         : public AggHashMapWithKey<HashMap,
-                                   AggHashMapWithOneNumberKeyWithNullable<primitive_type, HashMap, is_nullable>> {
-    using Self = AggHashMapWithOneNumberKeyWithNullable<primitive_type, HashMap, is_nullable>;
+                                   AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, is_nullable>> {
+    using Self = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, is_nullable>;
     using Base = AggHashMapWithKey<HashMap, Self>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ColumnType = RunTimeColumnType<logical_type>;
     using ResultVector = typename ColumnType::Container;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<logical_type>;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
@@ -348,10 +348,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
 };
-template <LogicalType primitive_type, typename HashMap>
-using AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKeyWithNullable<primitive_type, HashMap, false>;
-template <LogicalType primitive_type, typename HashMap>
-using AggHashMapWithOneNullableNumberKey = AggHashMapWithOneNumberKeyWithNullable<primitive_type, HashMap, true>;
+template <LogicalType logical_type, typename HashMap>
+using AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, false>;
+template <LogicalType logical_type, typename HashMap>
+using AggHashMapWithOneNullableNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, true>;
 
 template <typename HashMap, bool is_nullable>
 struct AggHashMapWithOneStringKeyWithNullable

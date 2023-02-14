@@ -28,8 +28,8 @@
 namespace starrocks {
 
 // 1. name
-// 2. arg primitive type
-// 3. return primitive type
+// 2. arg logical type
+// 3. return logical type
 // 4. is_window_function
 // 5. is_nullable
 using AggregateFuncKey = std::tuple<std::string, int, int, bool, bool>;
@@ -113,29 +113,29 @@ public:
         }
     }
 
-    template <LogicalType ArgPT, LogicalType ResultPT>
+    template <LogicalType ArgLT, LogicalType ResultLT>
     void add_array_mapping(std::string name) {
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
-                               create_array_function<ArgPT, ResultPT, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
-                               create_array_function<ArgPT, ResultPT, true>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, false, false),
+                               create_array_function<ArgLT, ResultLT, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, false, true),
+                               create_array_function<ArgLT, ResultLT, true>(name));
     }
 
-    template <LogicalType ArgPT, LogicalType ResultPT, bool AddWindowVersion = false>
+    template <LogicalType ArgLT, LogicalType ResultLT, bool AddWindowVersion = false>
     void add_decimal_mapping(std::string name) {
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
-                               create_decimal_function<ArgPT, ResultPT, false, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
-                               create_decimal_function<ArgPT, ResultPT, false, true>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, false, false),
+                               create_decimal_function<ArgLT, ResultLT, false, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, false, true),
+                               create_decimal_function<ArgLT, ResultLT, false, true>(name));
         if constexpr (AddWindowVersion) {
-            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false),
-                                   create_decimal_function<ArgPT, ResultPT, true, false>(name));
-            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
-                                   create_decimal_function<ArgPT, ResultPT, true, true>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, true, false),
+                                   create_decimal_function<ArgLT, ResultLT, true, false>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgLT, ResultLT, true, true),
+                                   create_decimal_function<ArgLT, ResultLT, true, true>(name));
         }
     }
 
-    template <LogicalType ArgPT, LogicalType ResultPT, bool IsNull>
+    template <LogicalType ArgLT, LogicalType ResultLT, bool IsNull>
     AggregateFunctionPtr create_array_function(std::string& name) {
         if constexpr (IsNull) {
             if (name == "dict_merge") {
@@ -145,10 +145,10 @@ public:
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin);
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
-                              ArgPT == TYPE_DATETIME) {
-                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
-                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgPT>>(
+                if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
+                              ArgLT == TYPE_DATETIME) {
+                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>();
+                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgLT>>(
                             windowfunnel);
                 }
             }
@@ -158,9 +158,9 @@ public:
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
-                              ArgPT == TYPE_DATETIME) {
-                    return AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
+                if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
+                              ArgLT == TYPE_DATETIME) {
+                    return AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>();
                 }
             }
         }
@@ -168,31 +168,31 @@ public:
         return nullptr;
     }
 
-    template <LogicalType ArgPT, LogicalType ResultPT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
-        static_assert(pt_is_decimal128<ResultPT>);
+    template <LogicalType ArgLT, LogicalType ResultLT, bool IsWindowFunc, bool IsNull>
+    std::enable_if_t<isArithmeticLT<ArgLT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
+        static_assert(lt_is_decimal128<ResultLT>);
         if constexpr (IsNull) {
-            using ResultType = RunTimeCppType<ResultPT>;
+            using ResultType = RunTimeCppType<ResultLT>;
             if (name == "decimal_avg") {
-                auto avg = AggregateFactory::MakeDecimalAvgAggregateFunction<ArgPT>();
+                auto avg = AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
                                                                             IsWindowFunc>(avg);
             } else if (name == "decimal_sum") {
-                auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgPT>();
+                auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
                                                                             IsWindowFunc>(sum);
             } else if (name == "decimal_multi_distinct_sum") {
-                auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT, ResultPT>,
+                auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgLT, ResultLT>,
                                                                             IsWindowFunc>(distinct_sum);
             }
         } else {
             if (name == "decimal_avg") {
-                return AggregateFactory::MakeDecimalAvgAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>();
             } else if (name == "decimal_sum") {
-                return AggregateFactory::MakeDecimalSumAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>();
             } else if (name == "decimal_multi_distinct_sum") {
-                return AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
             }
         }
         return nullptr;

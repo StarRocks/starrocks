@@ -844,9 +844,9 @@ TEST_P(CSVScannerTest, test_record_length_exceed_limit) {
 }
 
 TEST_P(CSVScannerTest, test_empty) {
-    auto run_test = [this](LogicalType pt) {
-        std::vector<TypeDescriptor> types{TypeDescriptor(pt)};
-        if (pt == TYPE_VARCHAR || pt == TYPE_CHAR) {
+    auto run_test = [this](LogicalType lt) {
+        std::vector<TypeDescriptor> types{TypeDescriptor(lt)};
+        if (lt == TYPE_VARCHAR || lt == TYPE_CHAR) {
             types[0].len = 10;
         }
         std::vector<TBrokerRangeDesc> ranges;

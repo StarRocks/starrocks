@@ -22,9 +22,9 @@
 namespace starrocks {
 
 struct InConstPredicateBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     Expr* operator()(const TExprNode& node) {
-        return new VectorizedInConstPredicate<ptype>(node);
+        return new VectorizedInConstPredicate<ltype>(node);
     }
 };
 

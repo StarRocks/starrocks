@@ -44,7 +44,7 @@ struct UDFFunctionCallHelper {
     JavaMethodDescriptor* call_desc;
     std::vector<std::string> _data_buffer;
 
-    // Now we don't support primitive type function
+    // Now we don't support logical type function
     ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();

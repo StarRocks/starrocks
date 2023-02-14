@@ -514,30 +514,30 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
 }
 
 struct ColumnRangeBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
                               std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
-                      pt_is_binary<ptype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
             return nullptr;
         } else {
             // Treat tinyint and boolean as int
-            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
-            RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
-                                 RunTimeTypeLimits<ptype>::max_value());
-            if constexpr (pt_is_decimal<limit_type>) {
+            RangeType full_range(col_name, ltype, RunTimeTypeLimits<ltype>::min_value(),
+                                 RunTimeTypeLimits<ltype>::max_value());
+            if constexpr (lt_is_decimal<limit_type>) {
                 full_range.set_precision(slot->type().precision);
                 full_range.set_scale(slot->type().scale);
             }
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
             auto& range = std::get<ColumnValueRange<value_type>>(v);
-            if constexpr (pt_is_decimal<limit_type>) {
+            if constexpr (lt_is_decimal<limit_type>) {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
             }
@@ -735,11 +735,11 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         // note(yan): we only handles scalar type now to avoid complex type mismatch.
         // otherwise we don't need this limitation.
         const SlotDescriptor* slot_desc = slots[index];
-        LogicalType ptype = slot_desc->type().type;
-        if (!is_scalar_primitive_type(ptype)) continue;
+        LogicalType ltype = slot_desc->type().type;
+        if (!is_scalar_logical_type(ltype)) continue;
         // disable on float/double type because min/max value may lose precision
         // The fix should be on storage layer, and this is just a temporary fix.
-        if (ptype == LogicalType::TYPE_FLOAT || ptype == LogicalType::TYPE_DOUBLE) continue;
+        if (ltype == LogicalType::TYPE_FLOAT || ltype == LogicalType::TYPE_DOUBLE) continue;
         {
             auto iter = slot_index_to_expr_ctxs.find(index);
             if (iter == slot_index_to_expr_ctxs.end()) {

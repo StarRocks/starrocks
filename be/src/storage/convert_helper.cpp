@@ -1520,7 +1520,7 @@ private:
 
 DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, typename, SrcType, typename, DstType)
 #define IS_DIRECTLY_COPYABLE_CTOR(SrcType, DstType) DEF_PRED_CASE_CTOR(is_directly_copyable, SrcType, DstType)
-#define IS_DIRECTLY_COPYABLE(PT, ...) DEF_BINARY_RELATION_ENTRY_SEP_NONE(IS_DIRECTLY_COPYABLE_CTOR, PT, ##__VA_ARGS__)
+#define IS_DIRECTLY_COPYABLE(LT, ...) DEF_BINARY_RELATION_ENTRY_SEP_NONE(IS_DIRECTLY_COPYABLE_CTOR, LT, ##__VA_ARGS__)
 
 IS_DIRECTLY_COPYABLE(DecimalV2Value, int128_t)
 IS_DIRECTLY_COPYABLE(int128_t, DecimalV2Value)

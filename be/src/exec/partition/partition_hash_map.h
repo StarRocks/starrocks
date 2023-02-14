@@ -334,11 +334,11 @@ protected:
     }
 };
 
-template <LogicalType primitive_type, typename HashMap>
+template <LogicalType logical_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, false> {
     using Iterator = typename HashMap::iterator;
-    using ColumnType = RunTimeColumnType<primitive_type>;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using ColumnType = RunTimeColumnType<logical_type>;
+    using FieldType = RunTimeCppType<logical_type>;
     HashMap hash_map;
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
@@ -358,11 +358,11 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, fal
     }
 };
 
-template <LogicalType primitive_type, typename HashMap>
+template <LogicalType logical_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<true, false> {
     using Iterator = typename HashMap::iterator;
-    using ColumnType = RunTimeColumnType<primitive_type>;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using ColumnType = RunTimeColumnType<logical_type>;
+    using FieldType = RunTimeCppType<logical_type>;
     HashMap hash_map;
     PartitionChunks null_key_value{kNullKeyPartitionIdx};
 

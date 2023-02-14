@@ -271,7 +271,7 @@ private:
         constexpr int max_simd_case_when_size = 8;
 
         // optimization for no-nullable Arithmetic Type
-        if constexpr (isArithmeticPT<ResultType>) {
+        if constexpr (isArithmeticLT<ResultType>) {
             bool then_columns_has_null = false;
             for (const auto& column : then_columns) {
                 then_columns_has_null |= column->has_null();
@@ -310,7 +310,7 @@ private:
 
                 auto res = RunTimeColumnType<ResultType>::create();
 
-                if constexpr (pt_is_decimal<ResultType>) {
+                if constexpr (lt_is_decimal<ResultType>) {
                     res->set_scale(this->type().scale);
                     res->set_precision(this->type().precision);
                 }

@@ -143,29 +143,29 @@ protected:
 
 namespace detail {
 struct SortRuntimeFilterBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ptype>::template create_with_range<false>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data);
         } else {
-            return RuntimeBloomFilter<ptype>::template create_with_range<true>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<false>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<true>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }

@@ -75,19 +75,19 @@ typedef Status (*ListCheckDepthFunc)(const arrow::Array* array, size_t expected_
 // invoked when a arrow type fail to convert to StarRocks type.
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name);
 
-// A triple [at, pt, is_nullable] can determine a optimized converter from converting at -> pt,
+// A triple [at, lt, is_nullable] can determine a optimized converter from converting at -> lt,
 // is_nullable means original data has null slots.
-ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict);
 
 // get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
 ListConvertFunc get_arrow_list_converter();
 
 ListCheckDepthFunc get_arrow_list_check_depth();
 
-// if there is no converter for a triple [at, pt, is_nullable], then call get_strict_type to obtain
-// strict pt0, and converting is decomposed into two phases:
-// phase1: convert at->pt0 by converter determined by the triple [at, pt0, is_nullable]
-// phase2: convert pt0->pt by VectorCastExpr.
+// if there is no converter for a triple [at, lt, is_nullable], then call get_strict_type to obtain
+// strict lt0, and converting is decomposed into two phases:
+// phase1: convert at->lt0 by converter determined by the triple [at, lt0, is_nullable]
+// phase2: convert lt0->lt by VectorCastExpr.
 LogicalType get_strict_type(ArrowTypeId at);
 
 } // namespace starrocks

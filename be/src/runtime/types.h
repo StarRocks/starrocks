@@ -160,9 +160,9 @@ struct TypeDescriptor {
         return ret;
     }
 
-    static TypeDescriptor from_primtive_type(LogicalType type,
-                                             [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                             [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
+    static TypeDescriptor from_logical_type(LogicalType type,
+                                            [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                            [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
         switch (type) {
         case TYPE_CHAR:
             return TypeDescriptor::create_char_type(MAX_CHAR_LENGTH);
@@ -197,10 +197,10 @@ struct TypeDescriptor {
 
     static TypeDescriptor from_storage_type_info(TypeInfo* type_info);
 
-    static TypeDescriptor from_protobuf(const PTypeDesc& ptype) {
+    static TypeDescriptor from_protobuf(const PTypeDesc& ltype) {
         int idx = 0;
-        TypeDescriptor result(ptype.types(), &idx);
-        DCHECK_EQ(idx, ptype.types_size());
+        TypeDescriptor result(ltype.types(), &idx);
+        DCHECK_EQ(idx, ltype.types_size());
         return result;
     }
 

@@ -343,7 +343,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     RuntimeState* state = pred->runtime_state();
     ColumnRef column_ref(pred->slot_desc());
     // change column input type from binary to int(code)
-    TypeDescriptor type_desc = TypeDescriptor::from_primtive_type(TYPE_INT);
+    TypeDescriptor type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
     column_ref._type = type_desc;
     Expr* probe_expr = &column_ref;
 

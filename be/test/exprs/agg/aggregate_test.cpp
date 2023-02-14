@@ -88,9 +88,9 @@ ColumnPtr gen_input_column1() {
     return column;
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
+    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
     for (int i = 0; i < 1024; i++) {
         column->append(i);
     }
@@ -187,9 +187,9 @@ ColumnPtr gen_input_column2<DateValue>() {
     return column;
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
+    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
     for (int i = 2000; i < 3000; i++) {
         column->append(i);
     }
@@ -233,7 +233,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
-template <LogicalType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
+template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalLTGuard<LT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
@@ -242,7 +242,7 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
 
     // update input column 1
     auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column = gen_input_decimal_column1<PT>(ctx->get_arg_type(0));
+    ColumnPtr column = gen_input_decimal_column1<LT>(ctx->get_arg_type(0));
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
@@ -250,7 +250,7 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
 
     // update input column 2
     auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_decimal_column2<PT>(ctx->get_arg_type(0));
+    ColumnPtr column2 = gen_input_decimal_column2<LT>(ctx->get_arg_type(0));
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
     func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
@@ -945,12 +945,12 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
 
 TEST_F(AggregateTest, test_window_funnel) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_ARRAY))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY))};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("window_funnel", TYPE_DATETIME, TYPE_INT, false);
@@ -1177,10 +1177,10 @@ TEST_F(AggregateTest, test_group_concat) {
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR))};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* group_concat_function =
@@ -1223,9 +1223,9 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 
 TEST_F(AggregateTest, test_percentile_cont) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1374,11 +1374,11 @@ ColumnPtr gen_histogram_column() {
 
 TEST_F(AggregateTest, test_histogram) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
@@ -1525,10 +1525,10 @@ TEST_F(AggregateTest, test_any_value) {
 
 TEST_F(AggregateTest, test_exchange_bytes) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT))};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* exchange_bytes_function =

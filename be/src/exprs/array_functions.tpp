@@ -25,18 +25,18 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayDistinct {
 public:
-    using CppType = RunTimeCppType<PT>;
+    using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (pt_is_largeint<PT>) {
+        if constexpr (lt_is_largeint<LT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
-        } else if constexpr (pt_is_fixedlength<PT>) {
+        } else if constexpr (lt_is_fixedlength<LT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_string<PT>) {
+        } else if constexpr (lt_is_string<LT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -123,14 +123,14 @@ private:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayDifference {
 public:
-    using CppType = RunTimeCppType<PT>;
+    using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
+        if constexpr (lt_is_arithmetic<LT> || lt_is_decimalv2<LT>) {
             return _array_difference(columns);
         } else {
             assert(false);
@@ -146,11 +146,11 @@ private:
         ColumnPtr dest_column_data = nullptr;
         ColumnPtr dest_column = nullptr;
 
-        if constexpr (pt_is_float<PT>) {
+        if constexpr (lt_is_float<LT>) {
             dest_column_data = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
-        } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+        } else if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
             dest_column_data = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        } else if constexpr (pt_is_decimalv2<PT>) {
+        } else if constexpr (lt_is_decimalv2<LT>) {
             dest_column_data = NullableColumn::create(DecimalColumn::create(), NullColumn::create());
         }
 
@@ -202,9 +202,9 @@ private:
                 if (items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                    if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
                         dest_data_column->append_datum((int64_t)0);
-                    } else if constexpr (pt_is_float<PT>) {
+                    } else if constexpr (lt_is_float<LT>) {
                         dest_data_column->append_datum((double)0);
                     } else {
                         dest_data_column->append_datum((DecimalV2Value)0);
@@ -214,10 +214,10 @@ private:
                 if (items[i - 1].is_null() || items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+                    if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
                         dest_data_column->append_datum(
                                 (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
-                    } else if constexpr (pt_is_float<PT>) {
+                    } else if constexpr (lt_is_float<LT>) {
                         dest_data_column->append_datum((double)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
                     } else {
                         dest_data_column->append_datum(
@@ -229,18 +229,18 @@ private:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayOverlap {
 public:
-    using CppType = RunTimeCppType<PT>;
+    using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (pt_is_largeint<PT>) {
+        if constexpr (lt_is_largeint<LT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
-        } else if constexpr (pt_is_fixedlength<PT>) {
+        } else if constexpr (lt_is_fixedlength<LT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_string<PT>) {
+        } else if constexpr (lt_is_string<LT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -326,10 +326,10 @@ private:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayIntersect {
 public:
-    using CppType = RunTimeCppType<PT>;
+    using CppType = RunTimeCppType<LT>;
 
     class CppTypeWithOverlapTimes {
     public:
@@ -342,11 +342,11 @@ public:
     template <LogicalType type>
     struct CppTypeWithOverlapTimesHash {
         std::size_t operator()(const CppTypeWithOverlapTimes& cpp_type_value) const {
-            if constexpr (pt_is_largeint<PT>) {
+            if constexpr (lt_is_largeint<LT>) {
                 return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
-            } else if constexpr (pt_is_fixedlength<PT>) {
+            } else if constexpr (lt_is_fixedlength<LT>) {
                 return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
-            } else if constexpr (pt_is_string<PT>) {
+            } else if constexpr (lt_is_string<LT>) {
                 return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
                                    CRC_HASH_SEED1);
             } else {
@@ -362,14 +362,14 @@ public:
     };
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        if constexpr (pt_is_largeint<PT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+        if constexpr (lt_is_largeint<LT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (pt_is_fixedlength<PT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+        } else if constexpr (lt_is_fixedlength<LT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (pt_is_string<PT>) {
-            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
+        } else if constexpr (lt_is_string<LT>) {
+            return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<LT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
         } else {
             assert(false);
@@ -489,10 +489,10 @@ private:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArraySort {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
@@ -555,7 +555,7 @@ protected:
             return;
         }
 
-        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_column), start, count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<LT>&>(src_column), start, count);
     }
 
     static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
@@ -575,7 +575,7 @@ protected:
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
         size_t data_offset = begin_of_not_null - sort_index->begin();
         size_t null_count = data_offset - start;
-        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_data_column), start + null_count,
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<LT>&>(src_data_column), start + null_count,
                      count - null_count);
     }
 
@@ -622,11 +622,11 @@ protected:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class ArrayReverse {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
-    using CppType = RunTimeCppType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using CppType = RunTimeCppType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
@@ -696,11 +696,11 @@ private:
     }
 
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
-        if constexpr (pt_is_fixedlength<PT>) {
+        if constexpr (lt_is_fixedlength<LT>) {
             _reverse_fixed_column(column, offsets, chunk_size);
-        } else if constexpr (pt_is_string<PT>) {
+        } else if constexpr (lt_is_string<LT>) {
             _reverse_binary_column(column, offsets, chunk_size);
-        } else if constexpr (pt_is_json<PT>) {
+        } else if constexpr (lt_is_json<LT>) {
             _reverse_json_column(column, offsets, chunk_size);
         } else {
             assert(false);
@@ -934,10 +934,10 @@ private:
 
 // array_sortby(array, key_array) the key_array should not change the null property of array, if key_array is null,
 // keep the array the same.
-template <LogicalType PT>
-class ArraySortBy : public ArraySort<PT> {
+template <LogicalType LT>
+class ArraySortBy : public ArraySort<LT> {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 2);
@@ -1008,7 +1008,7 @@ private:
         // each array.
         std::vector<uint32_t> key_sort_index, src_sort_index;
         src_sort_index.reserve(src_elements_column.size());
-        ArraySort<PT>::_init_sort_index(&key_sort_index, key_element_column.size());
+        ArraySort<LT>::_init_sort_index(&key_sort_index, key_element_column.size());
         // element column is nullable
         if (key_element_column.has_null()) {
             const auto& key_data_column = down_cast<const NullableColumn&>(key_element_column).data_column_ref();
@@ -1021,7 +1021,7 @@ private:
                         key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
                         throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                     }
-                    ArraySort<PT>::_sort_nullable_item(&key_sort_index, key_data_column, null_column,
+                    ArraySort<LT>::_sort_nullable_item(&key_sort_index, key_data_column, null_column,
                                                        key_offsets_column, i);
                     auto delta = key_offsets_column.get_data()[i] - src_offsets_column.get_data()[i];
                     for (auto id = key_offsets_column.get_data()[i]; id < key_offsets_column.get_data()[i + 1]; ++id) {
@@ -1043,7 +1043,7 @@ private:
                         key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
                         throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                     }
-                    ArraySort<PT>::_sort_item(&key_sort_index, key_data_column, key_offsets_column, i);
+                    ArraySort<LT>::_sort_item(&key_sort_index, key_data_column, key_offsets_column, i);
                     auto delta = key_offsets_column.get_data()[i] - src_offsets_column.get_data()[i];
                     for (auto id = key_offsets_column.get_data()[i]; id < key_offsets_column.get_data()[i + 1]; ++id) {
                         src_sort_index.push_back(key_sort_index[id] - delta);

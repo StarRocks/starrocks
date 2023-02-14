@@ -1515,7 +1515,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1530,11 +1530,11 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <LogicalType PT>
+template <LogicalType LT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
-    using CppType = RunTimeCppType<PT>;
-    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
     auto* data_column = down_cast<ColumnType*>(ColumnHelper::get_data_column(column));
     const auto num_rows = data_column->get_data().size();
     auto* data = &data_column->get_data().front();
@@ -1548,7 +1548,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Column* column, const
             const auto& datum = data[i];
             if (datum > max_decimal || datum < min_decimal) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
-                _print_decimalv3_error_msg<PT>(state, datum, desc);
+                _print_decimalv3_error_msg<LT>(state, datum, desc);
             }
         }
     }

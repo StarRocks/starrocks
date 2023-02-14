@@ -51,7 +51,7 @@ struct ComparePairFirst final {
 enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
-template <LogicalType primitive_type>
+template <LogicalType logical_type>
 struct TypeTraits {};
 
 template <>
@@ -78,12 +78,12 @@ struct TypeTraits<TYPE_DATETIME> {
 
 inline const constexpr int reserve_list_size = 4;
 
-template <LogicalType PT>
+template <LogicalType LT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
-    using TimeType = typename InteralTypeOfFunnel::TypeTraits<PT>::Type;
-    using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
-    using TimestampType = typename InteralTypeOfFunnel::TypeTraits<PT>::ValueType;
+    using TimeType = typename InteralTypeOfFunnel::TypeTraits<LT>::Type;
+    using TimeTypeColumn = typename RunTimeTypeTraits<LT>::ColumnType;
+    using TimestampType = typename InteralTypeOfFunnel::TypeTraits<LT>::ValueType;
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
@@ -407,12 +407,12 @@ struct WindowFunnelState {
     static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class WindowFunnelAggregateFunction final
-        : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
-    using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
-    using TimeType = typename WindowFunnelState<PT>::TimeType;
-    using TimestampType = typename WindowFunnelState<PT>::TimestampType;
+        : public AggregateFunctionBatchHelper<WindowFunnelState<LT>, WindowFunnelAggregateFunction<LT>> {
+    using TimeTypeColumn = typename WindowFunnelState<LT>::TimeTypeColumn;
+    using TimeType = typename WindowFunnelState<LT>::TimeType;
+    using TimestampType = typename WindowFunnelState<LT>::TimestampType;
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -426,10 +426,10 @@ public:
         TimeType tv;
         if (!columns[1]->is_constant()) {
             const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
-            DCHECK(PT == TYPE_DATETIME || PT == TYPE_DATE || PT == TYPE_INT || PT == TYPE_BIGINT);
+            DCHECK(LT == TYPE_DATETIME || LT == TYPE_DATE || LT == TYPE_INT || LT == TYPE_BIGINT);
             tv = timestamp_column->get_data()[row_num];
         } else {
-            tv = ColumnHelper::get_const_value<PT>(columns[1]);
+            tv = ColumnHelper::get_const_value<LT>(columns[1]);
         }
 
         // get event
@@ -450,9 +450,9 @@ public:
                 auto ele_offset = offset + i;
                 if (!null_vector[ele_offset] && data_column->get_data()[ele_offset]) {
                     event_level = i + 1;
-                    if constexpr (PT == TYPE_DATETIME) {
+                    if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
-                    } else if constexpr (PT == TYPE_DATE) {
+                    } else if constexpr (LT == TYPE_DATE) {
                         this->data(state).update(tv.julian(), event_level);
                     } else {
                         this->data(state).update(tv, event_level);
@@ -465,9 +465,9 @@ public:
                 auto ele_offset = offset + i;
                 if (data_column.get_data()[ele_offset]) {
                     event_level = i + 1;
-                    if constexpr (PT == TYPE_DATETIME) {
+                    if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
-                    } else if constexpr (PT == TYPE_DATE) {
+                    } else if constexpr (LT == TYPE_DATE) {
                         this->data(state).update(tv.julian(), event_level);
                     } else {
                         this->data(state).update(tv, event_level);
@@ -516,9 +516,9 @@ public:
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
-            if constexpr (PT == TYPE_DATETIME) {
+            if constexpr (LT == TYPE_DATETIME) {
                 tv = timestamp_column->get_data()[i].to_unix_second();
-            } else if constexpr (PT == TYPE_DATE) {
+            } else if constexpr (LT == TYPE_DATE) {
                 tv = timestamp_column->get_data()[i].julian();
             } else {
                 tv = timestamp_column->get_data()[i];
@@ -541,7 +541,7 @@ public:
             buffer[1] = (int64_t)sorted;
             buffer[2] = (int64_t)tv;
             buffer[3] = (int64_t)event_level;
-            WindowFunnelState<PT>::serialize(buffer, 4, dst_column);
+            WindowFunnelState<LT>::serialize(buffer, 4, dst_column);
         }
     }
 

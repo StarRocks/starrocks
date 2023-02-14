@@ -82,7 +82,7 @@ public:
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
-        static_assert(!pt_is_decimal<Type>,
+        static_assert(!lt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
                       "precision and scale param");
         auto ptr = RunTimeColumnType<Type>::create();
@@ -95,13 +95,13 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
-    template <LogicalType PT>
-    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
+    template <LogicalType LT>
+    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<LT> value, int precision, int scale,
                                                         size_t size) {
-        static_assert(pt_is_decimal<PT>);
-        using ColumnType = RunTimeColumnType<PT>;
+        static_assert(lt_is_decimal<LT>);
+        using ColumnType = RunTimeColumnType<LT>;
         auto data_column = ColumnType::create(precision, scale, 1);
-        auto& data = ColumnHelper::cast_to_raw<PT>(data_column)->get_data();
+        auto& data = ColumnHelper::cast_to_raw<LT>(data_column)->get_data();
         DCHECK(data.size() == 1);
         data[0] = value;
         return ConstColumn::create(data_column, size);
