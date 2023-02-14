@@ -22,46 +22,21 @@
 #include <gflags/gflags.h>
 
 #include <iostream>
-#include <set>
 #include <string>
 
 #include "common/status.h"
 #include "env/env.h"
-#include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
-#include "storage/data_dir.h"
-#include "storage/options.h"
 #include "storage/rowset/binary_plain_page.h"
-#include "storage/rowset/column_iterator.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
-#include "storage/tablet_meta_manager.h"
 #include "storage/tablet_schema_map.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "util/file_utils.h"
 
-using starrocks::DataDir;
-using starrocks::KVStore;
-using starrocks::Status;
-using starrocks::TabletMeta;
-using starrocks::TabletMetaManager;
-using starrocks::MetaStoreStats;
-using starrocks::FileUtils;
-using starrocks::Slice;
-using starrocks::RandomAccessFile;
-using starrocks::MemTracker;
-using strings::Substitute;
-using starrocks::SegmentFooterPB;
-using starrocks::ColumnReader;
-using starrocks::BinaryPlainPageDecoder;
-using starrocks::PageHandle;
-using starrocks::PagePointer;
-using starrocks::ColumnIteratorOptions;
-using starrocks::PageFooterPB;
+namespace starrocks {
 
 DEFINE_string(operation, "get_meta", "valid operation: flag");
 DEFINE_string(file, "", "segment file path");
@@ -72,11 +47,13 @@ std::string get_usage(const std::string& progname) {
     ss << "Stop BE first before use this tool.\n";
     ss << "Usage:\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
-    ss << "./meta_tool --operation=dump_data --file=";
+    ss << "./meta_tool --operation=dump_data --file=/path/to/segment/file\n";
     return ss.str();
 }
 
-void dump_data(const std::string& path) {
+void dump_data(const std::string& file_name) {
+    auto res = Env::Default()->new_random_access_file(file_name);
+
     /*
     size_t file_size = std::filesystem::file_size(path);
     size_t footer_offset = file_size - 12;
@@ -123,7 +100,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     }
 
     // read footer PB
-    uint32_t footer_length = starrocks::decode_fixed32_le(fixed_buf);
+    uint32_t footer_length = decode_fixed32_le(fixed_buf);
     if (file_size < 12 + footer_length) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", file_name, file_size,
                                                       12 + footer_length));
@@ -133,8 +110,8 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     RETURN_IF_ERROR(input_file->read_at_fully(file_size - 12 - footer_length, footer_buf.data(), footer_buf.size()));
 
     // validate footer PB's checksum
-    uint32_t expect_checksum = starrocks::decode_fixed32_le(fixed_buf + 4);
-    uint32_t actual_checksum = starrocks::crc32c::Value(footer_buf.data(), footer_buf.size());
+    uint32_t expect_checksum = decode_fixed32_le(fixed_buf + 4);
+    uint32_t actual_checksum = crc32c::Value(footer_buf.data(), footer_buf.size());
     if (actual_checksum != expect_checksum) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2", file_name,
@@ -150,7 +127,7 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
 }
 
 void show_segment_footer(const std::string& file_name) {
-    auto res = starrocks::Env::Default()->new_random_access_file(file_name);
+    auto res = Env::Default()->new_random_access_file(file_name);
     if (!res.ok()) {
         std::cout << "open file failed: " << res.status() << std::endl;
         return;
@@ -172,22 +149,23 @@ void show_segment_footer(const std::string& file_name) {
     }
     std::cout << json_footer << std::endl;
 }
+} // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
-    std::string usage = get_usage(argv[0]);
+    std::string usage = starrocks::get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
     google::ParseCommandLineFlags(&argc, &argv, true);
 
-    if (FLAGS_operation == "dump_data") {
-        dump_data(FLAGS_file);
-    } else if (FLAGS_operation == "show_segment_footer") {
-        if (FLAGS_file.empty()) {
+    if (starrocks::FLAGS_operation == "dump_data") {
+        starrocks::dump_data(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "show_segment_footer") {
+        if (starrocks::FLAGS_file.empty()) {
             std::cout << "no file flag for show dict" << std::endl;
             return -1;
         }
-        show_segment_footer(FLAGS_file);
+        starrocks::show_segment_footer(starrocks::FLAGS_file);
     } else {
-        std::cout << "do nothing" <<std::endl;
+        std::cout << "do nothing" << std::endl;
         return 0;
     }
     gflags::ShutDownCommandLineFlags();
