@@ -126,6 +126,8 @@ void show_segment_footer(const std::string& file_name) {
 }
 
 void dump_data(const std::string& file_name) {
+    using VarcharDecode = KeyCoderTraits<OLAP_FIELD_TYPE_VARCHAR>;
+
     auto res = Env::Default()->new_random_access_file(file_name);
     if (!res.ok()) {
         std::cout << "open file failed: " << res.status() << std::endl;
@@ -184,18 +186,22 @@ void dump_data(const std::string& file_name) {
 
     std::cout << "KEY_COUNT: " << sk_index_decode->num_items() << std::endl;
 
+    MemPool mem_pool;
+    Slice key1;
+    Slice key2;
     for (size_t i = 0; i < sk_index_decode->num_items(); i++) {
-        Slice key0 = sk_index_decode->key(i);
-        std::cout << "KEY0: " << key0 << ":" << key0.size << std::endl;
-        using VarcharDecode = KeyCoderTraits<OLAP_FIELD_TYPE_VARCHAR>;
-        MemPool mem_pool;
-        Slice result_slice;
-        st = VarcharDecode::decode_ascending(&key0, 1024 * 1024, reinterpret_cast<uint8_t*>(&result_slice), &mem_pool);
+        Slice key = sk_index_decode->key(static_cast<ssize_t>(i));
+        key1 = key2;
+        st = VarcharDecode::decode_ascending(&key, 1024 * 1024, reinterpret_cast<uint8_t*>(&key2), &mem_pool);
         if (!st.ok()) {
             std::cout << "Decode short key failed" << std::endl;
             return;
         } else {
-            std::cout << "RESULT:" << result_slice.to_string() << std::endl;
+            std::cout << "RESULT:" << key2.to_string() << std::endl;
+            if (i != 0 && key2 < key1) {
+                std::cout << "CHECK FAILED: " << key1 << ":" << key2 << std::endl;
+                return;
+            }
         }
     }
 
