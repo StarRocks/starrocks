@@ -132,6 +132,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.BackgroundHiveMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
@@ -353,6 +354,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private BackgroundHiveMetadataProcessor backgroundHiveMetadataProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -607,6 +609,7 @@ public class GlobalStateMgr {
         this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
+        this.backgroundHiveMetadataProcessor = new BackgroundHiveMetadataProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -1255,6 +1258,11 @@ public class GlobalStateMgr {
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
         }
+
+        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_hive_metadata) {
+            backgroundHiveMetadataProcessor.start();
+        }
+
         // domain resolver
         domainResolver.start();
         if (Config.use_staros) {
@@ -3362,7 +3370,7 @@ public class GlobalStateMgr {
             catalogName = hmsTable.getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, table, partitions);
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
     }
 
     public void initDefaultCluster() {
