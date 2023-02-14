@@ -278,25 +278,25 @@ public class PrivilegeStmtAnalyzer {
             /*
              * IDENTIFIED WITH
              */
-            if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
-                    stmt.setUserForAuthPlugin(stmt.getAuthString());
-                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
+            if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPluginName())) {
+                    stmt.setUserForAuthPlugin(stmt.getAuthStringUnResolved());
+                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPluginName())) {
                     // in this case, authString is password
-                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthString(),
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthStringUnResolved(),
                             stmt.isPasswordPlain(), stmt instanceof AlterUserStmt));
-                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPlugin()) &&
+                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPluginName()) &&
                         GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                     // If user realm is not specified when creating user, the service principal realm will be used as
                     // the user principal realm by default.
-                    if (stmt.getAuthString() != null) {
-                        stmt.setUserForAuthPlugin(stmt.getAuthString());
+                    if (stmt.getAuthStringUnResolved() != null) {
+                        stmt.setUserForAuthPlugin(stmt.getAuthStringUnResolved());
                     } else {
                         stmt.setUserForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
                     }
                 } else {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPluginName());
                 }
             }
 
