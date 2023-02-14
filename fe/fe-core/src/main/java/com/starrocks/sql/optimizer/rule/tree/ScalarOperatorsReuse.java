@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
@@ -21,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -249,17 +247,14 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
         private final boolean reuseLambda;
-        private boolean ignoreLambdaArg;
 
         private CommonSubScalarOperatorCollector(boolean reuseLambda) {
             this.reuseLambda = reuseLambda;
-            this.ignoreLambdaArg = false;
         }
-
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator) {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
-            if (!isNonDeterministicFuncOrLambdaArgumentExist(operator) && operators.contains(operator)) {
+            if (!isNonDeterministicFunction(operator) && operators.contains(operator)) {
                 Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
                 commonOperators.add(operator);
             }
@@ -283,16 +278,45 @@ public class ScalarOperatorsReuse {
                     argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
         }
 
-        // when called this function without reuseLambda, here get rid of the expressions with lambda arguments,
-        // for example, select a+b, array_map(x-> 2*x+2*x > a+b, [1])
-        // the a+b is reused, but 2*x is not reused as it contains the lambda argument x.
+        private boolean isOnlyRealColumnRef(ScalarOperator scalarOperator) {
+            if (scalarOperator instanceof ColumnRefOperator) {
+                return !((ColumnRefOperator) scalarOperator).isVirtualColumnRef();
+            }
+
+            return scalarOperator.getChildren().stream().allMatch(this::isOnlyRealColumnRef);
+        }
+
+        private int collectLambdaExprOperator(ScalarOperator scalarOperator) {
+            int depth = 0;
+            for (ScalarOperator child : scalarOperator.getChildren()) {
+                depth = Math.max(depth, collectLambdaExprOperator(child));
+            }
+
+            if (!scalarOperator.getChildren().isEmpty()) {
+                depth = depth + 1;
+            }
+
+            if (!scalarOperator.getChildren().isEmpty() && isOnlyRealColumnRef(scalarOperator)) {
+                collectCommonOperatorsByDepth(depth, scalarOperator);
+            }
+
+            return depth;
+        }
+
         @Override
         public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, Void context) {
-            ignoreLambdaArg = !reuseLambda;
-            Integer res = collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
-                    scalarOperator);
-            ignoreLambdaArg = false;
-            return res;
+            if (reuseLambda) {
+                // handle x-> 2*x+2*x, we need to reuse 2*x, the reuse scope is only lambda exprs
+                return collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
+                        scalarOperator);
+            } else {
+                // for select a+b, array_map(x-> 2*x+2*x > a+b, [1])
+                // reuse a+b, a and b are both real columns, the reuse scope is all exprs
+                if (scalarOperator.getUsedColumns().size() > 0) {
+                    return collectLambdaExprOperator(scalarOperator.getLambdaExpr());
+                }
+            }
+            return 1;
         }
 
         @Override
@@ -302,11 +326,7 @@ public class ScalarOperatorsReuse {
 
         // If a scalarOperator contains any non-deterministic function, it cannot be reused
         // because the non-deterministic function results returned each time are inconsistent.
-        private boolean isNonDeterministicFuncOrLambdaArgumentExist(ScalarOperator scalarOperator) {
-            if (ignoreLambdaArg && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
-                return true;
-            }
-
+        private boolean isNonDeterministicFunction(ScalarOperator scalarOperator) {
             if (scalarOperator instanceof CallOperator) {
                 String fnName = ((CallOperator) scalarOperator).getFnName();
                 if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
@@ -315,7 +335,7 @@ public class ScalarOperatorsReuse {
             }
 
             for (ScalarOperator child : scalarOperator.getChildren()) {
-                if (isNonDeterministicFuncOrLambdaArgumentExist(child)) {
+                if (isNonDeterministicFunction(child)) {
                     return true;
                 }
             }
@@ -323,7 +343,6 @@ public class ScalarOperatorsReuse {
         }
 
     }
-
 
     public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory,
                                                            boolean reuseLambda) {
@@ -416,7 +435,8 @@ public class ScalarOperatorsReuse {
             ColumnRefOperator keyCol = columnRefFactory.create("lambda", operator.getType(),
                     operator.isNullable(), false);
             columnRefMap.put(keyCol, operator.getLambdaExpr());
-            Projection fakeProjection = rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory, true);
+            Projection fakeProjection =
+                    rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory, true);
             columnRefMap = fakeProjection.getCommonSubOperatorMap();
             if (!columnRefMap.isEmpty()) {
                 operator.addColumnToExpr(columnRefMap);
