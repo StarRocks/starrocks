@@ -39,6 +39,7 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -124,7 +125,11 @@ public class AstToStringBuilder {
                     setVarSql += "cast (" + visit(setVar.getResolvedExpression())
                             + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
                 } else {
-                    setVarSql += visit(setVar.getExpression());
+                    if (setVar.getResolvedExpression() == null) {
+                        setVarSql += VariableMgr.getDefaultValue(setVar.getVariable());
+                    } else {
+                        setVarSql += visit(setVar.getResolvedExpression());
+                    }
                 }
 
                 setVarList.add(setVarSql);
