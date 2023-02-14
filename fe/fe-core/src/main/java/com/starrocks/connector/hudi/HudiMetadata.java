@@ -168,11 +168,11 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
-            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
     }
 

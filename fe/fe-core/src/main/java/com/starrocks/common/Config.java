@@ -1648,17 +1648,30 @@ public class Config extends ConfigBase {
     public static int hms_process_events_parallel_num = 4;
 
     /**
-     * Metastore event processor refresh table column statistic interval in seconds.
-     */
-    @ConfField(mutable = true)
-    public static int hms_refresh_columns_statistic_interval_s = 600;
-
-    /**
      * Used to split files stored in dfs such as object storage
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
+
+    /**
+     * Enable background refresh all hive external tables all partitions metadata on internal catalog.
+     */
+    @ConfField
+    public static boolean enable_background_refresh_hive_metadata = false;
+
+    /**
+     * Background refresh hive external table metadata interval in milliseconds.
+     */
+    @ConfField(mutable = true)
+    public static int background_refresh_hive_metadata_interval_millis = 600000;
+
+    /**
+     * Enable refresh hive partition statistics.
+     * The `getPartitionColumnStats()` requests of hive metastore has a high latency, and some users env may return timeout.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
      * size of iceberg worker pool

@@ -189,9 +189,10 @@ public class MetadataMgr {
         });
     }
 
-    public void refreshTable(String catalogName, String srDbName, Table table, List<String> partitionNames) {
+    public void refreshTable(String catalogName, String srDbName, Table table,
+                             List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames));
+        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
     }
 
     private class QueryMetadatas {
