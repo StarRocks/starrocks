@@ -263,7 +263,7 @@ public class ExpressionAnalyzer {
             }
             scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
             scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
-
+            // lambda functions should be rewritten before visited
             if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER))) {
                 // (k,v) -> expr => (k,v) -> (k,expr)
                 Expr lambdaFunc = functionCallExpr.getChild(0);
