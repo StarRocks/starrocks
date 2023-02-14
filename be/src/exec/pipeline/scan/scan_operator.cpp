@@ -33,13 +33,12 @@ namespace starrocks::pipeline {
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                           ScanNode* scan_node, bool is_stream_pipeline)
+                           ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _dop(dop),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
-          _is_stream_pipeline(is_stream_pipeline),
           _is_io_task_running(_io_tasks_per_scan_operator),
           _chunk_sources(_io_tasks_per_scan_operator) {
     for (auto i = 0; i < _io_tasks_per_scan_operator; i++) {
@@ -162,6 +161,7 @@ bool ScanOperator::has_output() const {
             return true;
         }
     }
+
     return num_buffered_chunks() > 0;
 }
 
@@ -289,11 +289,7 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
-        if (_is_stream_pipeline) {
-            _closed_chunk_sources.push(_chunk_sources[chunk_source_index]);
-        } else {
-            _chunk_sources[chunk_source_index]->close(state);
-        }
+        _chunk_sources[chunk_source_index]->close(state);
         _chunk_sources[chunk_source_index] = nullptr;
         detach_chunk_source(chunk_source_index);
     }
@@ -318,8 +314,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // Therefore, closing chunk source and storing/loading `_is_finished` and `_is_io_task_running`
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
-        if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished ||
-            (_is_epoch_finished && _is_stream_pipeline)) {
+        if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -417,6 +412,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+
     if (_lane_arbiter != nullptr) {
         while (morsel != nullptr) {
             auto [lane_owner, version] = morsel->get_lane_owner_and_version();
@@ -455,6 +451,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             }
         }
     }
+
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
 

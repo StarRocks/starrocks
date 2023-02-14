@@ -51,8 +51,8 @@ OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                                             ScanNode* scan_node, bool is_stream_pipeline)
-        : ScanOperator(factory, id, driver_sequence, dop, scan_node, is_stream_pipeline) {}
+                                             ScanNode* scan_node)
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     bool shared_scan = _scan_node->is_shared_scan_enabled();

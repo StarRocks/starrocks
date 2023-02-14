@@ -14,11 +14,7 @@
 
 #pragma once
 
-#include <queue>
-
-#include "column/stream_chunk.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -36,8 +32,7 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
-                 bool is_stream_pipeline = false);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
 
     ~ScanOperator() override;
 
@@ -98,15 +93,14 @@ protected:
     virtual bool is_buffer_full() const = 0;
     virtual void set_buffer_finished() = 0;
 
-protected:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
-    void _close_chunk_source_unlocked(RuntimeState* state, int index);
+    virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
-    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
+    virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _detach_chunk_sources();
 
@@ -140,17 +134,13 @@ protected:
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
     bool _is_finished = false;
-    mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
-    std::atomic<int> _num_running_io_tasks = 0;
-
-    bool _is_epoch_finished{true};
-    std::queue<ChunkSourcePtr> _old_chunk_sources;
-    std::queue<ChunkSourcePtr> _closed_chunk_sources;
-    bool _is_stream_pipeline{false};
 
 protected:
     int32_t _io_task_retry_cnt = 0;
     workgroup::ScanExecutor* _scan_executor = nullptr;
+    std::atomic<int> _num_running_io_tasks = 0;
+
+    mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
 
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;

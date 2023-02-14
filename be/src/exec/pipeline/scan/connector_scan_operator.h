@@ -55,7 +55,7 @@ private:
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                          ScanNode* scan_node, bool is_stream_pipeline = false);
+                          ScanNode* scan_node);
 
     ~ConnectorScanOperator() override = default;
 

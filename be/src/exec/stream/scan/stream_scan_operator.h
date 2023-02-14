@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "common/logging.h"
 #include "connector/connector.h"
 #include "exec/pipeline/fragment_context.h"
@@ -22,6 +24,7 @@
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/chunk_helper.h"
 
@@ -71,6 +74,10 @@ public:
     bool has_output() const override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void _close_chunk_source_unlocked(RuntimeState* state, int index) override;
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
+                                   int64_t scan_bytes) override;
+
     bool is_epoch_finished() const override;
 
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
@@ -81,10 +88,15 @@ private:
 
     std::atomic<int32_t> _chunk_num{0};
     bool _is_epoch_start{false};
+    bool _is_epoch_finished{true};
+    bool _is_stream_pipeline{false};
     int64_t _run_time = 0;
 
     StreamEpochManager* _stream_epoch_manager;
     starrocks::EpochInfo _current_epoch_info;
+
+    std::queue<ChunkSourcePtr> _old_chunk_sources;
+    std::queue<ChunkSourcePtr> _closed_chunk_sources;
 };
 
 class StreamChunkSource : public ConnectorChunkSource {

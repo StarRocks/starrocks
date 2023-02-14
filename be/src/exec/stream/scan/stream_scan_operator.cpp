@@ -29,7 +29,8 @@ OperatorPtr StreamScanOperatorFactory::do_create(int32_t dop, int32_t driver_seq
 
 StreamScanOperator::StreamScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                        ScanNode* scan_node, bool is_stream_pipeline)
-        : ConnectorScanOperator(factory, id, driver_sequence, dop, scan_node, is_stream_pipeline) {}
+        : ConnectorScanOperator(factory, id, driver_sequence, dop, scan_node),
+          _is_stream_pipeline(is_stream_pipeline) {}
 
 StreamScanOperator::~StreamScanOperator() {
     auto* state = runtime_state();
@@ -42,6 +43,16 @@ StreamScanOperator::~StreamScanOperator() {
         _closed_chunk_sources.pop();
         std::lock_guard guard(_task_mutex);
         chunk_source_ptr->close(state);
+        chunk_source_ptr = nullptr;
+    }
+
+    // defensive programming,_chunk_sources should have been closed normally
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->close(state);
+            _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
+        }
     }
 }
 
@@ -251,7 +262,7 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
 }
 
 // In order to not modify the code of ScanOperator,
-// there is lots of repetition with the method of is_finished,
+// there is lots of repetition with the method of is_finished in ScanOperator,
 // maybe can abstract a method contains the same code later
 bool StreamScanOperator::is_epoch_finished() const {
     if (_is_epoch_finished) {
@@ -322,6 +333,39 @@ StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
         return _mark_mock_data_finished();
     }
     return status_or;
+}
+
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of _finish_chunk_source_task in scanOperator,
+// maybe can abstract a method contains the same code later
+void StreamScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
+                                                   int64_t scan_rows, int64_t scan_bytes) {
+    _last_growth_cpu_time_ns += cpu_time_ns;
+    _last_scan_rows_num += scan_rows;
+    _last_scan_bytes += scan_bytes;
+    _num_running_io_tasks--;
+
+    DCHECK(_chunk_sources[chunk_source_index] != nullptr);
+    {
+        // - close() closes the chunk source which is not running.
+        // - _finish_chunk_source_task() closes the chunk source conditionally and then make it as not running.
+        // Therefore, closing chunk source and storing/loading `_is_finished` and `_is_io_task_running`
+        // must be protected by lock
+        std::lock_guard guard(_task_mutex);
+        if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished ||
+            (_is_epoch_finished && _is_stream_pipeline)) {
+            _close_chunk_source_unlocked(state, chunk_source_index);
+        }
+        _is_io_task_running[chunk_source_index] = false;
+    }
+}
+
+void StreamScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
+    if (_chunk_sources[chunk_source_index] != nullptr) {
+        _closed_chunk_sources.push(_chunk_sources[chunk_source_index]);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
 }
 
 StreamChunkSource::StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
