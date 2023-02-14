@@ -153,7 +153,6 @@ Status ESDataSource::_normalize_conjuncts() {
 
     for (int i = _predicate_idx.size() - 1; i >= 0; i--) {
         int conjunct_index = _predicate_idx[i];
-        _conjunct_ctxs[conjunct_index]->close(_runtime_state);
         _conjunct_ctxs.erase(_conjunct_ctxs.begin() + conjunct_index);
     }
     return Status::OK();
