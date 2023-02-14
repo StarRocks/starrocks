@@ -231,7 +231,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * group_concat_max_len
 
-  Used for compatibility with MySQL. No practical usage. Default: 65535
+  Used for compatibility with MySQL. No practical usage. Default value: 65535.
 
 * query_cache_entry_max_rows (2.5 and later)
 
