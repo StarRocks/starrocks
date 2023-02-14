@@ -114,6 +114,7 @@ public class BrokerFileGroup implements Writable {
 
     // for unit test and edit log persistence
     private BrokerFileGroup() {
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     // Used for broker table, no need to parse
@@ -124,6 +125,7 @@ public class BrokerFileGroup implements Writable {
         this.isNegative = false;
         this.filePaths = table.getPaths();
         this.fileFormat = table.getFileFormat();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
@@ -132,14 +134,13 @@ public class BrokerFileGroup implements Writable {
         this.columnExprList = dataDescription.getParsedColumnExprList();
         this.columnToHadoopFunction = dataDescription.getColumnToHadoopFunction();
         this.whereExpr = dataDescription.getWhereExpr();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     public void parseFormatProperties(DataDescription dataDescription) {
         CsvFormat csvFormat = dataDescription.getCsvFormat();
         if (csvFormat != null) {
             this.csvFormat = csvFormat;
-        } else {
-            this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         }
     }
 
