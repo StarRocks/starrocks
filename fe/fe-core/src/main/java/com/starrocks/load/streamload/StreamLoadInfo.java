@@ -61,6 +61,7 @@ public class StreamLoadInfo {
     private String mergeConditionStr;
     private ColumnSeparator columnSeparator;
     private RowDelimiter rowDelimiter;
+    private long skipHeader;
     private boolean trimSpace;
     private byte enclose;
     private byte escape;
@@ -136,6 +137,9 @@ public class StreamLoadInfo {
         return trimSpace;
     }
 
+    public long getSkipHeader() {
+        return skipHeader;
+    }
 
     public byte getEnclose() {
         return enclose;
@@ -306,6 +310,9 @@ public class StreamLoadInfo {
         }
         if (request.isSetRowDelimiter()) {
             rowDelimiter = new RowDelimiter(request.getRowDelimiter());
+        }
+        if (request.isSetSkipHeader()) {
+            skipHeader = request.getSkipHeader();
         }
         if (request.isSetEnclose()) {
             enclose = request.getEnclose();
