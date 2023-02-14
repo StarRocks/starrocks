@@ -70,4 +70,4 @@ StarRocks provides a unified data analytics experience.
 
 - One system can power various analytical scenarios, reducing system complexity and lowering TCO.
 
-- StarRocks unifies data lakes and data warehouses. Data in a lakehouse can be managed all in StarRocks. Latency-sensitive queries that require high concurrency can run on StarRocks. Data in data lakes can be accessed by using connectors and external tables provided by StarRocks.
+- StarRocks unifies data lakes and data warehouses. Data in a lakehouse can be managed all in StarRocks. Latency-sensitive queries that require high concurrency can run on StarRocks. Data in data lakes can be accessed by using external catalogs or external tables provided by StarRocks.
