@@ -30,6 +30,8 @@
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "runtime/memory/chunk_allocator.h"
+#include "storage/key_coder.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/short_key_index.h"
 #include "storage/tablet_meta.h"
@@ -180,12 +182,31 @@ void dump_data(const std::string& file_name) {
         std::cout << "Decode ShortKeyIndex success" << std::endl;
     }
 
+    std::cout << "KEY_COUNT: " << sk_index_decode->num_items() << std::endl;
+
+    for (size_t i = 0; i < sk_index_decode->num_items(); i++) {
+        Slice key0 = sk_index_decode->key(i);
+        std::cout << "KEY0: " << key0 << ":" << key0.size << std::endl;
+        using VarcharDecode = KeyCoderTraits<OLAP_FIELD_TYPE_VARCHAR>;
+        MemPool mem_pool;
+        Slice result_slice;
+        st = VarcharDecode::decode_ascending(&key0, 1024 * 1024, reinterpret_cast<uint8_t*>(&result_slice), &mem_pool);
+        if (!st.ok()) {
+            std::cout << "Decode short key failed" << std::endl;
+            return;
+        } else {
+            std::cout << "RESULT:" << result_slice.to_string() << std::endl;
+        }
+    }
+
     delete[] sk_ptr;
 }
 
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
+    starrocks::ChunkAllocator::init_instance(nullptr, 4096);
+
     std::string usage = starrocks::get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
     google::ParseCommandLineFlags(&argc, &argv, true);

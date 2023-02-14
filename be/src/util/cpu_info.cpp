@@ -300,9 +300,6 @@ int CpuInfo::get_current_core() {
     int cpu = sched_getcpu();
     if (cpu < 0) return 0;
     if (cpu >= max_num_cores_) {
-        LOG_FIRST_N(WARNING, 5) << "sched_getcpu() return value " << cpu
-                                << ", which is greater than get_nprocs_conf() retrun value " << max_num_cores_
-                                << ", now is " << get_nprocs_conf();
         cpu %= max_num_cores_;
     }
     return cpu;
