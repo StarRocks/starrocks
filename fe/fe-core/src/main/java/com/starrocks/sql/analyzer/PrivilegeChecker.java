@@ -1299,7 +1299,7 @@ public class PrivilegeChecker {
             } catch (Exception e) {
                 if (statement.getTableRefs().size() == 0) {
                     String dBName = statement.getDbName();
-                    throw new SemanticException("Database: {} is empty", dBName);
+                    throw new SemanticException("Database: %s is empty", dBName);
                 } else {
                     throw new SemanticException("BackupStatement failed");
                 }
