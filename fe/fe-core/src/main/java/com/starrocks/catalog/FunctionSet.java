@@ -400,6 +400,8 @@ public class FunctionSet {
     public static final String TRANSFORM = "transform";
     public static final String MAP_APPLY = "map_apply";
 
+    // map functions:
+    public static final String MAP_FILTER = "map_filter";
     // Struct functions:
     public static final String ROW = "row";
 

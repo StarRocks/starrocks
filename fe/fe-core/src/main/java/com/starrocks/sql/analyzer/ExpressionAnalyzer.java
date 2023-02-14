@@ -125,6 +125,7 @@ public class ExpressionAnalyzer {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
@@ -902,7 +903,8 @@ public class ExpressionAnalyzer {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
                 if (node.getChildren().size() != 2) {
-                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
+                            "but there are just " + node.getChildren().size() + " inputs.");
                 }
                 if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                     throw new SemanticException("The first input of " + fnName +
@@ -922,7 +924,8 @@ public class ExpressionAnalyzer {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_SORTBY)) {
                 if (node.getChildren().size() != 2) {
-                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
+                            "but there are just " + node.getChildren().size() + " inputs.");
                 }
                 if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
                     throw new SemanticException("The first input of " + fnName +
@@ -943,6 +946,27 @@ public class ExpressionAnalyzer {
                 if (node.getChildren().size() < 2) {
                     throw new SemanticException(fnName + " should have at least two inputs");
                 }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.MAP_FILTER)) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException(fnName + " should have 2 inputs, " +
+                            "but there are just " + node.getChildren().size() + " inputs.");
+                }
+                if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                    throw new SemanticException("The first input of " + fnName +
+                            " should be a map or a lambda function.");
+                }
+                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                    throw new SemanticException("The second input of " + fnName +
+                            " should be a array or a lambda function.");
+                }
+                // force the second array be of Type.ARRAY_BOOLEAN
+                if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                    throw new SemanticException("The second input of map_filter " +
+                            node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                }
+                node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
+                argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
