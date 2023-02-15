@@ -19,4 +19,13 @@ public class DropAnalyzeJobStmt extends DdlStmt {
     public boolean isSupportNewPlanner() {
         return true;
     }
+
+    public String toSql() {
+        return "drop analyze " + id;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropAnalyzeStatement(this, context);
+    }
 }

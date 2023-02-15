@@ -510,7 +510,13 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ----------------- Catalog Clause -------------
+
+    // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
         return visitStatement(statement, context);
