@@ -24,6 +24,7 @@
 #include <iostream>
 #include <string>
 
+#include "column/column.h"
 #include "common/status.h"
 #include "env/env.h"
 #include "gen_cpp/segment.pb.h"
@@ -32,10 +33,11 @@
 #include "json2pb/pb_to_json.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "storage/key_coder.h"
-#include "storage/rowset/binary_plain_page.h"
+#include "storage/rowset/page_handle.h"
+#include "storage/rowset/storage_page_decoder.h"
 #include "storage/short_key_index.h"
 #include "storage/tablet_meta.h"
-#include "storage/tablet_schema_map.h"
+#include "util/block_compression.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 
@@ -101,14 +103,55 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     return Status::OK();
 }
 
-Status read_page(RandomAccessFile* file, size_t offset, size_t size, Slice* body, PageFooterPB* footer) {
-    char* page_mem = new char[size];
-    auto res = file->read_at_fully(offset, page_mem, size);
+struct ReadFileOpt {
+    RandomAccessFile* file = nullptr;
+    BlockCompressionCodec* codec = nullptr;
+    EncodingTypePB encoding_type = UNKNOWN_ENCODING;
+    int64_t offset = 0; // file offset
+    int64_t size = 0;   // read size
+};
+
+Status read_page(ReadFileOpt* opt, Slice* body, PageFooterPB* footer, PageHandle* handle) {
+    // Read page
+    std::unique_ptr<char[]> page(new char[opt->size + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
+    Slice page_slice(page.get(), opt->size);
+    auto res = opt->file->read_at_fully(opt->offset, page.get(), opt->size);
     if (!res.ok()) {
-        std::cout << "Read page failed: " << res.to_string() << std::endl;
+        std::cout << "Read page failed: " << res << std::endl;
         return res;
     }
-    size -= 4;
+
+    // Parse page footer size
+    page_slice.size -= 4;
+    uint32_t footer_size = decode_fixed32_le((uint8_t*)page.get() + page_slice.size - 4);
+
+    // Parse page footer
+    if (!footer->ParseFromArray(page.get() + page_slice.size - 4 - footer_size, static_cast<int>(footer_size))) {
+        return Status::Corruption("Parse page footer failed");
+    }
+
+    // Decompress page
+    uint32_t body_size = page_slice.size - 4 - footer_size;
+    if (body_size != footer->uncompressed_size()) {
+        std::unique_ptr<char[]> decompressed_page(
+                new char[footer->uncompressed_size() + footer_size + 4 + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
+
+        Slice compressed_body(page.get(), body_size);
+        Slice decompressed_body(decompressed_page.get(), footer->uncompressed_size());
+        RETURN_IF_ERROR(opt->codec->decompress(compressed_body, &decompressed_body));
+        if (decompressed_body.size != footer->uncompressed_size()) {
+            return Status::Corruption("decompress failed");
+        }
+        memcpy(decompressed_body.data + decompressed_body.size, page.get() + body_size, footer_size + 4);
+        page = std::move(decompressed_page);
+        page_slice = Slice(page.get(), footer->uncompressed_size() + footer_size + 4);
+    }
+
+    // Decode page
+    RETURN_IF_ERROR(StoragePageDecoder::decode_page(footer, footer_size + 4, opt->encoding_type, &page, &page_slice));
+    *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
+    *handle = PageHandle(page_slice);
+    return Status::OK();
 }
 
 void show_segment_footer(const std::string& file_name) {
@@ -154,39 +197,26 @@ void dump_data(const std::string& file_name) {
 
     const PagePointerPB& page = footer.short_key_index_page();
     std::cout << "OFFSET: " << page.offset() << ":" << page.size() << std::endl;
-    char* sk_ptr = new char[page.size()];
 
-    st = input_file->read_at_fully(static_cast<int64_t>(page.offset()), sk_ptr, page.size());
-    if (!st.ok()) {
-        std::cout << "read short key index failed: " << st.to_string() << std::endl;
-        return;
-    }
-    Slice sk_page{sk_ptr, page.size()};
+    ReadFileOpt opt;
+    opt.file = input_file.get();
+    opt.codec = nullptr;
+    opt.encoding_type = UNKNOWN_ENCODING;
+    opt.offset = static_cast<int64_t>(page.offset());
+    opt.size = page.size();
 
-    uint32_t expect = decode_fixed32_le((uint8_t*)sk_page.data + sk_page.size - 4);
-    uint32_t actual = crc32c::Value(sk_page.data, sk_page.size - 4);
-    if (expect != actual) {
-        std::cout << "invalid checksum" << std::endl;
-        return;
-    } else {
-        std::cout << "checksum success" << std::endl;
-    }
-
+    Slice page_body;
     PageFooterPB page_footer;
-    sk_page.size = sk_page.size - 4;
-    uint32_t footer_size = decode_fixed32_le((uint8_t*)sk_page.data + sk_page.size - 4);
-    std::cout << "Short key footer size: " << footer_size << std::endl;
+    PageHandle page_handle;
 
-    bool succ =
-            page_footer.ParseFromArray(sk_page.data + sk_page.size - 4 - footer_size, static_cast<int>(footer_size));
-    if (!succ) {
-        std::cout << "Parse page footer failed" << std::endl;
+    st = read_page(&opt, &page_body, &page_footer, &page_handle);
+    if (!st.ok()) {
+        std::cout << "Read page failed: " << st << std::endl;
         return;
     }
 
-    sk_page.size = sk_page.size - 4 - footer_size;
     auto sk_index_decode = std::make_unique<ShortKeyIndexDecoder>();
-    st = sk_index_decode->parse(sk_page, page_footer.short_key_page_footer());
+    st = sk_index_decode->parse(page_body, page_footer.short_key_page_footer());
     if (!st.ok()) {
         std::cout << "Short key page decode failed: " << st.to_string() << std::endl;
         return;
@@ -195,27 +225,6 @@ void dump_data(const std::string& file_name) {
     }
 
     std::cout << "KEY_COUNT: " << sk_index_decode->num_items() << std::endl;
-
-    MemPool mem_pool;
-    Slice key1;
-    Slice key2;
-    for (size_t i = 0; i < sk_index_decode->num_items(); i++) {
-        Slice key = sk_index_decode->key(static_cast<ssize_t>(i));
-        key1 = key2;
-        st = VarcharDecode::decode_ascending(&key, 1024 * 1024, reinterpret_cast<uint8_t*>(&key2), &mem_pool);
-        if (!st.ok()) {
-            std::cout << "Decode short key failed" << std::endl;
-            return;
-        } else {
-            std::cout << "RESULT:" << key2.to_string() << std::endl;
-            if (i != 0 && key2 < key1) {
-                std::cout << "CHECK FAILED: " << key1 << ":" << key2 << std::endl;
-                return;
-            }
-        }
-    }
-
-    delete[] sk_ptr;
 }
 
 } // namespace starrocks
