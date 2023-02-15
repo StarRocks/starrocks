@@ -155,6 +155,12 @@ public class OffHeapColumnVector {
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
+
+        if (offsetData != 0) {
+            // offsetData[0] == 0 always.
+            // we have to set it explicitly otherwise it's undefined value here.
+            Platform.putInt(null, offsetData, 0);
+        }
     }
 
     private void reset() {
