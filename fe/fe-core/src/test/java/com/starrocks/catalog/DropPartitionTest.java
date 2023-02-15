@@ -105,7 +105,7 @@ public class DropPartitionTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, pathInfo, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, pathInfo, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));

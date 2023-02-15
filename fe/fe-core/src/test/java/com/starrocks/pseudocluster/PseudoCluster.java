@@ -203,7 +203,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+        public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                        long groupId)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
@@ -212,7 +212,7 @@ public class PseudoCluster {
                 shardIds.add(id);
                 List<ReplicaInfo> replicas = new ArrayList<>();
                 if (!workers.isEmpty()) {
-                    int availableReplicas = Math.min(workers.size(), replicaNum);
+                    int availableReplicas = 1;
                     int workerIndex = (int) (id % workers.size());
                     for (int j = 0; j < availableReplicas; ++j) {
                         replicas.add(ReplicaInfo.newBuilder()
