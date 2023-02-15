@@ -53,6 +53,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
+import org.apache.iceberg.io.DelegatingInputStream;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
@@ -205,6 +206,7 @@ public class IcebergCachingFileIO implements FileIO {
             try {
                 long fileLength = getLength();
                 long totalBytesToRead = fileLength;
+                long start = System.currentTimeMillis();
                 SeekableInputStream stream = wrappedInputFile.newStream();
                 List<ByteBuffer> buffers = Lists.newArrayList();
 
@@ -224,6 +226,8 @@ public class IcebergCachingFileIO implements FileIO {
                         buffers.add(ByteBuffer.wrap(buf));
                     }
                 }
+                LOG.error("========== file:[{}], cost:[{}]", wrappedInputFile.location(), System.currentTimeMillis() - start);
+                LOG.error("========={}", ((DelegatingInputStream) stream).getDelegate().toString());
 
                 stream.close();
                 return new CacheEntry(fileLength - totalBytesToRead, buffers);
