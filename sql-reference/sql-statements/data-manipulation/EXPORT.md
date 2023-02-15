@@ -13,26 +13,28 @@
 注：方括号 [] 中内容可省略不写。
 
 ```sql
-EXPORT TABLE table_name
-[PARTITION (p1[,p2])]
-TO export_path
+EXPORT TABLE <table_name>
+[PARTITION (<partition_name>[, ...])]
+[(<column_name>[, ...])]
+TO <export_path>
 [opt_properties]
 WITH BROKER
+[broker_properties]
 ```
 
-1. table_name
+1. `table_name`
 
     当前要导出的表的表名，目前支持 engine 为 olap 和 mysql 的表的导出。
 
-2. partition
+2. `partition_name`
 
     可以指定需要导出数据所在的分区，不指定的话默认导出表中所有分区的数据。
 
-3. export_path
+3. `export_path`
 
     导出的路径。目前不能导出到本地，需要导出到 broker。如果是目录，需要以斜线结尾。否则最后一个斜线后面的部分会作为导出文件的前缀。如不指定文件名前缀，文件名前缀默认为 **data_**。
 
-4. opt_properties
+4. `opt_properties`
 
     用于指定一些特殊参数。
 
@@ -52,7 +54,7 @@ WITH BROKER
     include_query_id: 导出文件名中是否包含 query id，默认为 true。
     ```
 
-5. broker
+5. `broker`
 
     用于指定导出使用的 broker
 
@@ -65,6 +67,10 @@ WITH BROKER
     这里需要指定具体的 broker name, 以及所需的 broker 属性。
 
     对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节中搜索 broker_properties。
+
+- `broker_properties`
+
+   用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
 
 ## 示例
 
