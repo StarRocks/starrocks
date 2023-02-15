@@ -20,7 +20,6 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
-import com.starrocks.authentication.LDAPAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
@@ -57,6 +56,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.EnumUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -134,23 +134,16 @@ public class PrivilegeStmtAnalyzerV2 {
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
+            byte[] password = MysqlPassword.EMPTY_PASSWORD;
             String authPluginUsing;
-            if (stmt.getAuthPlugin() == null) {
+            if (stmt.getAuthPluginName() == null) {
                 authPluginUsing = authenticationManager.getDefaultPlugin();
-                stmt.setScramblePassword(
-                        analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain()));
+                password = analysePassword(stmt.getOriginalPassword(), stmt.isPasswordPlain());
             } else {
-                authPluginUsing = stmt.getAuthPlugin();
+                authPluginUsing = stmt.getAuthPluginName();
                 if (authPluginUsing.equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
                     // In this case, authString is the password
-                    stmt.setScramblePassword(
-                            analysePassword(stmt.getAuthString(), stmt.isPasswordPlain()));
-                } else {
-                    stmt.setScramblePassword(new byte[0]);
-                }
-
-                if (authPluginUsing.equals(LDAPAuthenticationProvider.PLUGIN_NAME)) {
-                    stmt.setUserForAuthPlugin(stmt.getAuthString());
+                    password = analysePassword(stmt.getAuthStringUnResolved(), stmt.isPasswordPlain());
                 }
             }
 
@@ -158,7 +151,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
                 UserIdentity userIdentity = stmt.getUserIdent();
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
-                        userIdentity, stmt.getOriginalPassword(), stmt.getAuthString());
+                        userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
                 info.setAuthPlugin(authPluginUsing);
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);

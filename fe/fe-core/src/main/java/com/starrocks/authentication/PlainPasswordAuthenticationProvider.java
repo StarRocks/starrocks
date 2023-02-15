@@ -66,9 +66,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String password,
             String textForAuthPlugin) throws AuthenticationException {
         validatePassword(password);
-
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setPassword(MysqlPassword.makeScrambledPassword(password));
+        info.setPassword(password.getBytes(StandardCharsets.UTF_8));
         info.setTextForAuthPlugin(textForAuthPlugin);
         return info;
     }
