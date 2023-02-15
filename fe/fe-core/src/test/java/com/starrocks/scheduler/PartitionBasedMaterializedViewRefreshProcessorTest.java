@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -40,6 +41,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.scheduler.TaskRun.PARTITION_END;
+import static com.starrocks.scheduler.TaskRun.PARTITION_START;
 
 public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
@@ -161,7 +165,29 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;")
+                .withNewMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_mul_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_extendedprice) as total_price FROM " +
+                        "`hive0`.`partitioned_db`.`lineitem_mul_par` as a group by `l_orderkey`, `l_suppkey`, `l_shipdate`;")
+                .withNewMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_mul_parttbl_mv2`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`par_date`)\n" +
+                        "DISTRIBUTED BY HASH(`par_col`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT c1, c2, par_date, par_col FROM `hive0`.`partitioned_db`.`t1_par`;");
+
     }
 
     //@Test
@@ -332,7 +358,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv2"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(TaskRun.PARTITION_START, "2022-01-03");
+        taskRunProperties.put(PARTITION_START, "2022-01-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-02-05");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -350,7 +376,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
-        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-04-05");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
@@ -362,7 +388,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
-        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-03-01");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         insertSql = "insert into tbl4 partition(p3) values('2022-03-02',21,102);";
@@ -378,7 +404,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
-        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-05-06");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
         taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
@@ -412,7 +438,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(TaskRun.PARTITION_START, "1998-01-01");
+        taskRunProperties.put(PARTITION_START, "1998-01-01");
         taskRunProperties.put(TaskRun.PARTITION_END, "1998-01-03");
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -427,6 +453,93 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980104").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980105").getVisibleVersion());
+
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(plan.contains("PARTITION PREDICATES: 16: l_shipdate >= '1998-01-01', " +
+                "16: l_shipdate < '1998-01-03'"));
+        Assert.assertTrue(plan.contains("partitions=2/5"));
+    }
+
+    @Test
+    public void testRefreshPartitionWithMulParColumnsHiveTable1() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_mul_parttbl_mv1"));
+        Map<String, String> mvProperties = Maps.newHashMap();
+        mvProperties.put(PARTITION_START, "1998-01-01");
+        mvProperties.put(PARTITION_END, "1998-01-03");
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(plan.contains("PARTITION PREDICATES: 15: l_shipdate >= '1998-01-01', 15: l_shipdate < '1998-01-03'"));
+        Assert.assertTrue(plan.contains("partitions=5/8"));
+    }
+
+    @Test
+    public void testRefreshPartitionWithMulParColumnsHiveTable2() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_mul_parttbl_mv2"));
+        Map<String, String> mvProperties = Maps.newHashMap();
+        mvProperties.put(PARTITION_START, "2020-01-01");
+        mvProperties.put(PARTITION_END, "2020-01-03");
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
+        Assert.assertTrue(plan.contains("partitions=3/6"));
     }
 
     @Test
@@ -835,5 +948,4 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertNull(mvContext.getNextPartitionStart());
         Assert.assertNull(mvContext.getNextPartitionEnd());
     }
-
 }
