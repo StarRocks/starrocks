@@ -47,6 +47,17 @@ public:
               _opened(false),
               _closed(false) {}
 
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                          mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _open_mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+
     ~AsyncDeltaWriterImpl();
 
     DISALLOW_COPY_AND_MOVE(AsyncDeltaWriterImpl);
@@ -231,6 +242,16 @@ std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet
                                                            const std::vector<SlotDescriptor*>* slots,
                                                            MemTracker* mem_tracker) {
     auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker);
+    return std::make_unique<AsyncDeltaWriter>(impl);
+}
+
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
+                                                           const std::vector<SlotDescriptor*>* slots,
+                                                           const std::string& merge_condition,
+                                                           MemTracker* mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                         mem_tracker);
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

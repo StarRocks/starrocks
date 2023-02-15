@@ -65,8 +65,8 @@ public:
                                    const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
 
     // get column data by rssid and rowids
-    Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TabletSchema& tablet_schema,
-                             std::vector<uint32_t>& column_ids, bool with_default,
+    Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+                             const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns);
     // get delvec by version
@@ -99,10 +99,17 @@ public:
     void expire_cache();
 
 private:
-    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
-                      PrimaryIndex& index, std::int64_t tablet_id, DeletesMap* new_deletes);
     // print memory tracker state
     void _print_memory_stats();
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
+                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+
+    Status _do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+                                     const TabletSchema& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
+                                     int32_t condition_column, const std::vector<ColumnUniquePtr>& upserts,
+                                     PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+
+    int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

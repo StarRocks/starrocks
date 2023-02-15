@@ -49,6 +49,11 @@ public:
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
 
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
+
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
     ~AsyncDeltaWriter();

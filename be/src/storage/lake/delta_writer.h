@@ -44,6 +44,12 @@ public:
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
 
+    // for condition update
+    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
+
     // for schema change
     // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,

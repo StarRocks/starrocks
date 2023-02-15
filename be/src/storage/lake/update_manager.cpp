@@ -16,6 +16,7 @@
 
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
@@ -54,6 +55,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     watch.start();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), rowset_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
@@ -85,9 +87,17 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         new_deletes[rowset_id + i] = {};
     }
     auto& upserts = state.upserts();
+    // handle merge condition, skip update row which's merge condition column value is smaller than current row
+    int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
-            RETURN_IF_ERROR(_do_update(rowset_id, i, upserts, index, tablet->id(), &new_deletes));
+            if (condition_column < 0) {
+                RETURN_IF_ERROR(_do_update(rowset_id, i, upserts, index, tablet->id(), &new_deletes));
+            } else {
+                RETURN_IF_ERROR(_do_update_with_condition(tablet, metadata, op_write, *tablet_schema, rowset_id, i,
+                                                          condition_column, upserts, index, tablet->id(),
+                                                          &new_deletes));
+            }
             _index_cache.update_object_size(index_entry, index.memory_usage());
         }
     }
@@ -158,10 +168,82 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     return Status::OK();
 }
 
-Status UpdateManager::_do_update(std::uint32_t rowset_id, std::int32_t upsert_idx,
-                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
-                                 std::int64_t tablet_id, DeletesMap* new_deletes) {
+Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
+                                 PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes) {
     index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+    return Status::OK();
+}
+
+Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata,
+                                                const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
+                                                uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column,
+                                                const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
+                                                int64_t tablet_id, DeletesMap* new_deletes) {
+    CHECK(condition_column >= 0);
+    auto tablet_column = tablet_schema.column(condition_column);
+    std::vector<uint32_t> read_column_ids;
+    read_column_ids.push_back(condition_column);
+
+    std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
+    index.get(*upserts[upsert_idx], &old_rowids);
+    bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+    if (!non_old_value) {
+        std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+        size_t num_default = 0;
+        vector<uint32_t> idxes;
+        RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+        std::vector<std::unique_ptr<Column>> old_columns(1);
+        auto old_unordered_column =
+                ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        old_columns[0] = old_unordered_column->clone_empty();
+        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, num_default > 0,
+                                          old_rowids_by_rssid, &old_columns));
+        auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
+
+        std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+        std::vector<uint32_t> rowids;
+        for (int j = 0; j < upserts[upsert_idx]->size(); ++j) {
+            rowids.push_back(j);
+        }
+        new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
+        // only support condition update on single column
+        std::vector<std::unique_ptr<Column>> new_columns(1);
+        auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        new_columns[0] = new_column->clone_empty();
+        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, false,
+                                          new_rowids_by_rssid, &new_columns));
+
+        int idx_begin = 0;
+        int upsert_idx_step = 0;
+        for (int j = 0; j < old_column->size(); ++j) {
+            if (num_default > 0 && idxes[j] == 0) {
+                // plan_read_by_rssid will return idx with 0 if we have default value
+                upsert_idx_step++;
+            } else {
+                int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
+                if (r > 0) {
+                    index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                 idx_begin + upsert_idx_step, new_deletes);
+
+                    idx_begin = j + 1;
+                    upsert_idx_step = 0;
+
+                    // Update delete vector of current segment which is being applied
+                    (*new_deletes)[rowset_id + upsert_idx].push_back(j);
+                } else {
+                    upsert_idx_step++;
+                }
+            }
+        }
+
+        if (idx_begin < old_column->size()) {
+            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
+                         new_deletes);
+        }
+    } else {
+        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+    }
 
     return Status::OK();
 }
@@ -196,8 +278,9 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetada
 }
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
-                                        const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids,
-                                        bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                                        const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
+                                        std::vector<uint32_t>& column_ids, bool with_default,
+                                        std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
@@ -224,7 +307,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::unordered_map<uint32_t, std::string> rssid_to_path;
-    rowset_rssid_to_path(metadata, rssid_to_path);
+    rowset_rssid_to_path(metadata, op_write, rssid_to_path);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 
@@ -436,6 +519,18 @@ void UpdateManager::_print_memory_stats() {
                                          PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
         last_print_ts.store(time(nullptr));
     }
+}
+
+int32_t UpdateManager::_get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema) {
+    const auto& txn_meta = op_write.txn_meta();
+    if (txn_meta.has_merge_condition()) {
+        for (int i = 0; i < tablet_schema.columns().size(); ++i) {
+            if (tablet_schema.column(i).name() == txn_meta.merge_condition()) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }
 
 } // namespace lake
