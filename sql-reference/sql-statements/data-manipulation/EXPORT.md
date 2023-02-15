@@ -11,12 +11,13 @@
 ## 语法
 
 ```sql
-EXPORT TABLE table_name
-[PARTITION (partition_name[, ...])]
-[(column_name[, ...])]
-TO export_path
+EXPORT TABLE <table_name>
+[PARTITION (<partition_name>[, ...])]
+[(<column_name>[, ...])]
+TO <export_path>
 [opt_properties]
 WITH BROKER
+[broker_properties]
 ```
 
 ## 参数说明
@@ -41,14 +42,15 @@ WITH BROKER
   - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为 `true`，表示包含。
 
 - `broker`：导出使用的 Broker。
+- `broker_properties`: 用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
 
-    语法：
+  语法：
 
     ```sql
     WITH BROKER broker_name ("key"="value"[, ...])
     ```
 
-    参数：
+  参数：
   - `broker_name`：Broker 名称。
   - `"key"="value"`：Broker 属性。不同存储系统对应的 Broker 的属性不同。具体参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 。
 
