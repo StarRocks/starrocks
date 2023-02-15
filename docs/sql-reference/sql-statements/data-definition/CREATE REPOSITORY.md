@@ -30,7 +30,7 @@ PROPERTIES ("key"="value", ...)
 
 **PROPERTIES**:
 
-StarRocks Supports creating repository in HDFS, AWS S3, and Google GCS.
+StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 
 - For HDFS:
   - "username": The username of the account that you want to use to access the NameNode of the HDFS cluster.
@@ -43,10 +43,10 @@ StarRocks Supports creating repository in HDFS, AWS S3, and Google GCS.
     - If you use Instance Profile to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.region".
     - If you use Assumed Role to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.iam_role_arn" and "aws.s3.region".
   
-  - "fs.s3a.access.key": The Access Key ID that you can use to access the Amazon S3 bucket.
-  - "fs.s3a.secret.key": The Secret Access Key that you can use to access the Amazon S3 bucket.
-  - "fs.s3a.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
-  - "aws.s3.iam_role_arn": The ARN of the IAM role that has privileges on the AWS S3 bucket in which your data files are stored. If you want to use assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, CelerData will assume this role when it analyzes your Hive data by using a Hive catalog.
+  - "aws.s3a.access.key": The Access Key ID that you can use to access the Amazon S3 bucket.
+  - "aws.s3a.secret.key": The Secret Access Key that you can use to access the Amazon S3 bucket.
+  - "aws.s3a.endpoint": The endpoint that you can use to access the Amazon S3 bucket.
+  - "aws.s3.iam_role_arn": The ARN of the IAM role that has privileges on the AWS S3 bucket in which your data files are stored. If you want to use assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it analyzes your Hive data by using a Hive catalog.
   - "aws.s3.region": The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
 > **NOTE**
