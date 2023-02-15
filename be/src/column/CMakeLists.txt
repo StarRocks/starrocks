@@ -5,6 +5,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(Column STATIC
         array_column.cpp
+        adaptive_nullable_column.cpp
         chunk.cpp
         column.cpp
         column_helper.cpp
