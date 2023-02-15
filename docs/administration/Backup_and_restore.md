@@ -105,7 +105,7 @@ After the repository is created, you can check the repository via [SHOW REPOSITO
 
 After the repository is created, you need to create a data snapshot and back up it in the remote repository. For detailed instructions, see [BACKUP](../sql-reference/sql-statements/data-definition/BACKUP.md).
 
-The following example creates a data snapshot `sr_member_backup` for the table `sr_member` in the database `sr_hub` and back up it in the repository `test_repo`.
+The following example creates a data snapshot `sr_member_backup` for the table `sr_member` in the database `sr_hub` and backs up it in the repository `test_repo`.
 
 ```SQL
 BACKUP SNAPSHOT sr_hub.sr_member_backup
@@ -113,13 +113,13 @@ TO test_repo
 ON (sr_member);
 ```
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md).
 
 ## Restore or migrate data
 
 You can restore the data snapshot backed up in the remote storage system to the current or other StarRocks clusters to restore or migrate data.
 
-### (Optional) Create the repository in the new cluster
+### (Optional) Create a repository in the new cluster
 
 To migrate data to another StarRocks cluster, you need to create a repository with the same **repository name** and **location** in the new cluster, otherwise you will not be able to view the previously backed up data snapshots. See [Create a repository](#create-a-repository) for details.
 
@@ -141,7 +141,7 @@ mysql> SHOW SNAPSHOT ON test_repo;
 
 ### Restore data via the snapshot
 
-Restore data snapshots in the remote storage system to the current or other StarRocks clusters to restore or migrate data using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md).
+You can use the [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md) statement to restore data snapshots in the remote storage system to the current or other StarRocks clusters.
 
 The following example restores the data snapshot `sr_member_backup` in `test_repo` on the table `sr_member`. It only restores ONE data replica.
 
@@ -163,9 +163,9 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 | Configuration item      | Description                                                                             |
 | ----------------------- | -------------------------------------------------------------------------------- |
-| upload_worker_count     | The maximum number of threads for the upload tasks of BACKUP jobs on the BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the upload task. |
-| download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on the BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
-| max_download_speed_kbps | The upper limit of the download speed on the BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
+| upload_worker_count     | The maximum number of threads for the upload tasks of BACKUP jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the upload task. |
+| download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
+| max_download_speed_kbps | The upper limit of the download speed on a BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
 
 ## Usage notes
 
@@ -175,9 +175,9 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 - StarRocks does not support specifying data compression algorithm for data backup.
 - Because data is backed up as snapshots, the data loaded upon snapshot generation is not included in the snapshot. Therefore, if you load data into the old cluster after the snapshot is generated and before the RESTORE job is completed, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
 - Before the RESTORE job is completed, you cannot operate the table to be restored.
-- Primary Key table cannot be restored to a StarRocks cluster earlier than v2.5.
+- Primary Key tables cannot be restored to a StarRocks cluster earlier than v2.5.
 - You do not need to create the table to be restored in the new cluster before restoring it. The RESTORE job automatically creates it.
-- If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
-- If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase of the RESTORE job. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
-- During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Single-table Materialized view](../using_starrocks/Materialized_view-single_table.md) of the corresponding table. Currently, StarRocks does not support backing up the [Asynchronous Refresh Materialized view](../using_starrocks/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
-- Currently, StarRocks does not support backing up the data of users, privileges and resource groups.
+- If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
+- If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
+- During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Single-table Materialized view](../using_starrocks/Materialized_view-single_table.md), which can still accelerate or rewrite your queries after data restoration. Currently, StarRocks does not support backing up views and [Multi-table Materialized views](../using_starrocks/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
+- Currently, StarRocks does not support backing up the configuration data related to user accounts, privileges, and resource groups.
