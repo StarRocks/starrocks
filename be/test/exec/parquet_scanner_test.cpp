@@ -188,8 +188,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_decimal_p14s5", TypeDescriptor::from_logical_type(TYPE_DECIMAL64, -1, 14, 5)},
                 {"col_decimal_p27s9", TypeDescriptor::from_logical_type(TYPE_DECIMALV2, -1, 27, 9)},
 
-                {"col_int_null", TypeDescriptor::from_primtive_type(TYPE_INT)},
-                {"col_string_null", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
+                {"col_int_null", TypeDescriptor::from_logical_type(TYPE_INT)},
+                {"col_string_null", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
 
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
@@ -219,8 +219,7 @@ class ParquetScannerTest : public ::testing::Test {
                 // Convert struct->JSON->string
                 {"col_json_struct_string", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-                {"issue_17693_c0",
-                 TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))}};
+                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
