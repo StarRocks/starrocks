@@ -255,8 +255,11 @@ public class IcebergUtil {
         return partitionNames;
     }
 
-    static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
+    public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
         int filePartitionFields = partition.size();
+        if (filePartitionFields == 0) {
+            return "non-partition";
+        }
         StringBuilder sb = new StringBuilder();
         for (int index = 0; index < filePartitionFields; ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
@@ -423,5 +426,9 @@ public class IcebergUtil {
             return Type.UNKNOWN_TYPE;
         }
         return new MapType(keyType, valueType);
+    }
+
+    public static int add(int x) {
+        return x + 1;
     }
 }

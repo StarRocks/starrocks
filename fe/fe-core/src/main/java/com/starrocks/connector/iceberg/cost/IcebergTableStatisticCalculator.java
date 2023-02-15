@@ -18,6 +18,8 @@ package com.starrocks.connector.iceberg.cost;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -223,42 +225,70 @@ public class IcebergTableStatisticCalculator {
         List<Types.NestedField> nonPartitionPrimitiveColumns = columns.stream()
                 .filter(column -> !identityPartitionIds.contains(column.fieldId()) && column.type().isPrimitiveType())
                 .collect(toImmutableList());
+        ((IcebergCachingFileIO) icebergTable.io()).getAllFileIO().set(0);
+        ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCache().set(0);
+        ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCacheHit().set(0);
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
                 snapshot.get(), icebergPredicate);
 
         IcebergFileStats icebergFileStats = null;
-        for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
-            for (FileScanTask fileScanTask : combinedScanTask.files()) {
-                DataFile dataFile = fileScanTask.file();
-                // ignore this data file.
-                if (dataFile.recordCount() == 0) {
-                    continue;
-                }
-                if (icebergFileStats == null) {
-                    icebergFileStats = new IcebergFileStats(
-                            idToTypeMapping,
-                            nonPartitionPrimitiveColumns,
-                            dataFile.partition(),
-                            dataFile.recordCount(),
-                            dataFile.fileSizeInBytes(),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
-                            dataFile.nullValueCounts(),
-                            dataFile.columnSizes());
-                } else {
-                    icebergFileStats.incrementFileCount();
-                    icebergFileStats.incrementRecordCount(dataFile.recordCount());
-                    icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
-                    updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    icebergFileStats.updateNullCount(dataFile.nullValueCounts());
-                    updateColumnSizes(icebergFileStats, dataFile.columnSizes());
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.Statistic.PlanTime")) {
+            for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
+                for (FileScanTask fileScanTask : combinedScanTask.files()) {
+                    DataFile dataFile = fileScanTask.file();
+                    // ignore this data file.
+                    if (dataFile.recordCount() == 0) {
+                        continue;
+                    }
+                    if (icebergFileStats == null) {
+                        icebergFileStats = new IcebergFileStats(
+                                idToTypeMapping,
+                                nonPartitionPrimitiveColumns,
+                                dataFile.partition(),
+                                dataFile.recordCount(),
+                                dataFile.fileSizeInBytes(),
+                                IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
+                                IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
+                                dataFile.nullValueCounts(),
+                                dataFile.columnSizes());
+                    } else {
+                        icebergFileStats.incrementFileCount();
+                        icebergFileStats.incrementRecordCount(dataFile.recordCount());
+                        icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
+                        updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                                dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                        updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                                dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                        icebergFileStats.updateNullCount(dataFile.nullValueCounts());
+                        updateColumnSizes(icebergFileStats, dataFile.columnSizes());
+                    }
                 }
             }
         }
+
+        for (int i = 0; i < ((IcebergCachingFileIO) icebergTable.io()).getAllFileIO().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.Statistic.AllFileIO")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        for (int i = 0; i < ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCache().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.Statistic.FileIOWithCache")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        for (int i = 0; i < ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCacheHit().get(); i++) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.Statistic.FileIOWithCacheHit")) {
+                IcebergUtil.add(0);
+            }
+        }
+
+        ((IcebergCachingFileIO) icebergTable.io()).getAllFileIO().set(0);
+        ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCache().set(0);
+        ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCacheHit().set(0);
 
         return icebergFileStats;
     }
