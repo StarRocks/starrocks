@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -29,7 +28,6 @@ public class ClassUtils {
         WRAPPER_TO_PRIMITIVE.put(Float.class, Float.TYPE);
         WRAPPER_TO_PRIMITIVE.put(Long.class, Long.TYPE);
         WRAPPER_TO_PRIMITIVE.put(Double.class, Double.TYPE);
-        WRAPPER_TO_PRIMITIVE.put(ArrayList.class, List.class);
         WRAPPER_TO_PRIMITIVE.put(String.class, String.class);
     }
 
@@ -41,9 +39,10 @@ public class ClassUtils {
         return argTypes;
     }
 
-    // return wrapped type if its type is primitive.
     public static Class<?> toPrimitiveClass(Class<?> parameterType) {
-        if (!parameterType.isPrimitive() || parameterType.getName().equals("java.util.ArrayList")) {
+        if (List.class.isAssignableFrom(parameterType)) {
+            return List.class;
+        } else if (!parameterType.isPrimitive()) {
             Class<?> wrapperType = getWrapperType(parameterType);
 
             assert wrapperType != null;
