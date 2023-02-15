@@ -22,6 +22,7 @@
 #include <sstream>
 #include <utility>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/json_parser.h"
@@ -81,7 +82,6 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
     ChunkPtr src_chunk;
     RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
-    src_chunk->reserve(_max_chunk_size);
 
     if (_cur_file_eof) {
         RETURN_IF_ERROR(_open_next_reader());
@@ -113,6 +113,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             return status;
         }
     }
+    _materialize_src_chunk_adaptive_nullable_column(src_chunk);
     ASSIGN_OR_RETURN(auto cast_chunk, _cast_chunk(src_chunk));
     return materialize(src_chunk, cast_chunk);
 }
@@ -277,12 +278,23 @@ Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
             continue;
         }
 
-        // The columns in source chunk are all in NullableColumn type;
-        auto col = ColumnHelper::create_column(_json_types[column_pos], true);
+        // The columns in source chunk are all in AdaptiveNullableColumn type;
+        auto col = ColumnHelper::create_column(_json_types[column_pos], true, false, 0, true);
         (*chunk)->append_column(col, slot_desc->id());
     }
 
     return Status::OK();
+}
+
+void JsonScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk) {
+    chunk->materialized_nullable();
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        AdaptiveNullableColumn* adaptive_column =
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+        chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
+                                                             adaptive_column->materialized_raw_null_column()),
+                                      i);
+    }
 }
 
 Status JsonScanner::_open_next_reader() {
@@ -634,8 +646,8 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             // it would get an error "Objects and arrays can only be iterated when they are first encountered",
             // Hence, resetting the row object is necessary here.
             row->reset();
-            RETURN_IF_ERROR(add_nullable_column_by_json_object(column, _slot_descs[i]->type(),
-                                                               _slot_descs[i]->col_name(), row, !_strict_mode));
+            RETURN_IF_ERROR(add_adaptive_nullable_column_by_json_object(
+                    column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row, !_strict_mode));
         } else {
             simdjson::ondemand::value val;
             auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
@@ -756,7 +768,7 @@ Status JsonReader::_read_and_parse_json() {
 // _construct_column constructs column based on no value.
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
-    return add_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
+    return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
 } // namespace starrocks

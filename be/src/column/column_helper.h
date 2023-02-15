@@ -213,8 +213,8 @@ public:
                                        const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
-    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
-
+    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                   bool use_adaptive_nullable_column = false);
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
