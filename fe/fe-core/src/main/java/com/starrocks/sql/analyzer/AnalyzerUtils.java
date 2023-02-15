@@ -15,6 +15,11 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.SlotRef;
+>>>>>>> 2ec959296 ([Enhancement] Support create mv when base table has multi partition columns for external table (#17752))
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
@@ -546,6 +551,8 @@ public class AnalyzerUtils {
         } else if (expr instanceof IntLiteral) {
             IntLiteral intLiteral = (IntLiteral) expr;
             return String.valueOf(intLiteral.getLongValue() + offset);
+        } else if (expr instanceof MaxLiteral) {
+            return MaxLiteral.MAX_VALUE.toString();
         } else {
             return null;
         }
