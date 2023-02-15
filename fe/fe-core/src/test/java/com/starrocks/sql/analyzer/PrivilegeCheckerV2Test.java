@@ -898,7 +898,7 @@ public class PrivilegeCheckerV2Test {
                         "revoke INSERT on table db1.tbl1 from test",
                         "revoke ALTER on table db1.tbl1 from test"
                 ),
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         // check CTAS: CREATE_TABLE on db and SELECT on source table
         List<String> submitTaskSqls = Arrays.asList(

@@ -3228,6 +3228,9 @@ public class GlobalStateMgr {
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
+        // TODO(yiming): support for external catalog later, reason:
+        //  currently no action of DATABASE object type is supported by external catalog,
+        //  so we don't checkAnyActionOnOrInDb() for external catalog for now
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
