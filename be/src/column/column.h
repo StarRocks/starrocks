@@ -378,6 +378,9 @@ public:
 
     virtual void check_or_die() const = 0;
 
+    // current only used by adaptive_nullable_column
+    virtual void materialized_nullable() const {}
+
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
     static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);

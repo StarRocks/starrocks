@@ -16,7 +16,7 @@ using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
+class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
@@ -44,6 +44,8 @@ public:
         this->swap_column(tmp);
         return *this;
     }
+
+    NullableColumn() = default;
 
     ~NullableColumn() override = default;
 
@@ -290,10 +292,10 @@ public:
 
     void check_or_die() const override;
 
-private:
+protected:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;
-    bool _has_null;
+    mutable bool _has_null;
 };
 
 } // namespace starrocks::vectorized
