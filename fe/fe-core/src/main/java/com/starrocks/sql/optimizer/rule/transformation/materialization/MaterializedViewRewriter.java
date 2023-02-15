@@ -196,7 +196,7 @@ public class MaterializedViewRewriter {
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
                 queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
-                materializationContext.getOutputMapping(), queryColumnSet, matchMode, compensationJoinColumns);
+                materializationContext.getOutputMapping(), queryColumnSet);
 
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {

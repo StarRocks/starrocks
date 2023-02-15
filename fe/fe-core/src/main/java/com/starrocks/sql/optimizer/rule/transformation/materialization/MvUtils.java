@@ -133,7 +133,7 @@ public class MvUtils {
         }
     }
 
-    // get all ref tables within and below root
+    // get all ref table scan descs within and below root
     public static List<TableScanDesc> getTableScanDescs(OptExpression root) {
         TableScanContext scanContext = new TableScanContext();
         OptExpressionVisitor joinFinder = new OptExpressionVisitor<Void, TableScanContext>() {

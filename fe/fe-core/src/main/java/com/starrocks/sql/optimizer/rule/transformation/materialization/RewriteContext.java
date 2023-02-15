@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
-import com.google.common.collect.Multimap;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
@@ -46,8 +45,6 @@ public class RewriteContext {
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
-    private MaterializedViewRewriter.MatchMode matchMode;
-    private Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -61,9 +58,7 @@ public class RewriteContext {
                           ColumnRefFactory mvRefFactory,
                           ReplaceColumnRefRewriter mvColumnRefRewriter,
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
-                          Set<ColumnRefOperator> queryColumnSet,
-                          MaterializedViewRewriter.MatchMode matchMode,
-                          Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+                          Set<ColumnRefOperator> queryColumnSet) {
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
         this.queryEquivalenceClasses = queryEquivalenceClasses;
@@ -77,8 +72,6 @@ public class RewriteContext {
         this.mvColumnRefRewriter = mvColumnRefRewriter;
         this.outputMapping = outputMapping;
         this.queryColumnSet = queryColumnSet;
-        this.matchMode = matchMode;
-        this.compensationJoinColumns = compensationJoinColumns;
     }
 
     public BiMap<Integer, Integer> getQueryToMvRelationIdMapping() {

@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// column1, column2,...,columnK;column1, column2,...,columnK
 public class UniqueConstraint {
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
