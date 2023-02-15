@@ -397,9 +397,15 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // If the type of the storage level is CHAR,
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
+<<<<<<< HEAD
         if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
             RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
                                               input.get_value(i), mempool));
+=======
+        if (f->type()->type() == TYPE_CHAR) {
+            RETURN_IF_ERROR(
+                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+>>>>>>> 0199f379b ([BugFix] Fix the bug that BE may crash when separating primary key and sortkey (#17740))
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
         }
