@@ -58,8 +58,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
@@ -741,7 +741,8 @@ public class PropertyAnalyzer {
                 if (parentDb == null) {
                     throw new AnalysisException(String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
                 }
-                Table parentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, parentTableName);
+                Table parentTable =
+                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, parentTableName);
                 if (parentTable == null) {
                     throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
                             catalogName, dbName, parentTableName));
@@ -762,12 +763,14 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(String.format("some columns of:%s do not exist in table:%",
                             parentColumns, parentOlapTable.getName()));
                 }
-                KeysType parentTableKeyType = parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
+                KeysType parentTableKeyType =
+                        parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
                 if (parentTableKeyType == KeysType.AGG_KEYS) {
                     throw new AnalysisException(String.format("do not support reference agg table:%s", parentTable.getName()));
                 } else if (parentTableKeyType == KeysType.DUP_KEYS) {
                     if (!parentOlapTable.hasUniqueConstraints()) {
-                        throw new AnalysisException(String.format("dup table:%s has no unique constraint", parentTable.getName()));
+                        throw new AnalysisException(
+                                String.format("dup table:%s has no unique constraint", parentTable.getName()));
                     } else {
                         List<UniqueConstraint> uniqueConstraints = parentOlapTable.getUniqueConstraints();
                         boolean matched = false;

@@ -24,26 +24,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.Table;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -119,8 +109,7 @@ public class MaterializedViewRewriter {
         return MvUtils.isLogicalSPJ(expression);
     }
 
-    private boolean isMVApplicable(OptExpression queryExpression,
-                                   OptExpression mvExpression,
+    private boolean isMVApplicable(OptExpression mvExpression,
                                    List<Table> queryTables,
                                    List<Table> mvTables) {
         if (!isValidPlan(mvExpression)) {
@@ -131,6 +120,7 @@ public class MaterializedViewRewriter {
         if (Collections.disjoint(queryTables, mvTables)) {
             return false;
         }
+        return true;
     }
 
     public List<OptExpression> rewrite(ReplaceColumnRefRewriter queryColumnRefRewriter,
@@ -141,7 +131,7 @@ public class MaterializedViewRewriter {
         List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
         // Check whether mv can be applicable for the query.
-        if (!isMVApplicable(queryExpression, mvExpression, queryTables, mvTables)) {
+        if (!isMVApplicable(mvExpression, queryTables, mvTables)) {
             return Lists.newArrayList();
         }
 
@@ -290,7 +280,8 @@ public class MaterializedViewRewriter {
             }
 
             for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
-                Collection<TableScanDesc> parentTableScanDescs = nameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
+                Collection<TableScanDesc> parentTableScanDescs =
+                        nameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
                 if (parentTableScanDescs == null || parentTableScanDescs.isEmpty()) {
                     continue;
                 }
@@ -366,7 +357,7 @@ public class MaterializedViewRewriter {
             ColumnRefOperator childColumn = getColumnRef(pair.first, tableScanDesc.getScanOperator());
             ColumnRefOperator parentColumn = getColumnRef(pair.second, parentTableScanDesc.getScanOperator());
             if (childColumn == null || parentColumn == null
-                    ||!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
+                    || !viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
                     || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
                 // there is no join between childTable and parentTable
                 return false;
@@ -410,7 +401,8 @@ public class MaterializedViewRewriter {
                 queryRefFactory.updateColumnToRelationIds(newColumn.getId(), relationId);
                 queryRefFactory.updateColumnRefToColumns(newColumn, column, olapTable);
             }
-            Set<Integer> relationIds = compensationRelations.computeIfAbsent(entry.getKey().getTable(), table -> Sets.newHashSet());
+            Set<Integer> relationIds =
+                    compensationRelations.computeIfAbsent(entry.getKey().getTable(), table -> Sets.newHashSet());
             relationIds.add(relationId);
         }
     }
@@ -449,8 +441,8 @@ public class MaterializedViewRewriter {
                                 OptExpression mvExpression,
                                 List<Table> queryTables,
                                 List<Table> mvTables) {
-        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(queryExpression);
-        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerJoin(mvExpression);
+        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
         if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
             return true;
         } else {

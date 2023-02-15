@@ -57,8 +57,12 @@ public class TableScanDesc {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         TableScanDesc that = (TableScanDesc) o;
         return Objects.equals(table, that.table) && index == that.index;
     }
