@@ -12,4 +12,14 @@ public class DropAnalyzeJobStmt extends DdlStmt {
     public long getId() {
         return id;
     }
+
+    @Override
+    public String toSql() {
+        return "drop analyze " + id;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropAnalyzeStatement(this, context);
+    }
 }
