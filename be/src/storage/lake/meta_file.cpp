@@ -295,11 +295,16 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void rowset_rssid_to_path(const TabletMetadata& metadata, std::unordered_map<uint32_t, std::string>& rssid_to_path) {
+void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+                          std::unordered_map<uint32_t, std::string>& rssid_to_path) {
     for (auto& rs : metadata.rowsets()) {
         for (int i = 0; i < rs.segments_size(); i++) {
             rssid_to_path[rs.id() + i] = rs.segments(i);
         }
+    }
+    const uint32_t rowset_id = metadata.next_rowset_id();
+    for (int i = 0; i < op_write.rowset().segments_size(); i++) {
+        rssid_to_path[rowset_id + i] = op_write.rowset().segments(i);
     }
 }
 
