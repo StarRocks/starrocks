@@ -50,7 +50,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -321,7 +320,7 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-            checkAvailableBackendsIsEnough(replicationNum);
+            checkReplicationNum(replicationNum);
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
         return replicationNum;
@@ -336,18 +335,13 @@ public class PropertyAnalyzer {
             key = PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         }
         short replicationNum = Short.parseShort(properties.get(key));
-        checkAvailableBackendsIsEnough(replicationNum);
+        checkReplicationNum(replicationNum);
         return replicationNum;
     }
 
-    private static void checkAvailableBackendsIsEnough(short replicationNum) throws AnalysisException {
+    private static void checkReplicationNum(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
-            throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
-        }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-        if (replicationNum > backendIds.size()) {
-            throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
-            + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+            throw new AnalysisException("Replication num should larger than 0");
         }
     }
 
