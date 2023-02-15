@@ -114,6 +114,7 @@ public:
     void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
+    void update_column_by_index(ColumnPtr column, size_t idx);
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
 
@@ -244,6 +245,12 @@ public:
     size_t bytes_usage(size_t from, size_t size) const;
 
     bool has_const_column() const;
+
+    void materialized_nullable() {
+        for (ColumnPtr& c : _columns) {
+            c->materialized_nullable();
+        }
+    }
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.
