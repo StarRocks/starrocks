@@ -641,10 +641,6 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
     }
 };
 
-<<<<<<< HEAD:be/src/exec/vectorized/arrow_to_starrocks_converter.cpp
-constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
-    return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
-=======
 // Convert Arrow null to any types
 Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                       size_t column_start_idx, uint8_t* null_data, uint8_t* filter_data, ArrowConvertContext* ctx) {
@@ -658,9 +654,8 @@ Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t 
     return {};
 }
 
-constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
+constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType lt, bool is_nullable, bool is_strict) {
     return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
->>>>>>> 1ce2a8bc3 ([BugFix]  fix loading NA type from parquet file (#17780)):be/src/exec/arrow_to_starrocks_converter.cpp
 }
 
 #define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) \
@@ -729,16 +724,11 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
-<<<<<<< HEAD:be/src/exec/vectorized/arrow_to_starrocks_converter.cpp
-ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
-    auto optimized_idx = convert_idx(at, pt, is_nullable, is_strict);
-=======
-ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
+ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType lt, bool is_nullable, bool is_strict) {
     if (at == ArrowTypeId::NA) {
         return null_converter;
     }
     auto optimized_idx = convert_idx(at, lt, is_nullable, is_strict);
->>>>>>> 1ce2a8bc3 ([BugFix]  fix loading NA type from parquet file (#17780)):be/src/exec/arrow_to_starrocks_converter.cpp
     auto it = global_optimized_arrow_conv_table.find(optimized_idx);
     if (it != global_optimized_arrow_conv_table.end()) {
         return it->second;
