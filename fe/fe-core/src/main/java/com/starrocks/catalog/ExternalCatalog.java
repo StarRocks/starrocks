@@ -25,4 +25,14 @@ public class ExternalCatalog extends Catalog {
         super(id, name, config, comment);
         Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }
+
+    // database uuid format: external_catalog_name.db_name
+    public static String getDbNameFromUUID(String uuid) {
+        return uuid.split("\\.")[1];
+    }
+
+    // table uuid format: external_catalog_name.db_name.table_name.creation_time
+    public static String getTableNameFromUUID(String uuid) {
+        return uuid.split("\\.")[2];
+    }
 }

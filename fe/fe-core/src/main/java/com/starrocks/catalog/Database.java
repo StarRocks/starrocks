@@ -95,7 +95,6 @@ public class Database extends MetaObject implements Writable {
     // empirical value.
     // assume that the time a lock is held by thread is less than 100ms
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
-
     private long id;
     private String fullQualifiedName;
     private QueryableReentrantReadWriteLock rwLock;

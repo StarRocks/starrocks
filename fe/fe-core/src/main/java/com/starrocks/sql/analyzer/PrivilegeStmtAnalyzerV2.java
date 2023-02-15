@@ -60,6 +60,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -259,7 +260,8 @@ public class PrivilegeStmtAnalyzerV2 {
 
             PrivilegeType privilegeType = PrivilegeType.valueOf(privTypeString);
             if (!privilegeManager.isAvailablePirvType(objectType, privilegeType)) {
-                throw new SemanticException("Cant grant " + privTypeString + " to object " + objectType);
+                throw new SemanticException("Cannot grant or revoke " + privTypeString + " on '"
+                        + objectType + "' type object");
             }
             return privilegeType;
         }
@@ -285,28 +287,44 @@ public class PrivilegeStmtAnalyzerV2 {
                         }
                     } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
                         // normal objects
-                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
+                        ObjectType objectType = analyzeObjectType(stmt.getObjectTypeUnResolved());
+                        stmt.setObjectType(objectType);
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            if (tokens.size() < 1 || tokens.size() > 2) {
-                                throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
+                            if (objectType.equals(ObjectType.TABLE) && tokens.size() == 3) {
+                                objectList.add(privilegeManager.generateObject(objectType, tokens));
+                                continue;
+                            } else if (objectType.equals(ObjectType.DATABASE) && tokens.size() == 2) {
+                                objectList.add(privilegeManager.generateObject(objectType, tokens));
+                                continue;
                             }
 
-                            if (tokens.size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
-                                    stmt.getObjectType().equals(ObjectType.VIEW) ||
-                                    stmt.getObjectType().equals(ObjectType.MATERIALIZED_VIEW))) {
-                                List<String> tokensWithDatabase = new ArrayList<>();
+                            if (tokens.size() < 1 || tokens.size() > 2) {
+                                throw new PrivilegeException(
+                                        "invalid object tokens, should have two, current: " + tokens);
+                            }
+
+                            List<String> fullTokens = new LinkedList<>();
+                            if (tokens.size() == 1 && (objectType.equals(ObjectType.TABLE) ||
+                                    objectType.equals(ObjectType.VIEW) ||
+                                    objectType.equals(ObjectType.MATERIALIZED_VIEW))) {
                                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                                 } else {
-                                    tokensWithDatabase.add(session.getDatabase());
+                                    fullTokens.add(session.getDatabase());
                                 }
-
-                                tokensWithDatabase.add(tokens.get(0));
-                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(),
-                                        tokensWithDatabase));
+                                fullTokens.add(tokens.get(0));
                             } else {
-                                objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
+                                fullTokens.addAll(tokens);
                             }
+
+                            if (objectType.equals(ObjectType.TABLE) || objectType.equals(ObjectType.DATABASE)) {
+                                if (Strings.isNullOrEmpty(session.getCurrentCatalog())) {
+                                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_CATALOG_ERROR);
+                                } else {
+                                    fullTokens.add(0, session.getCurrentCatalog());
+                                }
+                            }
+                            objectList.add(privilegeManager.generateObject(objectType, fullTokens));
                         }
                     } else if (stmt.getFunctionArgsDef() != null) {
                         FunctionName functionName = parseFunctionName(stmt);
@@ -325,21 +343,29 @@ public class PrivilegeStmtAnalyzerV2 {
                         // TABLE -> 0/1
                         stmt.setObjectType(objectType);
 
-                        if (stmt.getTokens().size() == 1 && (stmt.getObjectType().equals(ObjectType.TABLE) ||
-                                stmt.getObjectType().equals(ObjectType.VIEW) ||
-                                stmt.getObjectType().equals(ObjectType.MATERIALIZED_VIEW))) {
+                        if (stmt.getTokens().size() == 1 && (objectType.equals(ObjectType.TABLE) ||
+                                objectType.equals(ObjectType.VIEW) ||
+                                objectType.equals(ObjectType.MATERIALIZED_VIEW))) {
                             throw new SemanticException("ALL " + stmt.getObjectTypeUnResolved() +
                                     " must be restricted with database");
                         }
 
-                        if (stmt.getObjectType().equals(ObjectType.USER)) {
+                        if (objectType.equals(ObjectType.USER)) {
                             if (stmt.getTokens().size() != 1) {
                                 throw new SemanticException("invalid ALL statement for user! only support ON ALL USERS");
                             } else {
                                 objectList.add(privilegeManager.generateUserObject(objectType, null));
                             }
                         } else {
-                            objectList.add(privilegeManager.generateObject(objectType, stmt.getTokens()));
+                            List<String> fullTokens = new LinkedList<>(stmt.getTokens());
+                            if (objectType.equals(ObjectType.TABLE) || objectType.equals(ObjectType.DATABASE)) {
+                                if (Strings.isNullOrEmpty(session.getCurrentCatalog())) {
+                                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_CATALOG_ERROR);
+                                } else {
+                                    fullTokens.add(0, session.getCurrentCatalog());
+                                }
+                            }
+                            objectList.add(privilegeManager.generateObject(objectType, fullTokens));
                         }
                     }
                     stmt.setObjectList(objectList);

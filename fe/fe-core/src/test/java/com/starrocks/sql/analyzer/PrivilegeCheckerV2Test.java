@@ -28,6 +28,8 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -41,6 +43,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -54,6 +57,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -74,6 +78,7 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -436,6 +441,131 @@ public class PrivilegeCheckerV2Test {
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
         Assert.assertEquals(1, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
+    }
+
+    @Test
+    public void testPrivOnDbTableForExternalCatalog() throws Exception {
+        new MockUp<Database>() {
+            @Mock
+            public String getUUID() {
+                return "hive0.tpch";
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public String getUUID() {
+                return "hive0.tpch.region.123456";
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String name) {
+                return new Database(112233, name);
+            }
+        };
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return new OlapTable(112244, tableName, new ArrayList<>(),
+                        null, null, null);
+            }
+        };
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        MetadataMgr oldMetadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
+        ConnectorPlanTestBase.mockHiveCatalog(ctx);
+        ctx.setCurrentCatalog("hive0");
+        ctx.setDatabase("tpch");
+
+        // Test select on table
+        verifyGrantRevoke(
+                "select * from hive0.tpch.region",
+                "grant select on table tpch.region to test",
+                "revoke select on table tpch.region from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+        // Test brief syntax
+        verifyGrantRevoke(
+                "select * from hive0.tpch.region",
+                "grant select on tpch.region to test",
+                "revoke select on tpch.region from test",
+                "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+
+        // Test drop on table
+        verifyGrantRevoke(
+                "drop table hive0.tpch.region",
+                "grant drop on tpch.region to test",
+                "revoke drop on tpch.region from test",
+                "DROP command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+
+        // Test show tables for external catalog, only show table where the user has any action on it
+        grantRevokeSqlAsRoot("grant select on tpch.nation to test");
+        StatementBase showTablesStmt = UtFrameUtils.parseStmtWithNewParser("show tables",
+                starRocksAssert.getCtx());
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTablesStmt);
+        ShowResultSet set = executor.execute();
+        System.out.println(set.getResultRows());
+        // Since we mocked the getUUID method, so all the tables will return
+        Assert.assertEquals(
+                "[[customer], [lineitem], [nation], [orders], [part], [partsupp], [region], [supplier]]",
+                set.getResultRows().toString());
+        grantRevokeSqlAsRoot("revoke select on tpch.nation from test");
+        // SELECT action is revoked, so we return empty result
+        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
+
+        // Test drop on database
+        verifyGrantRevoke(
+                "drop database tpch",
+                "grant drop on database tpch to test",
+                "revoke drop on database tpch from test",
+                "Access denied for user 'test' to database 'tpch'");
+
+        // Test create_table on database
+        verifyGrantRevoke(
+                "create table hive0.tpch.test1111 (id int) duplicate key (id) distributed by hash(id)" +
+                        " buckets 10 properties(\"replication_num\"=\"1\");",
+                "grant CREATE_TABLE on database tpch to test",
+                "revoke CREATE_TABLE on database tpch from test",
+                "Access denied for user 'test' to database 'tpch'");
+
+        // Test show databases, check any action on table
+        grantRevokeSqlAsRoot("grant drop on tpch.region to test");
+        StatementBase showTableStmt =  UtFrameUtils.parseStmtWithNewParser("show databases",
+                starRocksAssert.getCtx());
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTableStmt);
+        set = executor.execute();
+        System.out.println(set.getResultRows());
+        Assert.assertEquals(
+                "[[ssb], [tpcds], [tpch]]",
+                set.getResultRows().toString());
+        grantRevokeSqlAsRoot("revoke drop on tpch.region from test");
+        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
+
+        // Test show grants for external catalog
+        grantRevokeSqlAsRoot("grant drop on tpch.region to test");
+        grantRevokeSqlAsRoot("grant select on tpch.nation to test");
+        grantRevokeSqlAsRoot("grant drop on database tpch to test");
+        StatementBase showGrantsStmt =  UtFrameUtils.parseStmtWithNewParser("show grants",
+                starRocksAssert.getCtx());
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showGrantsStmt);
+        set = executor.execute();
+        String resultString = set.getResultRows().toString();
+        System.out.println(resultString);
+        Assert.assertTrue(resultString.contains("'test'@'%', hive0, GRANT DROP ON DATABASE tpch TO USER 'test'@'%'"));
+        Assert.assertTrue(resultString.contains(
+                "'test'@'%', hive0, GRANT DROP, SELECT ON TABLE tpch.region TO USER 'test'@'%'"));
+        grantRevokeSqlAsRoot("revoke drop on tpch.region from test");
+        grantRevokeSqlAsRoot("revoke select on tpch.nation from test");
+        grantRevokeSqlAsRoot("revoke drop on database tpch from test");
+        // empty result after privilege revoked
+        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
+
+        // restore some current infos in context
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        ctx.setDatabase(null);
+        ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
     @Test
@@ -898,7 +1028,7 @@ public class PrivilegeCheckerV2Test {
                         "revoke INSERT on table db1.tbl1 from test",
                         "revoke ALTER on table db1.tbl1 from test"
                 ),
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         // check CTAS: CREATE_TABLE on db and SELECT on source table
         List<String> submitTaskSqls = Arrays.asList(
