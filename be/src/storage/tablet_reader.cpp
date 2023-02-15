@@ -413,10 +413,10 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(idx),
-                                              mempool));
+            RETURN_IF_ERROR(
+                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(idx), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));
