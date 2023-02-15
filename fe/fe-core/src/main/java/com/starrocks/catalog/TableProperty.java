@@ -186,6 +186,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
                 break;
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionLiveNumber();
             default:
                 break;
         }
@@ -249,6 +251,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionTTL() {
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionLiveNumber() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                 String.valueOf(INVALID)));
         return this;
     }
@@ -471,6 +479,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildPartitionLiveNumber();
         buildAutoRefreshPartitionsLimit();
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
