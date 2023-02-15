@@ -309,12 +309,12 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
-        return createShards(numShards, replicaNum, pathInfo, cacheInfo, groupId, null);
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null);
     }
 
-    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
             List<Long> matchShardIds)
         throws DdlException {
         if (matchShardIds != null) {
@@ -326,7 +326,7 @@ public class StarOSAgent {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
-            builder.setReplicaCount(replicaNum)
+            builder.setReplicaCount(1)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo);
