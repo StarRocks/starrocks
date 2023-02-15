@@ -256,11 +256,14 @@ public class PlanFragmentBuilder {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
 
+        private boolean canUseLocalShuffleAgg = true;
+
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
 
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
+            canUseLocalShuffleAgg &= optExpression.arity() <= 1;
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
             Projection projection = (optExpression.getOp()).getProjection();
 
@@ -1267,6 +1270,9 @@ public class PlanFragmentBuilder {
             if (ConnectContext.get() == null) {
                 return inputFragment;
             }
+            if (!canUseLocalShuffleAgg) {
+                return inputFragment;
+            }
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
                     && sessionVariable.isEnablePipelineEngine()
@@ -1403,7 +1409,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
-                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && !node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal()) {
@@ -1458,7 +1464,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -1473,7 +1479,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
 
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctLocal()) {
