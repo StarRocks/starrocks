@@ -47,7 +47,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -56,7 +55,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -299,7 +297,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
-        TableType t = TableType.OLAP;
         db.readLock();
         try {
             List<Table> backupTbls = Lists.newArrayList();
@@ -385,14 +382,8 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Create a backup job
-        BackupJob backupJob = null;
-        if (t == TableType.OLAP) {
-            backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        } else if (t == TableType.LAKE) {
-            backupJob = new LakeBackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        }
+        BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs,
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
