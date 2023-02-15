@@ -61,12 +61,11 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             } else {
                 fileSystem = this.fileSystem;
             }
-
             RemoteIterator<LocatedFileStatus> blockIterator;
             if (!pathKey.isRecursive()) {
-                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getRawPath()));
             } else {
-                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+                blockIterator = fileSystem.listFiles(new Path(uri.getRawPath()), true);
             }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
@@ -74,7 +73,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                     continue;
                 }
                 String locateName = locatedFileStatus.getPath().toUri().getPath();
-                String fileName = PartitionUtil.getSuffixName(uri.getPath(), locateName);
+                String fileName = PartitionUtil.getSuffixName(uri.getRawPath(), locateName);
 
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
