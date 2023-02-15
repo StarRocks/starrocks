@@ -1458,12 +1458,7 @@ public class PrivilegeCheckerV2 {
             varList.forEach(setVar -> {
                 if ((setVar instanceof SetPassVar)) {
                     UserIdentity prepareChangeUser = ((SetPassVar) setVar).getUserIdent();
-                    try {
-                        prepareChangeUser.analyze();
-                    } catch (AnalysisException e) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR, "ANALYZE ERROR");
-                    }
-                    if (!context.getUserIdentity().equals(prepareChangeUser)) {
+                    if (!context.getCurrentUserIdentity().equals(prepareChangeUser)) {
                         if (prepareChangeUser.equals(UserIdentity.ROOT)) {
                             throw new SemanticException("Can not set password for root user, except root itself");
                         }

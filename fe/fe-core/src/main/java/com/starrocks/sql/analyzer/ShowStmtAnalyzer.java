@@ -671,14 +671,7 @@ public class ShowStmtAnalyzer {
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             UserIdentity user = statement.getUserIdent();
             if (user != null) {
-                try {
-                    user.analyze();
-                } catch (AnalysisException e) {
-                    SemanticException exception =
-                            new SemanticException("failed to show authentication for " + user.toString());
-                    exception.initCause(e);
-                    throw exception;
-                }
+                user.analyze();
             } else if (!statement.isAll()) {
                 statement.setUserIdent(context.getCurrentUserIdentity());
             }

@@ -293,11 +293,6 @@ public class ConnectContext {
         this.qualifiedUser = qualifiedUser;
     }
 
-    // for USER() function
-    public UserIdentity getUserIdentity() {
-        return new UserIdentity(qualifiedUser, remoteIP);
-    }
-
     public UserIdentity getCurrentUserIdentity() {
         return currentUserIdentity;
     }
