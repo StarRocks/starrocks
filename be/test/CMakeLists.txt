@@ -186,6 +186,7 @@ set(EXEC_FILES
         ./storage/lake/partial_update_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
+        ./storage/lake/condition_update_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp

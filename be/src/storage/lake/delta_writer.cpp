@@ -79,6 +79,18 @@ public:
               _slots(slots),
               _schema_initialized(false) {}
 
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                             const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                             MemTracker* mem_tracker)
+            : _tablet_manager(tablet_manager),
+              _tablet_id(tablet_id),
+              _txn_id(txn_id),
+              _partition_id(partition_id),
+              _mem_tracker(mem_tracker),
+              _slots(slots),
+              _schema_initialized(false),
+              _merge_condition(merge_condition) {}
+
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
                              MemTracker* mem_tracker)
             : _tablet_manager(tablet_manager),
@@ -153,6 +165,9 @@ private:
     // for partial update
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
+
+    // for condition update
+    std::string _merge_condition;
 };
 
 void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
@@ -302,18 +317,28 @@ Status DeltaWriterImpl::finish() {
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    // not support handle partial update and condition update at the same time
+    if (_partial_update_tablet_schema != nullptr && _merge_condition != "") {
+        return Status::NotSupported("partial update and condition update at the same time");
+    }
     // handle partial update
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
-    if (rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
-        op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
-        for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
-            const auto& tablet_column = _partial_update_tablet_schema->column(i);
-            op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
-            op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+    if (rowset_txn_meta != nullptr) {
+        if (_partial_update_tablet_schema != nullptr) {
+            op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
+            for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
+                const auto& tablet_column = _partial_update_tablet_schema->column(i);
+                op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
+                op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+            }
+            // generate rewrite segment names to avoid gc in rewrite operation
+            for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+                op_write->add_rewrite_segments(random_segment_filename());
+            }
         }
-        // generate rewrite segment names to avoid gc in rewrite operation
-        for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-            op_write->add_rewrite_segments(random_segment_filename());
+        // handle condition update
+        if (_merge_condition != "") {
+            op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
@@ -337,6 +362,7 @@ void DeltaWriterImpl::close() {
     _flush_token.reset();
     _tablet_schema.reset();
     _partial_update_tablet_schema.reset();
+    _merge_condition.clear();
 }
 
 std::vector<std::string> DeltaWriterImpl::files() const {
@@ -424,6 +450,13 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
                                                  MemTracker* mem_tracker) {
     return std::make_unique<DeltaWriter>(
             new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker));
+}
+
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
+                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+                                                 const std::string& merge_condition, MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(
+            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition, mem_tracker));
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
