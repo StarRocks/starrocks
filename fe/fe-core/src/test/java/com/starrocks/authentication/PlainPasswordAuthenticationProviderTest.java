@@ -23,6 +23,8 @@ import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 
+import static com.starrocks.mysql.MysqlPassword.EMPTY_PASSWORD;
+
 public class PlainPasswordAuthenticationProviderTest {
     protected PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider();
 
@@ -61,13 +63,15 @@ public class PlainPasswordAuthenticationProviderTest {
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         for (String password : passwords) {
-            UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser, password, null);
+            UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser,
+                    new String(MysqlPassword.makeScrambledPassword(password), StandardCharsets.UTF_8), null);
             byte[] scramble = MysqlPassword.scramble(seed, password);
             provider.authenticate(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed, info);
         }
 
         // no password
-        UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser, "", null);
+        UserAuthenticationInfo info = provider.validAuthenticationInfo(testUser,
+                new String(EMPTY_PASSWORD, StandardCharsets.UTF_8), null);
         provider.authenticate(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0], info);
         try {
             provider.authenticate(
@@ -81,7 +85,8 @@ public class PlainPasswordAuthenticationProviderTest {
             Assert.assertTrue(e.getMessage().contains("password length mismatch!"));
         }
 
-        info = provider.validAuthenticationInfo(testUser, "bb", null);
+        byte[] p = MysqlPassword.makeScrambledPassword("bb");
+        info = provider.validAuthenticationInfo(testUser, new String(p, StandardCharsets.UTF_8), null);
         try {
             provider.authenticate(
                     testUser.getQualifiedUser(),

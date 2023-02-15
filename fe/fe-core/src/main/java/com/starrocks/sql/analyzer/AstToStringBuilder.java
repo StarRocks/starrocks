@@ -139,15 +139,15 @@ public class AstToStringBuilder {
                 }
             }
 
-            if (!Strings.isNullOrEmpty(statement.getAuthPlugin())) {
-                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPlugin());
-                if (!Strings.isNullOrEmpty(statement.getAuthString())) {
+            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
+                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
                     if (statement.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(statement.getAuthString()).append("'");
+                    sb.append(statement.getAuthStringUnResolved()).append("'");
                 }
             }
 

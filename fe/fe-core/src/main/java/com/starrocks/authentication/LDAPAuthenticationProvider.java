@@ -25,8 +25,7 @@ public class LDAPAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AUTHENTICATION_LDAP_SIMPLE.name();
 
     @Override
-    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password, String textForAuthPlugin)
-            throws AuthenticationException {
+    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password, String textForAuthPlugin) {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setTextForAuthPlugin(textForAuthPlugin);
