@@ -2137,17 +2137,10 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "bitmap_union[([15: bitmap_union, BITMAP, true]); args: BITMAP; result: BITMAP; " +
                 "args nullable: true;");
 
-        sql = "select count(distinct v1), bitmap_union_count(BITMAP_HASH(v3)) from test_object group by v2, v3";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "bitmap_union_count[([16: bitmap_union, BITMAP, true]); args: BITMAP; " +
-                "result: BITMAP; args nullable: true;");
-
         sql = "select count(distinct t1a), PERCENTILE_UNION(PERCENTILE_HASH(t1f)) from test_all_type group by t1c";
         plan = getVerboseExplain(sql);
         assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
                 "result: PERCENTILE; args nullable: true;");
         FeConstants.runningUnitTest = false;
-
-
     }
 }

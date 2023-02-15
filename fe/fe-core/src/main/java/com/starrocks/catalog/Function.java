@@ -784,7 +784,6 @@ public class Function implements Writable {
         }
 
         return this;
-
     }
 
 }
