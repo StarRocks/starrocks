@@ -17,6 +17,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -108,21 +109,21 @@ public class PatternMatcherTest {
         try {
             PatternMatcher matcher = PatternMatcher.createMysqlPattern("^abc", false);
             Assert.fail();
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             System.out.println(e.getMessage());
         }
 
         try {
             PatternMatcher matcher = PatternMatcher.createMysqlPattern("\\\\(abc", false);
             Assert.fail();
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             System.out.println(e.getMessage());
         }
 
         try {
             PatternMatcher matcher = PatternMatcher.createMysqlPattern("\\*abc", false);
             Assert.fail();
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             System.out.println(e.getMessage());
         }
     }

@@ -84,15 +84,7 @@ public class PrivilegeStmtAnalyzerV2 {
          * analyse user identity + check if user exists in UserPrivTable
          */
         private void analyseUser(UserIdentity userIdent, boolean checkExist) {
-            // analyse user identity
-            try {
-                userIdent.analyze();
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            userIdent.analyze();
 
             // check if user exists
             if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
