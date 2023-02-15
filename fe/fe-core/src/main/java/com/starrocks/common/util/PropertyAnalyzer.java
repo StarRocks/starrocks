@@ -137,6 +137,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
+    public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
@@ -241,6 +242,25 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static int analyzePartitionLiveNumber(Map<String, String> properties,
+                                                 boolean removeProperties) throws AnalysisException {
+        int partitionLiveNumber = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            try {
+                partitionLiveNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_LIVE_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Partition Live Number: " + e.getMessage());
+            }
+            if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
+                throw new AnalysisException("Illegal Partition Live Number: " + partitionLiveNumber);
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_LIVE_NUMBER);
+            }
+        }
+        return partitionLiveNumber;
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
@@ -575,7 +595,7 @@ public class PropertyAnalyzer {
         }
     }
 
-    // analyzeWriteQuorum will parse the write quorum from properties
+    // analyzeWriteQuorum will parse to write quorum from properties
     public static String analyzeWriteQuorum(Map<String, String> properties) throws AnalysisException {
         String writeQuorum;
         if (properties == null || !properties.containsKey(PROPERTIES_WRITE_QUORUM)) {

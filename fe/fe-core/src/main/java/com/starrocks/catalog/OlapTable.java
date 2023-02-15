@@ -1998,6 +1998,14 @@ public class OlapTable extends Table {
         return tableProperty.getCompressionType();
     }
 
+    public void setPartitionLiveNumber(int number) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(number));
+        tableProperty.buildPartitionLiveNumber();
+    }
+
     public Map<String, String> buildBinlogAvailableVersion() {
         Map<String, String> result = new HashMap<>();
         Collection<Partition> partitions =  getPartitions();

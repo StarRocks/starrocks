@@ -799,7 +799,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
-                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                case OperationType.OP_ALTER_TABLE_PROPERTIES: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1762,4 +1763,7 @@ public class EditLog {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
 
+    public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+    }
 }
