@@ -436,6 +436,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+
+        ScalarOperator partitionPredicate = null;
+        if (node.getPartitionPredicate() != null) {
+            partitionPredicate = SqlToScalarOperatorTranslator.translate(node.getPartitionPredicate(),
+                    new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
+        }
+
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTable()) {
             DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
@@ -472,7 +479,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.FILE.equals(node.getTable().getType())) {
             scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
@@ -481,10 +488,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 ((IcebergTable) node.getTable()).refreshTable();
             }
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.DELTALAKE.equals(node.getTable().getType())) {
             scanOperator = new LogicalDeltaLakeScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);

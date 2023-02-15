@@ -219,10 +219,25 @@ public class PartitionUtil {
         List<String> partitionNames = partitionPair.first;
         List<Column> partitionColumns = partitionPair.second;
 
+        // Get the index of partitionColumn when table has multi partition columns.
+        int partitionColumnIndex = -1;
+        for (int index = 0; index < partitionColumns.size(); ++index) {
+            if (partitionColumns.get(index).equals(partitionColumn)) {
+                partitionColumnIndex = index;
+                break;
+            }
+        }
+        if (partitionColumnIndex == -1) {
+            throw new AnalysisException("Materialized view partition column in partition exp " +
+                    "must be base table partition column");
+        }
+
         List<PartitionKey> partitionKeys = new ArrayList<>();
         for (String partitionName : partitionNames) {
-            PartitionKey partitionKey = createPartitionKey(toPartitionValues(partitionName),
-                    partitionColumns, table.getType());
+            PartitionKey partitionKey = createPartitionKey(
+                    ImmutableList.of(toPartitionValues(partitionName).get(partitionColumnIndex)),
+                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                    table.getType());
             partitionKeys.add(partitionKey);
         }
 

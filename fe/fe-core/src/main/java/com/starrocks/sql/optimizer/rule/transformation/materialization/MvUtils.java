@@ -20,6 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
@@ -504,6 +507,41 @@ public class MvUtils {
 
                 CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
                         CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
+                rangeParts.add(andPredicate);
+            }
+        }
+        return rangeParts;
+    }
+
+    public static List<Expr> convertRange(Expr slotRef, List<Range<PartitionKey>> partitionRanges) {
+        List<Expr> rangeParts = Lists.newArrayList();
+        for (Range<PartitionKey> range : partitionRanges) {
+            if (range.isEmpty()) {
+                continue;
+            }
+            // partition range must have lower bound and upper bound
+            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
+            LiteralExpr lowerExpr = range.lowerEndpoint().getKeys().get(0);
+            if (lowerExpr.isMinValue() && range.upperEndpoint().isMaxValue()) {
+                continue;
+            } else if (lowerExpr.isMinValue()) {
+                Expr upperBound = range.upperEndpoint().getKeys().get(0);
+                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryPredicate.Operator.LT, slotRef, upperBound);
+                rangeParts.add(upperPredicate);
+            } else if (range.upperEndpoint().isMaxValue()) {
+                Expr lowerBound = range.lowerEndpoint().getKeys().get(0);
+                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryPredicate.Operator.GE, slotRef, lowerBound);
+                rangeParts.add(lowerPredicate);
+            } else {
+                // close, open range
+                Expr lowerBound = range.lowerEndpoint().getKeys().get(0);
+                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryPredicate.Operator.GE, slotRef, lowerBound);
+
+                Expr upperBound = range.upperEndpoint().getKeys().get(0);
+                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryPredicate.Operator.LT, slotRef, upperBound);
+
+                CompoundPredicate andPredicate = new CompoundPredicate(CompoundPredicate.Operator.AND, lowerPredicate,
+                        upperPredicate);
                 rangeParts.add(andPredicate);
             }
         }
