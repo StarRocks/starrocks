@@ -388,7 +388,12 @@ public class SyncPartitionUtils {
     public static Range<PartitionKey> createRange(String lowerBound, String upperBound, Column partitionColumn)
             throws AnalysisException {
         PartitionValue lowerValue = new PartitionValue(lowerBound);
-        PartitionValue upperValue = new PartitionValue(upperBound);
+        PartitionValue upperValue;
+        if (upperBound.equalsIgnoreCase(MaxLiteral.MAX_VALUE.toString())) {
+            upperValue = PartitionValue.MAX_VALUE;
+        } else {
+            upperValue = new PartitionValue(upperBound);
+        }
         PartitionKey lowerBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
                 Collections.singletonList(partitionColumn));
         PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
