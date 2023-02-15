@@ -456,6 +456,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
     public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
