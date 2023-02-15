@@ -9,6 +9,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -21,6 +22,7 @@ import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -261,6 +263,17 @@ public class AnalyzeStmtTest {
         Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
         GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
         Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+    }
+
+    @Test
+    public void testDropAnalyzeTest() {
+        String sql = "drop analyze 10";
+        StatementBase stmt = analyzeSuccess(sql);
+        try {
+            DDLStmtExecutor.execute(stmt, getConnectContext());
+        } catch (Exception ignore) {
+            Assert.fail();
+        }
     }
 
     @Test
