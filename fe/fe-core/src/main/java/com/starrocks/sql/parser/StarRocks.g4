@@ -1201,7 +1201,7 @@ createUserStatement
     ;
 
 dropUserStatement
-    : DROP USER user
+    : DROP USER (IF EXISTS)? user
     ;
 
 alterUserStatement
@@ -1223,11 +1223,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE identifierOrString
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE identifierOrString
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement
