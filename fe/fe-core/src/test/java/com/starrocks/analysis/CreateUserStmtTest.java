@@ -45,6 +45,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+
 public class CreateUserStmtTest {
 
     @Before
@@ -62,8 +64,9 @@ public class CreateUserStmtTest {
         String sql = "CREATE USER 'user' IDENTIFIED BY 'passwd'";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'user'@'%' IDENTIFIED BY '*XXX'", AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
-        Assert.assertNull(stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assert.assertNull(stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
@@ -71,61 +74,61 @@ public class CreateUserStmtTest {
         Assert.assertEquals(
                 "CREATE USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
-        Assert.assertNull(stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assert.assertNull(stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'user'@'%'", AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "");
-        Assert.assertNull(stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "");
+        Assert.assertNull(stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
-        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
-        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "");
-        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "");
+        Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPluginName());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "");
-        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
-        Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "");
+        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPluginName());
+        Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getAuthenticationInfo().getTextForAuthPlugin());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(new String(stmt.getPassword()), "");
-        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
-        Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
+        Assert.assertEquals(new String(stmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8), "");
+        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPluginName());
+        Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io",  stmt.getAuthenticationInfo().getTextForAuthPlugin());
 
         sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE",
                 AstToSQLBuilder.toSQL(stmt));
-        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
-        Assert.assertNull(stmt.getUserForAuthPlugin());
+        Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPluginName());
+        Assert.assertNull( stmt.getAuthenticationInfo().getTextForAuthPlugin());
     }
 
     @Test(expected = AnalysisException.class)

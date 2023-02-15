@@ -38,6 +38,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -103,6 +104,32 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("invalid user name"));
         }
+
+        sql = "create user u1 identified with mysql_native_password by '123456'";
+        CreateUserStmt createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u2 identified with mysql_native_password as '123456'";
+        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+
+        sql = "create user u2 identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u3 identified by '123456'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+
+        sql = "create user u4 identified by password '123456'";
+        analyzeFail(sql, "Password hash should be a 41-digit hexadecimal number");
+
+        sql = "create user u4 identified by password '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
+        createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
+        Assert.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
+                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
     }
 
     @Test
