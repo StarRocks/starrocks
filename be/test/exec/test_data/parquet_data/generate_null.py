@@ -17,10 +17,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 # Generate parquet file for testing
-
-# input = './data_json.json'
-# table = json.read_json(input)
-
 output = "./data_null.parquet"
 
 data = [

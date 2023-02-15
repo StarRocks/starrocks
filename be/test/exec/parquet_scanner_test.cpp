@@ -570,7 +570,6 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(file_names, column_names.size(), {});
-    // auto ranges = generate_split_ranges(file_names, file_size, slot_size, {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {};
