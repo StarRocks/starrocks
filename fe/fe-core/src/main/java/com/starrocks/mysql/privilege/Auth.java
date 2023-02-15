@@ -617,8 +617,8 @@ public class Auth implements Writable {
     @Deprecated
     public void createUser(CreateUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-            authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
+        if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+            authPlugin = AuthPlugin.valueOf(stmt.getAuthPluginName());
         }
 
         //The current version of the code, here has been completely abandoned, here is only for UT compatibility,
@@ -637,8 +637,8 @@ public class Auth implements Writable {
     @Deprecated
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-            authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
+        if (!Strings.isNullOrEmpty(stmt.getAuthPluginName())) {
+            authPlugin = AuthPlugin.valueOf(stmt.getAuthPluginName());
         }
         // alter user only support change password till now
         setPasswordInternal(stmt.getUserIdent(),
