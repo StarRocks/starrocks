@@ -378,6 +378,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
+    tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
 }
 
 size_t TabletSchema::estimate_row_size(size_t variable_len) const {
