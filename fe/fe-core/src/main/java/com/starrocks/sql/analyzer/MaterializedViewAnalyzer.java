@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
@@ -497,12 +498,14 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
-                if (partitionColumnNames.size() != 1) {
-                    throw new SemanticException("Materialized view related base table partition columns " +
-                            "only supports single column");
+                boolean found = false;
+                for (String partitionColumn : partitionColumnNames) {
+                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                        found = true;
+                        break;
+                    }
                 }
-                String partitionColumn = partitionColumnNames.get(0);
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                if (!found) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
@@ -516,12 +519,15 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
-                if (partitionSpec.fields().size() != 1) {
-                    throw new SemanticException("Materialized view related base table partition columns " +
-                            "only supports single column");
+                boolean found = false;
+                for (PartitionField partitionField : partitionSpec.fields()) {
+                    String partitionColumn = partitionField.name();
+                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                        found = true;
+                        break;
+                    }
                 }
-                String partitionColumn = partitionSpec.fields().get(0).name();
-                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                if (!found) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }

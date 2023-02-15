@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
@@ -21,6 +22,8 @@ public class TableRelation extends Relation {
 
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
+
+    private Expr partitionPredicate;
 
     public TableRelation(TableName name) {
         this.name = name;
@@ -68,6 +71,14 @@ public class TableRelation extends Relation {
 
     public Map<Field, Column> getColumns() {
         return columns;
+    }
+
+    public Expr getPartitionPredicate() {
+        return this.partitionPredicate;
+    }
+
+    public void setPartitionPredicate(Expr partitionPredicate) {
+        this.partitionPredicate = partitionPredicate;
     }
 
     @Override
