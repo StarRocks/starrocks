@@ -154,7 +154,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
 
         ColumnRefFactory factory = context.getColumnRefFactory();
         otherMap.forEach((k, v) -> {
+<<<<<<< HEAD
             CallOperator firstAgg = transformOtherAgg(v, v.getChildren(), true);
+=======
+            CallOperator firstAgg = transformOtherAgg(v, v.getArguments(), true);
+>>>>>>> 2f7bd965d ([BugFix] update args type when rewrite the input of agg funcs (#17698))
             ColumnRefOperator firstOutput = factory.create(firstAgg, firstAgg.getType(), firstAgg.isNullable());
             firstAggregations.put(firstOutput, firstAgg);
 

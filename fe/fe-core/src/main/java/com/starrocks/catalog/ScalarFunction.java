@@ -87,6 +87,13 @@ public class ScalarFunction extends Function {
         closeFnSymbol = other.closeFnSymbol;
     }
 
+    public ScalarFunction(ScalarFunction other) {
+        super(other);
+        symbolName = other.symbolName;
+        prepareFnSymbol = other.prepareFnSymbol;
+        closeFnSymbol = other.closeFnSymbol;
+    }
+
     public static ScalarFunction createVectorizedBuiltin(long fid,
                                                          String name, List<Type> argTypes,
                                                          boolean hasVarArgs, Type retType) {

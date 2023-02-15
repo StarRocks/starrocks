@@ -764,6 +764,10 @@ public class Function implements Writable {
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2f7bd965d ([BugFix] update args type when rewrite the input of agg funcs (#17698))
     // just shallow copy
     public Function copy() {
         return new Function(this);
@@ -779,5 +783,8 @@ public class Function implements Writable {
         return this;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2f7bd965d ([BugFix] update args type when rewrite the input of agg funcs (#17698))
 }

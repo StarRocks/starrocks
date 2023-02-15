@@ -182,7 +182,11 @@ public class SplitAggregateRule extends TransformationRule {
             singleDistinctFunctionPos++;
             if (kv.getValue().isDistinct()) {
                 distinctColumns = kv.getValue().getUsedColumns().getStream().
+<<<<<<< HEAD
                         mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+=======
+                        map(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+>>>>>>> 2f7bd965d ([BugFix] update args type when rewrite the input of agg funcs (#17698))
                 break;
             }
         }
