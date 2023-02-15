@@ -61,6 +61,7 @@ public class MaterializedViewTest extends PlanTestBase {
                 "DUPLICATE KEY(`deptno`)\n" +
                 "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
+                "    \"unique_constraints\" = \"deptno\"\n," +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         String locationsTable = "" +
@@ -97,15 +98,16 @@ public class MaterializedViewTest extends PlanTestBase {
                 "DUPLICATE KEY(`empid`)\n" +
                 "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
+                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME)
+                .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(deptsTable);
+                .withTable(ependentsTable);
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1568,6 +1570,108 @@ public class MaterializedViewTest extends PlanTestBase {
                 " join t2 r on t1.c3 = r.c5" +
                 " join t3 on t1.c2 = t3.c5";
         String query = "select c1, c2, c3, t3.c5 from t1 join t3 on t1.c2 = t3.c5";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK3() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)";
+        String query = "select a.empid from \n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join dependents using (empid)";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK4() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)";
+        String query = "select a.name from \n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join dependents using (empid)";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK5() {
+        String mv = "select a.empid, a.deptno from\n"
+                + "(select * from emps where empid = 1) a\n"
+                + "join depts using (deptno)";
+        String query = "select empid from emps where empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK6() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts using (deptno)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK7() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "join depts b on (emps.deptno=b.deptno)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    // join key is not foreign key
+    @Test
+    public void testViewDeltaJoinUKFK8() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.name=a.name)\n"
+                + "join depts b on (emps.name=b.name)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    // join key is not foreign key
+    @Test
+    public void testViewDeltaJoinUKFK9() {
+        String mv = "select emps.empid, emps.deptno from emps\n"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "join depts b on (emps.name=b.name)\n"
+                + "join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid from emps\n"
+                + "join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK10() {
+        String mv = "select emps.empid as empid1, emps.name, emps.deptno, dependents.empid as empid2 from emps\n"
+                + "join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.empid, emps.deptno\n"
+                + "from emps\n"
+                + "join dependents using (empid)"
+                + "join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.name = 'Bill'";
         testRewriteOK(mv, query);
     }
 }

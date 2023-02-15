@@ -794,6 +794,16 @@ public class PropertyAnalyzer {
                                 parentColumns, parentTable.getName()));
                     }
                 }
+                List<Pair<String, String>> columnRefPairs =
+                        Streams.zip(baseColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
+                for (Pair<String, String> pair : columnRefPairs) {
+                    Column childColumn = baseOlapTable.getColumn(pair.first);
+                    Column parentColumn = parentTable.getColumn(pair.second);
+                    if (!childColumn.getType().equals(parentColumn.getType())) {
+                        throw new AnalysisException(String.format(
+                                "column:%s type does mot match referenced column:%s type", pair.first, pair.second));
+                    }
+                }
 
                 BaseTableInfo parentTableInfo;
                 if (catalogName == InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME) {
@@ -801,8 +811,7 @@ public class PropertyAnalyzer {
                 } else {
                     parentTableInfo = new BaseTableInfo(catalogName, dbName, parentTable.getTableIdentifier());
                 }
-                List<Pair<String, String>> columnRefPairs =
-                        Streams.zip(baseColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
+
                 ForeignKeyConstraint foreignKeyConstraint = new ForeignKeyConstraint(parentTableInfo, columnRefPairs);
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }

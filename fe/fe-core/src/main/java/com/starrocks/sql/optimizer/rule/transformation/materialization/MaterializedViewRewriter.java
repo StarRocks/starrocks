@@ -356,8 +356,16 @@ public class MaterializedViewRewriter {
         for (Pair<String, String> pair : columnPairs) {
             ColumnRefOperator childColumn = getColumnRef(pair.first, tableScanDesc.getScanOperator());
             ColumnRefOperator parentColumn = getColumnRef(pair.second, parentTableScanDesc.getScanOperator());
-            if (childColumn == null || parentColumn == null
-                    || !viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
+            if (childColumn == null || parentColumn == null) {
+                return false;
+            }
+            if (viewEquivalenceClasses.getEquivalenceClass(childColumn) == null) {
+                return false;
+            }
+            if (viewEquivalenceClasses.getEquivalenceClass(parentColumn) == null) {
+                return false;
+            }
+            if (!viewEquivalenceClasses.getEquivalenceClass(childColumn).contains(parentColumn)
                     || !viewEquivalenceClasses.getEquivalenceClass(parentColumn).contains(childColumn)) {
                 // there is no join between childTable and parentTable
                 return false;

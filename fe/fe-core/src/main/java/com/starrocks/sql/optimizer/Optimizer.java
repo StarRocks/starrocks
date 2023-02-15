@@ -50,7 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.CboSingleTableRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableMvRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -418,7 +418,7 @@ public class Optimizer {
 
         if (!context.getCandidateMvs().isEmpty()
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
-            new CboSingleTableRewriteRule().transform(tree, context);
+            new SingleTableMvRewriteRule().transform(tree, context);
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

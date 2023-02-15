@@ -825,6 +825,32 @@ public class CreateTableTest {
                         ");"
         ));
 
+        // column types do not match
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "processing constraint failed when creating table",
+                () -> createTable(
+                "CREATE TABLE test.base_table2(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 INT,\n" +
+                        "k4 VARCHAR(20),\n" +
+                        "k5 INT,\n" +
+                        "k6 VARCHAR(20),\n" +
+                        "k7 INT,\n" +
+                        "k8 VARCHAR(20),\n" +
+                        "k9 INT,\n" +
+                        "k10 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
+                        ");"
+        ));
+
+        // key size does not match
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(

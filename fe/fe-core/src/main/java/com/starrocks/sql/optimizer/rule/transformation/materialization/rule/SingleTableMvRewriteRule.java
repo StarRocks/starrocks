@@ -27,8 +27,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class CboSingleTableRewriteRule extends Rule {
-    public CboSingleTableRewriteRule() {
+// used to rewrite query with single table scan pattern to mv
+public class SingleTableMvRewriteRule extends Rule {
+    public SingleTableMvRewriteRule() {
         super(RuleType.TF_MV_CBO_SINGLE_TABLE_REWRITE_RULE, Pattern.create(OperatorType.PATTERN));
     }
 
@@ -71,19 +72,4 @@ public class CboSingleTableRewriteRule extends Rule {
             rewrite(input.getInputs().get(i), context);
         }
     }
-
-    /*
-    private void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        if (root.getLogicalProperty() == null) {
-            ExpressionContext context = new ExpressionContext(root);
-            context.deriveLogicalProperty();
-            root.setLogicalProperty(context.getRootProperty());
-        }
-    }
-
-     */
 }
