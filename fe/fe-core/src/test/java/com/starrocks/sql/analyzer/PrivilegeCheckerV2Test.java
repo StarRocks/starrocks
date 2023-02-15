@@ -1578,6 +1578,16 @@ public class PrivilegeCheckerV2Test {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
         String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
         verifyNODEAndGRANT(sql, expectError);
+
+        ctxToTestUser();
+        // user 'test' not has GRANT/NODE privilege
+        sql = "set password = PASSWORD('123456')";
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
+        sql = "set password for test = PASSWORD('123456')";
+        statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
     }
 
     @Test
