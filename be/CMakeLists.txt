@@ -477,6 +477,8 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     endif()
     if (USE_AVX512)
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f")
+    else() 
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mno-avx512f")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
