@@ -74,8 +74,6 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                     .put(FunctionSet.SUM, Pair.create(FunctionSet.SUM, FunctionSet.SUM))
                     .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
                     .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))
-                    .put(FunctionSet.BITMAP_UNION_COUNT,
-                            Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION_COUNT))
                     .put(FunctionSet.PERCENTILE_UNION,
                             Pair.create(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION))
                     .build();
