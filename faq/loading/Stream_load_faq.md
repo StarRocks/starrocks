@@ -31,3 +31,10 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 ## 4. 导入状态为 "Label Already Exists" 应该怎么解决？
 
 请参见[导入通用常见问题](/faq/loading/Loading_faq.md)。
+
+## 5. 导入出错 "body exceed max size: 10737418240, limit: 10737418240" 应该如何解决？
+
+导入文件大小超过 10GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法:
+
+1. 把文件通过 `seq -w 0 n` 拆分。
+2. 通过 `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=1024000` 来扩大这个上限。
