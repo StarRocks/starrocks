@@ -281,7 +281,7 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, 1, pathInfo, cacheInfo, 333));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();

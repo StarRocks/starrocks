@@ -101,8 +101,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                           long groupId, List<Long> matchShardIds)
         throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, 1, pathInfo, cacheInfo, groupId,
-                matchShardIds);
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds);
     }
 
 }
