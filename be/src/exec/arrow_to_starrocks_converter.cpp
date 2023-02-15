@@ -922,6 +922,7 @@ struct ArrowListConverter {
             }
             uint8_t* null_data;
             Column* data_column;
+            column_start_idx = col_elements->size();
             if (col_elements->is_nullable()) {
                 auto nullable_column = down_cast<NullableColumn*>(col_elements);
                 auto null_column = nullable_column->mutable_null_column();
