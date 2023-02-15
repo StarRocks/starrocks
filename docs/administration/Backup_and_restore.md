@@ -6,7 +6,7 @@ StarRocks supports backing up data as snapshots into a remote storage system, an
 
 StarRocks supports the following remote storage systems:
 
-- Apache™ Hadoop®  (HDFS) cluster
+- Apache™ Hadoop® (HDFS) cluster
 - AWS S3
 - Google GCS
 
