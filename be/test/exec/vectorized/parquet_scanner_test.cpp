@@ -207,8 +207,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_decimal_p14s5", TypeDescriptor::from_primtive_type(TYPE_DECIMAL64, -1, 14, 5)},
                 {"col_decimal_p27s9", TypeDescriptor::from_primtive_type(TYPE_DECIMALV2, -1, 27, 9)},
 
-                {"col_int_null", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col_string_null", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col_int_null", TypeDescriptor::from_primtive_type(TYPE_INT)},
+                {"col_string_null", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
 
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
@@ -236,13 +236,8 @@ class ParquetScannerTest : public ::testing::Test {
                 // Convert struct->JSON->string
                 {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
-<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
         };
         SlotInfoArray slot_infos;
-=======
-                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))}};
-        SlotTypeDescInfoArray slot_infos;
->>>>>>> 1ce2a8bc3 ([BugFix]  fix loading NA type from parquet file (#17780)):be/test/exec/parquet_scanner_test.cpp
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
             CHECK_EQ(slot_map.count(name), 1);
@@ -560,9 +555,6 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     validate(scanner, 36865, check);
 }
 
-<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
-} // namespace starrocks::vectorized
-=======
 TEST_F(ParquetScannerTest, test_arrow_null) {
     std::vector<std::string> column_names{"col_int_null", "col_string_null"};
     std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_null.parquet";
@@ -570,11 +562,10 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(file_names, column_names.size(), {});
-    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+    auto* desc_tbl = generate_desc_tbl(slot_infos, slot_infos);
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {};
     validate(scanner, 3, check);
 }
 
 } // namespace starrocks
->>>>>>> 1ce2a8bc3 ([BugFix]  fix loading NA type from parquet file (#17780)):be/test/exec/parquet_scanner_test.cpp
