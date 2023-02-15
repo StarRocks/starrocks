@@ -876,6 +876,7 @@ build_aws_cpp_sdk() {
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
     $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
+               -DENABLE_CURL_LOGGING=OFF \
                -G "${CMAKE_GENERATOR}" \
                -D_POSIX_C_SOURCE=200112L \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
