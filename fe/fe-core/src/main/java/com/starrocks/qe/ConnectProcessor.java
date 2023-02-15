@@ -58,6 +58,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -700,7 +701,7 @@ public class ConnectProcessor {
         try {
             packetBuf = channel.fetchOnePacket();
             if (packetBuf == null) {
-                throw new IOException("Error happened when receiving packet.");
+                throw new RpcException(ctx.getRemoteIP(), "Error happened when receiving packet.");
             }
         } catch (AsynchronousCloseException e) {
             // when this happened, timeout checker close this channel
@@ -720,6 +721,10 @@ public class ConnectProcessor {
         while (!ctx.isKilled()) {
             try {
                 processOnce();
+            } catch (RpcException rpce) {
+                LOG.debug("Exception happened in one session(" + ctx + ").", rpce);
+                ctx.setKilled();
+                break;
             } catch (Exception e) {
                 // TODO(zhaochun): something wrong
                 LOG.warn("Exception happened in one seesion(" + ctx + ").", e);
