@@ -1,0 +1,12 @@
+{"k1":"v1",   "kind":"server", "ip":"10.10.0.1"}
+{"k1":"v2", "ip":"10.10.0.2", "value":"20"} 
+{"kind":"server", "ip":"10.10.0.3", "value":"30"}
+{"kind":"server"}  
+{"value":"50"}
+{"k1":"v1",   "kind":"server", "ip":"10.10.0.1", "value":"10"}
+{"value":"50"}
+{"k1":"v34",   "kind":"server2", "ip":"10.10.0.22"}
+{"k1":"v3", "ip":"10.10.0.33", "value":"20"} 
+{"kind":"server", "ip":"10.10.0.3", "value":"30"}
+{"kind":"server"}  
+{"k1":"v1",   "kind":"server", "ip":"10.10.0.1", "value":"10"}

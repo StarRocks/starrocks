@@ -399,6 +399,8 @@ public:
     // But if complex types contains ConstColumns internally, current unpack functions can not handle it.
     // So to get a right answer, we need to make sure that there are no const columns in Complex Columns(Struct/Map)
     virtual Status unfold_const_children(const TypeDescriptor& type) { return Status::OK(); }
+    // current only used by adaptive_nullable_column
+    virtual void materialized_nullable() const {}
 
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);

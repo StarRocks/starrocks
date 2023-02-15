@@ -496,6 +496,131 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     EXPECT_EQ("['v5', 'server', '10.10.0.5', 50]", chunk->debug_row(4));
 }
 
+TEST_F(JsonScannerTest, test_json_new_parser) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.ip", "$.value"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_json_new_parser.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(12, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL, '10.10.0.2', 20]", chunk->debug_row(1));
+    EXPECT_EQ("[NULL, 'server', '10.10.0.3', 30]", chunk->debug_row(2));
+    EXPECT_EQ("[NULL, 'server', NULL, NULL]", chunk->debug_row(3));
+    EXPECT_EQ("[NULL, NULL, NULL, 50]", chunk->debug_row(4));
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(5));
+    EXPECT_EQ("[NULL, NULL, NULL, 50]", chunk->debug_row(6));
+    EXPECT_EQ("['v34', 'server2', '10.10.0.22', NULL]", chunk->debug_row(7));
+    EXPECT_EQ("['v3', NULL, '10.10.0.33', 20]", chunk->debug_row(8));
+    EXPECT_EQ("[NULL, 'server', '10.10.0.3', 30]", chunk->debug_row(9));
+    EXPECT_EQ("[NULL, 'server', NULL, NULL]", chunk->debug_row(10));
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(11));
+}
+
+TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.ip", "$.value"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_adaptive_nullable_column.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(6, chunk->num_rows());
+
+    EXPECT_EQ("[NULL, NULL, NULL, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL, NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[NULL, 'server', NULL, NULL]", chunk->debug_row(2));
+    EXPECT_EQ("[NULL, NULL, '10.10.0.1', NULL]", chunk->debug_row(3));
+    EXPECT_EQ("[NULL, NULL, NULL, 50]", chunk->debug_row(4));
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(5));
+}
+
+TEST_F(JsonScannerTest, test_adaptive_nullable_column_2) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.ip", "$.value"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_adaptive_nullable_column.json");
+    ranges.emplace_back(range);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "ip", "value"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(6, chunk->num_rows());
+
+    EXPECT_EQ("[NULL, NULL, NULL, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL, NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[NULL, 'server', NULL, NULL]", chunk->debug_row(2));
+    EXPECT_EQ("[NULL, NULL, '10.10.0.1', NULL]", chunk->debug_row(3));
+    EXPECT_EQ("[NULL, NULL, NULL, 50]", chunk->debug_row(4));
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(5));
+
+    chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(6, chunk->num_rows());
+    EXPECT_EQ("[NULL, NULL, NULL, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', NULL, NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[NULL, 'server', NULL, NULL]", chunk->debug_row(2));
+    EXPECT_EQ("[NULL, NULL, '10.10.0.1', NULL]", chunk->debug_row(3));
+    EXPECT_EQ("[NULL, NULL, NULL, 50]", chunk->debug_row(4));
+    EXPECT_EQ("['v1', 'server', '10.10.0.1', 10]", chunk->debug_row(5));
+}
+
 TEST_F(JsonScannerTest, test_multi_type) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_BOOLEAN);

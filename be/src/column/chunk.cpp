@@ -152,6 +152,11 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
+void Chunk::update_column_by_index(ColumnPtr column, size_t idx) {
+    _columns[idx] = std::move(column);
+    check_or_die();
+}
+
 void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));

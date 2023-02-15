@@ -16,6 +16,7 @@
 
 #include <runtime/types.h>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/json_column.h"
@@ -285,12 +286,17 @@ struct ColumnBuilder {
     }
 };
 
-ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
+ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                      bool use_adaptive_nullable_column) {
     auto type = type_desc.type;
     if (is_const && (nullable || type == TYPE_NULL)) {
         return ColumnHelper::create_const_null_column(size);
     } else if (type == TYPE_NULL) {
-        return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        }
     }
 
     ColumnPtr p;
@@ -330,8 +336,11 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         return ConstColumn::create(p, size);
     }
     if (nullable) {
-        // Default value is null
-        return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        }
     }
     return p;
 }

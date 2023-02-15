@@ -28,6 +28,10 @@ namespace starrocks {
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                            simdjson::ondemand::value* value, bool invalid_as_null);
 
-Status add_nullable_column_by_json_object(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                                          simdjson::ondemand::object* value, bool invalid_as_null);
+Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                    simdjson::ondemand::value* value, bool invalid_as_null);
+
+Status add_adaptive_nullable_column_by_json_object(Column* column, const TypeDescriptor& type_desc,
+                                                   const std::string& name, simdjson::ondemand::object* value,
+                                                   bool invalid_as_null);
 } // namespace starrocks
