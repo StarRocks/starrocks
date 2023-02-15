@@ -39,7 +39,7 @@ StarRocks Supports creating repository in HDFS, AWS S3, and Google GCS.
 - For AWS S3:
   - "aws.s3.use_instance_profile": Whether or not to allow instance profile and assumed role as credential methods for accessing AWS S3. Default: `false`. 
 
-    - If you use Access Key and Secret Key to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.endpoint".
+    - If you use IAM user-based credential (Access Key and Secret Key) to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.endpoint".
     - If you use Instance Profile to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.region".
     - If you use Assumed Role to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.iam_role_arn" and "aws.s3.region".
   
