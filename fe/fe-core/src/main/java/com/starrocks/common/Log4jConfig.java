@@ -294,7 +294,7 @@ public class Log4jConfig extends XmlConfiguration {
         Log4jConfig config = new Log4jConfig(source);
 
         // LoggerContext.start(new Configuration)
-        LoggerContext context = (LoggerContext) LogManager.getContext(false);
+        LoggerContext context = (LoggerContext) LogManager.getContext(LogManager.class.getClassLoader(), false);
         context.start(config);
     }
 
