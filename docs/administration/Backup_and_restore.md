@@ -38,7 +38,7 @@ PROPERTIES(
 
   You can choose IAM user-based credential (Access Key and Secret Key), Instance Profile, or Assumed Role as the credential method for accessing AWS S3.
 
-  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using IAM user-based credential as the credential method.
+  - The following example creates a repository named `test_repo` in the AWS S3 bucket `bucket_s3` using IAM user-based credential as the credential method.
 
   ```SQL
   CREATE REPOSITORY test_repo
@@ -51,7 +51,7 @@ PROPERTIES(
   );
   ```
 
-  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Instance Profile as the credential method.
+  - The following example creates a repository named `test_repo` in the AWS S3 bucket `bucket_s3` using Instance Profile as the credential method.
 
   ```SQL
   CREATE REPOSITORY test_repo
@@ -63,7 +63,7 @@ PROPERTIES(
   );
   ```
 
-  - The following example creates a repository named `test_repo` in the Amazon S3 bucket `bucket_s3` using Assumed Role as the credential method.
+  - The following example creates a repository named `test_repo` in the AWS S3 bucket `bucket_s3` using Assumed Role as the credential method.
 
   ```SQL
   CREATE REPOSITORY test_repo
