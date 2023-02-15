@@ -109,6 +109,7 @@ import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
@@ -248,7 +249,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.DATABASE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
         }
@@ -310,7 +311,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
         }
@@ -358,7 +359,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
         }
