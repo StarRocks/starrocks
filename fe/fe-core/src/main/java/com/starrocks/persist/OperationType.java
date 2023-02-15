@@ -305,6 +305,7 @@ public class OperationType {
 
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
+    public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
     // warehouse
     public static final short OP_CREATE_WH = 11110;

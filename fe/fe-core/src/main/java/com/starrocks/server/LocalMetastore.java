@@ -2029,6 +2029,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
+
+                DynamicPartitionUtil.checkIfAutomaticPartitionAllowed(stmt.getProperties());
+
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
@@ -2349,6 +2352,17 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         table.setCompressionType(compressionType);
 
+        // partition live number
+        int partitionLiveNumber;
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            try {
+                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            table.setPartitionLiveNumber(partitionLiveNumber);
+        }
+
         // a set to record every new tablet created when create table
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
@@ -2461,6 +2475,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("Successfully create table[{};{}]", tableName, tableId);
             // register or remove table from DynamicPartition after table created
             DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
+            DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), table);
             stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
                     tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         } finally {
@@ -3940,6 +3955,31 @@ public class LocalMetastore implements ConnectorMetadata {
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
         editLog.logDynamicPartition(info);
+    }
+
+
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Map<String, String> logProperties = new HashMap<>(properties);
+        int partitionLiveNumber = -1;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            try {
+                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+            } catch (AnalysisException ex) {
+                throw new DdlException(ex.getMessage());
+            }
+        }
+        if (!properties.isEmpty()) {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
+                String.valueOf(partitionLiveNumber));
+        tableProperty.setPartitionTTLNumber(partitionLiveNumber);
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
+        editLog.logAlterTableProperties(info);
     }
 
     /**

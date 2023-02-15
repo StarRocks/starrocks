@@ -68,6 +68,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER;
 
 public class DynamicPartitionUtil {
@@ -361,15 +362,19 @@ public class DynamicPartitionUtil {
 
     public static boolean isTTLPartitionTable(Table table) {
         if (!(table instanceof OlapTable) ||
-                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
+                !(((OlapTable) table).getPartitionInfo().isRangePartition())) {
             return false;
         }
 
         TableProperty tableProperty = ((OlapTable) table).getTableProperty();
-        if (tableProperty == null || !tableProperty.getProperties().containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
+        if (tableProperty == null) {
             return false;
         }
-
+        Map<String, String> properties = tableProperty.getProperties();
+        if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) &&
+                !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            return false;
+        }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
         return rangePartitionInfo.getPartitionColumns().size() == 1;
     }
@@ -398,6 +403,15 @@ public class DynamicPartitionUtil {
         }
         if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
             properties.putIfAbsent(DynamicPartitionProperty.BUCKETS, String.valueOf(bucketNum));
+        }
+    }
+
+    public static void checkIfAutomaticPartitionAllowed(Map<String, String> properties) throws DdlException {
+        if (properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
+            throw new DdlException("Automatic partitioning does not support properties of dynamic partitioning");
         }
     }
 
