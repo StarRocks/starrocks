@@ -2,6 +2,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -149,6 +150,25 @@ public class ArithmeticExprTest {
                 Assert.fail("should throw exception");
             } catch (AnalysisException ignored) {
             }
+        }
+    }
+
+    @Test
+    public void testTinyintDivideAnalyze() throws IOException {
+        UtFrameUtils.createDefaultCtx();
+        ArithmeticExpr expr = new ArithmeticExpr(
+                ArithmeticExpr.Operator.DIVIDE, new IntLiteral(15, Type.TINYINT), new IntLiteral(30, Type.TINYINT));
+        try {
+            // The expr in integer type would be cast to double type.
+            expr.analyzeImpl(null);
+            Assert.assertNotNull(expr.fn);
+            Assert.assertEquals(expr.type, Type.DOUBLE);
+            Assert.assertTrue(expr.getChild(0) instanceof LiteralExpr);
+            Assert.assertTrue(expr.getChild(1) instanceof LiteralExpr);
+            Assert.assertEquals(expr.getChild(0).type, Type.DOUBLE);
+            Assert.assertEquals(expr.getChild(1).type, Type.DOUBLE);
+        } catch (AnalysisException e) {
+            Assert.fail("Should not throw exception");
         }
     }
 }
