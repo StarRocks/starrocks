@@ -39,7 +39,6 @@ public class ClassUtils {
         return argTypes;
     }
 
-    // return wrapped type if its type is primitive.
     public static Class<?> toPrimitiveClass(Class<?> parameterType) {
         if (List.class.isAssignableFrom(parameterType)) {
             return List.class;
