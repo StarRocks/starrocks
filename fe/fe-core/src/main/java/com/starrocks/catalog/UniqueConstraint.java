@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class UniqueConstraint {
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
-    private List<String> uniqueColumns;
+    private final List<String> uniqueColumns;
 
     public UniqueConstraint(List<String> uniqueColumns) {
         this.uniqueColumns = uniqueColumns;

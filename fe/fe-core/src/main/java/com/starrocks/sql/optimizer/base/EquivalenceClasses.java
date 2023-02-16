@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class EquivalenceClasses {
-    private Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
+    private final Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
 
     public EquivalenceClasses() {
         columnToEquivalenceClass = Maps.newHashMap();

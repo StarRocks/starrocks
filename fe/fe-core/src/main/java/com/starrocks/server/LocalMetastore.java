@@ -2367,11 +2367,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            processConstraint(db, olapTable, properties);
+            processConstraint(db, table, properties);
         } catch (AnalysisException e) {
             throw new DdlException(
                     String.format("processing constraint failed when creating table:%s. exception msg:%s",
-                            olapTable.getName(), e.getMessage()), e);
+                            table.getName(), e.getMessage()), e);
         }
 
         // a set to record every new tablet created when create table

@@ -40,12 +40,12 @@ public class ForeignKeyConstraint {
     public static final Pattern FOREIGN_KEY_PATTERN = Pattern.compile(FOREIGN_KEY_REGEX);
     // table with primary key or unique key
     // if parent table is dropped, the foreign key is not dropped cascade now.
-    private BaseTableInfo parentTableInfo;
+    private final BaseTableInfo parentTableInfo;
 
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
     // eg: [column1 -> column1', column2 -> column2']
-    private List<Pair<String, String>> columnRefPairs;
+    private final List<Pair<String, String>> columnRefPairs;
 
     public ForeignKeyConstraint(
             BaseTableInfo parentTableInfo,
