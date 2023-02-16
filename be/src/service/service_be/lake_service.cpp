@@ -556,7 +556,7 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
         return;
     }
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPLOAD);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         auto loader = std::make_unique<LakeSnapshotLoader>(_env);
@@ -587,11 +587,23 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
         return;
     }
 
-    auto loader = std::make_unique<LakeSnapshotLoader>(_env);
-    auto st = loader->restore(request);
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DOWNLOAD);
+    auto latch = BThreadCountDownLatch(1);
+    auto task = [&]() {
+        auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+        auto st = loader->restore(request);
+        if (!st.ok()) {
+            cntl->SetFailed(st.to_string());
+        }
+        latch.count_down();
+    };
+    auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
-        cntl->SetFailed(st.to_string());
+        LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
+        cntl->SetFailed(st.get_error_msg());
+        latch.count_down();
     }
+    latch.wait();
 }
 
 } // namespace starrocks
