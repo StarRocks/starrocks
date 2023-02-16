@@ -325,8 +325,7 @@ public class ArithmeticExpr extends Expr {
                 break;
             case DIVIDE:
                 commonType = getCommonType(t1, t2);
-                if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
-                        || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
+                if (commonType.getPrimitiveType().isIntegerType()) {
                     commonType = Type.DOUBLE;
                 }
                 break;
