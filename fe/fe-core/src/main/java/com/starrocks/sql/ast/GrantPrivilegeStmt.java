@@ -15,32 +15,32 @@
 
 package com.starrocks.sql.ast;
 
-import java.util.Collections;
 import java.util.List;
 
 public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
+    private final boolean withGrantOption;
+
     public GrantPrivilegeStmt(
             List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
-            GrantRevokePrivilegeObjects objects) {
+            GrantRevokePrivilegeObjects objects,
+            boolean withGrantOption) {
         super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects);
+        this.withGrantOption = withGrantOption;
     }
 
     /**
-     * The following 2 functions is used to generate sql when excuting `show grants` in old privilege framework
+     * The following functions is used to generate sql when excuting `show grants` in old privilege framework
      */
-    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserIdentity userIdentity) {
-        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(userIdentity, null, false),
+    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserIdentity userIdentity,
+                              boolean withGrantOption) {
+        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(userIdentity, null),
                 new GrantRevokePrivilegeObjects());
+        this.withGrantOption = withGrantOption;
     }
 
-    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, String roleName) {
-        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(null, roleName, false),
-                new GrantRevokePrivilegeObjects());
-    }
-
-    public void setUserPrivilegeObject(UserIdentity userIdentity) {
-        this.objects.setUserPrivilegeObjectList(Collections.singletonList(userIdentity));
+    public boolean isWithGrantOption() {
+        return withGrantOption;
     }
 }

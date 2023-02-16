@@ -218,6 +218,10 @@ public class AstToStringBuilder {
             } else {
                 sb.append("ROLE '").append(stmt.getRole()).append("'");
             }
+
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
+                sb.append(" WITH GRANT OPTION");
+            }
             return sb.toString();
         }
 

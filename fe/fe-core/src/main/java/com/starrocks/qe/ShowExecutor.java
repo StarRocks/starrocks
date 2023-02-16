@@ -124,7 +124,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -132,6 +131,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -210,7 +210,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -1858,14 +1857,57 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
+    private List<List<String>> privilegeToRowString(PrivilegeManager privilegeManager, GrantRevokeClause userOrRoleName,
+                                                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
+                                                            typeToPrivilegeEntryList) throws PrivilegeException {
+        List<List<String>> infos = new ArrayList<>();
+        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+                : typeToPrivilegeEntryList.entrySet()) {
+            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+                List<String> info = new ArrayList<>();
+                info.add(userOrRoleName.getRoleName() != null ?
+                        userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
+
+                ObjectType objectType = typeToPrivilegeEntry.getKey();
+                if (objectType.equals(ObjectType.CATALOG)) {
+                    CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
+                    if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
+                        info.add(null);
+                    } else {
+                        info.add(catalogPEntryObject.toString());
+                    }
+                } else {
+                    info.add("default");
+                }
+
+                GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
+                        userOrRoleName, null, privilegeEntry.isWithGrantOption());
+
+                grantPrivilegeStmt.setObjectType(objectType);
+                ActionSet actionSet = privilegeEntry.getActionSet();
+                List<PrivilegeType> privList = privilegeManager.analyzeActionSet(objectType, actionSet);
+                grantPrivilegeStmt.setPrivilegeTypes(privList);
+                grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
+
+                try {
+                    info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+                    infos.add(info);
+                } catch (com.starrocks.sql.common.MetaNotFoundException e) {
+                    //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                }
+            }
+        }
+
+        return infos;
+    }
+
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             PrivilegeManager privilegeManager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
             try {
+                List<List<String>> infos = new ArrayList<>();
                 if (showStmt.getRole() != null) {
-                    List<List<String>> infos = new ArrayList<>();
-
                     Long roleId = privilegeManager.getRoleIdByNameAllowNull(showStmt.getRole());
                     if (roleId == null) {
                         throw new SemanticException("There is no such grant defined for role " + showStmt.getRole());
@@ -1879,11 +1921,14 @@ public class ShowExecutor {
                         RolePrivilegeCollection parentRolePriv =
                                 privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                         parentRoleNameList.add(parentRolePriv.getName());
+                    }
 
+                    if (!parentRoleNameList.isEmpty()) {
                         try {
                             List<String> info = Lists.newArrayList(showStmt.getRole(), null,
                                     AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, showStmt.getRole())));
                             infos.add(info);
+
                         } catch (com.starrocks.sql.common.MetaNotFoundException e) {
                             //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
                         }
@@ -1892,52 +1937,10 @@ public class ShowExecutor {
                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
                             rolePrivilegeCollection.getTypeToPrivilegeEntryList();
 
-                    for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
-                            : typeToPrivilegeEntryList.entrySet()) {
-                        for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
-                            List<String> info = new ArrayList<>();
-                            String roleName = showStmt.getRole();
-                            info.add(roleName);
-
-                            ObjectType objectType = typeToPrivilegeEntry.getKey();
-                            if (objectType.equals(ObjectType.CATALOG)) {
-                                CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
-                                if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
-                                    info.add(null);
-                                } else {
-                                    List<Catalog> catalogs = new ArrayList<>(
-                                            GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
-                                    Optional<Catalog> catalogOptional = catalogs.stream().filter(
-                                            catalog -> catalog.getId() == catalogPEntryObject.getId()
-                                    ).findFirst();
-                                    if (!catalogOptional.isPresent()) {
-                                        throw new SemanticException("can't find catalog");
-                                    }
-                                    Catalog catalog = catalogOptional.get();
-                                    info.add(catalog.getName());
-                                }
-                            } else {
-                                info.add("default");
-                            }
-
-                            GrantPrivilegeStmt grantPrivilegeStmt =
-                                    new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), roleName);
-                            grantPrivilegeStmt.setObjectType(objectType);
-
-                            ActionSet actionSet = privilegeEntry.getActionSet();
-                            List<PrivilegeType> privList = privilegeManager.analyzeActionSet(objectType, actionSet);
-                            grantPrivilegeStmt.setPrivilegeTypes(privList);
-
-                            grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-                            info.add(AstToStringBuilder.toString(grantPrivilegeStmt));
-
-                            infos.add(info);
-                        }
-                    }
-                    resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+                    infos.addAll(privilegeToRowString(privilegeManager,
+                            new GrantRevokeClause(null, showStmt.getRole()),
+                            typeToPrivilegeEntryList));
                 } else {
-                    List<List<String>> infos = new ArrayList<>();
-
                     UserIdentity userIdentity = showStmt.getUserIdent();
                     UserPrivilegeCollection userPrivilegeCollection =
                             privilegeManager.getUserPrivilegeCollectionUnlocked(userIdentity);
@@ -1957,54 +1960,10 @@ public class ShowExecutor {
 
                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
                             userPrivilegeCollection.getTypeToPrivilegeEntryList();
-                    for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
-                            : typeToPrivilegeEntryList.entrySet()) {
-                        for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
-                            List<String> info = new ArrayList<>();
-                            info.add(userIdentity.toString());
-
-                            ObjectType objectType = typeToPrivilegeEntry.getKey();
-                            if (objectType.equals(ObjectType.CATALOG)) {
-                                CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
-                                if (catalogPEntryObject.getId() == CatalogPEntryObject.ALL_CATALOG_ID) {
-                                    info.add(null);
-                                } else {
-                                    List<Catalog> catalogs = new ArrayList<>(
-                                            GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
-                                    Optional<Catalog> catalogOptional = catalogs.stream().filter(
-                                            catalog -> catalog.getId() == catalogPEntryObject.getId()
-                                    ).findFirst();
-                                    if (!catalogOptional.isPresent()) {
-                                        throw new SemanticException("can't find catalog");
-                                    }
-                                    Catalog catalog = catalogOptional.get();
-                                    info.add(catalog.getName());
-                                }
-                            } else {
-                                info.add("default");
-                            }
-
-                            GrantPrivilegeStmt grantPrivilegeStmt =
-                                    new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(), userIdentity);
-                            grantPrivilegeStmt.setObjectType(objectType);
-
-                            ActionSet actionSet = privilegeEntry.getActionSet();
-                            List<PrivilegeType> privList = privilegeManager.analyzeActionSet(objectType, actionSet);
-                            grantPrivilegeStmt.setPrivilegeTypes(privList);
-
-                            grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-
-                            try {
-                                info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
-                                infos.add(info);
-                            } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                                //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
-                            }
-                        }
-                    }
-
-                    resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+                    infos.addAll(privilegeToRowString(privilegeManager, new GrantRevokeClause(userIdentity, null),
+                            typeToPrivilegeEntryList));
                 }
+                resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
             } catch (PrivilegeException e) {
                 throw new SemanticException(e.getMessage());
             }
