@@ -108,10 +108,17 @@ public class InsertPlanner {
                 isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
                         logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+<<<<<<< HEAD
         try {
+=======
+        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
+>>>>>>> 02cfc59fe ([BugFix] Miss local shuffle for local shuffle agg on single BE (#17845))
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
+            // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
+            session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
@@ -167,6 +174,7 @@ public class InsertPlanner {
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             return execPlan;
         } finally {
+            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
