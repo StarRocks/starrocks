@@ -117,14 +117,6 @@ Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer)
     return Status::OK();
 }
 
-struct ReadFileOpt {
-    RandomAccessFile* file = nullptr;
-    BlockCompressionCodec* codec = nullptr;
-    EncodingTypePB encoding_type = UNKNOWN_ENCODING;
-    int64_t offset = 0; // file offset
-    int64_t size = 0;   // read size
-};
-
 void show_segment_footer(const std::string& file_name) {
     auto res = Env::Default()->new_random_access_file(file_name);
     if (!res.ok()) {
@@ -290,10 +282,6 @@ void check_search(const std::string& file_name) {
     std::cout << "START:" << low.ordinal() << std::endl;
     std::cout << "END:" << high.ordinal() << std::endl;
 
-    // output data
-    int64_t idx = 0;
-    size_t count = 0;
-
     vectorized::SegmentReadOptions opts(blk_mgr);
     OlapReaderStatistics stats;
     opts.stats = &stats;
@@ -329,7 +317,6 @@ void check_search(const std::string& file_name) {
         cur_count += num_rows;
 
         for (size_t i = 0; i < num_rows; i++) {
-            //std::cout<<"COMPAREE:"<<cur_chunk->columns()[0]->get(i).get_slice()<<":"<<check_key<<":"<<check_key.size<<std::endl;
             if (check_key == cur_chunk->columns()[0]->get(i).get_slice()) {
                 result_count_1++;
             }
@@ -340,7 +327,6 @@ void check_search(const std::string& file_name) {
         }
 
         for (size_t i = 0; i < num_rows; i++) {
-            //std::cout<<"COMPAREE:"<<cur_chunk->columns()[0]->get(i).get_slice()<<":"<<check_key<<":"<<check_key.size<<std::endl;
             if (check_key == cur_chunk->columns()[0]->get(i).get_slice()) {
                 result_count_2++;
             }
@@ -474,13 +460,13 @@ void check_page(const std::string& file_name) {
         std::cout << "INDEX:" << idx << ":" << count << std::endl;
         while (idx < count) {
             Slice convert_key = {keys[page_idx].data + 1, keys[page_idx].size - 1};
-            bool equal = (convert_key == cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice());
+            Slice real_key = cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice();
+            Slice real_check_key = {real_key.data, std::min(real_key.size, (size_t)20)};
+            bool equal = (convert_key == real_check_key);
             if (!equal) {
                 std::cout << "CHECK FAILED: " << page_idx << ":" << convert_key << ":"
                           << cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice() << std::endl;
                 return;
-            } else {
-                std::cout << "CHECK_SUCC: " << page_idx << std::endl;
             }
             page_idx++;
             idx += 1024;
