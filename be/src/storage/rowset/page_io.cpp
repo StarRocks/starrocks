@@ -115,7 +115,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
                                         PageFooterPB* footer) {
     // the function will be used by query or load, current load is not allowed to fail when memory reach the limit,
     // so don't check when tls_thread_state.check is set to false
-    CHECK_MEM_LIMIT("read and decompress page");
+    //CHECK_MEM_LIMIT("read and decompress page");
 
     opts.sanity_check();
     opts.stats->total_pages_num++;

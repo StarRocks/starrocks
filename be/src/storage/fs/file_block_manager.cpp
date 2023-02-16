@@ -376,6 +376,16 @@ FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
 #endif
 }
 
+FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts, bool tool)
+        : _env(DCHECK_NOTNULL(env)), _opts(std::move(opts)) {
+    if (_opts.enable_metric) {
+        _metrics = std::make_unique<internal::BlockManagerMetrics>();
+    }
+
+    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                config::file_descriptor_cache_capacity);
+}
+
 FileBlockManager::~FileBlockManager() = default;
 
 Status FileBlockManager::open() {

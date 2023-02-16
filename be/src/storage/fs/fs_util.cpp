@@ -44,4 +44,11 @@ BlockManager* block_mgr_for_ut() {
     return &block_mgr;
 }
 
+BlockManager* block_mgr_for_tool() {
+    fs::BlockManagerOptions bm_opts;
+    bm_opts.read_only = false;
+    static FileBlockManager block_mgr(Env::Default(), std::move(bm_opts), true);
+    return &block_mgr;
+}
+
 } // namespace starrocks::fs::fs_util

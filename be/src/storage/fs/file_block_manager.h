@@ -68,6 +68,7 @@ public:
     // Note: all objects passed as pointers should remain alive for the lifetime
     // of the block manager.
     FileBlockManager(Env* env, BlockManagerOptions opts);
+    FileBlockManager(Env* env, BlockManagerOptions opts, bool tool);
     ~FileBlockManager() override;
 
     Status open() override;

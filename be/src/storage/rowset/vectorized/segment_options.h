@@ -27,6 +27,9 @@ class SegmentReadOptions {
 public:
     using PredicateList = std::vector<const ColumnPredicate*>;
 
+    SegmentReadOptions(fs::BlockManager* mgr) : block_mgr(mgr) {}
+    SegmentReadOptions() = default;
+
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
 
     std::vector<SeekRange> ranges;

@@ -35,6 +35,8 @@ BlockManager* block_manager();
 // For UnitTest.
 BlockManager* block_mgr_for_ut();
 
+BlockManager* block_mgr_for_tool();
+
 } // namespace fs_util
 } // namespace fs
 } // namespace starrocks
