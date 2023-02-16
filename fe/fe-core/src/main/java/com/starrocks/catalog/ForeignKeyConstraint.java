@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 public class ForeignKeyConstraint {
     private static final Logger LOG = LogManager.getLogger(ForeignKeyConstraint.class);
 
-    private static final String FOREIGN_KEY_REGEX = "\\(((\\s*\\w+\\s*)(,\\s*\\w+\\s*)*)\\)\\s+REFERENCES\\s+" +
+    private static final String FOREIGN_KEY_REGEX = "\\(((\\s*\\w+\\s*)(,\\s*\\w+\\s*)*)\\)\\s+(REFERENCES|references)\\s+" +
             "((\\w+)(\\.\\w+)*)\\s*\\(((\\s*\\w+\\s*)(,\\s*\\w+\\s*)*)\\)";
     public static final Pattern FOREIGN_KEY_PATTERN = Pattern.compile(FOREIGN_KEY_REGEX);
     // table with primary key or unique key
@@ -101,8 +101,8 @@ public class ForeignKeyConstraint {
                 continue;
             }
             String sourceColumns = foreignKeyMatcher.group(1);
-            String tablePath = foreignKeyMatcher.group(4);
-            String targetColumns = foreignKeyMatcher.group(7);
+            String tablePath = foreignKeyMatcher.group(5);
+            String targetColumns = foreignKeyMatcher.group(8);
             List<String> baseColumns = Arrays.asList(sourceColumns.split(","))
                     .stream().map(String::trim).collect(Collectors.toList());
             List<String> parentColumns = Arrays.asList(targetColumns.split(","))

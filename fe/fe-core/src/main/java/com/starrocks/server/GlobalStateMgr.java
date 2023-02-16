@@ -2434,13 +2434,12 @@ public class GlobalStateMgr {
                         constraintSb.append(" REFERENCES ");
                         if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                             Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
-                            if (!parentDb.getFullName().equals(dbName)) {
-                                constraintSb.append(parentDb.getFullName() + ".");
-                            }
+                            constraintSb.append(parentDb.getFullName());
+                            constraintSb.append(".");
                             Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
                             constraintSb.append(parentTable.getName());
                         } else {
-                            constraintSb.append(parentTableInfo.toString());
+                            constraintSb.append(parentTableInfo);
                         }
 
                         constraintSb.append("(");

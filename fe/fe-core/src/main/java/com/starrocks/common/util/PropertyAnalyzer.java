@@ -707,12 +707,12 @@ public class PropertyAnalyzer {
                     continue;
                 }
                 Matcher foreignKeyMatcher = ForeignKeyConstraint.FOREIGN_KEY_PATTERN.matcher(trimed);
-                if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 9) {
+                if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 10) {
                     throw new AnalysisException(String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
                 String sourceColumns = foreignKeyMatcher.group(1);
-                String tablePath = foreignKeyMatcher.group(4);
-                String targetColumns = foreignKeyMatcher.group(7);
+                String tablePath = foreignKeyMatcher.group(5);
+                String targetColumns = foreignKeyMatcher.group(8);
                 List<String> baseColumns = Arrays.asList(sourceColumns.split(","))
                         .stream().map(String::trim).collect(Collectors.toList());
                 List<String> parentColumns = Arrays.asList(targetColumns.split(","))
