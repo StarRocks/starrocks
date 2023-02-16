@@ -156,7 +156,10 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
 AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8;
+DISTRIBUTED BY HASH(site_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
 ```
 
 ### Usage notes
