@@ -212,20 +212,32 @@ public class AnalyzeExprTest {
 
     @Test
     public void testLambdaFunctionMapFilter() {
-        analyzeSuccess("select map_filter((k,v)->k > 1, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
-        analyzeSuccess("select map_filter((k,v)->k is null, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
-        analyzeSuccess("select map_filter((k,v)-> null, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
-        analyzeSuccess("select map_filter((k,v)-> 1, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
-        analyzeSuccess("select map_filter((k,v)-> 1, col_map) from (select map_from_arrays([],[]) as col_map)A;");
-        analyzeSuccess("select map_filter(col_map, map_values(col_map)) from (select map_from_arrays([],[]) as col_map)A;");
+        analyzeSuccess("select map_filter((k,v)->k > 1, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select map_filter((k,v)->k is null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select map_filter((k,v)-> null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select map_filter((k,v)-> 1, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeSuccess("select map_filter((k,v)-> 1, col_map) from " +
+                "(select map_from_arrays([],[]) as col_map)A;");
+        analyzeSuccess("select map_filter(col_map, map_values(col_map)) from " +
+                "(select map_from_arrays([],[]) as col_map)A;");
 
         analyzeFail("select map_filter((k,v)-> null, null)");
-        analyzeFail("select map_filter((k)-> null, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
-        analyzeFail("select map_filter((k,v,a)-> null, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
-        analyzeFail("select map_filter(col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
-        analyzeFail("select map_filter((k,v)-> null, col_map, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
-        analyzeFail("select map_filter((k,v)-> null, col_map, null) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
-        analyzeFail("select map_filter((k,v)-> null,  null) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
+        analyzeFail("select map_filter((k)-> null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeFail("select map_filter((k,v,a)-> null, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeFail("select map_filter(col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeFail("select map_filter((k,v)-> null, col_map, col_map) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeFail("select map_filter((k,v)-> null, col_map, null) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A");
+        analyzeFail("select map_filter((k,v)-> null,  null) from " +
+                "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;");
         analyzeFail("select map_filter((k,v)-> , col_map) from (select map_from_arrays([],[]) as col_map)A");
     }
 
