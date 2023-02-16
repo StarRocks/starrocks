@@ -52,7 +52,7 @@ public class UniqueConstraint {
             }
             String[] uniqueColumns = constraintDesc.split(",");
             List<String> columnNames =
-                    Arrays.asList(uniqueColumns).stream().map(columnName -> columnName.trim()).collect(Collectors.toList());
+                    Arrays.asList(uniqueColumns).stream().map(String::trim).collect(Collectors.toList());
             uniqueConstraints.add(new UniqueConstraint(columnNames));
         }
         return uniqueConstraints;

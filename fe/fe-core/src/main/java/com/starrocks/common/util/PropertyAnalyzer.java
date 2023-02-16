@@ -686,7 +686,7 @@ public class PropertyAnalyzer {
                 boolean columnExist = uniqueConstraint.getUniqueColumns().stream().allMatch(table::containColumn);
                 if (!columnExist) {
                     throw new AnalysisException(
-                            String.format("some columns of:%s do not exist in table:%",
+                            String.format("some columns of:%s do not exist in table:%s",
                                     uniqueConstraint.getUniqueColumns(), table.getName()));
                 }
             }
@@ -766,13 +766,13 @@ public class PropertyAnalyzer {
 
                 OlapTable baseOlapTable = (OlapTable) baseTable;
                 if (!baseColumns.stream().allMatch(baseOlapTable::containColumn)) {
-                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%",
+                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
                             baseColumns, baseOlapTable.getName()));
                 }
 
                 OlapTable parentOlapTable = (OlapTable) parentTable;
                 if (!parentColumns.stream().allMatch(parentOlapTable::containColumn)) {
-                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%",
+                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
                             parentColumns, parentOlapTable.getName()));
                 }
                 KeysType parentTableKeyType =
@@ -828,7 +828,7 @@ public class PropertyAnalyzer {
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }
             if (foreignKeyConstraints.isEmpty()) {
-                throw new AnalysisException(String.format("invalid foreign key constrain", foreignKeyConstraintsDesc));
+                throw new AnalysisException(String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
             }
             properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }

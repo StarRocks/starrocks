@@ -1848,7 +1848,7 @@ public class MvRewriteOptimizationTest {
                 ");");
 
         OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
-        Assert.assertTrue(olapTable.getUniqueConstraints() != null);
+        Assert.assertNotNull(olapTable.getUniqueConstraints());
         Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
         UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
         Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
@@ -1856,7 +1856,7 @@ public class MvRewriteOptimizationTest {
         Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
-        Assert.assertTrue(olapTable.getUniqueConstraints() != null);
+        Assert.assertNotNull(olapTable.getUniqueConstraints());
         Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
         UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
         Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
@@ -1872,7 +1872,7 @@ public class MvRewriteOptimizationTest {
         Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
-        Assert.assertTrue(olapTable.getUniqueConstraints() == null);
+        Assert.assertNull(olapTable.getUniqueConstraints());
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
@@ -1896,7 +1896,7 @@ public class MvRewriteOptimizationTest {
                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k1, k2)\"\n" +
                 ");");
         OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
-        Assert.assertTrue(baseTable.getForeignKeyConstraints() != null);
+        Assert.assertNotNull(baseTable.getForeignKeyConstraints());
         List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
         Assert.assertEquals(1, foreignKeyConstraints.size());
         BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
@@ -1925,7 +1925,7 @@ public class MvRewriteOptimizationTest {
         cluster.runSql("test", "alter table base_table1 set(" +
                 "\"foreign_key_constraints\"=\"\")");
         List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
-        Assert.assertTrue(foreignKeyConstraints3 == null);
+        Assert.assertNull(foreignKeyConstraints3);
     }
 
     public String getFragmentPlan(String sql) throws Exception {
