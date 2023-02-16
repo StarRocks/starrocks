@@ -34,6 +34,7 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class SystemInfoServiceTest {
 
@@ -116,6 +117,23 @@ public class SystemInfoServiceTest {
         service.updateBackendState(be);
         Backend newBe = service.getBackend(10001);
         Assert.assertTrue(newBe.getHost().equals("newHost"));
+    }
+
+    @Test
+    public void testGetBackendOrComputeNode() {
+        Backend be = new Backend(10001, "host1", 1000);
+        service.addBackend(be);
+        ComputeNode cn = new ComputeNode(10002, "host2", 1000);
+        service.addComputeNode(cn);
+
+        Assert.assertEquals(be, service.getBackendOrComputeNode(be.getId()));
+        Assert.assertEquals(cn, service.getBackendOrComputeNode(cn.getId()));
+        Assert.assertNull(service.getBackendOrComputeNode(/* Not Exist */ 100));
+
+        List<ComputeNode> nodes = service.backendAndComputeNodeStream().collect(Collectors.toList());
+        Assert.assertEquals(2, nodes.size());
+        Assert.assertEquals(be, nodes.get(0));
+        Assert.assertEquals(cn, nodes.get(1));
     }
 
     @Test
