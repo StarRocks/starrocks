@@ -312,17 +312,19 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
-    } else if (_tnode.analytic_node.order_by_exprs.empty()) {
+    } else if (_tnode.analytic_node.order_by_exprs.empty() && _tnode.analytic_node.__isset.use_hash_based_partition &&
+               _tnode.analytic_node.use_hash_based_partition) {
         // analytic has only partition by but withouth order by
+        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         HashPartitionContextFactoryPtr hash_partition_ctx_factory =
                 std::make_shared<HashPartitionContextFactory>(_tnode.analytic_node.partition_exprs);
-        ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                      hash_partition_ctx_factory));
+        ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(
+                context->next_operator_id(), pseudo_plan_node_id, hash_partition_ctx_factory));
         context->add_pipeline(ops_with_sink);
 
         ops_with_sink.clear();
         auto hash_partition_source_op = std::make_shared<HashPartitionSourceOperatorFactory>(
-                context->next_operator_id(), id(), hash_partition_ctx_factory);
+                context->next_operator_id(), pseudo_plan_node_id, hash_partition_ctx_factory);
         context->inherit_upstream_source_properties(hash_partition_source_op.get(), upstream_source_op);
         ops_with_sink.push_back(std::move(hash_partition_source_op));
     }
