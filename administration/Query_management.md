@@ -62,10 +62,10 @@ SET GLOBAL parallel_fragment_exec_instance_num = INT;
 您可以通过以下命令调整查询内存上限。
 
 ```sql
-SET exec_mem_limit = INT;
+SET query_mem_limit = INT;
 ```
 
-`exec_mem_limit`：单个 Instance 的内存限制，单位是 Byte。
+`query_mem_limit`：单个查询的内存限制，单位是 Byte。建议设置为 17179869184（16GB）以上。
 
 ## 调整数据库存储容量 Quota
 

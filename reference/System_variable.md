@@ -23,7 +23,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 通过 `SET <var_name>=xxx;` 语句设置的变量仅在当前会话生效。如：
 
 ```SQL
-SET exec_mem_limit = 137438953472;
+SET query_mem_limit = 137438953472;
 
 SET forward_to_master = true;
 
@@ -33,7 +33,7 @@ SET time_zone = "Asia/Shanghai";
 通过 `SET GLOBAL <var_name>=xxx;` 语句设置的变量全局生效。如：
 
  ```SQL
-SET GLOBAL exec_mem_limit = 137438953472;
+SET GLOBAL query_mem_limit = 137438953472;
 ```
 
 > 说明：只有 admin 用户可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
@@ -42,7 +42,7 @@ SET GLOBAL exec_mem_limit = 137438953472;
 
 * batch_size
 * disable_streaming_preaggregations
-* exec_mem_limit
+* query_mem_limit
 * force_streaming_aggregate
 * enable_profile
 * hash_join_push_down_right_table
@@ -63,7 +63,7 @@ SET GLOBAL exec_mem_limit = 137438953472;
 此外，变量设置也支持常量表达式，如：
 
  ```SQL
-SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
+SET query_mem_limit = 10 * 1024 * 1024 * 1024;
 ```
 
  ```SQL
@@ -75,7 +75,7 @@ SET forward_to_master = concat('tr', 'u', 'e');
 在一些场景中，可能需要对某些查询专门设置变量。通过使用 SET_VAR 提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
 
 ```sql
-SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
+SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
@@ -149,16 +149,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * event_scheduler
 
   用于兼容 MySQL 客户端。无实际作用。
-
-* exec_mem_limit
-
-  用于设置单个查询计划实例所能使用的内存限制。默认为 2GB，单位为：B/K/KB/M/MB/G/GB/T/TB/P/PB，默认为 B。
-
-  一个查询计划可能有多个实例，一个 BE 节点可能执行一个或多个实例。所以该参数并不能准确限制一个查询在整个集群中的内存使用，也不能准确限制一个查询在单一 BE 节点上的内存使用。具体需要根据生成的查询计划判断。
-
-  通常只有在一些阻塞节点（如排序节点、聚合节点、Join 节点）上才会消耗较多的内存，而其他节点（如扫描节点）中，数据为流式通过，并不会占用较多的内存。
-
-  当出现 "Memory Exceed Limit" 错误时，可以尝试指数级增加该参数，如 4G、8G、16G 等。
 
 * force_streaming_aggregate
 
@@ -242,11 +232,11 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * load_mem_limit
 
-  用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `exec_mem_limit` 作为导入操作的内存限制。
+  用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
   
-  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `exec_mem_limit`。否则，INSERT 的查询部分内存限制为 `exec_mem_limit`，而导入部分限制为 l`oad_mem_limit`。
+  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
 
-  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `exec_mem_limit`。
+  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
 
 * enable_query_cache (2.5 及以后)
 
@@ -347,6 +337,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * query_cache_type
 
    用于兼容 JDBC 连接池 C3P0。 无实际作用。
+
+* query_mem_limit
+
+   用于设置每个 BE 节点上查询的内存限制。默认值为 `0`，表示没有限制。支持 `B`、`K`、`KB`、`M`、`MB`、`G`、`GB`、`T`、`TB`、`P`、`PB` 等单位。
 
 * query_queue_concurrency_limit
 
