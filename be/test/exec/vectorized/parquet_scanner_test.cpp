@@ -243,8 +243,14 @@ class ParquetScannerTest : public ::testing::Test {
                 // Convert struct->JSON->string
                 {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
         };
         SlotInfoArray slot_infos;
+=======
+                {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
+                {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))}};
+        SlotTypeDescInfoArray slot_infos;
+>>>>>>> 28f56f21f ([BugFix] fix parquet array load bug (#17879)):be/test/exec/parquet_scanner_test.cpp
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
             CHECK_EQ(slot_map.count(name), 1);
@@ -352,6 +358,14 @@ class ParquetScannerTest : public ::testing::Test {
                                        772472, /*"/test_data/parquet_data/data_8192.parquet",*/
                                        775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
         _runtime_state = _obj_pool.add(new RuntimeState(TQueryGlobals()));
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
+=======
+        _issue_16475_file_names =
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17693_1.parquet",
+                                         test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
+        _issue_17822_file_names = 
+                std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17822.parquet"};
+>>>>>>> 28f56f21f ([BugFix] fix parquet array load bug (#17879)):be/test/exec/parquet_scanner_test.cpp
     }
 
 private:
@@ -361,6 +375,11 @@ private:
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
     std::vector<int> _file_sizes;
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
+=======
+    std::vector<std::string> _issue_16475_file_names;
+    std::vector<std::string> _issue_17822_file_names;
+>>>>>>> 28f56f21f ([BugFix] fix parquet array load bug (#17879)):be/test/exec/parquet_scanner_test.cpp
 };
 
 TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
@@ -381,6 +400,43 @@ TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
     validate(scanner, 36865, check);
 }
 
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
+=======
+TEST_F(ParquetScannerTest, test_issue_17693) {
+    auto column_names = std::vector<std::string>{
+            "issue_17693_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_issue_16475_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 2000, check);
+}
+
+TEST_F(ParquetScannerTest, test_issue_17822) {
+    auto column_names = std::vector<std::string>{
+            "issue_17822_c0",
+    };
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(_issue_17822_file_names, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->only_null() && col->is_nullable());
+        }
+    };
+    validate(scanner, 506, check);
+}
+
+>>>>>>> 28f56f21f ([BugFix] fix parquet array load bug (#17879)):be/test/exec/parquet_scanner_test.cpp
 TEST_F(ParquetScannerTest, test_parquet_data) {
     auto column_names = std::vector<std::string>{
             "col_date",     "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",
