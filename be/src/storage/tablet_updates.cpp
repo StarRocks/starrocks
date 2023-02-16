@@ -3395,7 +3395,6 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
         std::string seg_path =
                 Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        LOG(INFO) << "segment path is " << seg_path;
         auto segment = Segment::open(fs, seg_path, rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
