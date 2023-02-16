@@ -224,93 +224,93 @@ void dump_data2(const std::string& file_name) {
     fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
     auto mem_tracker = std::make_unique<MemTracker>();
 
+    // create schema
     TabletSchemaPB schema_pb = create_tablet_schema();
     auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
 
+    // open segment
     size_t footer_length_hint = 16 * 1024;
     auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
     if (!ret.ok()) {
         std::cout << "Segment open failed: " << ret.status() << std::endl;
         return;
     }
+    auto segment = ret.value();
 
+    // new segment iterator
     vectorized::SegmentReadOptions opts(blk_mgr);
     OlapReaderStatistics stats;
     opts.stats = &stats;
-
-    auto segment = ret.value();
-    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
     auto res = segment->new_iterator(read_schema, opts);
     if (!res.ok()) {
         std::cout << "New segment iterator failed: " << res.ok() << std::endl;
         return;
     }
-
     auto iter = res.value();
+
+    // output data
+    int64_t remain = 0;
+    size_t page_index = 0;
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
     do {
-        auto chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
-        Status st = res.value()->get_next(chunk.get());
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(cur_chunk.get());
         if (!st.ok()) {
             std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+
+            if (remain < pre_chunk->num_rows()) {
+                std::cout<<"CHUNK:"<<page_index<<":"<<pre_chunk->debug_row(pre_chunk->num_rows() - 1)<<std::endl;
+            }
             break;
         }
-        if (chunk->num_rows() <= 0) {
+        if (cur_chunk->num_rows() <= 0) {
             continue;
         }
-        std::cout<<"CHUNK:"<<chunk->debug_row(0)<<std::endl;
+
+        int64_t tmp_index = remain;
+        int64_t num_rows = cur_chunk->num_rows();
+        while (tmp_index < num_rows) {
+            std::cout<<"CHUNK:"<<page_index<<":"<<cur_chunk->debug_row(tmp_index)<<std::endl;
+            tmp_index += 1024;
+            page_index++;
+        }
+        remain += num_rows - tmp_index;
     } while (true);
 }
 
 void dump_data(const std::string& file_name) {
-    // Open file
-    auto res = Env::Default()->new_random_access_file(file_name);
-    if (!res.ok()) {
-        std::cout << "open file failed: " << res.status() << std::endl;
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
         return;
     }
-    auto input_file = std::move(res).value();
+    auto segment = ret.value();
 
-    // Read segment file
-    SegmentFooterPB footer;
-    auto st = get_segment_footer(input_file.get(), &footer);
+    // load short key index
+    auto st = segment->_load_index(mem_tracker.get());
     if (!st.ok()) {
-        std::cout << "get segment footer failed: " << st.to_string() << std::endl;
+        std::cout << "Load index failed: " << st.to_string() << std::endl;
         return;
     }
 
-    // Short key page pointer
-    const PagePointerPB& page = footer.short_key_index_page();
-    std::cout << "OFFSET: " << page.offset() << ":" << page.size() << std::endl;
-
-    // Read short key index page
-    ReadFileOpt opt;
-    opt.file = input_file.get();
-    opt.codec = nullptr;
-    opt.encoding_type = UNKNOWN_ENCODING;
-    opt.offset = static_cast<int64_t>(page.offset());
-    opt.size = page.size();
-
-    Slice page_body;
-    PageFooterPB page_footer;
-    PageHandle page_handle;
-
-    st = read_page(&opt, &page_body, &page_footer, &page_handle);
-    if (!st.ok()) {
-        std::cout << "Read page failed: " << st << std::endl;
-        return;
+    std::cout << "KEY_COUNT: " << segment->_sk_index_decoder->num_items() << std::endl;
+    size_t num_keys = segment->_sk_index_decoder->num_items();
+    for (size_t i = 0; i < num_keys; i++) {
+        std::cout << "INDEX: " << i << ":" << segment->_sk_index_decoder->key(i).to_string() << std::endl;
     }
-
-    // Parse short key index
-    auto sk_index_decode = std::make_unique<ShortKeyIndexDecoder>();
-    st = sk_index_decode->parse(page_body, page_footer.short_key_page_footer());
-    if (!st.ok()) {
-        std::cout << "Short key page decode failed: " << st.to_string() << std::endl;
-        return;
-    } else {
-        std::cout << "Decode ShortKeyIndex success" << std::endl;
-    }
-
-    std::cout << "KEY_COUNT: " << sk_index_decode->num_items() << std::endl;
 }
 
 } // namespace starrocks

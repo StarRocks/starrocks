@@ -236,7 +236,7 @@ Status Segment::_load_index(MemTracker* mem_tracker) {
         RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
 
         PageReadOptions opts;
-        opts.use_page_cache = !config::disable_storage_page_cache;
+        opts.use_page_cache = false;
         opts.rblock = rblock.get();
         opts.page_pointer = _short_key_index_page;
         opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
