@@ -34,6 +34,8 @@ public:
     Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
+    void cancel() override;
+
     size_t get_output_rows() const override;
 
 private:

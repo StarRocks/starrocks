@@ -78,6 +78,23 @@ Status ChunksSorterSpillableFullSort::do_done(RuntimeState* state) {
     return Status::OK();
 }
 
+void ChunksSorterSpillableFullSort::cancel() {
+    ChunksSorterFullSort::cancel();
+    if (_spill_strategy == SpillStrategy::NO_SPILL) {
+        // nothing TODO
+    } else {
+        if (_spill_channel->has_task()) {
+            std::function<StatusOr<ChunkPtr>()> cancel_task = [this]() -> StatusOr<ChunkPtr> {
+                _spiller->cancel();
+                return Status::EndOfFile("eos");
+            };
+            _spill_channel->add_spill_task(std::move(cancel_task));
+        } else {
+            _spiller->cancel();
+        }
+    }
+}
+
 Status ChunksSorterSpillableFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_spiller->spilled()) {
         return ChunksSorterFullSort::get_next(chunk, eos);

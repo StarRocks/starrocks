@@ -43,6 +43,7 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     if (state->is_cancelled()) {
         _is_finished = true;
+        _chunks_sorter->cancel();
         return Status::Cancelled("runtime state is cancelled");
     }
 

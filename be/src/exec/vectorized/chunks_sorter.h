@@ -124,6 +124,8 @@ public:
     size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
     void set_spill_stragety(SpillStrategy stragety) { _spill_strategy = stragety; }
 
+    virtual void cancel() {}
+
 protected:
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     virtual Status do_done(RuntimeState* state) = 0;
