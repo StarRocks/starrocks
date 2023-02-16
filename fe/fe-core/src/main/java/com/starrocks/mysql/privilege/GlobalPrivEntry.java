@@ -189,7 +189,7 @@ public class GlobalPrivEntry extends PrivEntry {
         if (privSet.isEmpty()) {
             return null;
         }
-        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent(), false);
         stmt.setAnalysedTable(privSet, new TablePattern("*", "*"));
         return AstToStringBuilder.toString(stmt);
     }

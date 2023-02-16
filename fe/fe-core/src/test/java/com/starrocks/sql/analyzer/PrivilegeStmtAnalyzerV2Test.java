@@ -486,13 +486,13 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant impersonate on USER root to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke impersonate on USER 'root'@'%' from test_user with grant option";
+        sql = "revoke impersonate on USER 'root'@'%' from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant impersonate on user 'root'@'%', 'test_user'@'%' to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke impersonate on user root, test_user from test_user with grant option";
+        sql = "revoke impersonate on user root, test_user from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "revoke impersonate on user root, 'test_user'@'%' from test_user";
@@ -642,6 +642,11 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant SELECT on all tables in all databases to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
         Assert.assertEquals("GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'test_user'@'%'",
+                AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+
+        sql = "grant SELECT on all tables in all databases to user test_user with grant option";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'test_user'@'%' WITH GRANT OPTION",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant SELECT on all tables in database test to user test_user";

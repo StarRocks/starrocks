@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -110,7 +111,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            if (stmt.isWithGrantOption()) {
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
                 throw new SemanticException("unsupported syntax: WITH GRANT OPTION");
             }
             // validate user/role

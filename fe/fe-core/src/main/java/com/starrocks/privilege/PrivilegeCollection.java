@@ -40,12 +40,12 @@ public class PrivilegeCollection {
         @SerializedName(value = "o")
         protected PEntryObject object;
         @SerializedName(value = "g")
-        protected boolean isGrant;
+        protected boolean withGrantOption;
 
-        public PrivilegeEntry(ActionSet actionSet, PEntryObject object, boolean isGrant) {
+        public PrivilegeEntry(ActionSet actionSet, PEntryObject object, boolean withGrantOption) {
             this.actionSet = actionSet;
             this.object = object;
-            this.isGrant = isGrant;
+            this.withGrantOption = withGrantOption;
         }
 
         public PrivilegeEntry(PrivilegeEntry other) {
@@ -55,9 +55,8 @@ public class PrivilegeCollection {
             } else {
                 this.object = other.object.clone();
             }
-            this.isGrant = other.isGrant;
+            this.withGrantOption = other.withGrantOption;
         }
-
 
         public ActionSet getActionSet() {
             return actionSet;
@@ -65,6 +64,10 @@ public class PrivilegeCollection {
 
         public PEntryObject getObject() {
             return object;
+        }
+
+        public boolean isWithGrantOption() {
+            return withGrantOption;
         }
 
         @Override
@@ -84,10 +87,10 @@ public class PrivilegeCollection {
     /**
      * find exact matching entry: object + isGrant
      */
-    private PrivilegeEntry findEntry(List<PrivilegeEntry> privilegeEntryList, PEntryObject object, boolean isGrant) {
+    private PrivilegeEntry findEntry(List<PrivilegeEntry> privilegeEntryList, PEntryObject object, boolean withGrantOption) {
         if (object == null) {
             for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-                if (privilegeEntry.object == null && isGrant == privilegeEntry.isGrant) {
+                if (privilegeEntry.object == null && withGrantOption == privilegeEntry.withGrantOption) {
                     return privilegeEntry;
                 }
             }
@@ -95,7 +98,7 @@ public class PrivilegeCollection {
             for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
                 if (privilegeEntry.object != null
                         && object.equals(privilegeEntry.object)
-                        && isGrant == privilegeEntry.isGrant) {
+                        && withGrantOption == privilegeEntry.withGrantOption) {
                     return privilegeEntry;
                 }
             }
@@ -171,7 +174,7 @@ public class PrivilegeCollection {
         }
     }
 
-    public void revoke(ObjectType objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
+    public void revoke(ObjectType objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
             throws PrivilegeException {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         if (privilegeEntryList == null) {
@@ -184,20 +187,20 @@ public class PrivilegeCollection {
             objects.add(null);
         }
         for (PEntryObject object : objects) {
-            PrivilegeEntry entry1 = findEntry(privilegeEntryList, object, isGrant);
-            if (entry1 != null) {
-                removeAction(privilegeEntryList, entry1, new ActionSet(privilegeTypes));
+            PrivilegeEntry entry = findEntry(privilegeEntryList, object, false);
+            if (entry != null) {
+                removeAction(privilegeEntryList, entry, new ActionSet(privilegeTypes));
             }
-            // some actions may not be granted
-            PrivilegeEntry entry2 = findEntry(privilegeEntryList, object, !isGrant);
-            if (entry2 != null) {
+            // some actions may with grant option
+            PrivilegeEntry entryWithGrantOption = findEntry(privilegeEntryList, object, true);
+            if (entryWithGrantOption != null) {
                 // 1. intend to revoke with grant option but already grant object without grant option
                 // 2. intend to revoke without grant option but already grant object with grant option
                 // either way, we should remove the action here
-                removeAction(privilegeEntryList, entry2, new ActionSet(privilegeTypes));
+                removeAction(privilegeEntryList, entryWithGrantOption, new ActionSet(privilegeTypes));
             }
 
-            if (entry1 == null && entry2 == null) {
+            if (entry == null && entryWithGrantOption == null) {
                 String msg = object.isFuzzyMatching() ? object.toString() : objectType.name() + " " + object;
                 throw new PrivilegeException("There is no such grant defined on " + msg);
             }
@@ -258,7 +261,7 @@ public class PrivilegeCollection {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();
             while (iterator.hasNext()) {
                 PEntryObject object = iterator.next();
-                if (privilegeEntry.isGrant && objectMatch(object, privilegeEntry.object)) {
+                if (privilegeEntry.withGrantOption && objectMatch(object, privilegeEntry.object)) {
                     if (privilegeEntry.actionSet.contains(new ActionSet(wantSet))) {
                         iterator.remove();
                         if (unCheckedObjects.isEmpty()) {
@@ -310,7 +313,7 @@ public class PrivilegeCollection {
             } else {
                 List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
                 for (PrivilegeEntry entry : otherList) {
-                    grantObjectToList(entry.actionSet, entry.object, entry.isGrant, typeList);
+                    grantObjectToList(entry.actionSet, entry.object, entry.withGrantOption, typeList);
                 } // for privilege entry in other.list
             }
         } // for typeId, privilegeEntryList in other

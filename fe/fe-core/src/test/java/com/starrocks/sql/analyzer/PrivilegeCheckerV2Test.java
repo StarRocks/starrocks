@@ -953,7 +953,7 @@ public class PrivilegeCheckerV2Test {
         verifyGrantRevoke(
                 "revoke select on db1.tbl1 from test",
                 "grant select on db1.tbl1 to test with grant option",
-                "revoke select on db1.tbl1 from test with grant option",
+                "revoke select on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
     }
 

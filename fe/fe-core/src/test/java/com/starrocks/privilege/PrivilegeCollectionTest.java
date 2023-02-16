@@ -59,12 +59,12 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(select, insert), Arrays.asList(table1)));
 
         // revoke select with grant option
-        collection.revoke(table, Arrays.asList(select), Arrays.asList(table1), true);
+        collection.revoke(table, Arrays.asList(select), Arrays.asList(table1));
         Assert.assertFalse(collection.check(table, select, table1));
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(select), Arrays.asList(table1)));
 
         // revoke select, insert with grant option
-        collection.revoke(table, Arrays.asList(select, insert), Arrays.asList(table1), true);
+        collection.revoke(table, Arrays.asList(select, insert), Arrays.asList(table1));
         Assert.assertFalse(collection.check(table, select, table1));
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(select), Arrays.asList(table1)));
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -72,7 +72,7 @@ public class PrivilegeCollectionTest {
 
         // revoke insert,delete
         Assert.assertTrue(collection.searchAnyActionOnObject(table, table1));
-        collection.revoke(table, Arrays.asList(insert, delete), Arrays.asList(table1), false);
+        collection.revoke(table, Arrays.asList(insert, delete), Arrays.asList(table1));
         Assert.assertFalse(collection.check(table, insert, table1));
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(delete, insert), Arrays.asList(table1)));
         Assert.assertFalse(collection.check(table, delete, table1));
@@ -80,7 +80,7 @@ public class PrivilegeCollectionTest {
 
         // nothing left
         Assert.assertEquals(0, collection.typeToPrivilegeEntryList.size());
-        collection.revoke(table, Arrays.asList(insert, delete), Arrays.asList(table1), false);
+        collection.revoke(table, Arrays.asList(insert, delete), Arrays.asList(table1));
     }
 
     @Test
@@ -120,7 +120,7 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(delete), Arrays.asList(table1)));
 
         // revoke insert on table1 without grant option
-        collection.revoke(table, Arrays.asList(insert), Arrays.asList(table1), false);
+        collection.revoke(table, Arrays.asList(insert), Arrays.asList(table1));
         Assert.assertTrue(collection.check(table, select, table1));
         Assert.assertTrue(collection.allowGrant(table, Arrays.asList(select), Arrays.asList(table1)));
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -128,7 +128,7 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(insert, delete), Arrays.asList(table1)));
 
         // revoke select,delete with grant option
-        collection.revoke(table, Arrays.asList(select, delete), Arrays.asList(table1), true);
+        collection.revoke(table, Arrays.asList(select, delete), Arrays.asList(table1));
         Assert.assertFalse(collection.check(table, select, table1));
         Assert.assertFalse(collection.check(table, insert, table1));
         Assert.assertFalse(collection.allowGrant(
@@ -166,21 +166,21 @@ public class PrivilegeCollectionTest {
         Assert.assertTrue(collection.check(table, select, table1));
 
         // revoke select on all tables in all databases
-        collection.revoke(table, Arrays.asList(select), Arrays.asList(allTablesInALLDb), false);
+        collection.revoke(table, Arrays.asList(select), Arrays.asList(allTablesInALLDb));
         Assert.assertEquals(3, collection.typeToPrivilegeEntryList.get(table).size());
         Assert.assertTrue(collection.check(table, select, table1));
 
         // revoke insert on all tables in all databases
-        collection.revoke(table, Arrays.asList(PrivilegeType.INSERT), Arrays.asList(allTablesInALLDb), false);
+        collection.revoke(table, Arrays.asList(PrivilegeType.INSERT), Arrays.asList(allTablesInALLDb));
         // revoke select on all tables in database db1
-        collection.revoke(table, Arrays.asList(PrivilegeType.SELECT), Arrays.asList(allTablesInDb), false);
+        collection.revoke(table, Arrays.asList(PrivilegeType.SELECT), Arrays.asList(allTablesInDb));
         Assert.assertEquals(2, collection.typeToPrivilegeEntryList.get(table).size());
         Assert.assertTrue(collection.check(table, select, table1));
 
         // revoke insert on all tables in database db1
-        collection.revoke(table, Arrays.asList(PrivilegeType.INSERT), Arrays.asList(allTablesInDb), false);
+        collection.revoke(table, Arrays.asList(PrivilegeType.INSERT), Arrays.asList(allTablesInDb));
         // revoke select on all tables in database db1
-        collection.revoke(table, Arrays.asList(PrivilegeType.SELECT), Arrays.asList(table1), false);
+        collection.revoke(table, Arrays.asList(PrivilegeType.SELECT), Arrays.asList(table1));
         Assert.assertEquals(1, collection.typeToPrivilegeEntryList.get(table).size());
         Assert.assertFalse(collection.check(table, select, table1));
 

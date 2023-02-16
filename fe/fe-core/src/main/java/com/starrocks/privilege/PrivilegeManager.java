@@ -371,14 +371,12 @@ public class PrivilegeManager {
                         stmt.getObjectType(),
                         stmt.getPrivilegeTypes(),
                         stmt.getObjectList(),
-                        stmt.isWithGrantOption(),
                         stmt.getRole());
             } else {
                 revokeFromUser(
                         stmt.getObjectType(),
                         stmt.getPrivilegeTypes(),
                         stmt.getObjectList(),
-                        stmt.isWithGrantOption(),
                         stmt.getUserIdentity());
             }
         } catch (PrivilegeException e) {
@@ -390,12 +388,11 @@ public class PrivilegeManager {
             ObjectType objectType,
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
-            boolean isGrant,
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
             UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            collection.revoke(objectType, privilegeTypes, objects, isGrant);
+            collection.revoke(objectType, privilegeTypes, objects);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
             invalidateUserInCache(userIdentity);
@@ -408,13 +405,12 @@ public class PrivilegeManager {
             ObjectType objectType,
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
-            boolean isGrant,
             String roleName) throws PrivilegeException {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-            collection.revoke(objectType, privilegeTypes, objects, isGrant);
+            collection.revoke(objectType, privilegeTypes, objects);
             invalidateRolesInCacheRoleUnlocked(roleId);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     roleId, collection, provider.getPluginId(), provider.getPluginVersion());
