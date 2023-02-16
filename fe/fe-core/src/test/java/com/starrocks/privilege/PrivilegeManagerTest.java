@@ -201,7 +201,6 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertFalse(revokeStmt.isWithGrantOption());
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);

@@ -145,7 +145,7 @@ public class TablePrivEntry extends DbPrivEntry {
 
     @Override
     public String toGrantSQL() {
-        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent(), false);
         stmt.setAnalysedTable(privSet, new TablePattern(origDb, origTbl));
         return AstToStringBuilder.toString(stmt);
     }
