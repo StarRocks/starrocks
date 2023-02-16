@@ -684,7 +684,7 @@ public class Coordinator {
                             if (errMsg == null) {
                                 errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
                             }
-                            queryStatus.setStatus(errMsg);
+                            queryStatus.setStatus(errMsg + " backend:" + pair.first.address.hostname);
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
