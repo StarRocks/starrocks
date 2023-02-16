@@ -292,7 +292,7 @@ MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
 # jindosdk for Aliyun OSS
-JINDOSDK_DOWNLOAD="https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/release/4.6.2/jindosdk-4.6.2.tar.gz"
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.2.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
