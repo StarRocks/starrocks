@@ -17,10 +17,10 @@
 #include <bthread/bthread.h>
 
 #include <memory>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "gutil/strings/util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -80,7 +80,7 @@ public:
               _schema_initialized(false) {}
 
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                             const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                             const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              MemTracker* mem_tracker)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
@@ -89,7 +89,7 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _schema_initialized(false),
-              _merge_condition(merge_condition) {}
+              _merge_condition(std::move(merge_condition)) {}
 
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
                              MemTracker* mem_tracker)
@@ -110,7 +110,7 @@ public:
 
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
-    [[nodiscard]] Status finish();
+    [[nodiscard]] Status finish(DeltaWriter::FinishMode mode);
 
     void close();
 
@@ -172,7 +172,7 @@ private:
 
 void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                               const std::vector<int32_t>& referenced_column_ids) {
-    _partial_update_tablet_schema = tschema;
+    _partial_update_tablet_schema = std::move(tschema);
     _referenced_column_ids = referenced_column_ids;
     build_schema_and_writer();
     // recover _tablet_schema with partial update schema
@@ -290,25 +290,29 @@ Status DeltaWriterImpl::handle_partial_update() {
     return Status::OK();
 }
 
-Status DeltaWriterImpl::finish() {
+Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
-
-    // TODO: move file type checking to a common place
-    auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
-    auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
-
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+
+    if (mode == DeltaWriter::kDontWriteTxnLog) {
+        return Status::OK();
+    }
+
+    if (UNLIKELY(_txn_id < 0)) {
+        return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
+    }
+
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : _tablet_writer->files()) {
-        if (is_seg_file(f)) {
+        if (is_segment(f)) {
             op_write->mutable_rowset()->add_segments(std::move(f));
-        } else if (is_del_file(f)) {
+        } else if (is_del(f)) {
             op_write->add_dels(std::move(f));
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f));
@@ -392,9 +396,9 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
-Status DeltaWriter::finish() {
+Status DeltaWriter::finish(FinishMode mode) {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
-    return _impl->finish();
+    return _impl->finish(mode);
 }
 
 void DeltaWriter::close() {
@@ -442,7 +446,7 @@ int64_t DeltaWriter::num_rows() const {
 
 void DeltaWriter::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                           const std::vector<int32_t>& referenced_column_ids) {
-    _impl->TEST_set_partial_update(tschema, referenced_column_ids);
+    _impl->TEST_set_partial_update(std::move(tschema), referenced_column_ids);
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
