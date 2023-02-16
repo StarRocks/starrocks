@@ -1155,7 +1155,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     }
     int64_t wait_start = MonotonicMillis();
     while (true) {
-        if (!_apply_running) {
+        if (_apply_stopped) {
             return Status::InternalError(strings::Substitute("wait_for_version version:$0 failed: apply stopped $1",
                                                              version.to_string(), _debug_string(false, true)));
         }
