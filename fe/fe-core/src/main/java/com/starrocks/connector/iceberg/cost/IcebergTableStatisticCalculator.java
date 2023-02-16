@@ -290,6 +290,8 @@ public class IcebergTableStatisticCalculator {
         ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCache().set(0);
         ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCacheHit().set(0);
 
+        LOG.error("============== generateIcebergFileStats done");
+
         return icebergFileStats;
     }
 

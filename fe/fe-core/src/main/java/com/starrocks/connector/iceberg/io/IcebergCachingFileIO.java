@@ -77,10 +77,11 @@ import java.util.function.Function;
  */
 public class IcebergCachingFileIO implements FileIO {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
-    private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+    private static final int DEFAULT_BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH = 1024L * 1024L * 1024L; // 1GB
     private static final long DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES = 16L * 1024L * 1024L * 1024L; // 16GB
 
+    public static final String FILEIO_BUFFER_CHUNK_SIZE = "fileIO.buffer-chunk-size";
     public static final String FILEIO_CACHE_MAX_TOTAL_BYTES = "fileIO.cache.max-total-bytes";
 
     private ContentCache fileContentCache;
@@ -106,7 +107,8 @@ public class IcebergCachingFileIO implements FileIO {
     public void initialize(Map<String, String> properties) {
         long maxTotalBytes = PropertyUtil.propertyAsLong(properties, FILEIO_CACHE_MAX_TOTAL_BYTES,
                                                         DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES);
-        this.fileContentCache = new ContentCache(DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH, maxTotalBytes);
+        long bufferChunkSize = PropertyUtil.propertyAsLong(properties, FILEIO_BUFFER_CHUNK_SIZE, DEFAULT_BUFFER_CHUNK_SIZE);
+        this.fileContentCache = new ContentCache(DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH, maxTotalBytes, bufferChunkSize);
     }
 
     @Override
@@ -139,6 +141,7 @@ public class IcebergCachingFileIO implements FileIO {
     public static class ContentCache {
         private final long maxTotalBytes;
         private final long maxContentLength;
+        private final long bufferChunkSize;
         private final Cache<String, CacheEntry> cache;
         private AtomicInteger fileIOWithCacheHit = new AtomicInteger(0);
         private AtomicInteger allFileIO = new AtomicInteger(0);
@@ -157,9 +160,10 @@ public class IcebergCachingFileIO implements FileIO {
         }
 
 
-        private ContentCache(long maxContentLength, long maxTotalBytes) {
+        private ContentCache(long maxContentLength, long maxTotalBytes, long bufferChunkSize) {
             this.maxTotalBytes = maxTotalBytes;
             this.maxContentLength = maxContentLength;
+            this.bufferChunkSize = bufferChunkSize;
 
             Caffeine<Object, Object> builder = Caffeine.newBuilder();
             this.cache = builder.maximumWeight(maxTotalBytes)
@@ -173,6 +177,10 @@ public class IcebergCachingFileIO implements FileIO {
 
         public long maxContentLength() {
             return maxContentLength;
+        }
+
+        public long bufferChunkSize() {
+            return bufferChunkSize;
         }
 
         public CacheEntry get(String key, Function<String, CacheEntry> mappingFunction) {
@@ -247,7 +255,7 @@ public class IcebergCachingFileIO implements FileIO {
 
                 while (totalBytesToRead > 0) {
                     // read the stream in 4MB chunk
-                    int bytesToRead = (int) Math.min(BUFFER_CHUNK_SIZE, totalBytesToRead);
+                    int bytesToRead = (int) Math.min(contentCache.bufferChunkSize(), totalBytesToRead);
                     byte[] buf = new byte[bytesToRead];
                     int bytesRead = IOUtil.readRemaining(stream, buf, 0, bytesToRead);
                     totalBytesToRead -= bytesRead;
