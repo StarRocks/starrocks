@@ -52,10 +52,6 @@ namespace starrocks {
 
 StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, const Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
-    std::cout<<"META:"<<meta->indexes().size()<<std::endl;
-    for (size_t i = 0; i < meta->indexes().size(); i++) {
-        std::cout<<"A:"<<i<<":"<<meta->indexes()[i].ordinal_index().SpaceUsedLong()<<std::endl;
-    }
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
@@ -128,10 +124,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             auto* index_meta = meta->mutable_indexes(i);
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
-                std::cout<<"REAL_1:"<<index_meta->ordinal_index().SpaceUsedLong()<<std::endl;
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
-                std::cout<<"REAL_2:"<<_ordinal_index_meta->SpaceUsedLong()<<std::endl;
                 mem_tracker()->consume(_ordinal_index_meta->SpaceUsedLong());
                 mem_tracker()->consume(_ordinal_index->mem_usage());
                 break;
