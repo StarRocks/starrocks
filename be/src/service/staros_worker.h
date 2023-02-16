@@ -43,7 +43,7 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
-    StarOSWorker() : _service_id(), _worker_id(0) {}
+    StarOSWorker() = default;
 
     ~StarOSWorker() override = default;
 
@@ -72,8 +72,6 @@ private:
 
 private:
     mutable std::shared_mutex _mtx;
-    ServiceId _service_id;
-    WorkerId _worker_id;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
 };
 
