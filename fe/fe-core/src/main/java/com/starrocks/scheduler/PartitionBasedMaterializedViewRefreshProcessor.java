@@ -26,6 +26,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -104,7 +105,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private MaterializedView materializedView;
     private MvTaskRunContext mvContext;
     // table id -> <base table info, snapshot table>
-    private Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> snapshotBaseTables;
+    private Map<Long, Pair<BaseTableInfo, Table>> snapshotBaseTables;
 
     @VisibleForTesting
     public MvTaskRunContext getMvContext() {
@@ -260,8 +261,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private void refreshExternalTable(TaskRunContext context) {
-        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
-            MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
             if (!table.isLocalTable()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
@@ -368,10 +369,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private Pair<Table, Column> getPartitionTableAndColumn(
-            Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> tables) {
+            Map<Long, Pair<BaseTableInfo, Table>> tables) {
         SlotRef slotRef = getPartitionSlotRef();
-        for (Pair<MaterializedView.BaseTableInfo, Table> tableInfo : tables.values()) {
-            MaterializedView.BaseTableInfo baseTableInfo = tableInfo.first;
+        for (Pair<BaseTableInfo, Table> tableInfo : tables.values()) {
+            BaseTableInfo baseTableInfo = tableInfo.first;
             Table table = tableInfo.second;
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
                 return Pair.create(table, table.getColumn(slotRef.getColumnName()));
@@ -448,7 +449,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean needToRefreshNonPartitionTable(Table partitionTable) {
-        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
             if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
@@ -465,7 +466,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean unPartitionedMVNeedToRefresh() {
-        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
             // External tables need to refresh, we can't get updated info of external table now.
             if (!snapshotTable.isOlapTable()) {
@@ -569,7 +570,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             partitionTable = partitionTableAndColumn.first;
         }
         Map<String, Set<String>> tableNamePartitionNames = Maps.newHashMap();
-        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
 
             if (partitionTable != null && partitionTable == table) {
@@ -658,8 +659,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private boolean checkBaseTablePartitionChange() {
         // check snapshotBaseTables and current tables in catalog
-        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
-            MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
+        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            BaseTableInfo baseTableInfo = tablePair.first;
             Table snapshotTable = tablePair.second;
 
             Database db = baseTableInfo.getDb();
@@ -787,11 +788,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     @VisibleForTesting
-    public Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
-        Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> tables = Maps.newHashMap();
-        List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+    public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
+        Map<Long, Pair<BaseTableInfo, Table>> tables = Maps.newHashMap();
+        List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
 
-        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Database db = baseTableInfo.getDb();
             if (db == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}",

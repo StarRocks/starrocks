@@ -317,4 +317,7 @@ public class OperationType {
     public static final short OP_ALTER_WH_MOD_PROP = 11114;
     public static final short OP_SUSPEND_WH = 11115;
     public static final short OP_RESUME_WH = 11116;
+
+    // constraint properties
+    public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 }
