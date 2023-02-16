@@ -457,7 +457,6 @@ void check_page(const std::string& file_name) {
         page_start_idx = count;
         int64_t num_rows = cur_chunk->num_rows();
         count += num_rows;
-        std::cout << "INDEX:" << idx << ":" << count << std::endl;
         while (idx < count) {
             Slice convert_key = {keys[page_idx].data + 1, keys[page_idx].size - 1};
             Slice real_key = cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice();
@@ -688,6 +687,63 @@ void check_row_data(const std::string& file_name) {
     std::cout << "CHECK SUCCESS: " << row_count << std::endl;
 }
 
+void dump_data3(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // new segment iterator
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto iter = res.value();
+
+    // output data
+    int64_t remain = 0;
+    size_t page_index = 0;
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
+    int64_t row = 0;
+    do {
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+            }
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        int64_t num_rows = cur_chunk->num_rows();
+        for (size_t i = 0; i < num_rows; i++) {
+            std::cout << "ROW:" << row << ":" << cur_chunk->debug_row(i) << std::endl;
+            row++;
+        }
+    } while (true);
+}
+
 void dump_data2(const std::string& file_name) {
     fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
     auto mem_tracker = std::make_unique<MemTracker>();
@@ -810,6 +866,8 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::dump_data(starrocks::FLAGS_file);
     } else if (starrocks::FLAGS_operation == "dump_data2") {
         starrocks::dump_data2(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "dump_data3") {
+        starrocks::dump_data3(starrocks::FLAGS_file);
     } else if (starrocks::FLAGS_operation == "show_segment_footer") {
         if (starrocks::FLAGS_file.empty()) {
             std::cout << "no file flag for show dict" << std::endl;
