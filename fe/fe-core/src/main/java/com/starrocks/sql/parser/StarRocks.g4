@@ -1205,8 +1205,8 @@ dropUserStatement
     ;
 
 alterUserStatement
-    : ALTER USER user authOption
-    | ALTER USER user DEFAULT ROLE (NONE| ALL | roleList)
+    : ALTER USER (IF EXISTS)? user authOption
+    | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
     ;
 
 showUserStatement
@@ -1223,11 +1223,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? roleList
+    : CREATE ROLE (IF NOT EXISTS)? identifierOrString
     ;
 
 dropRoleStatement
-    : DROP ROLE (IF EXISTS)? roleList
+    : DROP ROLE (IF EXISTS)? identifierOrString
     ;
 
 showRolesStatement
