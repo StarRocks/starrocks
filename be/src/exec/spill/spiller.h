@@ -145,6 +145,13 @@ public:
 
     bool restore_finished() { return _running_restore_tasks == 0; }
 
+    void cancel() {
+        std::lock_guard guard(_mutex);
+        if (_mem_table != nullptr) {
+            _mem_table_pool.push(std::move(_mem_table));
+        }
+    }
+
 private:
     // open stage
     // should be called in executor threads

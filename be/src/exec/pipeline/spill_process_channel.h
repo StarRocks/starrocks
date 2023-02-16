@@ -88,7 +88,7 @@ public:
 
     bool has_task() { return has_spill_task() || _current_task; }
 
-    bool is_finished() { return is_finishing() && !has_spill_task() && _current_task; }
+    bool is_finished() { return is_finishing() && !has_spill_task() && !_current_task; }
 
     void set_spiller(std::shared_ptr<Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<Spiller>& spiller() { return _spiller; }
