@@ -1,10 +1,19 @@
 # !/usr/bin/env python
 # -*- coding: utf-8 -*-
 ###########################################################################
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
-# Copyright (c) 2020, Dingshi Inc.
-# All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ###########################################################################
 
 """
@@ -58,12 +67,8 @@ if __name__ == "__main__":
                    "case_filter=", "part", "attr="]
 
     case_dir = None
-    # case_dir = "/home/disk2/yzy/starRocksTest_fault/case/sql_case/test_dql"
-    # filename_regex = "test_show_frontend.*"
-    # case_name_regex = ".*"
 
     filename_regex = ".*"
-    # filename_regex = "test_array_slice.*"
 
     case_name_regex = ".*"
 
@@ -127,10 +132,7 @@ if __name__ == "__main__":
         "test_sql_cases.py",
         "-vv",
         "-s",
-        "--nologcapture",
-        # "--with-xunitmp"
-        # "--with-html-output",
-        # "--html-out-file=result1.html"
+        "--nologcapture"
     ]
 
     # concurrency
