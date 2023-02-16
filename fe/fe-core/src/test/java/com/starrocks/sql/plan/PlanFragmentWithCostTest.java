@@ -9,11 +9,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -27,6 +31,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
 
@@ -42,6 +47,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000);
+
+        OlapTable colocateT0 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate_t0");
+        setTableStatistics(colocateT0, 10000);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -1105,6 +1113,182 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         assertContains(plan, "probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (2: v2)");
+    }
+
+    private boolean containAnyColocateNode(PlanNode root) {
+        if (root.isColocate()) {
+            return true;
+        }
+        for (PlanNode child : root.getChildren()) {
+            if (containAnyColocateNode(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void testOnePhaseAggWithLocalShuffle() throws Exception {
+        final Reference<Boolean> isSingleBackendAndComputeNode = new Reference<>(true);
+        final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
+                new ColumnStatistic(0.0, 10000, 0.0, 10, 10000));
+        final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
+                new ColumnStatistic(0.0, 10000, 0.0, 10, 100));
+        final Reference<List<ColumnStatistic>> cardinality = new Reference<>(avgHighCardinality);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean isSingleBackendAndComputeNode() {
+                return isSingleBackendAndComputeNode.getRef();
+            }
+        };
+        new MockUp<MockTpchStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.size() == 1) {
+                    if (columns.get(0).equals("v1")) {
+                        return avgLowCardinality;
+                    } else if (columns.get(0).equals("v2")) {
+                        return cardinality.getRef();
+                    }
+                }
+                return avgLowCardinality;
+            }
+        };
+
+        boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+
+        String sql;
+        String plan;
+        ExecPlan execPlan;
+        OlapScanNode olapScanNode;
+
+        try {
+            // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v2) from colocate_t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v1) from colocate_t0 group by v1";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(1: v1)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 3: use two-phase aggregation for non-grouping agg.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v2) from t0";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 4: use two-phase aggregation for multiple BEs.
+            isSingleBackendAndComputeNode.setRef(false);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v2) from t0 group by v2";
+            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+
+            // case 5: use two-phase aggregation for low-cardinality agg.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgLowCardinality);
+            sql = "select sum(v2) from t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 6: insert into cannot use one-phase local aggregation with local shuffle.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+
+            // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select count(1) from " +
+                    "(select v2, sum(v2) from t0 group by v2) t1 join " +
+                    "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
+            execPlan = getExecPlan(sql);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: v2 = 6: v2\n" +
+                    "  |  \n" +
+                    "  |----5:AGGREGATE (update finalize)\n" +
+                    "  |    |  group by: 6: v2\n" +
+                    "  |    |  \n" +
+                    "  |    4:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+        } finally {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+        }
     }
 
     @Test
