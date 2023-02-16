@@ -35,6 +35,7 @@ package com.starrocks.mysql.nio;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.rpc.RpcException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -72,6 +73,10 @@ public class ReadListener implements ChannelListener<ConduitStreamSourceChannel>
                         ctx.stopAcceptQuery();
                         ctx.cleanup();
                     }
+                } catch (RpcException rpce) {
+                    LOG.debug("Exception happened in one session(" + ctx + ").", rpce);
+                    ctx.setKilled();
+                    ctx.cleanup();
                 } catch (Exception e) {
                     LOG.warn("Exception happened in one session(" + ctx + ").", e);
                     ctx.setKilled();
