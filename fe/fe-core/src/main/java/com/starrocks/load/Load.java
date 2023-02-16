@@ -112,7 +112,8 @@ public class Load {
      * @return
      * @throws UserException
      */
-    public static void checkMergeCondition(String mergeCondition, OlapTable table) throws DdlException {
+    public static void checkMergeCondition(String mergeCondition, OlapTable table,
+            boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
         }
@@ -125,6 +126,9 @@ public class Load {
             if (table.getColumn(mergeCondition).isKey()) {
                 throw new DdlException("Merge condition column " + mergeCondition
                         + " should not be primary key!");
+            }
+            if (missAutoIncrementColumn && table.getColumn(mergeCondition).isAutoIncrement()) {
+                throw new DdlException("Merge condition column can not be auto increment column in partial update");
             }
             switch (table.getColumn(mergeCondition).getPrimitiveType()) {
                 case CHAR:
@@ -368,7 +372,7 @@ public class Load {
                     continue;
                 }
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() && !column.isAutoIncrement()) {
                     throw new DdlException("Column has no default value. column: " + columnName);
                 }
             }
@@ -559,8 +563,8 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
-    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs)
-            throws UserException {
+    public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+             List<Boolean> missAutoIncrementColumn) throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
@@ -568,6 +572,11 @@ public class Load {
                 ret.add(col);
             } else if (col.isKey()) {
                 throw new DdlException("key column " + col.getName() + " not in partial update columns");
+            } else if (col.isAutoIncrement()) {
+                if (missAutoIncrementColumn != null) {
+                    missAutoIncrementColumn.add(Boolean.TRUE);
+                }
+                ret.add(col);
             }
         }
         return ret;

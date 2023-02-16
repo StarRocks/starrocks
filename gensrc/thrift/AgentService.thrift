@@ -276,6 +276,10 @@ struct TMoveDirReq {
     5: required bool overwrite
 }
 
+struct TDropAutoIncrementMapReq {
+    1: required i64 table_id
+}
+
 enum TAgentServiceVersion {
     V1
 }
@@ -365,6 +369,7 @@ struct TAgentTaskRequest {
     24: optional TAlterTabletReqV2 alter_tablet_req_v2
     25: optional i64 recv_time // time the task is inserted to queue
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
+    27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
 }
 
 struct TAgentResult {

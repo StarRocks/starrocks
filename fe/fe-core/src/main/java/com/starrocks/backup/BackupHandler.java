@@ -434,6 +434,9 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
         TableType t = TableType.OLAP;
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+        if (backupMeta != null) {
+            backupMeta.makeDummyMap();
+        }
         // Create a restore job
         RestoreJob restoreJob = null;
         if (backupMeta != null) {
