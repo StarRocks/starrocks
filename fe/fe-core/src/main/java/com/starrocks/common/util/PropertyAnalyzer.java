@@ -50,6 +50,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -342,6 +343,17 @@ public class PropertyAnalyzer {
     private static void checkReplicationNum(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
+        }
+        // Skip the alive nodes checking if use_staros is true, because if use_staros is true, only
+        // compute-storage-separation table will be created and in this case the replication_num will
+        // be ignored, so there is no need to check whether the number of alive nodes is greater than the
+        // replication_num.
+        if (!Config.use_staros) {
+            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+            if (replicationNum > backendIds.size()) {
+                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+            }
         }
     }
 
