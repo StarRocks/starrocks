@@ -138,6 +138,10 @@ public class CatalogPEntryObject implements PEntryObject {
         if (id == ALL_CATALOG_ID) {
             return "ALL CATALOGS";
         } else {
+            if (id == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            }
+
             List<Catalog> catalogs =
                     new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().values());
             Optional<Catalog> catalogOptional = catalogs.stream().filter(

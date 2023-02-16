@@ -25,12 +25,10 @@ import com.starrocks.analysis.ParseNode;
 public class GrantRevokeClause implements ParseNode {
     private final UserIdentity userIdentity;
     private final String roleName;
-    private final boolean withGrantOption;
 
-    public GrantRevokeClause(UserIdentity userIdentifier, String roleName, boolean withGrantOption) {
+    public GrantRevokeClause(UserIdentity userIdentifier, String roleName) {
         this.userIdentity = userIdentifier;
         this.roleName = roleName;
-        this.withGrantOption = withGrantOption;
     }
 
     public UserIdentity getUserIdentity() {
@@ -39,14 +37,5 @@ public class GrantRevokeClause implements ParseNode {
 
     public String getRoleName() {
         return roleName;
-    }
-
-    public boolean isWithGrantOption() {
-        return withGrantOption;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
     }
 }

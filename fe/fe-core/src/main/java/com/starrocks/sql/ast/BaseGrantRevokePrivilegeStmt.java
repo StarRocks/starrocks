@@ -124,10 +124,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privBitSet;
     }
 
-    public boolean isWithGrantOption() {
-        return clause.isWithGrantOption();
-    }
-
     public ObjectType getObjectType() {
         return objectType;
     }

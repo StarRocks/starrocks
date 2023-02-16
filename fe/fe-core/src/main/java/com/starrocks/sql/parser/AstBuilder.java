@@ -135,7 +135,6 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
-import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -4196,13 +4195,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantRevokeClause(StarRocksParser.GrantRevokeClauseContext context) {
-        boolean withGrantOption = context.WITH() != null;
         if (context.user() != null) {
             UserIdentity user = (UserIdentity) visit(context.user());
-            return new GrantRevokeClause(user, null, withGrantOption);
+            return new GrantRevokeClause(user, null);
         } else {
             String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
-            return new GrantRevokeClause(null, roleName, withGrantOption);
+            return new GrantRevokeClause(null, roleName);
         }
     }
 
@@ -4214,7 +4212,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .map(user -> (UserIdentity) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
-        return new GrantPrivilegeStmt(privList, "USER", clause, objects);
+        return new GrantPrivilegeStmt(privList, "USER", clause, objects, context.WITH() != null);
     }
 
     @Override
@@ -4230,58 +4228,82 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantTablePrivBrief(StarRocksParser.GrantTablePrivBriefContext context) {
-        GrantRevokePrivilegeObjects privilegeObjects = parsePrivilegeObjectNameList(context.privObjectNameList());
-        return newGrantRevokePrivilegeStmt("TABLE", context.privilegeTypeList(),
-                context.grantRevokeClause(), privilegeObjects, true);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        return new GrantPrivilegeStmt(privilegeList, "TABLE",
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                context.WITH() != null);
     }
 
     @Override
     public ParseNode visitRevokeTablePrivBrief(StarRocksParser.RevokeTablePrivBriefContext context) {
-        GrantRevokePrivilegeObjects privilegeObjects = parsePrivilegeObjectNameList(context.privObjectNameList());
-        return newGrantRevokePrivilegeStmt("TABLE", context.privilegeTypeList(),
-                context.grantRevokeClause(), privilegeObjects, false);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        return new RevokePrivilegeStmt(privilegeList, "TABLE",
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                parsePrivilegeObjectNameList(context.privObjectNameList()));
     }
 
     @Override
     public ParseNode visitGrantPrivWithType(StarRocksParser.GrantPrivWithTypeContext context) {
-        String type = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        GrantRevokePrivilegeObjects objects = parsePrivilegeObjectNameList(context.privObjectNameList());
-        return newGrantRevokePrivilegeStmt(
-                type, context.privilegeTypeList(), context.grantRevokeClause(), objects, true);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+
+        return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                context.WITH() != null);
     }
 
     @Override
     public ParseNode visitRevokePrivWithType(StarRocksParser.RevokePrivWithTypeContext context) {
-        String type = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        GrantRevokePrivilegeObjects objects = parsePrivilegeObjectNameList(context.privObjectNameList());
-        return newGrantRevokePrivilegeStmt(
-                type, context.privilegeTypeList(), context.grantRevokeClause(), objects, false);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+
+        return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                parsePrivilegeObjectNameList(context.privObjectNameList()));
     }
 
     @Override
     public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
-        String type = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        type = extendPrivilegeType(context.GLOBAL() != null, type);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        objectTypeUnResolved = extendPrivilegeType(context.GLOBAL() != null, objectTypeUnResolved);
+
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setFunctionArgsDef(argsDef);
         objects.setFunctionName(functionName);
-        return newGrantRevokePrivilegeStmt(
-                type, context.privilegeTypeList(), context.grantRevokeClause(), objects, true);
+
+        return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()), objects, context.WITH() != null);
     }
 
     @Override
     public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
-        String type = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        type = extendPrivilegeType(context.GLOBAL() != null, type);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        objectTypeUnResolved = extendPrivilegeType(context.GLOBAL() != null, objectTypeUnResolved);
+
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setFunctionArgsDef(argsDef);
         objects.setFunctionName(functionName);
-        return newGrantRevokePrivilegeStmt(
-                type, context.privilegeTypeList(), context.grantRevokeClause(), objects, false);
+
+        return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()), objects);
     }
 
     public String extendPrivilegeType(boolean isGlobal, String type) {
@@ -4295,9 +4317,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantOnAll(StarRocksParser.GrantOnAllContext context) {
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        String privilegeType = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
 
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
             objects.setAllPrivilegeObject(true, null);
         } else if (context.IN() != null) {
@@ -4307,15 +4331,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             objects.setAllPrivilegeObject(false, null);
         }
 
-        return newGrantRevokePrivilegeStmt(privilegeType, context.privilegeTypeList(),
-                context.grantRevokeClause(), objects, true);
+        return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                objects, context.WITH() != null);
     }
 
     @Override
     public ParseNode visitRevokeOnAll(StarRocksParser.RevokeOnAllContext context) {
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        String privilegeType = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
 
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         if (context.isAll != null) {
             objects.setAllPrivilegeObject(true, null);
         } else if (context.IN() != null) {
@@ -4325,28 +4352,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             objects.setAllPrivilegeObject(false, null);
         }
 
-        return newGrantRevokePrivilegeStmt(privilegeType, context.privilegeTypeList(),
-                context.grantRevokeClause(), objects, false);
-    }
-
-    public ParseNode visitAllGlobalFunctions(StarRocksParser.GrantRevokeClauseContext grantRevokeClauseContext,
-                                             StarRocksParser.PrivilegeTypeListContext privilegeActionListContext,
-                                             boolean isGrant) {
-        String type = "GLOBAL_FUNCTIONS";
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setAllPrivilegeObject(false, null);
-        return newGrantRevokePrivilegeStmt(
-                type, privilegeActionListContext, grantRevokeClauseContext, objects, isGrant);
+        return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
+                (GrantRevokeClause) visit(context.grantRevokeClause()), objects);
     }
 
     @Override
     public ParseNode visitGrantOnAllGlobalFunctions(StarRocksParser.GrantOnAllGlobalFunctionsContext context) {
-        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeTypeList(), true);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setAllPrivilegeObject(false, null);
+
+        return new GrantPrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                objects, context.WITH() != null);
     }
 
     @Override
     public ParseNode visitRevokeOnAllGlobalFunctions(StarRocksParser.RevokeOnAllGlobalFunctionsContext context) {
-        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeTypeList(), false);
+        List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
+
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setAllPrivilegeObject(false, null);
+
+        return new RevokePrivilegeStmt(privilegeList, "GLOBAL_FUNCTIONS",
+                (GrantRevokeClause) visit(context.grantRevokeClause()), objects);
     }
 
     @Override
@@ -4386,22 +4418,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         grantRevokePrivilegeObjects.setPrivilegeObjectNameTokensList(objectNameList);
         return grantRevokePrivilegeObjects;
-    }
-
-    private BaseGrantRevokePrivilegeStmt newGrantRevokePrivilegeStmt(
-            String objectTypeString,
-            StarRocksParser.PrivilegeTypeListContext privListContext,
-            StarRocksParser.GrantRevokeClauseContext clauseContext,
-            GrantRevokePrivilegeObjects objects,
-            boolean isGrant) {
-        List<String> privilegeList = privListContext.privilegeType().stream().map(
-                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-        GrantRevokeClause clause = (GrantRevokeClause) visit(clauseContext);
-        if (isGrant) {
-            return new GrantPrivilegeStmt(privilegeList, objectTypeString.toUpperCase(), clause, objects);
-        } else {
-            return new RevokePrivilegeStmt(privilegeList, objectTypeString.toUpperCase(), clause, objects);
-        }
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

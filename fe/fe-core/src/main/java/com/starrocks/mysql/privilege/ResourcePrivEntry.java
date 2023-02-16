@@ -134,7 +134,7 @@ public class ResourcePrivEntry extends PrivEntry {
 
     @Override
     public String toGrantSQL() {
-        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "RESOURCE", getUserIdent());
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "RESOURCE", getUserIdent(), false);
         stmt.setAnalysedResource(privSet, new ResourcePattern(origResource));
         return AstToStringBuilder.toString(stmt);
     }

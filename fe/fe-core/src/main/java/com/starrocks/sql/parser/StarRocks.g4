@@ -1265,19 +1265,20 @@ setDefaultRoleStatement
     : SET DEFAULT ROLE (NONE | ALL | roleList) TO user;
 
 grantRevokeClause
-    : (USER? user | ROLE identifierOrString) (WITH GRANT OPTION)?
+    : (USER? user | ROLE identifierOrString)
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause                                   #grantImpersonate
-    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause                                #grantTablePrivBrief
+    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantImpersonate
+    | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
     | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
-        TO grantRevokeClause                                                                            #grantPrivWithType
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
     | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
-        TO grantRevokeClause                                                                            #grantPrivWithFunc
+        TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
     | GRANT privilegeTypeList ON ALL privObjectType
-        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause                  #grantOnAll
-    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause                              #grantOnAllGlobalFunctions
+        (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
+        (WITH GRANT OPTION)?                                                                            #grantOnAll
+    | GRANT privilegeTypeList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause (WITH GRANT OPTION)?         #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
