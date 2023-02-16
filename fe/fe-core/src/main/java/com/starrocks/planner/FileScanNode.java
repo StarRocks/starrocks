@@ -279,6 +279,10 @@ public class FileScanNode extends LoadScanNode {
         params.setStrict_mode(strictMode);
         params.setProperties(brokerDesc.getProperties());
         params.setUse_broker(brokerDesc.hasBroker());
+        params.setSkip_header(fileGroup.getSkipHeader());
+        params.setTrim_space(fileGroup.isTrimspace());
+        params.setEnclose(fileGroup.getEnclose());
+        params.setEscape(fileGroup.getEscape());
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
