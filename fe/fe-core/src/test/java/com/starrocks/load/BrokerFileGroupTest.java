@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.UserIdentity;
@@ -38,6 +39,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -69,6 +71,44 @@ public class BrokerFileGroupTest {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    @Test
+    public void testCSVParams() throws UserException {
+        CsvFormat csvFormat = new CsvFormat((byte) '\'', (byte) '|', 3, true);
+        List<String> filePaths = new ArrayList<>();
+        filePaths.add("/a/b/c/file");
+        DataDescription desc = new DataDescription("olapTable", null, 
+                                filePaths, null, null, 
+                                null, null, null,
+                                false, null, null, csvFormat);
+        desc.analyze("testDb");
+
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parseFormatProperties(desc);
+        Assert.assertEquals('\'', fileGroup.getEnclose());
+        Assert.assertEquals('|', fileGroup.getEscape());
+        Assert.assertEquals(3, fileGroup.getSkipHeader());
+        Assert.assertEquals(true, fileGroup.isTrimspace());
+    }
+
+    @Test
+    public void testCSVParamsWithSpecialCharacter() throws UserException {
+        CsvFormat csvFormat = new CsvFormat((byte) '\t', (byte) '\\', 3, true);
+        List<String> filePaths = new ArrayList<>();
+        filePaths.add("/a/b/c/file");
+        DataDescription desc = new DataDescription("olapTable", null, 
+                                filePaths, null, null, 
+                                null, null, null,
+                                false, null, null, csvFormat);
+        desc.analyze("testDb");
+
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parseFormatProperties(desc);
+        Assert.assertEquals('\\', fileGroup.getEscape());
+        Assert.assertEquals('\t', fileGroup.getEnclose());
+        Assert.assertEquals(92, fileGroup.getEscape());
+        Assert.assertEquals(9, fileGroup.getEnclose());
     }
 
     @Test

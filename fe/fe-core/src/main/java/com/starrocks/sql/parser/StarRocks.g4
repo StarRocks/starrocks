@@ -1056,6 +1056,7 @@ dataDesc
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
         format=fileFormat?
+        (formatPropsField=formatProps)?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
         (SET colMappingList=classifier)?
@@ -1066,6 +1067,15 @@ dataDesc
         partitions=partitionNames?
         (SET colMappingList=classifier)?
         (WHERE where=expression)?
+    ;
+
+formatProps
+    :  '('
+            (SKIP_HEADER '=' INTEGER_VALUE)?
+            (TRIM_SPACE '=' booleanValue)?
+            (ENCLOSE '=' encloseCharacter=string)?
+            (ESCAPE '=' escapeCharacter=string)?
+        ')'
     ;
 
 brokerDesc

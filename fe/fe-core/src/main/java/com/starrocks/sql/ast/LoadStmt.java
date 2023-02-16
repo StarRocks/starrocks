@@ -66,6 +66,15 @@ import java.util.Map.Entry;
 //          INTO TABLE tbl_name
 //          [PARTITION (p1, p2)]
 //          [COLUMNS TERMINATED BY separator ]
+//          [FORMAT AS CSV] 
+//          [ 
+//              (
+//                  "trim_space"="xx",
+//                  "enclose"="x",
+//                  "escape"="x",
+//                  "skip_header"="2"
+//              ) 
+//          ]
 //          [(col1, ...)]
 //          [SET (k1=f1(xx), k2=f2(xx))]
 //

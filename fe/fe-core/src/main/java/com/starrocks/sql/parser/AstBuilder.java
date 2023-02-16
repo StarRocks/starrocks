@@ -88,6 +88,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
@@ -2210,8 +2211,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
             colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
+        StarRocksParser.FormatPropsContext formatPropsContext = null;
+        CsvFormat csvFormat = null;
+        if (context.formatPropsField != null) {
+            formatPropsContext = context.formatProps();
+            String escape = null;
+            if (formatPropsContext.escapeCharacter != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(formatPropsContext.escapeCharacter);
+                escape = stringLiteral.getValue();
+            }
+            String enclose = null;
+            if (formatPropsContext.encloseCharacter != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(formatPropsContext.encloseCharacter);
+                enclose = stringLiteral.getValue();
+            }
+            long skipheader = 0;
+            if (formatPropsContext.INTEGER_VALUE() != null) {
+                skipheader = Long.parseLong(formatPropsContext.INTEGER_VALUE().getText());
+                if (skipheader < 0) {
+                    skipheader = 0;
+                }
+            }
+            boolean trimspace = false;
+            if (formatPropsContext.booleanValue() != null) {
+                trimspace = Boolean.parseBoolean(formatPropsContext.booleanValue().getText());
+            }
+            csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0), 
+                                      escape == null ? 0 : (byte) escape.charAt(0), 
+                                      skipheader, trimspace);
+        } else {
+            csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+        }
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
-                colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
+                colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr, csvFormat);
     }
 
     private ColumnSeparator getColumnSeparator(StarRocksParser.StringContext context) {
@@ -5807,6 +5839,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return jobProperties;
     }
+
 
     private Map<String, String> getDataSourceProperties(
             StarRocksParser.DataSourcePropertiesContext dataSourcePropertiesContext) {
