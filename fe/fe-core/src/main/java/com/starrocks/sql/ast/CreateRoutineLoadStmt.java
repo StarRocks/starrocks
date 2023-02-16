@@ -512,8 +512,16 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
             trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
-            enclose = (byte) jobProperties.getOrDefault(ENCLOSE, "0").charAt(0);
-            escape = (byte) jobProperties.getOrDefault(ESCAPE, "0").charAt(0);
+            if (jobProperties.containsKey(ENCLOSE)) {
+                enclose = (byte) jobProperties.get(ENCLOSE).charAt(0);
+            } else {
+                enclose = 0;
+            }
+            if (jobProperties.containsKey(ESCAPE)) {
+                escape = (byte) jobProperties.get(ESCAPE).charAt(0);            
+            } else {
+                escape = 0;
+            }
         }
     }
 
