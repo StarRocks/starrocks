@@ -346,23 +346,23 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 ## Query a Delta Lake table
 
-To view the databases in your Delta Lake cluster, use the following syntax:
+1. Use the following syntax to view the databases in your Delta Lake cluster:
 
-```SQL
-SHOW DATABASES FROM <catalog_name>
-```
+   ```SQL
+   SHOW DATABASES FROM <catalog_name>
+   ```
 
-To connect to your target Delta Lake database, use the following syntax:
+2. Use the following syntax to connect to your target Delta Lake database:
 
-```SQL
-USE <catalog_name>.<database_name>
-```
+   ```SQL
+   USE <catalog_name>.<database_name>
+   ```
 
-To query a Delta Lake table, use the following syntax:
+3. Use the following syntax to query the Delta Lake table:
 
-```SQL
-SELECT count(*) FROM <table_name> LIMIT 10
-```
+   ```SQL
+   SELECT count(*) FROM <table_name> LIMIT 10
+   ```
 
 ## Load data from Delta Lake
 
@@ -376,7 +376,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. However, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
