@@ -90,22 +90,25 @@ public:
     void reset() override;
 
     Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
-        if (_needs_levels) {
+        if (_need_parse_levels) {
             return _read_records_and_levels(num_records, content_type, dst);
         } else {
             return _read_records_only(num_records, content_type, dst);
         }
     }
 
-    void set_needs_levels(bool needs_levels) override { _needs_levels = needs_levels; }
+    // If need_levels is set, client will get all levels through get_levels function.
+    // If need_levels is not set, read_records may not records levels information, this will
+    // improve performance. So set this flag when you only needs it.
+    void set_need_parse_levels(bool needs_levels) override { _need_parse_levels = needs_levels; }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // _needs_levels must be true
-        DCHECK(_needs_levels);
+        DCHECK(_need_parse_levels);
 
-        *def_levels = nullptr;
+        *def_levels = &_def_levels[0];
         *rep_levels = nullptr;
-        *num_levels = 0;
+        *num_levels = _levels_parsed;
     }
 
 private:
@@ -118,7 +121,7 @@ private:
     // When the flag is false, the information of levels does not need to be materialized,
     // so that the advantages of RLE encoding can be fully utilized and a lot of overhead
     // can be saved in decoding.
-    bool _needs_levels = false;
+    bool _need_parse_levels = false;
 
     bool _eof = false;
 
@@ -319,6 +322,7 @@ void OptionalStoredColumnReader::reset() {
 
     memmove(&_def_levels[0], &_def_levels[_levels_parsed], num_levels * sizeof(level_t));
     _levels_decoded -= _levels_parsed;
+    _levels_parsed = 0;
 }
 
 Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records, ColumnContentType content_type,
