@@ -23,7 +23,6 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -102,16 +101,16 @@ public class QueryQueueManager {
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
                                     int cpuUsedPermille) {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-        if (backend == null) {
-            LOG.warn("backend doesn't exist. id: {}", backendId);
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("backend or computed node doesn't exist. id: {}", backendId);
             return;
         }
 
         try {
             lock.lock();
 
-            backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
             maybeNotifyAfterLock();
         } finally {
             lock.unlock();
@@ -223,7 +222,7 @@ public class QueryQueueManager {
     }
 
     public boolean canRunMore() {
-        return GlobalStateMgr.getCurrentSystemInfo().getBackends().stream()
+        return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
                 .noneMatch(ComputeNode::isResourceOverloaded);
     }
 
