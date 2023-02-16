@@ -45,6 +45,7 @@
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "runtime/vectorized/time_types.h"
 
 namespace starrocks {
 
@@ -316,6 +317,7 @@ void dump_data(const std::string& file_name) {
 
 int meta_tool_main(int argc, char** argv) {
     starrocks::ChunkAllocator::init_instance(nullptr, 4096);
+    starrocks::vectorized::date::init_date_cache();
 
     std::string usage = starrocks::get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
