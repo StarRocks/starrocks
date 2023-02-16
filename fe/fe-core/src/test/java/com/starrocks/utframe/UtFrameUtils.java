@@ -50,7 +50,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -236,10 +235,7 @@ public class UtFrameUtils {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            boolean oldRunningUnitTest = FeConstants.runningUnitTest;
-            FeConstants.runningUnitTest = true;
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
-            FeConstants.runningUnitTest = oldRunningUnitTest;
 
             addMockBackend(10001);
 
