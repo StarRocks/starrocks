@@ -31,6 +31,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
 
@@ -1114,7 +1115,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (2: v2)");
     }
 
-    @Test
     private boolean containAnyColocateNode(PlanNode root) {
         if (root.isColocate()) {
             return true;
