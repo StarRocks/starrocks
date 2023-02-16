@@ -1018,7 +1018,7 @@ build_serdes() {
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
-    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavrocpp_s -lavro -lssl -lcrypto -ldl" 
+    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl" 
     ./configure --prefix=${TP_INSTALL_DIR} \
                 --libdir=${TP_INSTALL_DIR}/lib \
                 --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
