@@ -36,7 +36,6 @@ public class PushDownMinMaxConjunctsRuleTest {
     @Test
     public void transformIceberg(@Mocked IcebergTable table) {
         RemoteScanPartitionPruneRule rule0 = RemoteScanPartitionPruneRule.ICEBERG_SCAN;
-        PushDownMinMaxConjunctsRule rule1 = PushDownMinMaxConjunctsRule.ICEBERG_SCAN;
 
         PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
@@ -50,7 +49,6 @@ public class PushDownMinMaxConjunctsRuleTest {
         assertEquals(0, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
 
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
-        rule1.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
 
         assertEquals(2, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
     }
