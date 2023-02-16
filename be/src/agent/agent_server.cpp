@@ -199,7 +199,7 @@ void AgentServer::Impl::init_or_die() {
                                        _thread_pool_update_tablet_meta_info);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 1, 1, std::numeric_limits<int>::max(),
-                                    _thread_pool_drop_auto_increment_map);
+                                       _thread_pool_drop_auto_increment_map);
 
 #ifndef BE_TEST
         // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
