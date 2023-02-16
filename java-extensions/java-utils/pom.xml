@@ -20,6 +20,13 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <dependencies>
+        <dependency>
+            <groupId>me.bechberger</groupId>
+            <artifactId>ap-loader-all</artifactId>
+            <version>2.9-4</version>
+        </dependency>
+    </dependencies>
     <build>
         <finalName>starrocks-java-utils</finalName>
         <plugins>
