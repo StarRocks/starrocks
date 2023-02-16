@@ -643,7 +643,9 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {

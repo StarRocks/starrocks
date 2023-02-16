@@ -665,9 +665,12 @@ public class PropertyAnalyzer {
 
     public static List<UniqueConstraint> analyzeUniqueConstraint(
             Map<String, String> properties, OlapTable table) throws AnalysisException {
-        List<UniqueConstraint> uniqueConstraints = null;
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String uniqueConstraintStr = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
+            if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
+                return uniqueConstraints;
+            }
             uniqueConstraints = UniqueConstraint.parse(uniqueConstraintStr);
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 throw new AnalysisException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
@@ -691,6 +694,9 @@ public class PropertyAnalyzer {
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+            if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
+                return foreignKeyConstraints;
+            }
             if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
                 throw new AnalysisException("empty foreign key constraint is invalid");
             }

@@ -2061,7 +2061,7 @@ public class OlapTable extends Table {
         tableProperty.setUniqueConstraints(uniqueConstraints);
     }
 
-    public List<ForeignKeyConstraint> getForeignKeyConstraint() {
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         if (tableProperty == null) {
             return null;
         }

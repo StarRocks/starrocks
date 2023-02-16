@@ -2522,7 +2522,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         List<ForeignKeyConstraint> foreignKeyConstraints =
                 PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
-        if (foreignKeyConstraints != null && !foreignKeyConstraints.isEmpty()) {
+        if (foreignKeyConstraints != null) {
             olapTable.setForeignKeyConstraint(foreignKeyConstraints);
         }
     }

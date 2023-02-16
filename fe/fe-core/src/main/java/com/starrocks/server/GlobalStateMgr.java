@@ -69,6 +69,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -308,6 +309,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -2404,6 +2406,52 @@ public class GlobalStateMgr {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
+                }
+
+                // unique constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+                }
+
+                // foreign key constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                            .append("\" = \"");
+                    List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
+                    List<String> constraintStrs = Lists.newArrayList();
+                    for (ForeignKeyConstraint constraint : constraints) {
+                        BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                        StringBuilder constraintSb = new StringBuilder();
+                        constraintSb.append("(");
+                        String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                        constraintSb.append(baseColumns);
+                        constraintSb.append(")");
+                        constraintSb.append(" REFERENCES ");
+                        if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                            Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
+                            if (!parentDb.getFullName().equals(dbName)) {
+                                constraintSb.append(parentDb.getFullName() + ".");
+                            }
+                            Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
+                            constraintSb.append(parentTable.getName());
+                        } else {
+                            constraintSb.append(parentTableInfo.toString());
+                        }
+
+                        constraintSb.append("(");
+                        String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                        constraintSb.append(parentColumns);
+                        constraintSb.append(")");
+                        constraintStrs.add(constraintSb.toString());
+                    }
+
+                    sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
                 }
             }
 

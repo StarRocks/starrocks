@@ -71,13 +71,13 @@ public class ForeignKeyConstraint {
         }
         StringBuilder sb = new StringBuilder();
         sb.append("(");
-        String baseColumns = Joiner.on(".").join(columnRefPairs.stream().map(pair -> pair.first).collect(Collectors.toList()));
+        String baseColumns = Joiner.on(",").join(columnRefPairs.stream().map(pair -> pair.first).collect(Collectors.toList()));
         sb.append(baseColumns);
         sb.append(")");
         sb.append(" REFERENCES ");
         sb.append(parentTableInfo.toString());
         sb.append("(");
-        String parentColumns = Joiner.on(".").join(columnRefPairs.stream().map(pair -> pair.second).collect(Collectors.toList()));
+        String parentColumns = Joiner.on(",").join(columnRefPairs.stream().map(pair -> pair.second).collect(Collectors.toList()));
         sb.append(parentColumns);
         sb.append(")");
         return sb.toString();

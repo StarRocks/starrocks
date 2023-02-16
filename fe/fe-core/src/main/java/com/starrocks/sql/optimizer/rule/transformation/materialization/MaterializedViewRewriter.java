@@ -274,7 +274,7 @@ public class MaterializedViewRewriter {
             // now only support OlapTable
             Preconditions.checkState(tableScanDesc.getTable() instanceof OlapTable);
             OlapTable childTable = (OlapTable) tableScanDesc.getTable();
-            List<ForeignKeyConstraint> foreignKeyConstraints = childTable.getForeignKeyConstraint();
+            List<ForeignKeyConstraint> foreignKeyConstraints = childTable.getForeignKeyConstraints();
             if (foreignKeyConstraints == null) {
                 continue;
             }
