@@ -297,7 +297,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _scan_executor_with_workgroup->initialize(num_io_threads);
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    if (!store_paths.empty()) {
+    bool is_compute_node = store_paths.empty();
+    if (!is_compute_node) {
         Status status = _load_path_mgr->init();
         if (!status.ok()) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
@@ -315,14 +316,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                        config::lake_metadata_cache_limit);
 #endif
 
-        // agent_server is not needed for cn
-        _agent_server = new AgentServer(this);
-        _agent_server->init_or_die();
-
 #if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_tablet_manager->start_gc();
 #endif
     }
+
+    _agent_server = new AgentServer(this, is_compute_node);
+    _agent_server->init_or_die();
+
     _broker_mgr->init();
     _small_file_mgr->init();
 
