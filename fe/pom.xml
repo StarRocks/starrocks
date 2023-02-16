@@ -270,7 +270,7 @@ under the License.
             <dependency>
                 <groupId>org.codehaus.jackson</groupId>
                 <artifactId>jackson-mapper-asl</artifactId>
-                <version>1.9.13-cloudera.2</version>
+                <version>1.9.13</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
