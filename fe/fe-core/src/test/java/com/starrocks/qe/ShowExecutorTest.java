@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -50,6 +51,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
@@ -61,6 +63,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -73,6 +76,8 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.system.Backend;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -714,6 +719,55 @@ public class ShowExecutorTest {
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("5", resultSet.getString(27));
+
+        Config.integrate_starmgr = false;
+    }
+
+    @Test
+    public void testShowComputeNodes() throws AnalysisException, DdlException {
+        ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
+        node.updateResourceUsage(10, 100L, 1L, 30);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            List<Long> getComputeNodeIds(boolean needAlive) {
+                return ImmutableList.of(node.getId());
+            }
+
+            @Mock
+            ComputeNode getComputeNode(long computeNodeId) {
+                if (computeNodeId == node.getId()) {
+                    return node;
+                }
+                return null;
+            }
+        };
+
+        new MockUp<BackendCoreStat>() {
+            @Mock
+            int getCoresOfBe(long beId) {
+                return 16;
+            }
+        };
+
+
+        Config.integrate_starmgr = true;
+
+        ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES.size(), resultSet.getMetaData().getColumnCount());
+        for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES.size(); ++i) {
+            Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES.get(i), resultSet.getMetaData().getColumn(i).getName());
+        }
+        System.out.println(resultSet.getMetaData().getColumn(13));
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("16", resultSet.getString(13));
+        Assert.assertEquals("10", resultSet.getString(14));
+        Assert.assertEquals("1.00 %", resultSet.getString(15));
+        Assert.assertEquals("3.0 %", resultSet.getString(16));
 
         Config.integrate_starmgr = false;
     }
