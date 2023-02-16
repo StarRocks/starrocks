@@ -2856,7 +2856,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!CollectionUtils.isEmpty(chosenBackendIds)) {
             return chosenBackendIds;
         } else if (replicationNum > 1) {
-            throw new DdlException(String.format("Unable to find %d alive nodes with different IPs to create %d replicas",
+            throw new DdlException(String.format("Unable to find %d alive nodes on different hosts to create %d replicas",
                     replicationNum, replicationNum));
         } else {
             throw new DdlException("No alive nodes");
