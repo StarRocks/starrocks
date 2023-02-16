@@ -46,7 +46,6 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
@@ -54,17 +53,20 @@ import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
 
-    private static final ConcurrentHashMap<String, IcebergHiveCatalog> METASTORE_URI_TO_CATALOG =
-            new ConcurrentHashMap<>();
+    //private static final ConcurrentHashMap<String, IcebergHiveCatalog> METASTORE_URI_TO_CATALOG =
+    //        new ConcurrentHashMap<>();
 
     public static synchronized IcebergHiveCatalog getInstance(String uri, Map<String, String> properties,
                                                               HdfsEnvironment hdfsEnvironment) {
-        if (!METASTORE_URI_TO_CATALOG.containsKey(uri)) {
-            properties.put(CatalogProperties.URI, uri);
-            METASTORE_URI_TO_CATALOG.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
-                    hdfsEnvironment.getConfiguration(), properties).loadCatalog());
-        }
-        return METASTORE_URI_TO_CATALOG.get(uri);
+        //if (!METASTORE_URI_TO_CATALOG.containsKey(uri)) {
+        //    properties.put(CatalogProperties.URI, uri);
+        //    METASTORE_URI_TO_CATALOG.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
+        //            hdfsEnvironment.getConfiguration(), properties).loadCatalog());
+        //}
+        //return METASTORE_URI_TO_CATALOG.get(uri);
+        properties.put(CatalogProperties.URI, uri);
+        return (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri), hdfsEnvironment.getConfiguration(),
+                properties).loadCatalog();
     }
 
     private String name;
