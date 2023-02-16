@@ -336,7 +336,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::atomic_int _buffer_size;
+    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
