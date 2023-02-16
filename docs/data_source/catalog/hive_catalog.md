@@ -346,23 +346,23 @@ You can use one of the following syntaxes to view the schema of a Hive table:
 
 ## Query a Hive table
 
-To view the databases in your Hive cluster, use the following syntax:
+1. Use the following syntax to view the databases in your Hive cluster:
 
-```SQL
-SHOW DATABASES FROM <catalog_name>
-```
+   ```SQL
+   SHOW DATABASES FROM <catalog_name>
+   ```
 
-To connect to your target Hive database, use the following syntax:
+2. Use the following syntax to connect to your target Hive database:
 
-```SQL
-USE <catalog_name>.<database_name>
-```
+   ```SQL
+   USE <catalog_name>.<database_name>
+   ```
 
-To query a Hive table, use the following syntax:
+3. Use the following syntax to query the Hive table:
 
-```SQL
-SELECT count(*) FROM <table_name> LIMIT 10
-```
+   ```SQL
+   SELECT count(*) FROM <table_name> LIMIT 10
+   ```
 
 ## Load data from Hive
 
@@ -376,7 +376,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. However, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
