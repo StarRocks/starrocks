@@ -1448,7 +1448,7 @@ public class Auth implements Writable {
     // create role
     @Deprecated
     public void createRole(CreateRoleStmt stmt) throws DdlException {
-        createRoleInternal(stmt.getQualifiedRole(), false);
+        createRoleInternal(stmt.getRoles().get(0), false);
     }
 
     @Deprecated
@@ -1479,7 +1479,7 @@ public class Auth implements Writable {
     // drop role
     @Deprecated
     public void dropRole(DropRoleStmt stmt) throws DdlException {
-        dropRoleInternal(stmt.getQualifiedRole(), false);
+        dropRoleInternal(stmt.getRoles().get(0), false);
     }
 
     @Deprecated

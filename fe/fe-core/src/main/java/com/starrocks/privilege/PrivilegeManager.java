@@ -357,8 +357,12 @@ public class PrivilegeManager {
             invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.grant(objectType, privilegeTypes, objects, isGrant);
+
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            rolePrivCollectionModified.put(roleId, collection);
+
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
-                    roleId, collection, provider.getPluginId(), provider.getPluginVersion());
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             roleWriteUnlock();
         }
@@ -412,8 +416,12 @@ public class PrivilegeManager {
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.revoke(objectType, privilegeTypes, objects);
             invalidateRolesInCacheRoleUnlocked(roleId);
+
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            rolePrivCollectionModified.put(roleId, collection);
+
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
-                    roleId, collection, provider.getPluginId(), provider.getPluginVersion());
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             roleWriteUnlock();
         }
@@ -484,10 +492,8 @@ public class PrivilegeManager {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
-            // write journal to update privilege collections of both role & parent role
-            RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                    roleId, collection, provider.getPluginId(), provider.getPluginVersion());
-
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            rolePrivCollectionModified.put(roleId, collection);
             for (String parentRole : parentRoleName) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRole);
 
@@ -530,10 +536,14 @@ public class PrivilegeManager {
                 }
 
                 collection.addParentRole(parentRoleId);
-                info.add(parentRoleId, parentCollection);
+                rolePrivCollectionModified.put(parentRoleId, parentCollection);
             }
 
             invalidateRolesInCacheRoleUnlocked(roleId);
+
+            // write journal to update privilege collections of both role & parent role
+            RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             globalStateMgr.getEditLog().logUpdateRolePrivilege(info);
             LOG.info("grant role {}[{}] to role {}[{}]", parentRoleName,
                     Joiner.on(", ").join(parentRoleName), roleName, roleId);
@@ -601,18 +611,22 @@ public class PrivilegeManager {
                 parentCollection.removeSubRole(roleId);
                 collection.removeParentRole(parentRoleId);
             }
-            // write journal to update privilege collections of both role & parent role
-            RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                    roleId, collection, provider.getPluginId(), provider.getPluginVersion());
+
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            rolePrivCollectionModified.put(roleId, collection);
 
             List<Long> parentRoleIdList = new ArrayList<>();
             for (String parentRoleName : parentRoleNameList) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRoleName);
                 RolePrivilegeCollection parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
-                info.add(parentRoleId, parentCollection);
                 parentRoleIdList.add(parentRoleId);
+                rolePrivCollectionModified.put(parentRoleId, parentCollection);
             }
+
+            // write journal to update privilege collections of both role & parent role
+            RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             globalStateMgr.getEditLog().logUpdateRolePrivilege(info);
             LOG.info("revoke role {}[{}] from role {}[{}]",
                     parentRoleNameList.toString(), parentRoleIdList.toString(), roleName, roleId);
@@ -1406,21 +1420,26 @@ public class PrivilegeManager {
         return provider.getAvailablePrivType(objectType);
     }
 
-    public void createRole(CreateRoleStmt stmt) throws DdlException {
+    public void createRole(CreateRoleStmt stmt) {
         roleWriteLock();
         try {
-            String roleName = stmt.getQualifiedRole();
-            if (roleNameToId.containsKey(roleName)) {
-                throw new DdlException(String.format("Role %s already exists!", roleName));
+            Map<String, Long> roleNameToBeCreated = new HashMap<>();
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            for (String roleName : stmt.getRoles()) {
+                long roleId = globalStateMgr.getNextId();
+                RolePrivilegeCollection collection = new RolePrivilegeCollection(
+                        roleName, RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
+                rolePrivCollectionModified.put(roleId, collection);
+
+                roleNameToBeCreated.put(roleName, roleId);
             }
-            RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                    roleName, RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
-            long roleId = globalStateMgr.getNextId();
-            roleIdToPrivilegeCollection.put(roleId, collection);
-            roleNameToId.put(roleName, roleId);
+
+            roleIdToPrivilegeCollection.putAll(rolePrivCollectionModified);
+            roleNameToId.putAll(roleNameToBeCreated);
+
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
-                    roleId, collection, provider.getPluginId(), provider.getPluginVersion());
-            LOG.info("created role {}[{}]", roleName, roleId);
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
+            LOG.info("created role {}[{}]", stmt.getRoles().toString(), roleNameToBeCreated.values());
         } finally {
             roleWriteUnlock();
         }
@@ -1430,7 +1449,7 @@ public class PrivilegeManager {
             RolePrivilegeCollectionInfo info) throws PrivilegeException {
         roleWriteLock();
         try {
-            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivilegeCollectionMap().entrySet()) {
+            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivCollectionModified().entrySet()) {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollection privilegeCollection = entry.getValue();
@@ -1449,18 +1468,26 @@ public class PrivilegeManager {
     public void dropRole(DropRoleStmt stmt) throws DdlException {
         roleWriteLock();
         try {
-            String roleName = stmt.getQualifiedRole();
-            long roleId = getRoleIdByNameNoLock(roleName);
-            invalidateRolesInCacheRoleUnlocked(roleId);
-            RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
-            if (!collection.isRemovable()) {
-                throw new DdlException("role " + roleName + " cannot be dropped!");
+            List<String> roleNameToBeDropped = new ArrayList<>();
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            for (String roleName : stmt.getRoles()) {
+                long roleId = getRoleIdByNameNoLock(roleName);
+                RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
+                if (!collection.isRemovable()) {
+                    throw new DdlException("role " + roleName + " cannot be dropped!");
+                }
+
+                roleNameToBeDropped.add(roleName);
+                rolePrivCollectionModified.put(roleId, collection);
+                invalidateRolesInCacheRoleUnlocked(roleId);
             }
-            roleIdToPrivilegeCollection.remove(roleId);
-            roleNameToId.remove(roleName);
-            globalStateMgr.getEditLog()
-                    .logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
-            LOG.info("dropped role {}[{}]", roleName, roleId);
+
+            roleIdToPrivilegeCollection.keySet().removeAll(rolePrivCollectionModified.keySet());
+            roleNameToBeDropped.forEach(roleNameToId.keySet()::remove);
+
+            globalStateMgr.getEditLog().logDropRole(
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
+            LOG.info("dropped role {}[{}]", stmt.getRoles().toString(), rolePrivCollectionModified.keySet().toString());
         } catch (PrivilegeException e) {
             throw new DdlException("failed to drop role: " + e.getMessage(), e);
         } finally {
@@ -1472,7 +1499,7 @@ public class PrivilegeManager {
             RolePrivilegeCollectionInfo info) throws PrivilegeException {
         roleWriteLock();
         try {
-            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivilegeCollectionMap().entrySet()) {
+            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivCollectionModified().entrySet()) {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollection privilegeCollection = entry.getValue();

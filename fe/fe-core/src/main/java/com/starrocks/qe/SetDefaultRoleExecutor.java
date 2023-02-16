@@ -27,7 +27,7 @@ import java.util.Set;
 public class SetDefaultRoleExecutor {
     public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
-        UserIdentity user = stmt.getUserIdentifier();
+        UserIdentity user = stmt.getUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;
 

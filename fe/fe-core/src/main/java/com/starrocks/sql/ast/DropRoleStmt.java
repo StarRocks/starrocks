@@ -15,16 +15,17 @@
 
 package com.starrocks.sql.ast;
 
+import java.util.List;
+
 public class DropRoleStmt extends DdlStmt {
+    private final List<String> roles;
 
-    private final String role;
-
-    public DropRoleStmt(String role) {
-        this.role = role;
+    public DropRoleStmt(List<String> roles) {
+        this.roles = roles;
     }
 
-    public String getQualifiedRole() {
-        return role;
+    public List<String> getRoles() {
+        return roles;
     }
 
     @Override

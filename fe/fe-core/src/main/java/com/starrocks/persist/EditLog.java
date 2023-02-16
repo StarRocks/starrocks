@@ -1407,10 +1407,10 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_CREATE, job);
     }
 
-    public void logExportUpdateState(long jobId, ExportJob.JobState newState, 
-            List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
-            Set<String> exportedFiles, ExportFailMsg failMsg) {
-        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, 
+    public void logExportUpdateState(long jobId, ExportJob.JobState newState,
+                                     List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
+                                     Set<String> exportedFiles, ExportFailMsg failMsg) {
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
                 snapshotPaths, exportTempPath, exportedFiles, failMsg);
         logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
@@ -1720,12 +1720,10 @@ public class EditLog {
     }
 
     public void logUpdateRolePrivilege(
-            long roleId,
-            RolePrivilegeCollection privilegeCollection,
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                roleId, privilegeCollection, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logUpdateRolePrivilege(info);
     }
 
@@ -1734,12 +1732,10 @@ public class EditLog {
     }
 
     public void logDropRole(
-            long roleId,
-            RolePrivilegeCollection privilegeCollection,
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
-                roleId, privilegeCollection, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 

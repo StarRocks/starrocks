@@ -165,16 +165,13 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), "Can not create role", false);
-            if (session.getGlobalStateMgr().getPrivilegeManager().checkRoleExists(stmt.getQualifiedRole())) {
-                throw new SemanticException("Can not create role %s: already exists!", stmt.getQualifiedRole());
-            }
+            stmt.getRoles().forEach(r -> validRoleName(r, "Can not create role", true));
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), "Can not drop role", true);
+            stmt.getRoles().forEach(r -> validRoleName(r, "Can not drop role", true));
             return null;
         }
 
@@ -378,7 +375,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdentifier(), true);
+            analyseUser(stmt.getUserIdentity(), true);
             for (String roleName : stmt.getRoles()) {
                 validRoleName(roleName, "Cannot set role", true);
             }

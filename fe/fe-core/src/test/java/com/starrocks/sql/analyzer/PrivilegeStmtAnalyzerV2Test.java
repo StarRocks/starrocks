@@ -261,12 +261,12 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testRole() throws Exception {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         sql = "create role test_role2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role2", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role2", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         // bad name
@@ -280,7 +280,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "drop role test_role";
         DropRoleStmt dropStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", dropStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", createStmt.getRoles().get(0));
 
         sql = "drop role ___";
         try {

@@ -1233,11 +1233,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE identifierOrString
+    : CREATE ROLE roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE identifierOrString
+    : DROP ROLE roleList
     ;
 
 showRolesStatement
