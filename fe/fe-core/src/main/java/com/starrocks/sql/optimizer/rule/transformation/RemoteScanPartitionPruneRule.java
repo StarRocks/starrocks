@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.rewrite.OptRemotePartitionPruner;
+import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +53,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
-        new OptRemotePartitionPruner().prunePartitions(context, operator);
+        OptExternalPartitionPruner.prunePartitions(context, operator);
         return Lists.newArrayList();
     }
 }

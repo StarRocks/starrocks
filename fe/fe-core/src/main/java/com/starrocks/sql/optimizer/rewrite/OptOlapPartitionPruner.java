@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
 public class OptOlapPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptOlapPartitionPruner.class);
 
-    public LogicalOlapScanOperator prunePartitions(LogicalOlapScanOperator logicalOlapScanOperator) {
+    public static LogicalOlapScanOperator prunePartitions(LogicalOlapScanOperator logicalOlapScanOperator) {
         List<Long> selectedPartitionIds = null;
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
 
@@ -96,8 +96,8 @@ public class OptOlapPartitionPruner {
         return builder.build();
     }
 
-    private Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(LogicalOlapScanOperator logicalOlapScanOperator,
-                                                                                List<Long> selectedPartitionIds) {
+    private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
+            LogicalOlapScanOperator logicalOlapScanOperator, List<Long> selectedPartitionIds) {
         List<ScalarOperator> scanPredicates = Utils.extractConjuncts(logicalOlapScanOperator.getPredicate());
 
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
@@ -184,9 +184,9 @@ public class OptOlapPartitionPruner {
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
-    private void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
-                                 Long partitionId,
-                                 LiteralExpr value) {
+    private static void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
+                                        Long partitionId,
+                                        LiteralExpr value) {
         Set<Long> partitionIdSet = partitionValueToIds.get(value);
         if (partitionIdSet == null) {
             partitionIdSet = new HashSet<>();
@@ -195,8 +195,8 @@ public class OptOlapPartitionPruner {
         partitionValueToIds.put(value, partitionIdSet);
     }
 
-    private List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
-                                          LogicalOlapScanOperator operator) {
+    private static List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
+                                                 LogicalOlapScanOperator operator) {
 
         Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
@@ -281,8 +281,8 @@ public class OptOlapPartitionPruner {
         return null;
     }
 
-    private List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
-                                           LogicalOlapScanOperator operator) {
+    private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
+                                                  LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
         if (operator.getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();
@@ -306,8 +306,8 @@ public class OptOlapPartitionPruner {
         return null;
     }
 
-    private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
-                                       PartitionInfo partitionInfo) {
+    private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
+                                              PartitionInfo partitionInfo) {
         boolean probeResult = true;
         if (candidatePartitions.isEmpty()) {
             probeResult = false;

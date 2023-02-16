@@ -61,10 +61,10 @@ import java.util.TreeMap;
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
-public class OptRemotePartitionPruner {
-    private static final Logger LOG = LogManager.getLogger(OptRemotePartitionPruner.class);
+public class OptExternalPartitionPruner {
+    private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
 
-    public LogicalScanOperator prunePartitions(OptimizerContext context, LogicalScanOperator logicalScanOperator) {
+    public static LogicalScanOperator prunePartitions(OptimizerContext context, LogicalScanOperator logicalScanOperator) {
         if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator operator = (LogicalEsScanOperator) logicalScanOperator;
             EsTablePartitions esTablePartitions = operator.getEsTablePartitions();
@@ -122,9 +122,9 @@ public class OptRemotePartitionPruner {
         return logicalScanOperator;
     }
 
-    private void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
-                                   Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+    private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
+                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                          Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
             throws AnalysisException {
         Table table = operator.getTable();
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
@@ -181,8 +181,8 @@ public class OptRemotePartitionPruner {
                 table.getName(), columnToPartitionValuesMap, columnToNullPartitions);
     }
 
-    private void classifyConjuncts(LogicalScanOperator operator,
-                                   Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+    private static void classifyConjuncts(LogicalScanOperator operator,
+                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
@@ -194,9 +194,9 @@ public class OptRemotePartitionPruner {
         }
     }
 
-    private void computePartitionInfo(LogicalScanOperator operator,
-                                      Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                      Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+    private static void computePartitionInfo(LogicalScanOperator operator,
+                                             Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
             ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
@@ -221,8 +221,8 @@ public class OptRemotePartitionPruner {
      * @return
      * @throws AnalysisException
      */
-    private Collection<Long> partitionPrune(PartitionInfo partitionInfo,
-                                            Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+    private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
+                                                   Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
         if (partitionInfo == null) {
             return null;
         }
@@ -242,7 +242,7 @@ public class OptRemotePartitionPruner {
     }
 
 
-    private void computeMinMaxConjuncts(LogicalScanOperator operator, OptimizerContext context)
+    private static void computeMinMaxConjuncts(LogicalScanOperator operator, OptimizerContext context)
             throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         for (ScalarOperator scalarOperator : scanOperatorPredicates.getNonPartitionConjuncts()) {
@@ -256,7 +256,7 @@ public class OptRemotePartitionPruner {
      * Only conjuncts of the form <column> <op> <constant> and <column> in <constant> are supported,
      * and <op> must be one of LT, LE, GE, GT, or EQ.
      */
-    private boolean isSupportedMinMaxConjuncts(ScalarOperator operator) {
+    private static boolean isSupportedMinMaxConjuncts(ScalarOperator operator) {
         if (operator instanceof BinaryPredicateOperator) {
             ScalarOperator leftChild = operator.getChild(0);
             ScalarOperator rightChild = operator.getChild(1);
@@ -278,8 +278,8 @@ public class OptRemotePartitionPruner {
         }
     }
 
-    private void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator,
-                                    OptimizerContext context) throws AnalysisException {
+    private static void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator,
+                                           OptimizerContext context) throws AnalysisException {
         List<ScalarOperator> minMaxConjuncts = operator.getScanOperatorPredicates().getMinMaxConjuncts();
         if (scalarOperator instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) scalarOperator;
@@ -318,10 +318,10 @@ public class OptRemotePartitionPruner {
         }
     }
 
-    private BinaryPredicateOperator buildMinMaxConjunct(BinaryPredicateOperator.BinaryType type,
-                                                        ScalarOperator left, ScalarOperator right,
-                                                        LogicalScanOperator operator,
-                                                        OptimizerContext context) throws AnalysisException {
+    private static BinaryPredicateOperator buildMinMaxConjunct(BinaryPredicateOperator.BinaryType type,
+                                                               ScalarOperator left, ScalarOperator right,
+                                                               LogicalScanOperator operator,
+                                                               OptimizerContext context) throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         ColumnRefOperator newColumnRef = context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
         scanOperatorPredicates.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));

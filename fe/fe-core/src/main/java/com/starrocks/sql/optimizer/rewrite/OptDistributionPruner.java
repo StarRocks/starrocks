@@ -33,8 +33,8 @@ import java.util.List;
 public class OptDistributionPruner {
     private static final Logger LOG = LogManager.getLogger(OptDistributionPruner.class);
 
-    public List<Long> pruneTabletIds(LogicalOlapScanOperator olapScanOperator,
-                                     List<Long> selectedPartitionIds) {
+    public static List<Long> pruneTabletIds(LogicalOlapScanOperator olapScanOperator,
+                                            List<Long> selectedPartitionIds) {
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         List<Long> result = Lists.newArrayList();
@@ -47,8 +47,8 @@ public class OptDistributionPruner {
         return result;
     }
 
-    private Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
-                                               LogicalOlapScanOperator operator) {
+    private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
+                                                      LogicalOlapScanOperator operator) {
         try {
             com.starrocks.planner.DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {

@@ -29,26 +29,25 @@ import org.junit.Assert;
 
 import java.util.List;
 
-public class MaterializedViewBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewBase.class);
-    protected class MaterializedViewChecker {
+public class MaterializedViewTestBase extends PlanTestBase {
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
+    protected class MVRewriteChecker {
         private String mv;
         private final String query;
-
         private String rewritePlan;
         private Exception exception;
 
-        public MaterializedViewChecker(String query) {
+        public MVRewriteChecker(String query) {
             this.query = query;
         }
 
-        public MaterializedViewChecker(String mv, String query) {
+        public MVRewriteChecker(String mv, String query) {
             this.mv = mv;
             this.query = query;
         }
 
-        public MaterializedViewChecker rewrite() {
+        public MVRewriteChecker rewrite() {
             // Get a faked distribution name
             this.exception = null;
             this.rewritePlan = "";
@@ -83,7 +82,7 @@ public class MaterializedViewBase extends PlanTestBase {
             return this;
         }
 
-        public MaterializedViewChecker ok() {
+        public MVRewriteChecker ok() {
             Assert.assertTrue(this.exception == null);
             if (mv != null && !mv.isEmpty()) {
                 Assert.assertTrue(this.rewritePlan.contains("TABLE: mv0"));
@@ -91,31 +90,31 @@ public class MaterializedViewBase extends PlanTestBase {
             return this;
         }
 
-        public MaterializedViewChecker nonMatch() {
+        public MVRewriteChecker nonMatch() {
             if (mv != null && !mv.isEmpty()) {
                 Assert.assertTrue(!this.rewritePlan.contains("TABLE: mv0"));
             }
             return this;
         }
 
-        public MaterializedViewChecker contains(String expect) {
+        public MVRewriteChecker contains(String expect) {
             Assert.assertTrue(this.rewritePlan.contains(expect));
             return this;
         }
 
-        public MaterializedViewChecker notContains(String expect) {
+        public MVRewriteChecker notContains(String expect) {
             Assert.assertTrue(!this.rewritePlan.contains(expect));
             return this;
         }
 
-        public MaterializedViewChecker contains(String... expects) {
+        public MVRewriteChecker contains(String... expects) {
             for (String expect: expects) {
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
         }
 
-        public MaterializedViewChecker contains(List<String> expects) {
+        public MVRewriteChecker contains(List<String> expects) {
             for (String expect: expects) {
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
@@ -123,23 +122,23 @@ public class MaterializedViewBase extends PlanTestBase {
         }
     }
 
-    protected MaterializedViewChecker testRewriteOK(String query) {
-        MaterializedViewChecker fixture = new MaterializedViewChecker(query);
+    protected MVRewriteChecker testRewriteOK(String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query);
         return fixture.rewrite().ok();
     }
 
-    protected MaterializedViewChecker testRewriteFail(String query) {
-        MaterializedViewChecker fixture = new MaterializedViewChecker(query);
+    protected MVRewriteChecker testRewriteFail(String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query);
         return fixture.rewrite().nonMatch();
     }
 
-    protected MaterializedViewChecker testRewriteOK(String mv, String query) {
-        MaterializedViewChecker fixture = new MaterializedViewChecker(mv, query);
+    protected MVRewriteChecker testRewriteOK(String mv, String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
         return fixture.rewrite().ok();
     }
 
-    protected MaterializedViewChecker testRewriteFail(String mv, String query) {
-        MaterializedViewChecker fixture = new MaterializedViewChecker(mv, query);
+    protected MVRewriteChecker testRewriteFail(String mv, String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
         return fixture.rewrite().nonMatch();
     }
 

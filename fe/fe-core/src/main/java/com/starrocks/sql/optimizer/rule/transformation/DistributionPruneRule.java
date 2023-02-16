@@ -52,7 +52,7 @@ public class DistributionPruneRule extends TransformationRule {
         if (!olapScanOperator.getHintsTabletIds().isEmpty()) {
             result = olapScanOperator.getHintsTabletIds();
         } else {
-            result = new OptDistributionPruner().pruneTabletIds(olapScanOperator,
+            result = OptDistributionPruner.pruneTabletIds(olapScanOperator,
                     olapScanOperator.getSelectedPartitionId());
         }
 
