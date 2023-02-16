@@ -225,18 +225,17 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
         auto* dest_data_column = dest_nullable_column->mutable_data_column();
 
         if (src_column->has_null()) {
-            dest_null_column->get_data().assign(src_null_column->get_data().begin(),
-                                                src_null_column->get_data().end());
+            dest_null_column->get_data().assign(src_null_column->get_data().begin(), src_null_column->get_data().end());
         } else {
             dest_null_column->get_data().resize(chunk_size, 0);
         }
         dest_nullable_column->set_has_null(src_nullable_column->has_null());
 
         _filter_map_items(down_cast<MapColumn*>(src_data_column.get()), bool_column,
-                            down_cast<MapColumn*>(dest_data_column), dest_null_column);
+                          down_cast<MapColumn*>(dest_data_column), dest_null_column);
     } else {
         _filter_map_items(down_cast<MapColumn*>(src_column.get()), bool_column,
-                            down_cast<MapColumn*>(dest_column.get()), nullptr);
+                          down_cast<MapColumn*>(dest_column.get()), nullptr);
     }
     return dest_column;
 }
