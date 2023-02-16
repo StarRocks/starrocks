@@ -223,7 +223,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.codec = _compress_codec;
     opts.stats = iter_opts.stats;
     opts.verify_checksum = true;
-    opts.use_page_cache = iter_opts.use_page_cache;
+    opts.use_page_cache = false;
     opts.encoding_type = _encoding_info->encoding();
     opts.kept_in_memory = keep_in_memory();
 
@@ -297,7 +297,7 @@ Status ColumnReader::_load_ordinal_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = block_manager();
     auto meta = _ordinal_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
+    auto use_page_cache = false;
     auto kept_in_memory = keep_in_memory();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(fs, file_name(), *meta, num_rows(), use_page_cache,
                                                            kept_in_memory, mem_tracker()));
@@ -313,7 +313,7 @@ Status ColumnReader::_load_zonemap_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = block_manager();
     auto meta = _zonemap_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
+    auto use_page_cache = false;
     auto kept_in_memory = keep_in_memory();
     ASSIGN_OR_RETURN(auto first_load,
                      _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
@@ -329,7 +329,7 @@ Status ColumnReader::_load_bitmap_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = block_manager();
     auto meta = _bitmap_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
+    auto use_page_cache = false;
     auto kept_in_memory = keep_in_memory();
     ASSIGN_OR_RETURN(auto first_load,
                      _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
@@ -345,7 +345,7 @@ Status ColumnReader::_load_bloom_filter_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = block_manager();
     auto meta = _bloom_filter_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
+    auto use_page_cache = false;
     auto kept_in_memory = keep_in_memory();
     ASSIGN_OR_RETURN(auto first_load,
                      _bloom_filter_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));

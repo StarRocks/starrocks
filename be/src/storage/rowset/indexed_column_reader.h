@@ -141,7 +141,7 @@ private:
     std::string _file_name;
     IndexedColumnMetaPB _meta;
 
-    bool _use_page_cache = true;
+    bool _use_page_cache = false;
     bool _kept_in_memory = false;
     int64_t _num_values = 0;
     // whether this column contains any index page.

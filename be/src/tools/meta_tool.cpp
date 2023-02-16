@@ -190,7 +190,7 @@ TabletSchemaPB create_tablet_schema() {
     TabletSchemaPB tablet_schema;
 
     ColumnPB* col1 = tablet_schema.add_column();
-    col1->set_name("c1");
+    col1->set_name("user_id");
     col1->set_type(type_to_string(PrimitiveType::TYPE_VARCHAR));
     col1->set_length(64);
     col1->set_is_key(true);
@@ -198,7 +198,7 @@ TabletSchemaPB create_tablet_schema() {
     col1->set_unique_id(0);
 
     ColumnPB* col2 = tablet_schema.add_column();
-    col2->set_name("c2");
+    col2->set_name("enterprise_id");
     col2->set_type(type_to_string(PrimitiveType::TYPE_VARCHAR));
     col2->set_length(64);
     col2->set_is_key(true);
@@ -206,19 +206,11 @@ TabletSchemaPB create_tablet_schema() {
     col2->set_unique_id(1);
 
     ColumnPB* col3 = tablet_schema.add_column();
-    col3->set_name("c3");
+    col3->set_name("stat_date");
     col3->set_type(type_to_string(PrimitiveType::TYPE_DATE));
     col3->set_is_key(true);
     col3->set_is_nullable(true);
     col3->set_unique_id(2);
-
-    ColumnPB* col4 = tablet_schema.add_column();
-    col4->set_name("c4");
-    col4->set_type(type_to_string(PrimitiveType::TYPE_VARCHAR));
-    col4->set_length(65536);
-    col4->set_is_key(false);
-    col4->set_is_nullable(true);
-    col4->set_unique_id(3);
 
     tablet_schema.set_num_short_key_columns(1);
     tablet_schema.set_keys_type(DUP_KEYS);
@@ -254,13 +246,18 @@ void dump_data2(const std::string& file_name) {
     }
 
     auto iter = res.value();
-    vectorized::Chunk chunk;
-    Status st = res.value()->get_next(&chunk);
-    if (!st.ok()) {
-        std::cout << "get next chunk failed: " << st.to_string() << std::endl;
-        return;
-    }
-    std::cout<<"CHUNK:"<<chunk.debug_row(0)<<std::endl;
+    do {
+        auto chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(chunk.get());
+        if (!st.ok()) {
+            std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+            break;
+        }
+        if (chunk->num_rows() <= 0) {
+            continue;
+        }
+        std::cout<<"CHUNK:"<<chunk->debug_row(0)<<std::endl;
+    } while (true);
 }
 
 void dump_data(const std::string& file_name) {
