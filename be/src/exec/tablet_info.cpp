@@ -298,9 +298,14 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
             column->append(value);
             break;
         }
+        case TYPE_BOOLEAN: {
+            auto* column = down_cast<BooleanColumn*>(_partition_columns[i].get());
+            column->get_data().emplace_back(t_expr.bool_literal.value);
+            break;
+        }
         default: {
             std::stringstream ss;
-            ss << "unsupported partition column node type, type=" << t_expr.node_type;
+            ss << "unsupported partition column node type, type=" << t_expr.node_type << ", logic type=" << type;
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
