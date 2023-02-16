@@ -35,6 +35,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -104,6 +105,9 @@ public class DataDescription {
     private final String fileFormat;
     private final boolean isNegative;
 
+    private CsvFormat csvFormat;
+    private Map<String, String> formatProperties;
+
     // column names of source files
     private List<String> fileFieldNames;
     // column names in the path
@@ -140,7 +144,7 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList) {
         this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, null, isNegative,
-                columnMappingList, null);
+                columnMappingList, null, null);
     }
 
     public DataDescription(String tableName,
@@ -153,7 +157,8 @@ public class DataDescription {
                            List<String> columnsFromPath,
                            boolean isNegative,
                            List<Expr> columnMappingList,
-                           Expr whereExpr) {
+                           Expr whereExpr,
+                           CsvFormat csvFormat) {
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
@@ -166,6 +171,7 @@ public class DataDescription {
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
         this.srcTableName = null;
+        this.csvFormat = csvFormat;
     }
 
     // data from table external_hive_table
@@ -203,6 +209,10 @@ public class DataDescription {
 
     public List<String> getFilePaths() {
         return filePaths;
+    }
+
+    public CsvFormat getCsvFormat() {
+        return csvFormat;
     }
 
     public List<String> getFileFieldNames() {

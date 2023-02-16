@@ -52,6 +52,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -102,9 +103,18 @@ public class BrokerFileGroup implements Writable {
     // load from table
     private long srcTableId = -1;
     private boolean isLoadFromTable = false;
+    
+    // for csv
+    private CsvFormat csvFormat;
+
+    public static final String ESCAPE = "escape";
+    public static final String ENCLOSE = "enclose";
+    public static final String TRIMSPACE = "trim_space";
+    public static final String SKIPHEADER = "skip_header";
 
     // for unit test and edit log persistence
     private BrokerFileGroup() {
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     // Used for broker table, no need to parse
@@ -115,6 +125,7 @@ public class BrokerFileGroup implements Writable {
         this.isNegative = false;
         this.filePaths = table.getPaths();
         this.fileFormat = table.getFileFormat();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
@@ -123,6 +134,14 @@ public class BrokerFileGroup implements Writable {
         this.columnExprList = dataDescription.getParsedColumnExprList();
         this.columnToHadoopFunction = dataDescription.getColumnToHadoopFunction();
         this.whereExpr = dataDescription.getWhereExpr();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+    }
+
+    public void parseFormatProperties(DataDescription dataDescription) {
+        CsvFormat csvFormat = dataDescription.getCsvFormat();
+        if (csvFormat != null) {
+            this.csvFormat = csvFormat;
+        }
     }
 
     // NOTE: DBLock will be held
@@ -188,6 +207,8 @@ public class BrokerFileGroup implements Writable {
             }
         }
         isNegative = dataDescription.isNegative();
+
+        parseFormatProperties(dataDescription);
 
         // FilePath
         filePaths = dataDescription.getFilePaths();
@@ -300,6 +321,22 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isLoadFromTable() {
         return isLoadFromTable;
+    }
+
+    public long getSkipHeader() {
+        return csvFormat.getSkipheader();
+    }
+
+    public byte getEnclose() {
+        return csvFormat.getEnclose();
+    }
+
+    public byte getEscape() {
+        return csvFormat.getEscape();
+    }
+
+    public boolean isTrimspace() {
+        return csvFormat.isTrimspace();
     }
 
     @Override
