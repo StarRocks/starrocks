@@ -145,7 +145,11 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     city_code VARCHAR(20) COMMENT "city_code of user",
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
-DISTRIBUTED BY HASH(site_id) BUCKETS 8;
+AGGREGATE KEY(site_id, date, city_code)
+DISTRIBUTED BY HASH(site_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
