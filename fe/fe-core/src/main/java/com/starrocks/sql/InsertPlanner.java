@@ -115,7 +115,11 @@ public class InsertPlanner {
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+<<<<<<< HEAD
         try {
+=======
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
+>>>>>>> 02cfc59fe ([BugFix] Miss local shuffle for local shuffle agg on single BE (#17845))
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }

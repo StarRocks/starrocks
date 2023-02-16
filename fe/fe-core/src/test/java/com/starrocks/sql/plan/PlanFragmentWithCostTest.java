@@ -1615,7 +1615,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
+<<<<<<< HEAD
             assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+=======
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+>>>>>>> 02cfc59fe ([BugFix] Miss local shuffle for local shuffle agg on single BE (#17845))
                     "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
