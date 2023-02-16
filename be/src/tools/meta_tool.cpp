@@ -241,6 +241,115 @@ void check_row_count(const std::string& file_name) {
     }
 }
 
+void check_search(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // load short key index
+    auto st = segment->_load_index(mem_tracker.get());
+    if (!st.ok()) {
+        std::cout << "Load index failed: " << st.to_string() << std::endl;
+        return;
+    }
+
+    int64_t real_key_count = segment->_sk_index_decoder->num_items();
+    int64_t expect_key_count = segment->num_rows() / 1024 + 1;
+    std::cout << "REAL_SHORT_KEY_COUNT: " << segment->_sk_index_decoder->num_items() << std::endl;
+    std::cout << "EXPECT_SHORT_KEY_COUNT: " << expect_key_count << std::endl;
+    if (real_key_count == expect_key_count) {
+        std::cout << "SHORT KEY COUNT CHECK SUCCESS" << std::endl;
+    } else {
+        std::cout << "SHORT KEY COUNT CHECK FAILED" << std::endl;
+    }
+
+    char data[] = "09C29459EC5D43EE2E054";
+    data[0] = 0x02;
+    Slice search_key{data, sizeof(data) - 1};
+
+    char data2[] = "9C29459EC5D43EE2E054";
+    Slice check_key{data2, sizeof(data2) - 1};
+
+    size_t num_keys = segment->_sk_index_decoder->num_items();
+
+    auto low = segment->_sk_index_decoder->lower_bound(search_key);
+    auto high = segment->_sk_index_decoder->lower_bound(search_key);
+    std::cout << "START:" << low.ordinal() << std::endl;
+    std::cout << "END:" << high.ordinal() << std::endl;
+
+    // output data
+    int64_t idx = 0;
+    size_t count = 0;
+
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto* iter = res.value().get();
+
+    vectorized::ChunkPtr cur_chunk;
+    int64_t start_search_idx = low.ordinal() * 1024;
+    int64_t end_search_idx = high.ordinal() * 1024;
+    int64_t pre_count = 0;
+    int64_t cur_count = 0;
+    int64_t result_count_1 = 0;
+    int64_t result_count_2 = 0;
+    do {
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        st = iter->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed1: " << st.to_string() << std::endl;
+            }
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        int64_t num_rows = cur_chunk->num_rows();
+        pre_count = cur_count;
+        cur_count += num_rows;
+
+        for (size_t i = 0; i < num_rows; i++) {
+            //std::cout<<"COMPAREE:"<<cur_chunk->columns()[0]->get(i).get_slice()<<":"<<check_key<<":"<<check_key.size<<std::endl;
+            if (check_key == cur_chunk->columns()[0]->get(i).get_slice()) {
+                result_count_1++;
+            }
+        }
+
+        if (cur_count < start_search_idx || pre_count > end_search_idx) {
+            continue;
+        }
+
+        for (size_t i = 0; i < num_rows; i++) {
+            //std::cout<<"COMPAREE:"<<cur_chunk->columns()[0]->get(i).get_slice()<<":"<<check_key<<":"<<check_key.size<<std::endl;
+            if (check_key == cur_chunk->columns()[0]->get(i).get_slice()) {
+                result_count_2++;
+            }
+        }
+    } while (true);
+
+    std::cout << "RESULT:" << result_count_1 << ":" << result_count_2 << std::endl;
+}
+
 void check_short_key_index(const std::string& file_name) {
     fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
     auto mem_tracker = std::make_unique<MemTracker>();
@@ -280,14 +389,317 @@ void check_short_key_index(const std::string& file_name) {
     for (size_t i = 1; i < num_keys; i++) {
         Slice pre_key = segment->_sk_index_decoder->key(i - 1);
         Slice cur_key = segment->_sk_index_decoder->key(i);
+        Slice pre_conver_key = Slice{pre_key.data + 1, pre_key.size - 1};
+        Slice cur_conver_key = Slice{cur_key.data + 1, cur_key.size - 1};
 
-        bool check = pre_key <= cur_key;
+        bool check = pre_conver_key <= cur_conver_key;
         if (!check) {
             std::cout << "CHECK SORT KEY FAILED: " << i << ":" << pre_key << ":" << cur_key << std::endl;
             return;
         }
     }
     std::cout << "CHECK SORT KEY SUCCESS" << std::endl;
+}
+
+void check_page(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // real_row_count
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto iter = res.value();
+
+    // load short key index
+    auto st = segment->_load_index(mem_tracker.get());
+    if (!st.ok()) {
+        std::cout << "Load index failed: " << st.to_string() << std::endl;
+        return;
+    }
+
+    size_t num_keys = segment->_sk_index_decoder->num_items();
+    std::vector<Slice> keys;
+
+    for (size_t i = 0; i < num_keys; i++) {
+        keys.emplace_back(segment->_sk_index_decoder->key(i));
+    }
+
+    // output data
+    int64_t idx = 0;
+    int64_t page_idx = 0;
+    int64_t page_start_idx = 0;
+    size_t count = 0;
+
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
+    do {
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        st = res.value()->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+                return;
+            }
+
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        page_start_idx = count;
+        int64_t num_rows = cur_chunk->num_rows();
+        count += num_rows;
+        std::cout << "INDEX:" << idx << ":" << count << std::endl;
+        while (idx < count) {
+            Slice convert_key = {keys[page_idx].data + 1, keys[page_idx].size - 1};
+            bool equal = (convert_key == cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice());
+            if (!equal) {
+                std::cout << "CHECK FAILED: " << page_idx << ":" << convert_key << ":"
+                          << cur_chunk->columns()[0]->get(idx - page_start_idx).get_slice() << std::endl;
+                return;
+            } else {
+                std::cout << "CHECK_SUCC: " << page_idx << std::endl;
+            }
+            page_idx++;
+            idx += 1024;
+        }
+    } while (true);
+
+    std::cout << "CHUNK_SUCCESS:" << idx << std::endl;
+}
+
+void check_varchar_length(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // real_row_count
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto iter = res.value();
+
+    // output data
+    int64_t row_count = 0;
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
+    int64_t max_size1 = 0;
+    int64_t max_size2 = 0;
+    do {
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+            }
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        for (size_t i = 0; i < cur_chunk->num_rows(); i++) {
+            auto& columns = cur_chunk->columns();
+            int64_t c_size_1 = columns[0]->get(i).get_slice().size;
+            int64_t c_size_2 = columns[1]->get(i).get_slice().size;
+            bool check = (c_size_1 <= 64) && (c_size_2 <= 64);
+            max_size1 = std::max(max_size1, c_size_1);
+            max_size2 = std::max(max_size2, c_size_2);
+            row_count++;
+            if (!check) {
+                std::cout << "CHECK DATA SORT FAILED STEP 1:" << std::endl;
+                return;
+            }
+        }
+    } while (true);
+
+    row_count++;
+    std::cout << "CHECK SUCCESS: " << row_count << ":" << max_size1 << ":" << max_size2 << std::endl;
+}
+
+void check_null(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // real_row_count
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto iter = res.value();
+
+    // output data
+    int64_t row_count = 0;
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
+    int64_t max_size1 = 0;
+    int64_t max_size2 = 0;
+    int64_t null_count = 0;
+    int64_t not_null_count = 0;
+    do {
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+            }
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        for (size_t i = 0; i < cur_chunk->num_rows(); i++) {
+            auto& columns = cur_chunk->columns();
+            bool is_null = columns[2]->get(i).is_null();
+            if (is_null) {
+                null_count++;
+            } else {
+                not_null_count++;
+            }
+            row_count++;
+        }
+    } while (true);
+
+    std::cout << "CHECK SUCCESS: " << null_count << ":" << not_null_count << std::endl;
+}
+
+void check_row_data(const std::string& file_name) {
+    fs::BlockManager* blk_mgr = fs::fs_util::block_mgr_for_tool();
+    auto mem_tracker = std::make_unique<MemTracker>();
+
+    // create schema
+    TabletSchemaPB schema_pb = create_tablet_schema();
+    auto schema = TabletSchema::create(mem_tracker.get(), schema_pb);
+    auto read_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*schema);
+
+    // open segment
+    size_t footer_length_hint = 16 * 1024;
+    auto ret = Segment::open(mem_tracker.get(), blk_mgr, file_name, 0, schema.get(), &footer_length_hint, nullptr);
+    if (!ret.ok()) {
+        std::cout << "Segment open failed: " << ret.status() << std::endl;
+        return;
+    }
+    auto segment = ret.value();
+
+    // real_row_count
+    vectorized::SegmentReadOptions opts(blk_mgr);
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    auto res = segment->new_iterator(read_schema, opts);
+    if (!res.ok()) {
+        std::cout << "New segment iterator failed: " << res.ok() << std::endl;
+        return;
+    }
+    auto iter = res.value();
+
+    // output data
+    int64_t row_count = 0;
+    vectorized::ChunkPtr pre_chunk;
+    vectorized::ChunkPtr cur_chunk;
+    do {
+        pre_chunk = cur_chunk;
+        cur_chunk = vectorized::ChunkHelper::new_chunk(read_schema, 0);
+        Status st = res.value()->get_next(cur_chunk.get());
+        if (!st.ok()) {
+            if (!st.is_end_of_file()) {
+                std::cout << "get next chunk failed: " << st.to_string() << std::endl;
+            }
+            break;
+        }
+        if (cur_chunk->num_rows() <= 0) {
+            continue;
+        }
+
+        for (size_t i = 0; i < cur_chunk->num_rows() - 1; i++) {
+            auto& columns = cur_chunk->columns();
+            bool check = (columns[0]->get(i).get_slice() < columns[0]->get(i + 1).get_slice()) ||
+                         (columns[1]->get(i).get_slice() < columns[1]->get(i + 1).get_slice()) ||
+                         (columns[2]->get(i).get_date() <= columns[2]->get(i + 1).get_date());
+            row_count++;
+            if (!check) {
+                std::cout << "CHECK DATA SORT FAILED STEP 1:" << std::endl;
+                return;
+            }
+        }
+        if (pre_chunk != nullptr) {
+            auto& pre_columns = pre_chunk->columns();
+            auto& cur_columns = cur_chunk->columns();
+            bool check =
+                    (pre_columns[0]->get(pre_chunk->num_rows() - 1).get_slice() < cur_columns[0]->get(0).get_slice()) ||
+                    (pre_columns[1]->get(pre_chunk->num_rows() - 1).get_slice() < cur_columns[1]->get(0).get_slice()) ||
+                    (pre_columns[2]->get(pre_chunk->num_rows() - 1).get_date() <= cur_columns[2]->get(0).get_date());
+            row_count++;
+            if (!check) {
+                std::cout << "CHECK DATA SORT FAILED STEP 2:" << std::endl;
+                return;
+            }
+        }
+
+    } while (true);
+
+    row_count++;
+    std::cout << "CHECK SUCCESS: " << row_count << std::endl;
 }
 
 void dump_data2(const std::string& file_name) {
@@ -398,6 +810,16 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::check_row_count(starrocks::FLAGS_file);
     } else if (starrocks::FLAGS_operation == "check_short_key_index") {
         starrocks::check_short_key_index(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "check_row_data") {
+        starrocks::check_row_data(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "check_page") {
+        starrocks::check_page(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "check_varchar_length") {
+        starrocks::check_varchar_length(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "check_null") {
+        starrocks::check_null(starrocks::FLAGS_file);
+    } else if (starrocks::FLAGS_operation == "check_search") {
+        starrocks::check_search(starrocks::FLAGS_file);
     } else if (starrocks::FLAGS_operation == "dump_data") {
         starrocks::dump_data(starrocks::FLAGS_file);
     } else if (starrocks::FLAGS_operation == "dump_data2") {

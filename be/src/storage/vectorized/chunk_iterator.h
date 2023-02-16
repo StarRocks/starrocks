@@ -107,7 +107,7 @@ public:
 
     int chunk_size() const { return _chunk_size; }
 
-protected:
+public:
     virtual Status do_get_next(Chunk* chunk) = 0;
     virtual Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
         return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");

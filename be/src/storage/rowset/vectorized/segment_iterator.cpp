@@ -84,7 +84,7 @@ public:
 
     void close() override;
 
-protected:
+public:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
 
@@ -170,6 +170,7 @@ private:
         bool _has_force_dict_encode{false};
     };
 
+public:
     Status _init();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
