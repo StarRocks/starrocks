@@ -104,6 +104,8 @@ public:
     bool is_nullable() const { return _check_flag(kIsNullableShift); }
     void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
 
+    bool is_auto_increment() const { return _check_flag(kHasAutoIncrementShift); }
+
     bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
 
@@ -169,6 +171,7 @@ private:
     constexpr static uint8_t kHasBitmapIndexShift = 3;
     constexpr static uint8_t kHasPrecisionShift = 4;
     constexpr static uint8_t kHasScaleShift = 5;
+    constexpr static uint8_t kHasAutoIncrementShift = 6;
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {

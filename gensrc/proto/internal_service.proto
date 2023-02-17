@@ -164,6 +164,8 @@ message PTabletWriterOpenRequest {
     optional int64 timeout_ms = 24;
     optional WriteQuorumTypePB write_quorum = 25;
     optional string merge_condition = 26;
+    optional bool miss_auto_increment_column = 27;
+    optional bool abort_delete = 28;
 };
 
 message PTabletWriterOpenResult {

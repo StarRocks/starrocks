@@ -1373,6 +1373,8 @@ public class GlobalStateMgr {
             loadRBACPrivilege(dis);
             checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+            remoteChecksum = dis.readLong();
             // ** NOTICE **: always add new code at the end
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1695,6 +1697,8 @@ public class GlobalStateMgr {
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             saveRBACPrivilege(dos);
             checksum = warehouseMgr.saveWarehouses(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = localMetastore.saveAutoIncrementId(dos, checksum);
             dos.writeLong(checksum);
             // ** NOTICE **: always add new code at the end
         }
@@ -3478,6 +3482,22 @@ public class GlobalStateMgr {
 
     public void replayReplaceTempPartition(ReplacePartitionOperationLog replaceTempPartitionLog) {
         localMetastore.replayReplaceTempPartition(replaceTempPartitionLog);
+    }
+
+    public Long allocateAutoIncrementId(Long tableId, Long rows) {
+        return localMetastore.allocateAutoIncrementId(tableId, rows);
+    }
+
+    public void removeAutoIncrementIdByTableId(Long tableId) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    }
+
+    public Long getCurrentAutoIncrementIdByTableId(Long tableId) {
+        return localMetastore.getCurrentAutoIncrementIdByTableId(tableId);
+    }
+
+    public void addOrReplaceAutoIncrementIdByTableId(Long tableId, Long id) {
+        localMetastore.addOrReplaceAutoIncrementIdByTableId(tableId, id);
     }
 
     public void installPlugin(InstallPluginStmt stmt) throws UserException, IOException {

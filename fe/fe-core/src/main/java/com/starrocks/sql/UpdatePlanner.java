@@ -98,7 +98,7 @@ public class UpdatePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage());
+                    table.enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement());
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             if (canUsePipeline) {

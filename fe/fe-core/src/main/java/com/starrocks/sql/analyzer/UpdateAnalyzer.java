@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -84,7 +85,12 @@ public class UpdateAnalyzer {
                 }
 
                 if (assign.getExpr() instanceof DefaultValueExpr) {
-                    assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
+                    if (!col.isAutoIncrement()) {
+                        assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
+                    } else {
+                        updateStmt.setNullExprInAutoIncrement(false);
+                        assign.setExpr(TypeManager.addCastExpr(new NullLiteral(), col.getType()));
+                    }
                 }
 
                 item = new SelectListItem(assign.getExpr(), col.getName());

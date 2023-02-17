@@ -128,6 +128,8 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private ParamCreateContext paramCreateContext;
+    private boolean nullExprInAutoIncrement;
+
 
     // used to construct for streaming loading
     public StreamLoadScanNode(TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, StreamLoadInfo streamLoadInfo) {
@@ -139,6 +141,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.numInstances = 1;
         this.nextBe = 0;
         this.needAssignBE = false;
+        this.nullExprInAutoIncrement = true;
     }
 
     public StreamLoadScanNode(
@@ -156,6 +159,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.needAssignBE = false;
         this.txnId = txnId;
         this.curChannelId = 0;
+        this.nullExprInAutoIncrement = true;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -164,6 +168,10 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     public void setNeedAssignBE(boolean needAssignBE) {
         this.needAssignBE = needAssignBE;
+    }
+
+    public boolean nullExprInAutoIncrement() {
+        return nullExprInAutoIncrement;
     }
 
     @Override
@@ -279,8 +287,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
-                        if (column.isAllowNull()) {
+                        if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
+                            nullExprInAutoIncrement = false;
                         } else {
                             throw new AnalysisException("column has no source field, column=" + column.getName());
                         }

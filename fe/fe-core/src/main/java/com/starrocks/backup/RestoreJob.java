@@ -486,6 +486,11 @@ public class RestoreJob extends AbstractJob {
                 Preconditions.checkNotNull(remoteTbl);
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
+                    if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
+                    }
+
+                    backupMeta.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
                     if (!localTbl.isOlapOrLakeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
@@ -596,6 +601,8 @@ public class RestoreJob extends AbstractJob {
                         status = st;
                         return;
                     }
+
+                    backupMeta.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));

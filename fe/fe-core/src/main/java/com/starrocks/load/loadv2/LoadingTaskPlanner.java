@@ -118,6 +118,8 @@ public class LoadingTaskPlanner {
     private Map<String, String> sessionVariables = null;
     ConnectContext context = null;
 
+    private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
@@ -142,6 +144,21 @@ public class LoadingTaskPlanner {
         this.context = context;
     }
 
+    private boolean checkNullExprInAutoIncrement() {
+        boolean nullExprInAutoIncrement = false;
+        for (ScanNode node : scanNodes) {
+            if (((FileScanNode) node).nullExprInAutoIncrement()) {
+                nullExprInAutoIncrement = true;
+            }
+
+            if (nullExprInAutoIncrement) {
+                break;
+            }
+        }
+
+        return nullExprInAutoIncrement;
+    }
+
     public void plan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
             throws UserException {
         // Generate tuple descriptor
@@ -155,7 +172,13 @@ public class LoadingTaskPlanner {
                 if (fileGroups.get(0).isNegative()) {
                     throw new DdlException("Primary key table does not support negative load");
                 }
-                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
+                List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
+                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList(),
+                    isMissAutoIncrementColumn);
+
+                if (isMissAutoIncrementColumn.size() != 0) {
+                    this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
+                }
             } else {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
@@ -207,9 +230,9 @@ public class LoadingTaskPlanner {
         // 2. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage());
+                table.writeQuorum(), table.enableReplicatedStorage(), checkNullExprInAutoIncrement());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table);
+        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.complete(mergeConditionStr);
 
         // 3. Plan fragment
@@ -281,9 +304,9 @@ public class LoadingTaskPlanner {
         // 4. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage());
+                table.writeQuorum(), table.enableReplicatedStorage(), checkNullExprInAutoIncrement());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table);
+        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.complete(mergeConditionStr);
 
         // 6. Sink plan fragment

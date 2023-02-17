@@ -66,6 +66,10 @@ public:
 
     static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
 
+    void set_abort_delete(bool abort) { _abort_delete = abort; }
+
+    ChunkPtr get_result_chunk() { return _result_chunk; }
+
 private:
     void _merge();
 
@@ -118,6 +122,8 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+
+    bool _abort_delete = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {
