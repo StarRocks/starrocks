@@ -29,7 +29,7 @@ public:
     ~SortedAggregateStreamingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return !is_finished(); }
+    bool need_input() const override;
     bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
 
