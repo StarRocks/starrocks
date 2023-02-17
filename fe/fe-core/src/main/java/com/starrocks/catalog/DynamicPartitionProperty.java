@@ -134,10 +134,6 @@ public class DynamicPartitionProperty {
         return enable;
     }
 
-    public void disable() {
-        this.enable = false;
-    }
-
     public StartOfDate getStartOfWeek() {
         return startOfWeek;
     }
