@@ -798,6 +798,7 @@ public class PropertyAnalyzer {
                         }
                     }
                 } else {
+                    // for PRIMARY_KEYS and UNIQUE_KEYS type table
                     // parent columns should be keys
                     List<String> keyColumnNames =
                             parentOlapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());

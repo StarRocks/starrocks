@@ -1922,6 +1922,7 @@ public class MvRewriteOptimizationTest {
         Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
         Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
 
+        cluster.runSql("test", "show create table base_table1");
         cluster.runSql("test", "alter table base_table1 set(" +
                 "\"foreign_key_constraints\"=\"\")");
         List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
