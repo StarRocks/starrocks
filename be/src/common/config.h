@@ -845,16 +845,8 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
-// spill file size (memory table size). default size: 100M
-CONF_Int32(spill_file_size, "104857600");
-// spill mem table pool size
-CONF_Int32(spill_mem_table_pool_size, "2");
 // spill dirs
 CONF_String(spill_local_storage_dir, "spill");
-
-CONF_Double(spill_query_limit_threhold, "0.7");
-// 10M
-CONF_Int64(spill_operator_min_bytes, "104857600");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.

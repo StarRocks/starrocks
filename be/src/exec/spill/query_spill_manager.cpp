@@ -52,14 +52,6 @@ std::vector<std::string> QuerySpillManager::_spill_paths(const TUniqueId& uid) c
     return res;
 }
 
-size_t QuerySpillManager::spill_file_size() const {
-    return config::spill_file_size;
-}
-
-size_t QuerySpillManager::spill_mem_table_pool_size() const {
-    return config::spill_mem_table_pool_size;
-}
-
 SpillPathProviderFactory QuerySpillManager::provider(const std::string& prefix) {
     auto paths = _spill_paths(_uid);
     std::lock_guard guard(_mutex);

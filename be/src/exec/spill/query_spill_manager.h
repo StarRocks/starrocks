@@ -32,8 +32,6 @@ class TUniqueId;
 class QuerySpillManager {
 public:
     Status init(const TUniqueId& uid);
-    size_t spill_file_size() const;
-    size_t spill_mem_table_pool_size() const;
     SpillPathProviderFactory provider(const std::string& prefix);
 
     size_t pending_spilled_bytes() { return _spilled_bytes; }
