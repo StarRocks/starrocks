@@ -207,6 +207,7 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
+    static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
     Aggregator(AggregatorParamsPtr&& params);
 
     ~Aggregator() noexcept override {
@@ -259,6 +260,7 @@ public:
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
+    size_t chunk_buffer_size() { return _buffer_size.load(std::memory_order_acquire); }
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -334,6 +336,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
+    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
