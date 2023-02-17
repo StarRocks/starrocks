@@ -353,7 +353,7 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 
 class SetMemTrackerForColumnPool {
 public:
-    SetMemTrackerForColumnPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+    SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
 
     template <typename Pool>
     void operator()() {
@@ -361,7 +361,7 @@ public:
     }
 
 private:
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
 Status ExecEnv::init_mem_tracker() {
@@ -425,7 +425,7 @@ Status ExecEnv::init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    SetMemTrackerForColumnPool op(column_pool_mem_tracker());
+    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
