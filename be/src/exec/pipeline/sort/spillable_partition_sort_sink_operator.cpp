@@ -65,6 +65,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                 [this]() {
                     // Current partition sort is ended, and
                     // the last call will drive LocalMergeSortSourceOperator to work.
+                    TRACE_SPILL_LOG << "finish partition rows:" << _chunks_sorter->get_output_rows();
                     _sort_context->finish_partition(_chunks_sorter->get_output_rows());
                     _is_finished = true;
                     return Status::OK();

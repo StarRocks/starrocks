@@ -31,6 +31,7 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
@@ -38,9 +39,6 @@ enum class SpillFormaterType { NONE, SPILL_BY_COLUMN };
 using ChunkBuilder = std::function<ChunkUniquePtr()>;
 
 struct SpilledOptions {
-    // const int partition_nums;
-    // const std::vector<ExprContext*>& partiton_exprs;
-
     SpilledOptions() : is_unordered(true), sort_exprs(nullptr), sort_desc(nullptr) {}
 
     SpilledOptions(SortExecExprs* sort_exprs_, const SortDescs* sort_desc_)
@@ -55,6 +53,18 @@ struct SpilledOptions {
     SpillFormaterType spill_type{};
     SpillPathProviderFactory path_provider_factory;
     ChunkBuilder chunk_builder;
+};
+
+struct SpillProcessMetrics {
+    SpillProcessMetrics() = default;
+    SpillProcessMetrics(RuntimeProfile* profile);
+
+    RuntimeProfile::Counter* spill_timer = nullptr;
+    RuntimeProfile::Counter* spill_rows = nullptr;
+    RuntimeProfile::Counter* flush_timer = nullptr;
+    RuntimeProfile::Counter* restore_timer = nullptr;
+    RuntimeProfile::Counter* write_io_timer = nullptr;
+    RuntimeProfile::Counter* restore_rows = nullptr;
 };
 
 struct SpillFormatContext {
@@ -87,6 +97,10 @@ public:
 
     // some init work
     Status prepare(RuntimeState* state);
+
+    void set_metrics(const SpillProcessMetrics& metrics) { _metrics = metrics; }
+
+    const SpillProcessMetrics& metrics() { return _metrics; }
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
@@ -181,6 +195,7 @@ private:
 
 private:
     SpilledOptions _opts;
+    SpillProcessMetrics _metrics;
     std::weak_ptr<SpillerFactory> _parent;
 
     bool _has_opened = false;

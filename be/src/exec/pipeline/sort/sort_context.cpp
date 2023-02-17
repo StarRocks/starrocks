@@ -72,7 +72,9 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
             auto chunk = _merger.try_get_next();
             // Input cursor maye short circuit
             if (!chunk) {
-                _required_rows = 0;
+                if (_merger.is_eos()) {
+                    _required_rows = 0;
+                }
                 return nullptr;
             }
             _current_chunk.reset(std::move(chunk));

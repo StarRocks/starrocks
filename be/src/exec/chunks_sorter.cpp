@@ -158,8 +158,6 @@ void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
-    _spill_timer = ADD_TIMER(profile, "SpillTime");
-    _spill_rows = ADD_COUNTER(profile, "spill-rows", TUnit::UNIT);
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }

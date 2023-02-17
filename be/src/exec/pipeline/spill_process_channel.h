@@ -23,6 +23,7 @@
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "util/blocking_queue.hpp"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class SpillProcessChannel;

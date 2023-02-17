@@ -36,6 +36,14 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks {
+SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
+    spill_timer = ADD_TIMER(profile, "SpillTime");
+    spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
+    flush_timer = ADD_TIMER(profile, "SpillFlushTimer");
+    write_io_timer = ADD_TIMER(profile, "SpillWriteIOTimer");
+    restore_rows = ADD_COUNTER(profile, "SpillRestoreRows", TUnit::UNIT);
+    restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
+}
 // Not thread safe
 class ColumnSpillFormater : public SpillFormater {
 public:
@@ -164,6 +172,7 @@ Status Spiller::_run_flush_task(RuntimeState* state, const MemTablePtr& mem_tabl
     }
     DCHECK(writable != nullptr);
     {
+        SCOPED_TIMER(_metrics.write_io_timer);
         // flush all pending result to spilled files
         size_t num_rows_flushed = 0;
         RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {

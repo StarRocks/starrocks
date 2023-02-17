@@ -46,8 +46,8 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TSpillMode;
+import com.starrocks.thrift.TTabletInternalParallelMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -139,7 +139,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
     // spill mode: auto, force
-    public static final String SPILL_MODE = "auto";
+    public static final String SPILL_MODE = "spill_mode";
     // if set to true, some of stmt will be forwarded to leader FE to get result
     public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";

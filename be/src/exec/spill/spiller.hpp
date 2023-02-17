@@ -29,6 +29,7 @@ namespace starrocks {
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, ChunkPtr chunk, TaskExecutor&& executor, MemGuard&& guard) {
+    SCOPED_TIMER(_metrics.spill_timer);
     RETURN_IF_ERROR(_spilled_task_status);
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
@@ -37,6 +38,8 @@ Status Spiller::spill(RuntimeState* state, ChunkPtr chunk, TaskExecutor&& execut
         _mem_table = _acquire_mem_table_from_pool();
         DCHECK(_mem_table != nullptr);
     }
+
+    COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
     _spilled_append_rows += chunk->num_rows();
     TRACE_SPILL_LOG << "spilled rows:" << chunk->num_rows() << ",cumulative:" << _spilled_append_rows
                     << ",spiller:" << this << "," << _mem_table.get();
@@ -60,6 +63,7 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
     _running_flush_tasks++;
     // TODO: handle spill queue
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table)]() {
+        SCOPED_TIMER(_metrics.flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         guard.scoped_begin();
@@ -79,12 +83,12 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
     };
     // submit io task
     RETURN_IF_ERROR(executor.submit(std::move(task)));
-
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+    SCOPED_TIMER(_metrics.restore_timer);
     RETURN_IF_ERROR(_spilled_task_status);
     ChunkPtr chunk;
 
@@ -95,6 +99,9 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
     DCHECK(has_output_data());
     // read chunk from buffer
     ASSIGN_OR_RETURN(chunk, _current_stream->read(_spill_read_ctx));
+    TRACE_SPILL_LOG << "read rows:" << chunk->num_rows() << " cumulative:" << _restore_read_rows
+                    << ", spiller:" << this;
+    COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
 
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));

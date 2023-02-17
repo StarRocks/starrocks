@@ -162,8 +162,6 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
-    RuntimeProfile::Counter* _spill_timer = nullptr;
-    RuntimeProfile::Counter* _spill_rows = nullptr;
 
     size_t _revocable_mem_bytes = 0;
     SpillStrategy _spill_strategy = SpillStrategy::NO_SPILL;
