@@ -109,6 +109,10 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    void set_max_buffered_rows(int64_t max_buffered_rows) { _max_buffered_rows = max_buffered_rows; }
+    void set_max_buffered_bytes(int64_t max_buffered_bytes) { _max_buffered_bytes = max_buffered_bytes; }
+    void set_eager_materialized_slots(const std::vector<SlotId>& slots) { _eager_materialized_slots = slots; }
+
 protected:
     std::shared_ptr<SortContextFactory> _sort_context_factory;
     // _sort_exec_exprs contains the ordering expressions
@@ -118,6 +122,8 @@ protected:
     const std::string _sort_keys;
     int64_t _offset;
     int64_t _limit;
+    int64_t _max_buffered_rows;
+    int64_t _max_buffered_bytes;
     const TTopNType::type _topn_type;
     const std::vector<OrderByType>& _order_by_types;
 
@@ -129,6 +135,7 @@ protected:
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
+    std::vector<SlotId> _eager_materialized_slots;
 };
 
 } // namespace pipeline

@@ -278,7 +278,7 @@ public:
     }
 
     size_t element_memory_usage(size_t from, size_t size) const override {
-        return _offsets[from + size] - _offsets[from] + size * sizeof(T);
+        return _offsets[from + size] - _offsets[from] + size * sizeof(T) + _slices.size() * sizeof(_slices[0]);
     }
 
     void swap_column(Column& rhs) override {
