@@ -229,11 +229,7 @@ ChunkPtr ChunksSorterFullSort::_lazy_materialize_tmpl(const ChunkPtr& sorted_eag
 
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
-    {
-        typeof(_sort_permutation) tmp;
-        tmp.swap(_sort_permutation);
-        _unsorted_chunk.reset();
-    }
+    _sort_permutation = {};
     RETURN_IF_ERROR(_merge_sorted(state));
 
     return Status::OK();

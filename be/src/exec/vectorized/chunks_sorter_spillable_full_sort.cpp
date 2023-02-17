@@ -14,12 +14,17 @@
 
 #include "exec/vectorized/chunks_sorter_spillable_full_sort.h"
 
+#include "common/statusor.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 
 namespace starrocks::vectorized {
+void ChunksSorterSpillableFullSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorterFullSort::setup_runtime(profile, parent_mem_tracker);
+    _spiller->set_metrics(SpillProcessMetrics(profile));
+}
 
 Status ChunksSorterSpillableFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (_spill_strategy == SpillStrategy::NO_SPILL) {
@@ -29,9 +34,7 @@ Status ChunksSorterSpillableFullSort::update(RuntimeState* state, const ChunkPtr
     }
 
     // force spill
-    SCOPED_TIMER(_spill_timer);
     bool first_time_spill = _spiller->spilled_append_rows() == 0;
-    COUNTER_UPDATE(_spill_rows, chunk->num_rows());
     CHECK(!_spill_channel->has_task());
 
     RETURN_IF_ERROR(_spiller->spill(state, chunk, io_executor(), MemTrackerGuard(tls_mem_tracker)));
@@ -58,7 +61,6 @@ Status ChunksSorterSpillableFullSort::do_done(RuntimeState* state) {
         return ChunksSorterFullSort::do_done(state);
     }
 
-    SCOPED_TIMER(_spill_timer);
     if (_sorted_chunks.empty() && _unsorted_chunk == nullptr) {
         // force flush
         RETURN_IF_ERROR(_spiller->flush(state, io_executor(), MemTrackerGuard(tls_mem_tracker)));
@@ -132,15 +134,19 @@ std::function<StatusOr<ChunkPtr>()> ChunksSorterSpillableFullSort::_spill_proces
         if (_unsorted_chunk != nullptr) {
             return std::move(_unsorted_chunk);
         }
-        if (_process_sorted_chunk_idx == _sorted_chunks.size()) {
-            return Status::EndOfFile("eos");
+
+        if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
+            return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
         }
-        return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
+
+        if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
+            return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
+        }
+        return Status::EndOfFile("eos");
     };
 }
 
 Status ChunksSorterSpillableFullSort::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_spill_timer);
     auto chunk_st = _spiller->restore(_state, io_executor(), MemTrackerGuard(tls_mem_tracker));
     if (chunk_st.status().is_end_of_file()) {
         *eos = true;
