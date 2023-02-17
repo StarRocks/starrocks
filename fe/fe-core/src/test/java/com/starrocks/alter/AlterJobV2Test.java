@@ -195,6 +195,64 @@ public class AlterJobV2Test {
     }
 
     @Test
+    public void testModifyWithSelectStarMV() {
+        try {
+            String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT * FROM modify_column_test";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            // modify column which not define in mv
+            String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+            Assert.assertTrue(!mv.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testModifyWithExpr() {
+        try {
+            String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            {
+                // modify column which not define in mv
+                String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
+                AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
+                        connectContext);
+                GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+
+                waitForSchemaChangeAlterJobFinish();
+                MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+                Assert.assertTrue(mv.isActive());
+            }
+
+            {
+                // TODO: How to distinguish columns used by MV?
+                // modify column which define in mv
+                String alterStmtStr = "alter table test.modify_column_test drop column k2";
+                AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
+                        connectContext);
+                GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+
+                waitForSchemaChangeAlterJobFinish();
+                MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+                Assert.assertTrue(mv.isActive());
+            }
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
     public void testModifyUnRelatedColumnWithMv() {
         try {
             String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +

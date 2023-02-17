@@ -50,6 +50,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -96,6 +97,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -191,13 +193,21 @@ public class MaterializedViewAnalyzer {
             if (CollectionUtils.isEmpty(selectRelations)) {
                 throw new SemanticException("Materialized view query statement must contain at least one select");
             }
+
+            // derive alias
+            final HashSet<String> aliases = Sets.newHashSet();
             for (SelectRelation selectRelation : selectRelations) {
-                // check alias except * and SlotRef
-                validateSelectItem(selectRelation.getSelectList());
+                deriveSelectAlias(selectRelation.getSelectList(), aliases);
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+
+            // for select star, use `analyze` to deduce its child's output and validate select list then.
+            for (SelectRelation selectRelation : selectRelations) {
+                // check alias except * and SlotRef
+                validateSelectItem(selectRelation.getSelectList());
+            }
 
             // convert queryStatement to sql and set
             statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
@@ -262,20 +272,28 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
+        private void deriveSelectAlias(SelectList selectList, HashSet<String> aliases) {
+            for (SelectListItem selectListItem : selectList.getItems()) {
+                if (!(selectListItem.getExpr() instanceof SlotRef)
+                        && selectListItem.getAlias() == null) {
+                    String alias = Util.deriveAliasFromOrdinal(aliases.size());
+                    selectListItem.setAlias(alias);
+                    aliases.add(alias);
+                }
+            }
+        }
+
         private void validateSelectItem(SelectList selectList) {
             List<SelectListItem> selectListItems = selectList.getItems();
             for (SelectListItem selectListItem : selectListItems) {
-                if (!FeConstants.runningUnitTest) {
-                    if (selectListItem.isStar()) {
-                        throw new SemanticException("Select * is not supported in materialized view");
-                    } else if (!(selectListItem.getExpr() instanceof SlotRef)
-                            && selectListItem.getAlias() == null) {
-                        throw new SemanticException("Materialized view query statement select item " +
-                                selectListItem.getExpr().toSql() + " must has an alias");
+                Preconditions.checkState((selectListItem.getExpr() instanceof SlotRef)
+                        || selectListItem.getAlias() != null);
+                if (selectListItem.isStar() && selectListItem.getStarExpandedExprs() != null) {
+                    for (Expr expandExpr : selectListItem.getStarExpandedExprs()) {
+                        checkNondeterministicFunction(expandExpr);
                     }
-                }
-                // check select item has nondeterministic function
-                if (selectListItem.getExpr() != null) {
+                } else if (selectListItem.getExpr() != null) {
+                    // check select item has nondeterministic function
                     checkNondeterministicFunction(selectListItem.getExpr());
                 }
             }

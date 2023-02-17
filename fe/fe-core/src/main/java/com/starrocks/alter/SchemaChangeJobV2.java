@@ -662,7 +662,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Set materialized view {} inactive because the base table's scheme has changed",
+                            mv.getName());
                     mv.setActive(false);
+                    return;
                 }
             }
         }
