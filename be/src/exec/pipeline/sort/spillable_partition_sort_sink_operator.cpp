@@ -112,8 +112,8 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     // init spill parameters
     auto* spill_manager = state->query_ctx()->spill_manager();
     _spill_options = std::make_shared<SpilledOptions>(&_sort_exec_exprs, sort_desc);
-    _spill_options->spill_file_size = spill_manager->spill_file_size();
-    _spill_options->mem_table_pool_size = spill_manager->spill_mem_table_pool_size();
+    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->chunk_builder = [&]() {
         return ChunkHelper::new_chunk(*_materialized_tuple_desc, _state->chunk_size());
