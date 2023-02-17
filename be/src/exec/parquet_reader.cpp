@@ -31,7 +31,8 @@ ParquetReaderWrap::~ParquetReaderWrap() {
 }
 
 ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file,
-                                     int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size)
+                                     int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size,
+                                     const std::string& file_name)
 
         : _num_of_columns_from_file(num_of_columns_from_file),
           _total_groups(0),
@@ -40,7 +41,8 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _current_line_of_group(0),
           _current_line_of_batch(0),
           _read_offset(read_offset),
-          _read_size(read_size) {
+          _read_size(read_size),
+          _file_name(file_name) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
@@ -203,18 +205,20 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         // read batch
         arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
         if (!status.ok()) {
-            return Status::InternalError("Get RecordBatchReader Failed.");
+            return Status::InternalError("Get RecordBatchReader Failed. Error File: " + _file_name +
+                                         ", Error Row Group: " + std::to_string(_current_group));
         }
         status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError("Read Batch Error With Libarrow. Error File: " + _file_name +
+                                         ", Error Row Group: " + std::to_string(_current_group));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
+                         << " got: " << _current_group << ", Error File: " << _file_name;
             return Status::InternalError("Unexpected EOF");
         }
 
@@ -225,14 +229,15 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
                 << " is larger than batch size:" << _batch->num_rows() << ". start to read next batch";
         arrow::Status status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError("Read Batch Error With Libarrow. Error File: " + _file_name +
+                                         ", Error Row Group: " + std::to_string(_current_group));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
+                         << " got: " << _current_group << ", Error File: " << _file_name;
             return Status::InternalError("Unexpected EOF");
         }
 

@@ -60,7 +60,7 @@ private:
 class ParquetReaderWrap {
 public:
     ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file,
-                      int64_t read_offset, int64_t read_size);
+                      int64_t read_offset, int64_t read_size, const std::string& file_name);
     virtual ~ParquetReaderWrap();
 
     void close();
@@ -98,6 +98,7 @@ private:
     int64_t _read_size;
 
     std::string _timezone;
+    std::string _file_name;
 };
 
 // Reader of broker parquet file
