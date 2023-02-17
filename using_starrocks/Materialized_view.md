@@ -308,13 +308,14 @@ SHOW MATERIALIZED VIEW;
 - 查看特定物化视图。
 
 ```SQL
-SHOW MATERIALIZED VIEW WHERE NAME = order_mv;
+SHOW MATERIALIZED VIEW WHERE NAME = "order_mv";
 ```
 
 - 通过名称匹配查看物化视图。
 
 ```SQL
 SHOW MATERIALIZED VIEW WHERE NAME LIKE "order%";
+SHOW MATERIALIZED VIEW LIKE "order%";
 ```
 
 - 通过 `information_schema` 查看所有物化视图。
