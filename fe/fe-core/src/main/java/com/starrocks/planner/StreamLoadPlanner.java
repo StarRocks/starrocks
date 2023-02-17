@@ -131,8 +131,9 @@ public class StreamLoadPlanner {
         }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
+        List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
         if (streamLoadInfo.isPartialUpdate()) {
-            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs());
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(), missAutoIncrementColumn);
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -174,9 +175,12 @@ public class StreamLoadPlanner {
 
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage());
+                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement());
+        if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
+            olapTableSink.setMissAutoIncrementColumn();
+        }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable);
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, olapTableSink.missAutoIncrementColumn());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
