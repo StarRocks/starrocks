@@ -51,14 +51,15 @@ Status Spiller::spill(RuntimeState* state, ChunkPtr chunk, TaskExecutor&& execut
 template <class TaskExecutor, class MemGuard>
 Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     RETURN_IF_ERROR(_spilled_task_status);
-    if (_mem_table == nullptr) {
+    auto captured_mem_table = std::move(_mem_table);
+    if (captured_mem_table == nullptr) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_mem_table->done());
+    RETURN_IF_ERROR(captured_mem_table->done());
     _running_flush_tasks++;
     // TODO: handle spill queue
-    auto task = [this, state, guard = guard, mem_table = std::move(_mem_table)]() {
+    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table)]() {
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         guard.scoped_begin();
