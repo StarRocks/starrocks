@@ -71,7 +71,7 @@ This statement is used to operate nodes in a system. (Administrator only!)
    ALTER SYSTEM CREATE IMAGE
    ```
 
-   Executing this statement triggers FE to create a new image (metadata snapshot) file. It is an asynchronous operation. You can check the start time and finish time of the operation by viewing the FE log file **fe.log**. "Triggering a new checkpoint manually..." indicates that the operation has started, and "finished save image..." indicates that the image is created.
+   Executing this statement triggers the Leader FE to create a new image (metadata snapshot) file. It is an asynchronous operation. You can check the start time and end time of the operation by viewing the FE log file **fe.log**. "Triggering a new checkpoint manually..." indicates that the operation has started, and "finished save image..." indicates that the image is created.
 
 Note:
 
