@@ -1799,61 +1799,72 @@ public class ShowExecutor {
             throw new AnalysisException("Repository " + showStmt.getRepoName() + " does not exist");
         }
 
-        List<List<String>> snapshotInfos = repo.getSnapshotInfos(showStmt.getSnapshotName(), showStmt.getTimestamp());
+        List<List<String>> snapshotInfos = repo.getSnapshotInfos(showStmt.getSnapshotName(), showStmt.getTimestamp(),
+                                                                 showStmt.getSnapshotNames());
         resultSet = new ShowResultSet(showStmt.getMetaData(), snapshotInfos);
     }
 
     private void handleShowBackup() throws AnalysisException {
         ShowBackupStmt showStmt = (ShowBackupStmt) stmt;
-        Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
-
-        AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-        if (!(jobI instanceof BackupJob)) {
-            resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
-            return;
-        }
-
-        BackupJob backupJob = (BackupJob) jobI;
-
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // check privilege
-            List<TableRef> tableRefs = backupJob.getTableRef();
-            AtomicBoolean privilegeDeny = new AtomicBoolean(false);
-            tableRefs.forEach(tableRef -> {
-                TableName tableName = tableRef.getName();
-                if (!PrivilegeManager.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
-                        PrivilegeType.EXPORT)) {
-                    privilegeDeny.set(true);
-                }
-            });
-            if (privilegeDeny.get()) {
-                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
-                return;
-            }
-        }
-
-        List<String> info = backupJob.getInfo();
         List<List<String>> infos = Lists.newArrayList();
-        infos.add(info);
+        List<Database> dbs = Lists.newArrayList();
+
+        for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            dbs.add(entry.getValue());
+        }
+
+        for (Database db : dbs) {
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+            if (!(jobI instanceof BackupJob)) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                continue;
+            }
+    
+            BackupJob backupJob = (BackupJob) jobI;
+    
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                // check privilege
+                List<TableRef> tableRefs = backupJob.getTableRef();
+                AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+                tableRefs.forEach(tableRef -> {
+                    TableName tableName = tableRef.getName();
+                    if (!PrivilegeManager.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
+                            PrivilegeType.EXPORT)) {
+                        privilegeDeny.set(true);
+                    }
+                });
+                if (privilegeDeny.get()) {
+                    resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                    return;
+                }
+            }
+    
+            List<String> info = backupJob.getInfo();
+            infos.add(info);
+        }
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowRestore() throws AnalysisException {
         ShowRestoreStmt showStmt = (ShowRestoreStmt) stmt;
-        Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
+        List<List<String>> infos = Lists.newArrayList();
+        List<Database> dbs = Lists.newArrayList();
 
-        AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-        if (!(jobI instanceof RestoreJob)) {
-            resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
-            return;
+        for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            dbs.add(entry.getValue());
         }
 
-        RestoreJob restoreJob = (RestoreJob) jobI;
-        List<String> info = restoreJob.getInfo();
-        List<List<String>> infos = Lists.newArrayList();
-        infos.add(info);
+        for (Database db : dbs) {
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+            if (!(jobI instanceof RestoreJob)) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                continue;
+            }
+    
+            RestoreJob restoreJob = (RestoreJob) jobI;
+            List<String> info = restoreJob.getInfo();
+            infos.add(info);
+        }
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
