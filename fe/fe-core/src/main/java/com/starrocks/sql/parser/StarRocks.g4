@@ -1816,7 +1816,7 @@ whenClause
 
 over
     : OVER '('
-        (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (PARTITION BY partition+=expression (',' partition+=expression)*)?
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
