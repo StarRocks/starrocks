@@ -22,7 +22,7 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 Status ChunksPartitioner::prepare(RuntimeState* state) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
-    _obj_pool = state->obj_pool();
+    _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
     return Status::OK();
 }
@@ -38,10 +38,6 @@ ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
         _downgrade_buffer.pop();
     }
     return chunk;
-}
-
-int32_t ChunksPartitioner::num_partitions() {
-    return _hash_map_variant.size();
 }
 
 bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,

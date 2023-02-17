@@ -67,8 +67,14 @@ public class AnalyticExpr extends Expr {
     // in SQL, and hence, will fail analysis().
     private boolean resetWindow = false;
 
+    private final String partitionHint;
+    private final boolean useHashBasedPartition;
+
     // SQL string of this AnalyticExpr before standardization. Returned in toSqlImpl().
     private String sqlString;
+
+    private static final String HINT_SORT = "sort";
+    private static final String HINT_HASH = "hash";
 
     public static String LEAD = "LEAD";
     public static String LAG = "LAG";
@@ -87,7 +93,7 @@ public class AnalyticExpr extends Expr {
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs,
-                        List<OrderByElement> orderByElements, AnalyticWindow window) {
+                        List<OrderByElement> orderByElements, AnalyticWindow window, String partitionHint) {
         Preconditions.checkNotNull(fnCall);
         this.fnCall = fnCall;
         this.partitionExprs = partitionExprs != null ? partitionExprs : new ArrayList<Expr>();
@@ -97,6 +103,22 @@ public class AnalyticExpr extends Expr {
         }
 
         this.window = window;
+
+        if (partitionHint == null || !this.orderByElements.isEmpty()) {
+            this.partitionHint = null;
+            this.useHashBasedPartition = false;
+        } else if (HINT_SORT.equalsIgnoreCase(partitionHint)) {
+            this.partitionHint = HINT_SORT;
+            this.useHashBasedPartition = false;
+        } else if (HINT_HASH.equalsIgnoreCase(partitionHint)) {
+            this.partitionHint = HINT_HASH;
+            this.useHashBasedPartition = true;
+        } else {
+            this.partitionHint = null;
+            this.useHashBasedPartition = false;
+            Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash'");
+        }
+
         setChildren();
     }
 
@@ -114,6 +136,8 @@ public class AnalyticExpr extends Expr {
         partitionExprs = Expr.cloneList(other.partitionExprs);
         window = (other.window != null ? other.window.clone() : null);
         resetWindow = other.resetWindow;
+        partitionHint = other.partitionHint;
+        useHashBasedPartition = other.useHashBasedPartition;
         sqlString = other.sqlString;
         setChildren();
     }
@@ -134,6 +158,14 @@ public class AnalyticExpr extends Expr {
         return window;
     }
 
+    public String getPartitionHint() {
+        return partitionHint;
+    }
+
+    public boolean isUseHashBasedPartition() {
+        return useHashBasedPartition;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (!super.equals(obj)) {
@@ -142,21 +174,12 @@ public class AnalyticExpr extends Expr {
 
         AnalyticExpr o = (AnalyticExpr) obj;
 
-        if (!fnCall.equals(o.getFnCall())) {
-            return false;
-        }
-
-        if ((window == null) != (o.window == null)) {
-            return false;
-        }
-
-        if (window != null) {
-            if (!window.equals(o.window)) {
-                return false;
-            }
-        }
-
-        return orderByElements.equals(o.orderByElements);
+        return Objects.equals(fnCall, o.fnCall) &&
+                Objects.equals(partitionExprs, o.partitionExprs) &&
+                Objects.equals(orderByElements, o.orderByElements) &&
+                Objects.equals(window, o.window) &&
+                Objects.equals(partitionHint, o.partitionHint) &&
+                Objects.equals(useHashBasedPartition, o.useHashBasedPartition);
     }
 
     /**
@@ -398,6 +421,7 @@ public class AnalyticExpr extends Expr {
         // all children information is contained in the group of fnCall, partitionExprs, orderByElements and window,
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
-        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window);
+        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint,
+                useHashBasedPartition);
     }
 }
