@@ -269,6 +269,8 @@ public enum ErrorCode {
             "Incorrect label name '%s'"),
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
             "Change to ssl connection failed"),
+    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Dynamic history partition num must greater than 0"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
