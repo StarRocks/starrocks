@@ -50,7 +50,11 @@ common_sql_path = os.path.join(root_path, "common/sql")
 common_data_path = os.path.join(root_path, "common/data")
 common_result_path = os.path.join(root_path, "common/result")
 
-__LOG_FILE = os.path.join(root_path, "log", "sql_test.log")
+LOG_DIR = os.path.join(root_path, "log")
+if not os.path.exists(LOG_DIR):
+    os.mkdir(LOG_DIR)
+
+__LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
 
 T_R_DB = "t_r_db"

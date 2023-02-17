@@ -128,7 +128,7 @@ The first line contains the name of the test case in the format: `-- name: ${cas
 Starting from the second line, it lists all the test statements to be executed, such as `create, select, drop`...  
 
 - Format:
-```clickhouse
+```sql
 -- name: ${case name}
 SQL1;
 SQL2;
@@ -136,7 +136,7 @@ SQL3;
 ```
 
 - Example:
-```clickhouse
+```sql
 -- name: test_alter_array_partition
 show backends;
 select connection_id();
@@ -154,7 +154,7 @@ In addition to the test statements, the R file will also hold information about 
 The first line is the same with T.  
 Starting from the second line, in addition to listing the SQL to be executed, if you also want to check the result of his execution, you need to follow the result information immediately after the test statement and wrap them with `-- result: ` and `-- !result`.
 - Format:
-```clickhouse
+```sql
 -- name: ${case name}
 SQL1;
 -- result: 
@@ -165,7 +165,7 @@ SQL2;
 ```
 
 - Example:
-```clickhouse
+```sql
 -- name: test_alter_array_partition
 show backends;
 select connection_id();
@@ -200,7 +200,7 @@ skip_res_cmd = [
 #### 1.2 SKIP FLAG
 You can skip the check round by adding the **`[UC]`** flag in front of the statement that needs to skip the check.  
 Compared to `SKIP ARRAY`, `[UC]` is more flexible as it affects a single case without affecting other cases.
-```clickhouse
+```sql
 -- name: ${case name}
 [UC]SQL1;
 -- result: 
@@ -214,7 +214,7 @@ SQL2;
 The test framework supports shell commands, you just need to add **`shell: `** in front of the command. Also, the framework supports the use of variables in commands to some extent. Some variables are naturally supported, such as root_path and so on. Of course, you can set custom variables in the `replace` section of `conf/sr.conf` and use it in the format of "${variable name}".  
 The shell statement will not check the return result by default, and the use case will fail as soon as it is executed with an error.When the result is set, both return code / stdout(stderr) will be checked.  
 - format:
-```clickhouse
+```sql
 shell: ***
 -- result: 
 returncode
@@ -230,7 +230,7 @@ VAR_1 = ABCDEFG
 ```
 
 - Example (USE VARIABLE):
-```clickhouse
+```sql
 -- name: ${case name}
 SQL1;
 shell: shell_command
@@ -238,7 +238,7 @@ SQL2;
 ```
 
 - Example (NORMAL):
-```clickhouse
+```sql
 -- name: ${case name}
 SQL1;
 shell: echo ${VAR_1}
@@ -246,7 +246,7 @@ SQL2;
 ```
 
 - Example (JSON CHECK):
-```clickhouse
+```sql
 -- name: ${case name}
 SQL1;
 shell: curl *****
@@ -273,7 +273,7 @@ def func_1(self, param1, param2):
 ```
 
 - Example(USE FUNCTION):
-```clickhouse
+```sql
 - name: ${case name}
 SQL1;
 function: func_1("var1", "var2")
@@ -283,7 +283,7 @@ SQL2;
 ### 4. CHECK IN ORDERLY MANNER
 The multi-row check of SQL execution result is unordered by default, but for some statements like order by, we need to guarantee the correct order of result.  
 You can check them by prefixing the SQL statements with `[ORDER]` tags.
-```clickhouse
+```sql
 -- name: ${case name}
 [ORDER]SQL1;
 -- result: 
