@@ -57,6 +57,7 @@
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -112,6 +113,7 @@ public:
     // if is_open_done() return true, open_wait() will not block
     // otherwise open_wait() will block
     void try_open();
+    void try_incremental_open(std::vector<PTabletWithPartition>& tablets);
     bool is_open_done();
     Status open_wait();
 
@@ -120,15 +122,15 @@ public:
     bool is_full();
 
     Status add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids, const std::vector<uint32_t>& indexes,
-                     uint32_t from, uint32_t size, bool eos);
+                     uint32_t from, uint32_t size);
 
     Status add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
-                      const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
+                      const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size);
 
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close();
+    Status try_close(bool wait_all_sender_close = false);
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
@@ -154,9 +156,10 @@ private:
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
     Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
-    void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure);
+    void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure,
+               std::vector<PTabletWithPartition>& tablets, bool incrmental_open);
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
-    Status _send_request(bool eos);
+    Status _send_request(bool eos, bool wait_all_sender_close = false);
     void _cancel(int64_t index_id, const Status& err_st);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -222,10 +225,25 @@ public:
     IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
     ~IndexChannel();
 
-    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets);
+    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
+            func(it.second.get());
+        }
+        for (auto& it : _incremental_node_channels) {
+            func(it.second.get());
+        }
+    }
+
+    void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& it : _node_channels) {
+            func(it.second.get());
+        }
+    }
+
+    void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& it : _incremental_node_channels) {
             func(it.second.get());
         }
     }
@@ -235,6 +253,8 @@ public:
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
     bool has_intolerable_failure();
+
+    bool has_incremental_node_channel() { return !_incremental_node_channels.empty(); }
 
 private:
     friend class OlapTableSink;
@@ -251,6 +271,8 @@ private:
     std::set<int64_t> _failed_channels;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+
+    std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _incremental_node_channels;
 };
 
 // Write data to Olap Table.
@@ -306,6 +328,9 @@ public:
 
     Status reset_epoch(RuntimeState* state);
 
+    void set_nonblocking_send_chunk(bool nonblocking_send_chunk) { _nonblocking_send_chunk = nonblocking_send_chunk; }
+    bool nonblocking_send_chunk() const { return _nonblocking_send_chunk; }
+
 private:
     template <LogicalType LT>
     void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
@@ -356,6 +381,10 @@ private:
             index_channel->for_each_node_channel(func);
         }
     }
+
+    Status _automatic_create_partition();
+
+    Status _incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions);
 
     friend class NodeChannel;
     friend class IndexChannel;
@@ -468,6 +497,17 @@ private:
     bool _miss_auto_increment_column = false;
 
     bool _abort_delete = false;
+
+    std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
+
+    std::vector<std::vector<std::string>> _partition_not_exist_row_values;
+
+    bool _enable_automatic_partition = false;
+
+    bool _nonblocking_send_chunk = false;
+
+    std::atomic<bool> _is_automatic_partition_running = false;
+    Status _automatic_partition_status;
 };
 
 } // namespace stream_load

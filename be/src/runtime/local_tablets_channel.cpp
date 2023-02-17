@@ -310,6 +310,25 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
+    } else if (request.eos() && request.wait_all_sender_close()) {
+        int i = 0;
+        while (_num_remaining_senders.load(std::memory_order_acquire) != 0) {
+            bthread_usleep(10000); // 10ms
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait all sender close timeout " << request.timeout_ms() << "ms still has "
+                          << _num_remaining_senders << " sender";
+                break;
+            }
+
+            if (++i % 6000 == 0) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait all sender close already "
+                          << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
+                          << "ms still has " << _num_remaining_senders << " sender";
+            }
+        }
     }
 
     int64_t last_execution_time_us = 0;
@@ -578,6 +597,84 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
         channel_row_idx_start_points[channel_index]--;
     }
     return std::move(context);
+}
+
+Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+                                             std::shared_ptr<OlapTableSchemaParam> schema) {
+    std::vector<SlotDescriptor*>* index_slots = nullptr;
+    int32_t schema_hash = 0;
+    for (auto& index : _schema->indexes()) {
+        if (index->index_id == _index_id) {
+            index_slots = &index->slots;
+            schema_hash = index->schema_hash;
+            break;
+        }
+    }
+    if (index_slots == nullptr) {
+        return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
+    }
+    // update tablets
+    std::vector<int64_t> tablet_ids;
+    tablet_ids.reserve(params.tablets_size());
+    for (const PTabletWithPartition& tablet : params.tablets()) {
+        if (_delta_writers.count(tablet.tablet_id()) != 0) {
+            continue;
+        }
+
+        DeltaWriterOptions options;
+        options.tablet_id = tablet.tablet_id();
+        options.schema_hash = schema_hash;
+        options.txn_id = _txn_id;
+        options.partition_id = tablet.partition_id();
+        options.load_id = params.id();
+        options.slots = index_slots;
+        options.global_dicts = &_global_dicts;
+        options.parent_span = _load_channel->get_span();
+        options.index_id = _index_id;
+        options.node_id = _node_id;
+        options.timeout_ms = params.timeout_ms();
+        if (params.is_replicated_storage()) {
+            for (auto& replica : tablet.replicas()) {
+                options.replicas.emplace_back(replica);
+                if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
+                    _node_id_to_endpoint[replica.node_id()] = replica;
+                }
+            }
+            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
+                options.replica_state = Primary;
+            } else {
+                options.replica_state = Secondary;
+            }
+        } else {
+            options.replica_state = Peer;
+        }
+
+        auto res = AsyncDeltaWriter::open(options, _mem_tracker);
+        RETURN_IF_ERROR(res.status());
+        auto writer = std::move(res).value();
+        _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+        tablet_ids.emplace_back(tablet.tablet_id());
+    }
+    _s_tablet_writer_count += _delta_writers.size();
+
+    std::stringstream ss;
+    ss << "open delta writer ";
+    for (auto& [tablet_id, delta_writer] : _delta_writers) {
+        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    }
+    LOG(INFO) << ss.str();
+
+    auto it = _tablet_id_to_sorted_indexes.begin();
+    while (it != _tablet_id_to_sorted_indexes.end()) {
+        tablet_ids.emplace_back(it->first);
+        it++;
+    }
+    DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
+    std::sort(tablet_ids.begin(), tablet_ids.end());
+    for (size_t i = 0; i < tablet_ids.size(); ++i) {
+        _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+    }
+    return Status::OK();
 }
 
 void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* committed_info,
