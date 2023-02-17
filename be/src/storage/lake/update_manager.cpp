@@ -403,7 +403,12 @@ Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_vers
         return Status::OK();
     } else {
         auto& index = index_entry->value();
-        if (index.data_version() != base_version) {
+        if (index.data_version() > base_version) {
+            // return error, and ignore this publish later
+            LOG(WARNING) << "Lake check_meta_version and publish already finished txn, tablet_id: " << tablet.id()
+                         << " index_ver: " << index.data_version() << " base_ver: " << base_version;
+            return Status::AlreadyExist("lake primary publish txn already finish");
+        } else if (index.data_version() < base_version) {
             // clear cache, and continue publish
             LOG(WARNING) << "Lake check_meta_version and remove primary index cache, tablet_id: " << tablet.id()
                          << " index_ver: " << index.data_version() << " base_ver: " << base_version;

@@ -506,7 +506,20 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
     auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
 
-    RETURN_IF_ERROR(log_applier->init());
+    auto init_st = log_applier->init();
+    if (!init_st.ok()) {
+        if (init_st.is_already_exist()) {
+            auto target_metadata_or = tablet->get_metadata(new_version);
+            if (target_metadata_or.ok()) {
+                // try to publish already finished txn
+                return compaction_score(**target_metadata_or);
+            } else {
+                return target_metadata_or.status();
+            }
+        } else {
+            return init_st;
+        }
+    }
 
     // Apply txn logs
     int64_t alter_version = -1;
