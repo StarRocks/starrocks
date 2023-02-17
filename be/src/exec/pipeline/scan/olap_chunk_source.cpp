@@ -139,8 +139,8 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-void OlapChunkSource::_decide_chunk_size() {
-    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
+void OlapChunkSource::_decide_chunk_size(bool has_predicate) {
+    if (!has_predicate && _limit != -1 && _limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _limit;
     } else {
@@ -166,9 +166,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
-    _decide_chunk_size();
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
+    _decide_chunk_size(!preds.empty());
     for (auto& p : preds) {
         if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
