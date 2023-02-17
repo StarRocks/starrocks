@@ -578,6 +578,9 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
+        // check whether Config.run_mode was changed, exit if changed
+
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -661,8 +664,6 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         if (Config.run_mode.equals("shared-data")) {
-            // for debug
-            LOG.info("run mode is shared-data");
             runMode = RunMode.SHAREDDDATA;
             this.starOSAgent = new StarOSAgent();
         }
@@ -986,9 +987,6 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        // for debug
-        LOG.info("isCloudNativeMode is {}", isCloudNativeMode);
-
         if (isCloudNativeMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);

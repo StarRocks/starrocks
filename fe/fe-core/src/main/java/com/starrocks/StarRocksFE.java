@@ -131,7 +131,7 @@ public class StarRocksFE {
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
-            if (Config.run_mode.equals("shared-nothing")) {
+            if (GlobalStateMgr.getCurrentState().isCloudNativeMode()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();

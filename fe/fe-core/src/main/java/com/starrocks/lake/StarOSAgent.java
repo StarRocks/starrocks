@@ -82,9 +82,6 @@ public class StarOSAgent {
     }
 
     public boolean init(StarManagerServer server) {
-        // for debug
-        LOG.info("enter init");
-
         // check if Config.starmanager_address == FE address
         String[] starMgrAddr = Config.starmgr_address.split(":");
         if (!starMgrAddr[0].equals("127.0.0.1")) {
