@@ -20,7 +20,8 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import java.io.Serializable;
 import javax.validation.constraints.NotNull;
 
-// used to record element position in the sql
+// Used to record element position in the sql. ParserRuleContext records the input start and end token,
+// and we can transform their line and col info to NodePosition.
 public class NodePosition implements Serializable {
 
     public static final NodePosition ZERO = new NodePosition(0, 0);

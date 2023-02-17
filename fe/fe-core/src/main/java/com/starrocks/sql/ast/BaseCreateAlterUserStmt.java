@@ -45,7 +45,7 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles,
                                    NodePosition pos) {
         super(pos);
-        this.userIdentity = userDesc.getUserIdent();
+        this.userIdentity = userDesc.getUserIdentity();
         this.password = userDesc.getPassword();
         this.isPasswordPlain = userDesc.isPasswordPlain();
         this.authPluginName = userDesc.getAuthPlugin();
