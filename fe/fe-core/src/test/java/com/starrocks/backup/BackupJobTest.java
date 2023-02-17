@@ -47,6 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -139,6 +140,8 @@ public class BackupJobTest {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         backupDir.mkdirs();
+
+        MetricRepo.init();
     }
 
     @AfterClass

@@ -703,7 +703,6 @@ public class GlobalStateMgr {
         }
     }
 
-    @VisibleForTesting
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return localMetastore.getIdToDb();
     }
