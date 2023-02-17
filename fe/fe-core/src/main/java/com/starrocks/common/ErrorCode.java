@@ -269,6 +269,27 @@ public enum ErrorCode {
             "Incorrect label name '%s'"),
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
             "Change to ssl connection failed"),
+<<<<<<< HEAD
+=======
+    ERR_CATALOG_ACCESS_DENIED(5084, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to catalog '%s'"),
+    ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
+            "Table not found when checking privilege"),
+    ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
+            "Db [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
+            "%s denied to user '%s'@'%s' for resoure '%s' when checking privilege"),
+    ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to table '%s' when checking privilege"),
+    ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
+            "Routine load job [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
+            "Export job [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
+            "Backup job not found when checking privilege"),
+    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Dynamic history partition num must greater than 0"),
+>>>>>>> ce38e034f ([BugFix] Fix bug create too much dynamic partition. (#17966))
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
