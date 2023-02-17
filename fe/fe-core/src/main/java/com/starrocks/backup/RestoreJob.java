@@ -79,6 +79,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -430,6 +431,7 @@ public class RestoreJob extends AbstractJob {
      * 6. make snapshot for all replicas for incremental download later.
      */
     private void checkAndPrepareMeta() {
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -1214,6 +1216,7 @@ public class RestoreJob extends AbstractJob {
             if (!st.ok()) {
                 status = st;
             }
+            MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1378,6 +1381,7 @@ public class RestoreJob extends AbstractJob {
 
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
         return Status.OK;
     }
 
