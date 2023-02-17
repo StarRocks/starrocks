@@ -47,6 +47,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -106,17 +107,20 @@ public class DynamicPartitionUtil {
         }
     }
 
-    private static void checkEnd(String end) throws DdlException {
+    private static int checkEnd(String end) throws DdlException {
         if (Strings.isNullOrEmpty(end)) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_EMPTY);
         }
         try {
-            if (Integer.parseInt(end) <= 0) {
+            int endInt = Integer.parseInt(end);
+            if (endInt <= 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_ZERO, end);
             }
+            return endInt;
         } catch (NumberFormatException e) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_FORMAT, end);
         }
+        return DynamicPartitionProperty.DEFAULT_END_OFFSET;
     }
 
     private static void checkBuckets(String buckets) throws DdlException {
@@ -263,6 +267,23 @@ public class DynamicPartitionUtil {
         }
     }
 
+    private static void checkHistoryPartitionNum(String val) throws DdlException {
+        if (Strings.isNullOrEmpty(val)) {
+            throw new DdlException(
+                    "Invalid properties: " + DynamicPartitionProperty.HISTORY_PARTITION_NUM);
+        }
+        try {
+            int historyPartitionNum = Integer.parseInt(val);
+            if (historyPartitionNum < 0) {
+                ErrorReport.reportDdlException(
+                        ErrorCode.ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO);
+            }
+        } catch (NumberFormatException e) {
+            throw new DdlException(
+                    "Invalid properties: " + DynamicPartitionProperty.HISTORY_PARTITION_NUM);
+        }
+    }
+
     public static Map<String, String> analyzeDynamicPartition(Map<String, String> properties) throws DdlException {
         // properties should not be empty, check properties before call this function
         Map<String, String> analyzedProperties = new HashMap<>();
@@ -299,11 +320,30 @@ public class DynamicPartitionUtil {
             analyzedProperties.put(DynamicPartitionProperty.START, startValue);
         }
 
+        int end = DynamicPartitionProperty.DEFAULT_END_OFFSET;
         if (properties.containsKey(DynamicPartitionProperty.END)) {
             String endValue = properties.get(DynamicPartitionProperty.END);
-            checkEnd(endValue);
+            end = checkEnd(endValue);
             properties.remove(DynamicPartitionProperty.END);
             analyzedProperties.put(DynamicPartitionProperty.END, endValue);
+        }
+
+        if (properties.containsKey(DynamicPartitionProperty.HISTORY_PARTITION_NUM)) {
+            String val = properties.get(DynamicPartitionProperty.HISTORY_PARTITION_NUM);
+            checkHistoryPartitionNum(val);
+            properties.remove(DynamicPartitionProperty.HISTORY_PARTITION_NUM);
+            analyzedProperties.put(DynamicPartitionProperty.HISTORY_PARTITION_NUM, val);
+        }
+
+        int historyPartitionNum = Integer.parseInt(analyzedProperties.getOrDefault(
+                DynamicPartitionProperty.HISTORY_PARTITION_NUM,
+                String.valueOf(DynamicPartitionProperty.NOT_SET_HISTORY_PARTITION_NUM)));
+
+        int expectCreatePartitionNum = end + historyPartitionNum;
+
+        if (expectCreatePartitionNum > Config.max_dynamic_partition_num) {
+            throw new DdlException("Too many dynamic partitions: " + expectCreatePartitionNum
+                    + ". Limit: " + Config.max_dynamic_partition_num);
         }
 
         if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH)) {
