@@ -62,8 +62,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             column = nullable->data_column();
             // empty null array with non-zero elements
-            column->empty_null_complex_column(nullable->null_column()->get_data(),
-                                              std::dynamic_pointer_cast<ArrayColumn>(column)->offsets().get_data());
+            column->empty_null_in_complex_column(nullable->null_column()->get_data(),
+                                                 std::dynamic_pointer_cast<ArrayColumn>(column)->offsets().get_data());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
