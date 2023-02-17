@@ -49,6 +49,9 @@ public:
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
+    Status incremental_open(const PTabletWriterOpenRequest& params,
+                            std::shared_ptr<OlapTableSchemaParam> schema) override;
+
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 

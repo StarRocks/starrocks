@@ -299,6 +299,7 @@ public class OlapTableSink extends DataSink {
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
+        partitionParam.setEnable_automatic_partition(table.supportedAutomaticPartition());
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {

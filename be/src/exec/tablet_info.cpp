@@ -198,7 +198,7 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                 return Status::InternalError(ss.str());
             }
         }
-        _partitions.emplace_back(part);
+        _partitions.emplace(part->id, part);
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {
                 _partitions_map.emplace(&in_key, part);
@@ -317,9 +317,56 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
     return Status::OK();
 }
 
+Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTablePartition>& partitions) {
+    for (auto& t_part : partitions) {
+        if (_partitions.count(t_part.id) != 0) {
+            continue;
+        }
+
+        OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
+        part->id = t_part.id;
+        if (t_part.__isset.start_keys) {
+            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.start_keys, &part->start_key), "start_keys");
+        }
+        if (t_part.__isset.end_keys) {
+            RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end keys");
+        }
+        part->num_buckets = t_part.num_buckets;
+        auto num_indexes = _schema->indexes().size();
+        if (t_part.indexes.size() != num_indexes) {
+            std::stringstream ss;
+            ss << "number of partition's index is not equal with schema's"
+               << ", num_part_indexes=" << t_part.indexes.size() << ", num_schema_indexes=" << num_indexes;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        part->indexes = t_part.indexes;
+        std::sort(part->indexes.begin(), part->indexes.end(),
+                  [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
+                      return lhs.index_id < rhs.index_id;
+                  });
+        // check index
+        for (int j = 0; j < num_indexes; ++j) {
+            if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
+                std::stringstream ss;
+                ss << "partition's index is not equal with schema's"
+                   << ", part_index=" << part->indexes[j].index_id
+                   << ", schema_index=" << _schema->indexes()[j]->index_id;
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+        }
+        _partitions.emplace(part->id, part);
+        _partitions_map.emplace(&part->end_key, part);
+    }
+
+    return Status::OK();
+}
+
 Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                             int* invalid_row_index) {
+                                             int* invalid_row_index, int64_t txn_id,
+                                             std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
     partitions->resize(num_rows);
 
@@ -347,19 +394,38 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                 row.index = i;
                 auto it = is_list_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
                 if (UNLIKELY(it == _partitions_map.end())) {
-                    (*partitions)[i] = nullptr;
-                    (*selection)[i] = 0;
-                    if (invalid_row_index != nullptr) {
-                        *invalid_row_index = i;
+                    if (partition_not_exist_row_values) {
+                        // only support single column partition now
+                        if (partition_columns.size() != partition_not_exist_row_values->size()) {
+                            return Status::InternalError("automatic partition only support single column partition.");
+                        }
+                        for (auto& column : *row.columns) {
+                            (*partition_not_exist_row_values)[0].emplace_back(std::move(column->debug_item(i)));
+                        }
+                    } else {
+                        (*partitions)[i] = nullptr;
+                        (*selection)[i] = 0;
+                        if (invalid_row_index != nullptr) {
+                            *invalid_row_index = i;
+                        }
                     }
                 } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
                     (*partitions)[i] = it->second;
                     (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
                 } else {
-                    (*partitions)[i] = nullptr;
-                    (*selection)[i] = 0;
-                    if (invalid_row_index != nullptr) {
-                        *invalid_row_index = i;
+                    if (partition_not_exist_row_values) {
+                        if (partition_columns.size() != partition_not_exist_row_values->size()) {
+                            return Status::InternalError("automatic partition only support single column partition.");
+                        }
+                        for (auto& column : *row.columns) {
+                            (*partition_not_exist_row_values)[0].emplace_back(std::move(column->debug_item(i)));
+                        }
+                    } else {
+                        (*partitions)[i] = nullptr;
+                        (*selection)[i] = 0;
+                        if (invalid_row_index != nullptr) {
+                            *invalid_row_index = i;
+                        }
                     }
                 }
             }

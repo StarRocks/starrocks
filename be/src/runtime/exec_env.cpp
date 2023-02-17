@@ -162,6 +162,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
+                            .set_min_threads(0)
+                            .set_max_threads(8)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_automatic_partition_pool));
+
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
         num_prepare_threads = CpuInfo::num_cores();
@@ -459,6 +466,10 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
+    if (_automatic_partition_pool) {
+        _automatic_partition_pool->shutdown();
+    }
+
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_profile_report_worker);

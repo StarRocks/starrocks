@@ -51,6 +51,9 @@ public:
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
                                       std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
+    virtual Status incremental_open(const PTabletWriterOpenRequest& params,
+                                    std::shared_ptr<OlapTableSchemaParam> schema) = 0;
+
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response) = 0;
 

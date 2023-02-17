@@ -27,6 +27,9 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 
     state->set_per_fragment_instance_idx(_sender_id);
 
+    _sink->set_nonblocking_send_chunk(true);
+    _automatic_partition_chunk.reset();
+
     RETURN_IF_ERROR(_sink->prepare(state));
 
     RETURN_IF_ERROR(_sink->try_open(state));
@@ -62,6 +65,20 @@ bool OlapTableSinkOperator::pending_finish() const {
             _fragment_ctx->cancel(st);
             return false;
         }
+    }
+
+    // last chunk trigger automatic partition creation
+    // we need handle it before close sink
+    if (_automatic_partition_chunk) {
+        if (_sink->is_full()) {
+            return true;
+        }
+        auto st = _sink->send_chunk(_fragment_ctx->runtime_state(), _automatic_partition_chunk.get());
+        if (!st.ok()) {
+            _fragment_ctx->cancel(st);
+            return false;
+        }
+        _automatic_partition_chunk.reset();
     }
 
     if (!_sink->is_close_done()) {
@@ -119,11 +136,11 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
-    if (_is_open_done) {
+    if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close
         return _sink->try_close(state);
     } else {
-        // sink's open not finish, we need check in pending_finish() before close
+        // sink's open not finish or automatic partition in processing, we need check in pending_finish() before close
         return Status::OK();
     }
 }
@@ -148,13 +165,30 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         RETURN_IF_ERROR(_sink->open_wait());
     }
 
+    // previous push_chunk() trigger automatic partition creation
+    if (_automatic_partition_chunk) {
+        // resend previous chunk before send new chunk
+        auto st = _sink->send_chunk(state, _automatic_partition_chunk.get());
+        if (!st.ok()) {
+            return st;
+        }
+        _automatic_partition_chunk.reset();
+    }
+
     uint16_t num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
     }
 
-    // send_chunk() use internal queue, we check is_full() before call send_chunk(), so it will not block
-    return _sink->send_chunk(state, chunk.get());
+    // send_chunk() will return EAGAIN to avoid block
+    auto st = _sink->send_chunk(state, chunk.get());
+    if (st.is_eagain()) {
+        // temporarily save the chunk, wait for the partition to be created and send again
+        _automatic_partition_chunk = chunk;
+        return Status::OK();
+    } else {
+        return st;
+    }
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

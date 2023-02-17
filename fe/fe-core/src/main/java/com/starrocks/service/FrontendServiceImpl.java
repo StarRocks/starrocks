@@ -1586,6 +1586,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
 
+        LOG.info("Recieve create partition: {}", request);
+
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
@@ -1593,52 +1595,53 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d is not exists", dbId));
             return result;
         }
         Table table = db.getTable(tableId);
         if (table == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d tableId=%d is not exists", dbId, tableId));
             return result;
         }
         if (!(table instanceof OlapTable)) {
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId)));
             result.setStatus(errorStatus);
-            result.setErr_msg(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId));
             return result;
         }
         OlapTable olapTable = (OlapTable) table;
 
         if (request.partition_values == null) {
+            errorStatus.setError_msgs(Lists.newArrayList("partition_values should not null."));
             result.setStatus(errorStatus);
-            result.setErr_msg("partition_values should not null.");
             return result;
         }
         // Now only supports the case of automatically creating single partition
         if (request.partition_values.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "automatic partition only support single column partition."));
             result.setStatus(errorStatus);
-            result.setErr_msg("automatic partition only support single partition, partition_values size should equal 1.");
             return result;
         }
         List<String> partitionValues = request.partition_values.get(0);
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support expression range partition."));
             result.setStatus(errorStatus);
-            result.setErr_msg("automatic partition only support expression range partition.");
             return result;
         }
         List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
         if (partitionExprs.size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
             result.setStatus(errorStatus);
-            result.setErr_msg("automatic partition only support one expression partitionExpr.");
             return result;
         }
         Expr expr = partitionExprs.get(0);
         if (!(expr instanceof FunctionCallExpr)) {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support FunctionCallExpr"));
             result.setStatus(errorStatus);
-            result.setErr_msg("automatic partition only support FunctionCallExpr");
             return result;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
@@ -1648,14 +1651,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
             if (paramsExprs.size() != 2) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc params exprs size should be 2."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("date_trunc params exprs size should be 2.");
                 return result;
             }
             Expr granularityExpr = paramsExprs.get(0);
             if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("date_trunc granularity is not string literal."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("date_trunc granularity is not string literal.");
                 return result;
             }
             StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
@@ -1663,20 +1666,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
             if (paramsExprs.size() != 4) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice params exprs size should be 4."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("time_slice params exprs size should be 4.");
                 return result;
             }
             Expr intervalExpr = paramsExprs.get(1);
             if (!(intervalExpr instanceof IntLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval is not int literal."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("time_slice interval is not int literal.");
                 return result;
             }
             Expr granularityExpr = paramsExprs.get(2);
             if (!(granularityExpr instanceof StringLiteral)) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice granularity is not string literal."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("time_slice granularity is not string literal.");
                 return result;
             }
             StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
@@ -1684,13 +1687,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             granularity = granularityLiteral.getStringValue();
             interval = intervalLiteral.getLongValue();
             if (interval != 1) {
+                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval only support 1 currently."));
                 result.setStatus(errorStatus);
-                result.setErr_msg("time_slice interval only support 1 currently.");
                 return result;
             }
         } else {
+            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support data_trunc function."));
             result.setStatus(errorStatus);
-            result.setErr_msg("automatic partition only support data_trunc function.");
             return result;
         }
 
@@ -1700,8 +1703,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     partitionValues, interval, granularity);
         } catch (AnalysisException ex) {
+            errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);
-            result.setErr_msg(ex.getMessage());
             return result;
         }
 
@@ -1711,8 +1714,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 state.addPartitions(db, olapTable.getName(), addPartitionClause);
             } catch (DdlException | AnalysisException e) {
                 LOG.warn(e);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("automatic create partition failed. error:%s", e.getMessage())));
                 result.setStatus(errorStatus);
-                result.setErr_msg(String.format("automatic create partition failed. error:%s", e.getMessage()));
                 return result;
             }
         }
