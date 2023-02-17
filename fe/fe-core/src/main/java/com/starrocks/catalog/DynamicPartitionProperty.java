@@ -54,9 +54,13 @@ public class DynamicPartitionProperty {
     public static final String START_DAY_OF_MONTH = "dynamic_partition.start_day_of_month";
     public static final String TIME_ZONE = "dynamic_partition.time_zone";
     public static final String REPLICATION_NUM = "dynamic_partition.replication_num";
-
+    public static final String CREATE_HISTORY_PARTITION = "dynamic_partition.create_history_partition";
+    public static final String HISTORY_PARTITION_NUM = "dynamic_partition.history_partition_num";
     public static final int MIN_START_OFFSET = Integer.MIN_VALUE;
+    // This parameter must be filled in, and it is set to the maximum value to prevent special situations.
+    public static final int MAX_END_OFFSET = Integer.MAX_VALUE;
     public static final int NOT_SET_REPLICATION_NUM = -1;
+    public static final int NOT_SET_HISTORY_PARTITION_NUM = 0;
 
     private boolean exist;
 
@@ -70,7 +74,8 @@ public class DynamicPartitionProperty {
     private StartOfDate startOfMonth;
     private TimeZone tz = TimeUtils.getSystemTimeZone();
     private int replicationNum;
-
+    private boolean createHistoryPartition = false;
+    private int historyPartitionNum;
     public DynamicPartitionProperty(Map<String, String> properties) {
         if (properties != null && !properties.isEmpty()) {
             this.exist = true;
@@ -84,6 +89,10 @@ public class DynamicPartitionProperty {
             this.buckets = Integer.parseInt(properties.get(BUCKETS));
             this.replicationNum =
                     Integer.parseInt(properties.getOrDefault(REPLICATION_NUM, String.valueOf(NOT_SET_REPLICATION_NUM)));
+            this.createHistoryPartition =
+                    Boolean.parseBoolean(properties.get(CREATE_HISTORY_PARTITION));
+            this.historyPartitionNum = Integer.parseInt(properties.getOrDefault(
+                    HISTORY_PARTITION_NUM, String.valueOf(NOT_SET_HISTORY_PARTITION_NUM)));
             createStartOfs(properties);
         } else {
             this.exist = false;
@@ -164,6 +173,14 @@ public class DynamicPartitionProperty {
         return replicationNum;
     }
 
+    public boolean isCreateHistoryPartition() {
+        return createHistoryPartition;
+    }
+
+    public int getHistoryPartitionNum() {
+        return historyPartitionNum;
+    }
+
     public String getPropString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
@@ -195,7 +212,9 @@ public class DynamicPartitionProperty {
                 + ",\n\"" + START + "\" = \"" + start + "\""
                 + ",\n\"" + END + "\" = \"" + end + "\""
                 + ",\n\"" + PREFIX + "\" = \"" + prefix + "\""
-                + ",\n\"" + BUCKETS + "\" = \"" + buckets + "\"";
+                + ",\n\"" + BUCKETS + "\" = \"" + buckets + "\""
+                + ",\n\"" + CREATE_HISTORY_PARTITION + "\" = \"" + createHistoryPartition + "\""
+                + ",\n\"" + HISTORY_PARTITION_NUM + "\" = \"" + historyPartitionNum + "\"";
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
             res += ",\n\"" + REPLICATION_NUM + "\" = \"" + replicationNum + "\"";
         }

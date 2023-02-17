@@ -168,12 +168,13 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
         ZonedDateTime now = ZonedDateTime.now(dynamicPartitionProperty.getTimeZone().toZoneId());
 
+        boolean createHistoryPartition = dynamicPartitionProperty.isCreateHistoryPartition();
         int idx;
         int start = dynamicPartitionProperty.getStart();
+        int historyPartitionNum = dynamicPartitionProperty.getHistoryPartitionNum();
 
-        /// If specify start, create history partitions automatically
-        if (start != DynamicPartitionProperty.MIN_START_OFFSET) {
-            idx = start;
+        if (createHistoryPartition) {
+            idx = Math.max(start, -historyPartitionNum);
         } else {
             idx = 0;
         }
