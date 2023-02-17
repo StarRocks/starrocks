@@ -36,9 +36,6 @@ public class ColumnSeparator implements ParseNode {
         this.separator = Delimiter.convertDelimiter(oriSeparator);
     }
 
-
-
-
     public String getColumnSeparator() {
         return separator;
     }
