@@ -185,7 +185,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
@@ -204,7 +204,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         // 4. check if zhangsan from specified ip can access
         Assert.assertTrue(auth.checkPlainPassword("zhangsan", "192.168.0.1",
@@ -936,7 +936,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        userIdentity = createUserStmt.getUserIdent();
+        userIdentity = createUserStmt.getUserIdentity();
 
         sql = "GRANT NODE_PRIV ON *.* TO zhaoliu";
         try {
@@ -1029,7 +1029,7 @@ public class AuthTest {
         String createUserSql = "CREATE USER 'test_user' IDENTIFIED BY '12345'";
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         auth.createUser(createUserStmt);
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
         // check if select & load & spark resource usage privilege all not granted
         String dbName = "db1";
@@ -1132,7 +1132,7 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        UserIdentity userIdentity = createUserStmt.getUserIdent();
+        UserIdentity userIdentity = createUserStmt.getUserIdentity();
 
 
         // 2. grant usage_priv on resource 'spark0' to 'testUser'@'%'
@@ -1617,7 +1617,7 @@ public class AuthTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         // createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
-        UserIdentity user = createUserStmt.getUserIdent();
+        UserIdentity user = createUserStmt.getUserIdentity();
 
         // enable_password_reuse is false allow same password
         Config.enable_password_reuse = true;
@@ -1668,7 +1668,7 @@ public class AuthTest {
 
         // 2. check reuse
         Config.enable_password_reuse = false;
-        auth.checkPasswordReuse(createUserStmt.getUserIdent(), password);
+        auth.checkPasswordReuse(createUserStmt.getUserIdentity(), password);
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);

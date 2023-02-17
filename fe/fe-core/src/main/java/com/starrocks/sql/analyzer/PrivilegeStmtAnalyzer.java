@@ -262,12 +262,12 @@ public class PrivilegeStmtAnalyzer {
         }
 
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
+            analyseUser(stmt.getUserIdentity(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
              */
             stmt.setScramblePassword(
-                    analysePassword(stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.isPasswordPlain(),
+                    analysePassword(stmt.getUserIdentity(), stmt.getOriginalPassword(), stmt.isPasswordPlain(),
                             stmt instanceof AlterUserStmt));
             /*
              * IDENTIFIED WITH
@@ -277,7 +277,7 @@ public class PrivilegeStmtAnalyzer {
                     stmt.setUserForAuthPlugin(stmt.getAuthStringUnResolved());
                 } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPluginName())) {
                     // in this case, authString is password
-                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthStringUnResolved(),
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdentity(), stmt.getAuthStringUnResolved(),
                             stmt.isPasswordPlain(), stmt instanceof AlterUserStmt));
                 } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPluginName()) &&
                         GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {

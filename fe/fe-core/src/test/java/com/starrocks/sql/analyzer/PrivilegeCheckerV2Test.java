@@ -245,7 +245,7 @@ public class PrivilegeCheckerV2Test {
         AuthenticationManager authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdent();
+        testUser = createUserStmt.getUserIdentity();
 
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());

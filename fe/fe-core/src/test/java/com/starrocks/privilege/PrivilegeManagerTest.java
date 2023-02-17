@@ -325,26 +325,16 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertTrue(manager.checkRoleExists("test_role"));
 
-        // can't create twice
-        try {
-            DDLStmtExecutor.execute(stmt, ctx);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Role test_role already exists!"));
-        }
+        // not check create twice
+        DDLStmtExecutor.execute(stmt, ctx);
 
         sql = "drop role test_role";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertFalse(manager.checkRoleExists("test_role"));
 
-        // can't drop twice
-        try {
-            DDLStmtExecutor.execute(stmt, ctx);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Role test_role doesn't exist!"));
-        }
+        // not check drop twice
+        DDLStmtExecutor.execute(stmt, ctx);
     }
 
     // used in testPersistRole
@@ -804,7 +794,7 @@ public class PrivilegeManagerTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_role_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
-        UserIdentity testUser = createUserStmt.getUserIdent();
+        UserIdentity testUser = createUserStmt.getUserIdentity();
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
 

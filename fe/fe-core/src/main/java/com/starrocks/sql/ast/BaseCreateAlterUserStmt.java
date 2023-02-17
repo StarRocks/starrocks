@@ -21,7 +21,7 @@ import java.util.List;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public class BaseCreateAlterUserStmt extends DdlStmt {
-    protected UserIdentity userIdent;
+    protected UserIdentity userIdentity;
     protected String password;
     protected boolean isPasswordPlain;
     protected String authPluginName;
@@ -38,7 +38,7 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     protected byte[] scramblePassword;
 
     public BaseCreateAlterUserStmt(UserDesc userDesc, SetRoleType setRoleType, List<String> defaultRoles) {
-        this.userIdent = userDesc.getUserIdent();
+        this.userIdentity = userDesc.getUserIdentity();
         this.password = userDesc.getPassword();
         this.isPasswordPlain = userDesc.isPasswordPlain();
         this.authPluginName = userDesc.getAuthPlugin();
@@ -48,8 +48,8 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
         this.defaultRoles = defaultRoles;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public String getOriginalPassword() {
