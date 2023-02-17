@@ -774,6 +774,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
+
+    @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
+    private boolean enableRewriteSumByAssociativeRule = true;
+
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
     }

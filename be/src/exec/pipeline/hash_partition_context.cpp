@@ -17,9 +17,10 @@
 #include "exprs/expr.h"
 
 namespace starrocks::pipeline {
+using namespace starrocks::vectorized;
 
 Status HashPartitionContext::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
