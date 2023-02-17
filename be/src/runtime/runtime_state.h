@@ -276,6 +276,14 @@ public:
 
     bool enable_spill() const { return _query_options.enable_spilling; }
 
+    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
+
+    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+
+    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+
+    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

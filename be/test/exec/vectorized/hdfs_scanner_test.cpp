@@ -189,7 +189,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(chunk->num_rows(), 4);
@@ -300,33 +300,28 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
-    do {                                                                                  \
-        _debug_row_output = "";                                                           \
-        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
-        for (;;) {                                                                        \
-            chunk->reset();                                                               \
-            status = scanner->get_next(_runtime_state, &chunk);                           \
-            if (status.is_end_of_file()) {                                                \
-                break;                                                                    \
-            }                                                                             \
-            if (!status.ok()) {                                                           \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
-                break;                                                                    \
-            }                                                                             \
-            chunk->check_or_die();                                                        \
-            if (chunk->num_rows() > 0) {                                                  \
-                int rep = std::min(_debug_rows_per_call, (int)chunk->num_rows());         \
-                for (int i = 0; i < rep; i++) {                                           \
-                    std::cout << "row#" << i << ": " << chunk->debug_row(i) << std::endl; \
-                    _debug_row_output += chunk->debug_row(i);                             \
-                    _debug_row_output += '\n';                                            \
-                }                                                                         \
-                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
-            }                                                                             \
-            records += chunk->num_rows();                                                 \
-        }                                                                                 \
-    } while (0)
+#define READ_SCANNER_RETURN_ROWS(scanner, records)               \
+    do {                                                         \
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0); \
+        for (;;) {
+chunk->reset();
+status = scanner->get_next(_runtime_state, &chunk);
+if (status.is_end_of_file()) {
+    break;
+}
+if (!status.ok()) {
+    std::cout << "status not ok: " << status.get_error_msg() << std::endl;
+    break;
+}
+chunk->check_or_die();
+if (chunk->num_rows() > 0) {
+    std::cout << "row#0: " << chunk->debug_row(0) << std::endl;
+    EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());
+}
+records += chunk->num_rows();
+} // namespace starrocks::vectorized
+}
+while (0)
 
 #define READ_SCANNER_ROWS(scanner, exp)             \
     {                                               \
@@ -335,36 +330,36 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         EXPECT_EQ(records, exp);                    \
     }
 
-// ====================================================================================================
+    // ====================================================================================================
 
-static SlotDesc mtypes_orc_descs[] = {
-        {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
-        {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_tinyint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-        {"col_smallint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_SMALLINT)},
-        {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"col_bigint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_largeint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col0_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"PART_x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {""}};
+    static SlotDesc mtypes_orc_descs[] = {
+            {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
+            {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
+            {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col_tinyint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+            {"col_smallint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_SMALLINT)},
+            {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"col_bigint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"col_largeint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"col0_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col0_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"col1_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"PART_x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {""}};
 std::string mtypes_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
 
 static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -1068,7 +1063,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 

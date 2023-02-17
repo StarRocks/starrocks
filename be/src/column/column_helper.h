@@ -3,6 +3,8 @@
 #pragma once
 
 #include <utility>
+
+#include "column/vectorized_fwd.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -424,15 +426,16 @@ public:
 };
 
 // Hold a slice of chunk
+template <class Ptr = vectorized::ChunkUniquePtr>
 struct ChunkSlice {
-    ChunkUniquePtr chunk;
+    Ptr chunk;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    vectorized::ChunkPtr cutoff(size_t required_rows);
-    void reset(vectorized::ChunkUniquePtr input);
+    Ptr cutoff(size_t required_rows);
+    void reset(Ptr input);
 };
 
 } // namespace starrocks::vectorized
