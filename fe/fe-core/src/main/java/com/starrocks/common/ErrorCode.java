@@ -265,6 +265,8 @@ public enum ErrorCode {
             "Unknown catalog.db '%s'"),
     ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
             "Only support like 'function_pattern' syntax."),
+    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Dynamic history partition num must greater than 0"),
 
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
