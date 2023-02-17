@@ -604,6 +604,9 @@
     + [Build_Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Integration
+  + [Integrate with StarRocks](./integrations/intro.md)
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)
