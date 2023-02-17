@@ -4,7 +4,7 @@ This topic introduces how to integrate with StarRocks.
 
 ## BI tools
 
-[SuperSet](./superset_support.md)
+[Superset](./superset_support.md)
 
 ## Data Integration
 
@@ -23,8 +23,6 @@ This topic introduces how to integrate with StarRocks.
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
 [Apache Kafka](../loading/RoutineLoad.md)
-
-[Apache pulsar](../loading/RoutineLoad.md)
 
 ## Cluster Management
 
