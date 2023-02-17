@@ -151,7 +151,7 @@ public class SetPassVarTest {
         AuthenticationManager authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdent();
+        testUser = createUserStmt.getUserIdentity();
     }
     @Test
     public void testSetPasswordInNewPrivilege() throws Exception {

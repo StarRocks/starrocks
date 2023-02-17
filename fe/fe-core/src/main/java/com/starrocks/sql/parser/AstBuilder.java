@@ -4022,7 +4022,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropUserStatement(StarRocksParser.DropUserStatementContext context) {
         UserIdentity user = (UserIdentity) visit(context.user());
-        return new DropUserStmt(user);
+        return new DropUserStmt(user, context.EXISTS() != null);
     }
 
     @Override
@@ -4056,7 +4056,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
         }
-        return new AlterUserStmt(userDesc);
+        return new AlterUserStmt(userDesc, context.EXISTS() != null);
     }
 
     @Override
@@ -4092,13 +4092,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateRoleStatement(StarRocksParser.CreateRoleStatementContext context) {
         Identifier role = (Identifier) visit(context.identifierOrString());
-        return new CreateRoleStmt(role.getValue());
+        return new CreateRoleStmt(role.getValue(), context.NOT() != null);
     }
 
     @Override
     public ParseNode visitDropRoleStatement(StarRocksParser.DropRoleStatementContext context) {
         Identifier role = (Identifier) visit(context.identifierOrString());
-        return new DropRoleStmt(role.getValue());
+        return new DropRoleStmt(role.getValue(), context.EXISTS() != null);
     }
 
     @Override

@@ -130,7 +130,7 @@ public class AstToStringBuilder {
                 sb.append("ALTER");
             }
 
-            sb.append(" USER ").append(statement.getUserIdent());
+            sb.append(" USER ").append(statement.getUserIdentity());
             if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
                 if (statement.isPasswordPlain()) {
                     sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
