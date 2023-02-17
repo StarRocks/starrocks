@@ -318,7 +318,7 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 
 class SetMemTrackerForColumnPool {
 public:
-    SetMemTrackerForColumnPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+    SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
 
     template <typename Pool>
     void operator()() {
@@ -326,7 +326,7 @@ public:
     }
 
 private:
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
 Status ExecEnv::init_mem_tracker() {
@@ -389,7 +389,11 @@ Status ExecEnv::init_mem_tracker() {
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
+<<<<<<< HEAD
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
+=======
+    ForEach<ColumnPoolList>(op);
+>>>>>>> b241adc46 ([BugFix] let _column_pool_memory_tracker be shared_ptr to avoid early deleted. (#17687))
     _init_storage_page_cache();
     return Status::OK();
 }
