@@ -82,15 +82,8 @@ public class StarOSAgent {
     }
 
     public boolean init(StarManagerServer server) {
-        // check if Config.starmanager_address == FE address
-        String[] starMgrAddr = Config.starmgr_address.split(":");
-        if (!starMgrAddr[0].equals("127.0.0.1")) {
-            LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
-            return false;
-        }
-
         client = new StarClient(server);
-        client.connectServer(Config.starmgr_address);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
         return true;
     }
 
@@ -107,7 +100,7 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            LOG.warn("Failed to get serviceId from starMgr. Error: {}", e);
+            LOG.warn("Failed to get serviceId from starMgr. Error:", e);
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
@@ -116,7 +109,8 @@ public class StarOSAgent {
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
             EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
-            FileStoreType fsType = FileStoreType.valueOf(enumDescriptor.findValueByName(Config.default_fs_type).getNumber());
+            FileStoreType fsType = FileStoreType.valueOf(
+                    enumDescriptor.findValueByName(Config.cloud_native_storage_type).getNumber());
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
