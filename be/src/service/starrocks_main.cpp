@@ -103,6 +103,7 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
         auto s = Aws::Utils::Logging::GetLogLevelName(levels[idx]);
         if (s == slevel) {
             level = levels[idx];
+            break;
         }
     }
     return level;

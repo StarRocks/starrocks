@@ -764,7 +764,6 @@ CONF_Bool(connector_scan_node_always_shared_scan, "true");
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 CONF_String(aws_sdk_logging_trace_level, "trace");
 
-
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
