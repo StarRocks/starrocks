@@ -53,7 +53,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
             // empty null map with non-empty elements
-            std::dynamic_pointer_cast<MapColumn>(data_column)->empty_null_map(nullable->null_column());
+            data_column->empty_null_complex_column(
+                    nullable->null_column()->get_data(),
+                    std::dynamic_pointer_cast<MapColumn>(data_column)->offsets_column()->get_data());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
