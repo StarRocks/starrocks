@@ -623,4 +623,26 @@ TEST(FixedLengthColumnTest, test_replicate) {
     ASSERT_EQ(c2->get(4).get_int32(), 3);
 }
 
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_fill_range) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5};
+    void* buff = values.data();
+    size_t length = values.size() * sizeof(values[0]);
+
+    auto c1 = Int64Column::create();
+    ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
+    ASSERT_EQ(values.size(), c1->size());
+
+    std::vector<int64_t> ids{0, 0, 0};
+    std::vector<uint8_t> filter{1, 0, 1, 0, 1};
+    c1->fill_range(ids, filter);
+
+    auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
+    ASSERT_EQ(0, p[0]);
+    ASSERT_EQ(values[1], p[1]);
+    ASSERT_EQ(0, p[2]);
+    ASSERT_EQ(values[3], p[3]);
+    ASSERT_EQ(0, p[4]);
+}
+
 } // namespace starrocks

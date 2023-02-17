@@ -1208,7 +1208,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
-            get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns);
+            get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr);
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1221,7 +1221,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
-            get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
+            get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr);
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
@@ -3350,7 +3350,7 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, si
 
 Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<Column>>* columns) {
+                                        vector<std::unique_ptr<Column>>* columns, void* state) {
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
     {
         std::lock_guard<std::mutex> l(_rowsets_lock);
@@ -3358,7 +3358,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             rssid_to_rowsets.insert(rowset);
         }
     }
-    if (with_default) {
+    if (with_default && state == nullptr) {
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);
             if (tablet_column.has_default_value()) {
@@ -3414,6 +3414,34 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
     }
+    if (state != nullptr && with_default) {
+        AutoIncrementPartialUpdateState* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
+        Rowset* rowset = auto_increment_state->rowset;
+        uint32_t id = auto_increment_state->id;
+        const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
+        uint32_t segment_id = auto_increment_state->segment_id;
+
+        std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
+        auto segment = Segment::open(fs, seg_path, segment_id, auto_increment_state->schema);
+        if (!segment.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
+            return segment.status();
+        }
+        if ((*segment)->num_rows() == 0) {
+            return Status::OK();
+        }
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
+        iter_opts.read_file = read_file.get();
+        for (auto i = 0; i < column_ids.size(); ++i) {
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(id));
+            RETURN_IF_ERROR(col_iter->init(iter_opts));
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+        }
+    }
     return Status::OK();
 }
 
@@ -3426,7 +3454,7 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const Column
 Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upsert,
                                                            EditVersion* read_version,
                                                            std::vector<uint64_t>* rss_rowids) {
-    {
+    if (read_version != nullptr) {
         // get next_rowset_id and read_version to identify conflict
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {

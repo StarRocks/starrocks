@@ -394,7 +394,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = db.getTable(stmt.getTableName());
-            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table);
+            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, false);
             tableId = table.getId();
         } finally {
             db.readUnlock();

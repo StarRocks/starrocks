@@ -730,4 +730,23 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
 }
 
+AgentStatus drop_auto_increment_map(TTableId table_id) {
+    // always success
+    StorageEngine::instance()->remove_increment_map_by_table_id(table_id);
+    return STARROCKS_SUCCESS;
+}
+
+void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
+                                      ExecEnv* exec_env) {
+    const TDropAutoIncrementMapReq& drop_auto_increment_map_req = agent_task_req->task_req;
+    LOG(INFO) << "drop auto increment map task tableid=" << drop_auto_increment_map_req.table_id;
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+
+    drop_auto_increment_map(drop_auto_increment_map_req.table_id);
+    LOG(INFO) << "drop auto increment map task success, tableid=" << drop_auto_increment_map_req.table_id;
+    unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+}
+
 } // namespace starrocks
