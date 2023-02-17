@@ -116,7 +116,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 // is to say, counting bytes which do not match 10xx_xxxx pattern.
 // All 0xxx_xxxx, 110x_xxxx, 1110_xxxx and 1111_0xxx are greater than 1011_1111 when use int8_t arithmetic,
 // so just count bytes greater than 1011_1111 in a byte string as the result of utf8_length.
-static int utf8_len(const char* begin, const char* end) {
+inline static int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
 #if defined(__AVX2__)
