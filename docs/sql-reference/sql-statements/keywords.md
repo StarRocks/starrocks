@@ -50,6 +50,7 @@ Following are the reserved keywords supported by StarRocks.
 - CANCEL
 - CASE
 - CHAR
+- CHARACTER
 - CHECK
 - COLLATE
 - COLUMN

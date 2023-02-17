@@ -319,6 +319,9 @@
       + [bitnot](./sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](./sql-reference/sql-functions/bit-functions/bitor.md)
       + [bitxor](./sql-reference/sql-functions/bit-functions/bitxor.md)
+      + [bit_shift_left](./sql-reference/sql-functions/bit-functions/bit_shift_left.md)
+      + [bit_shift_right](./sql-reference/sql-functions/bit-functions/bit_shift_right.md)
+      + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
