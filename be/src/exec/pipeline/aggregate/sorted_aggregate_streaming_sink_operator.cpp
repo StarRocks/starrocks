@@ -37,6 +37,10 @@ void SortedAggregateStreamingSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
+bool SortedAggregateStreamingSinkOperator::need_input() const {
+    return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+}
+
 bool SortedAggregateStreamingSinkOperator::is_finished() const {
     return _is_finished || _aggregator->is_finished();
 }
