@@ -161,6 +161,17 @@ public class CreateTableTest {
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zlib');"));
 
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("create table test.tb12(col1 bigint AUTO_INCREMENT, \n"
+                        + "col2 varchar(10)) \n"
+                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("create table test.tb13(col1 bigint, col2 bigint AUTO_INCREMENT) \n"
+                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
@@ -228,6 +239,32 @@ public class CreateTableTest {
                         () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
                                 + "distributed by hash(key1) buckets 1\n"
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(IllegalArgumentException.class, "The AUTO_INCREMENT column must be BIGINT",
+                        () -> createTable("create table test.atbl9(col1 int AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(AnalysisException.class, "AUTO_INCREMENT column col1 must be NOT NULL",
+                        () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(IllegalArgumentException.class,
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
+                        () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(DdlException.class, "Table with AUTO_INCREMENT column must use Replicated Storage",
+                        () -> createTable("create table test.atbl12(col1 bigint AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
+
     }
 
     @Test

@@ -12,20 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import java.util.List;
 
 public class DropRoleStmt extends DdlStmt {
     private final List<String> roles;
+    private final boolean ifExists;
 
-    public DropRoleStmt(List<String> roles) {
+    public DropRoleStmt(List<String> roles, boolean ifExists) {
         this.roles = roles;
+        this.ifExists = ifExists;
     }
 
     public List<String> getRoles() {
         return roles;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override

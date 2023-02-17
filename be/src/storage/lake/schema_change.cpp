@@ -260,8 +260,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
-    RETURN_IF_ERROR(writer->flush());
-    RETURN_IF_ERROR(writer->finish());
+    RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
 
     // update new rowset meta
     for (auto& f : writer->files()) {

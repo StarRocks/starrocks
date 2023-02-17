@@ -245,7 +245,7 @@ public class PrivilegeCheckerV2Test {
         AuthenticationManager authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
-        testUser = createUserStmt.getUserIdent();
+        testUser = createUserStmt.getUserIdentity();
 
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
@@ -2433,7 +2433,7 @@ public class PrivilegeCheckerV2Test {
                     "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Can not grant/revoke root or cluster_admin role except root user", e.getMessage());
+            Assert.assertEquals("Can not grant root or cluster_admin role except root user", e.getMessage());
         }
 
         try {
@@ -2441,7 +2441,7 @@ public class PrivilegeCheckerV2Test {
                     "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Can not grant/revoke root or cluster_admin role except root user", e.getMessage());
+            Assert.assertEquals("Can not grant root or cluster_admin role except root user", e.getMessage());
         }
 
         sql = "drop role r1";

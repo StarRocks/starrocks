@@ -484,12 +484,14 @@ ChunkPtr Aggregator::poll_chunk_buffer() {
     }
     ChunkPtr chunk = _buffer.front();
     _buffer.pop();
+    _buffer_size--;
     return chunk;
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     _buffer.push(chunk);
+    _buffer_size++;
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -687,9 +689,18 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     auto use_intermediate_as_output = _use_intermediate_as_output();
     const auto& slots = _intermediate_tuple_desc->slots();
 
+    // build group by columns
+    size_t num_rows = input_chunk->num_rows();
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
-        result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        // materialize group by const columns
+        if (_group_by_columns[i]->is_constant()) {
+            auto res =
+                    ColumnHelper::unfold_const_column(_group_by_types[i].result_type, num_rows, _group_by_columns[i]);
+            result_chunk->append_column(std::move(res), slots[i]->id());
+        } else {
+            result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        }
     }
 
     if (!_agg_fn_ctxs.empty()) {
@@ -870,9 +881,6 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
         ASSIGN_OR_RETURN(_group_by_columns[i], _group_by_expr_ctxs[i]->evaluate(chunk));
         DCHECK(_group_by_columns[i] != nullptr);
         if (_group_by_columns[i]->is_constant()) {
-            // If group by column is constant, we disable streaming aggregate.
-            // Because we don't want to send const column to exchange node
-            _streaming_preaggregation_mode = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {

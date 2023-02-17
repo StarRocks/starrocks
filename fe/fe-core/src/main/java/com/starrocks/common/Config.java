@@ -2021,4 +2021,10 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static boolean enable_auto_tablet_distribution = false;
+
+    /**
+     * default size of minimum cache size of auto increment id allocation
+     **/
+    @ConfField(mutable = true)
+    public static long auto_increment_cache_size = 100000;
 }

@@ -32,6 +32,8 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -41,6 +43,7 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -97,7 +100,7 @@ public class PrivilegeManager {
                     .expireAfterAccess(CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN, TimeUnit.MINUTES)
                     .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollection>() {
                         @Override
-                        public PrivilegeCollection load(Pair<UserIdentity, Set<Long>> userIdentitySetPair)
+                        public PrivilegeCollection load(@NotNull Pair<UserIdentity, Set<Long>> userIdentitySetPair)
                                 throws Exception {
                             return loadPrivilegeCollection(userIdentitySetPair.first, userIdentitySetPair.second);
                         }
@@ -596,7 +599,6 @@ public class PrivilegeManager {
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-            invalidateRolesInCacheRoleUnlocked(roleId);
 
             for (String parentRoleName : parentRoleNameList) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRoleName);
@@ -628,6 +630,7 @@ public class PrivilegeManager {
             RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             globalStateMgr.getEditLog().logUpdateRolePrivilege(info);
+            invalidateRolesInCacheRoleUnlocked(roleId);
             LOG.info("revoke role {}[{}] from role {}[{}]",
                     parentRoleNameList.toString(), parentRoleIdList.toString(), roleName, roleId);
         } finally {
@@ -1287,20 +1290,41 @@ public class PrivilegeManager {
         PrivilegeCollection collection = new PrivilegeCollection();
         userReadLock();
         try {
-            UserPrivilegeCollection userCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            collection.merge(userCollection);
+            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            collection.merge(userPrivilegeCollection);
             roleReadLock();
             try {
                 // 1. get all parent roles by default, but can be specified with `SET ROLE` statement
                 if (roleIds == null) {
-                    roleIds = userCollection.getAllRoles();
+                    roleIds = userPrivilegeCollection.getAllRoles();
                 }
 
                 // 2. get all predecessors base on step 1
-                roleIds = getAllPredecessorsUnlocked(roleIds);
+                Set<Long> parentRoleIds = new HashSet<>();
+                for (Long roleId : roleIds) {
+                    getAllPredecessorsInner(roleId, parentRoleIds);
+                }
 
                 // 3. merge privilege collections of all predecessors
                 for (long roleId : roleIds) {
+                    // Because the drop role is an asynchronous behavior, the parentRole may not exist.
+                    // Here, for the role that does not exist, choose to ignore it directly
+                    RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
+
+                    // The main purpose of the secondary verification of UserPrivilegeCollection here is.
+                    // Because the user's permissions may be revoke while the session is not disconnected,
+                    // the role list stored in the session cannot be changed at this time
+                    // (because the current session and the session initiated by the revoke operation may not be the same),
+                    // but for the user The operation will cause the cache to invalid, so in the next load process after
+                    // the cache fails, we need to determine whether the user still has access to this role.
+                    if (rolePrivilegeCollection != null && userPrivilegeCollection.getAllRoles().contains(roleId)) {
+                        collection.merge(rolePrivilegeCollection);
+                    }
+                }
+
+                for (long roleId : parentRoleIds) {
+                    // Because the drop role is an asynchronous behavior, the parentRole may not exist.
+                    // Here, for the role that does not exist, choose to ignore it directly
                     RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (rolePrivilegeCollection != null) {
                         collection.merge(rolePrivilegeCollection);
@@ -1333,6 +1357,7 @@ public class PrivilegeManager {
             if (roleIds == null) {
                 roleIds = getRoleIdsByUser(pair.first);
             }
+
             for (long badRoleId : badRoles) {
                 if (roleIds.contains(badRoleId)) {
                     badKeys.add(pair);
@@ -1371,8 +1396,18 @@ public class PrivilegeManager {
         return userCollection;
     }
 
-    public Map<UserIdentity, UserPrivilegeCollection> getUserToPrivilegeCollection() {
-        return userToPrivilegeCollection;
+    public List<String> getAllUsers() {
+        userReadLock();
+        try {
+            List<String> users = Lists.newArrayList();
+            Set<UserIdentity> userIdentities = userToPrivilegeCollection.keySet();
+            for (UserIdentity userIdentity : userIdentities) {
+                users.add(userIdentity.toString());
+            }
+            return users;
+        } finally {
+            userReadUnlock();
+        }
     }
 
     // return null if not exists
@@ -1393,11 +1428,119 @@ public class PrivilegeManager {
         return collection;
     }
 
-    public Map<Long, RolePrivilegeCollection> getRoleIdToPrivilegeCollection() {
-        return roleIdToPrivilegeCollection;
+    public List<String> getGranteeRolesToRole(String roleName) {
+        roleReadLock();
+        try {
+            Long roleId = getRoleIdByNameAllowNull(roleName);
+            if (roleId == null) {
+                throw new SemanticException("cannot find role " + roleName);
+            }
+
+            RolePrivilegeCollection rolePrivilegeCollection =
+                    getRolePrivilegeCollectionUnlocked(roleId, true);
+
+            List<String> parentRoleNameList = new ArrayList<>();
+            for (Long parentRoleId : rolePrivilegeCollection.getParentRoleIds()) {
+                // Because the drop role is an asynchronous behavior, the parentRole may not exist.
+                // Here, for the role that does not exist, choose to ignore it directly
+                RolePrivilegeCollection parentRolePriv =
+                        getRolePrivilegeCollectionUnlocked(parentRoleId, false);
+                if (parentRolePriv != null) {
+                    parentRoleNameList.add(parentRolePriv.getName());
+                }
+            }
+
+            if (!parentRoleNameList.isEmpty()) {
+                return Lists.newArrayList(roleName, null,
+                        AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, roleName)));
+            }
+            return null;
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            roleReadUnlock();
+        }
     }
 
-    public List<PrivilegeType> analyzeActionSet(ObjectType objectType, ActionSet actionSet) throws PrivilegeException {
+    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByRole(String roleName) {
+        roleReadLock();
+        try {
+            Long roleId = getRoleIdByNameAllowNull(roleName);
+            if (roleId == null) {
+                throw new SemanticException("cannot find role " + roleName);
+            }
+
+            RolePrivilegeCollection rolePrivilegeCollection =
+                    getRolePrivilegeCollectionUnlocked(roleId, true);
+            return rolePrivilegeCollection.getTypeToPrivilegeEntryList();
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public List<String> getGranteeRoleToUser(UserIdentity userIdentity) {
+        userReadLock();
+        try {
+            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            Set<Long> allRoles = userPrivilegeCollection.getAllRoles();
+
+            roleReadLock();
+            try {
+                List<String> parentRoleNameList = new ArrayList<>();
+                for (Long roleId : allRoles) {
+                    // Because the drop role is an asynchronous behavior, the parentRole may not exist.
+                    // Here, for the role that does not exist, choose to ignore it directly
+                    RolePrivilegeCollection parentRolePriv =
+                            getRolePrivilegeCollectionUnlocked(roleId, false);
+                    if (parentRolePriv != null) {
+                        parentRoleNameList.add(parentRolePriv.getName());
+                    }
+                }
+
+                if (!parentRoleNameList.isEmpty()) {
+                    return Lists.newArrayList(userIdentity.toString(), null,
+                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, userIdentity)));
+                }
+                return null;
+            } finally {
+                roleReadUnlock();
+            }
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByUser(
+            UserIdentity userIdentity) {
+        userReadLock();
+        try {
+            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            return userPrivilegeCollection.getTypeToPrivilegeEntryList();
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public List<String> getAllRoles() {
+        roleReadLock();
+        try {
+            List<String> roles = new ArrayList<>();
+            for (RolePrivilegeCollection rolePrivilegeCollection : roleIdToPrivilegeCollection.values()) {
+                roles.add(rolePrivilegeCollection.getName());
+            }
+            return roles;
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public List<PrivilegeType> analyzeActionSet(ObjectType objectType, ActionSet actionSet) {
         List<PrivilegeType> privilegeTypes = provider.getAvailablePrivType(objectType);
         List<PrivilegeType> actions = new ArrayList<>();
         for (PrivilegeType actionName : privilegeTypes) {
@@ -1426,6 +1569,14 @@ public class PrivilegeManager {
             Map<String, Long> roleNameToBeCreated = new HashMap<>();
             Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
+                if (roleNameToId.containsKey(roleName)) {
+                    // Existence verification has been performed in the Analyzer stage. If it exists here,
+                    // it may be that other threads have performed the same operation, and return directly here
+                    LOG.info("Operation CREATE ROLE failed for " + roleName + " : role " + roleName + " already exists");
+                    return;
+                }
+
+
                 long roleId = globalStateMgr.getNextId();
                 RolePrivilegeCollection collection = new RolePrivilegeCollection(
                         roleName, RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
@@ -1471,6 +1622,14 @@ public class PrivilegeManager {
             List<String> roleNameToBeDropped = new ArrayList<>();
             Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
+                if (!roleNameToId.containsKey(roleName)) {
+                    // Existence verification has been performed in the Analyzer stage. If it not exists here,
+                    // it may be that other threads have performed the same operation, and return directly here
+                    LOG.info("Operation DROP ROLE failed for " + roleName + " : role " + roleName + " not exists");
+
+                    return;
+                }
+
                 long roleId = getRoleIdByNameNoLock(roleName);
                 RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
                 if (!collection.isRemovable()) {
@@ -1648,18 +1807,16 @@ public class PrivilegeManager {
         userWriteLock();
         try {
             // 1. remove invalidate object of users
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> mapIter =
-                    userToPrivilegeCollection.entrySet().iterator();
-            while (mapIter.hasNext()) {
-                mapIter.next().getValue().removeInvalidObject(globalStateMgr);
+            for (Map.Entry<UserIdentity, UserPrivilegeCollection> userPrivEntry : userToPrivilegeCollection.entrySet()) {
+                userPrivEntry.getValue().removeInvalidObject(globalStateMgr);
             }
 
             // 2. remove invalidate roles of users
             roleReadLock();
             try {
-                mapIter = userToPrivilegeCollection.entrySet().iterator();
-                while (mapIter.hasNext()) {
-                    removeInvalidRolesUnlocked(mapIter.next().getValue().getAllRoles());
+                for (Map.Entry<UserIdentity, UserPrivilegeCollection> userPrivEntry : userToPrivilegeCollection.entrySet()) {
+                    removeInvalidRolesUnlocked(userPrivEntry.getValue().getAllRoles());
+                    removeInvalidRolesUnlocked(userPrivEntry.getValue().getDefaultRoleIds());
                 }
             } finally {
                 roleReadUnlock();
@@ -1674,10 +1831,8 @@ public class PrivilegeManager {
         try {
             roleWriteLock();
             try {
-                Iterator<Map.Entry<Long, RolePrivilegeCollection>> mapIter =
-                        roleIdToPrivilegeCollection.entrySet().iterator();
-                while (mapIter.hasNext()) {
-                    mapIter.next().getValue().removeInvalidObject(globalStateMgr);
+                for (Map.Entry<Long, RolePrivilegeCollection> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
+                    rolePrivEntry.getValue().removeInvalidObject(globalStateMgr);
                 }
             } finally {
                 roleWriteUnlock();
@@ -1689,10 +1844,8 @@ public class PrivilegeManager {
         // 4. remove invalidate parent roles & sub roles
         roleWriteLock();
         try {
-            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
-                    roleIdToPrivilegeCollection.entrySet().iterator();
-            while (roleIter.hasNext()) {
-                RolePrivilegeCollection collection = roleIter.next().getValue();
+            for (Map.Entry<Long, RolePrivilegeCollection> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
+                RolePrivilegeCollection collection = rolePrivEntry.getValue();
                 removeInvalidRolesUnlocked(collection.getParentRoleIds());
                 removeInvalidRolesUnlocked(collection.getSubRoleIds());
             }
@@ -1781,7 +1934,7 @@ public class PrivilegeManager {
         return result;
     }
 
-    private void getAllPredecessorsInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
+    protected void getAllPredecessorsInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
         RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, false);
         if (collection == null) { // this role has been dropped
             resultSet.remove(roleId);

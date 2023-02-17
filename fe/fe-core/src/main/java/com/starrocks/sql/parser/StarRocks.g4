@@ -317,7 +317,7 @@ createTableStatement
      ;
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? (defaultDesc | AUTO_INCREMENT)? comment?
     ;
 
 charsetName
@@ -1211,12 +1211,12 @@ createUserStatement
     ;
 
 dropUserStatement
-    : DROP USER user
+    : DROP USER (IF EXISTS)? user
     ;
 
 alterUserStatement
-    : ALTER USER user authOption
-    | ALTER USER user DEFAULT ROLE (NONE| ALL | roleList)
+    : ALTER USER (IF EXISTS)? user authOption
+    | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
     ;
 
 showUserStatement
@@ -1233,11 +1233,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE roleList
+    : CREATE ROLE (IF NOT EXISTS)? roleList
     ;
 
 dropRoleStatement
-    : DROP ROLE roleList
+    : DROP ROLE (IF EXISTS)? roleList
     ;
 
 showRolesStatement

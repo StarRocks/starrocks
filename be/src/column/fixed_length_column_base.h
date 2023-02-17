@@ -148,6 +148,8 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+    Status fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter);
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to

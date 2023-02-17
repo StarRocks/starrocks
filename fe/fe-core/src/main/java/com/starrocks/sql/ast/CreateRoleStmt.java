@@ -19,13 +19,19 @@ import java.util.List;
 
 public class CreateRoleStmt extends DdlStmt {
     private final List<String> roles;
+    private final boolean ifNotExists;
 
-    public CreateRoleStmt(List<String> roles) {
+    public CreateRoleStmt(List<String> roles, boolean ifNotExists) {
         this.roles = roles;
+        this.ifNotExists = ifNotExists;
     }
 
     public List<String> getRoles() {
         return roles;
+    }
+
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
     @Override

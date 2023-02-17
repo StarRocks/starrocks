@@ -35,6 +35,7 @@
 #include "exec/tablet_sink.h"
 
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <utility>
 
@@ -54,6 +55,8 @@
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "simd/simd.h"
+#include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
@@ -68,7 +71,9 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
-namespace starrocks::stream_load {
+namespace starrocks {
+
+namespace stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
@@ -189,6 +194,8 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
+    request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
+    request.set_abort_delete(_parent->_abort_delete);
     for (auto& tablet : _index_tablets_map[index_id]) {
         auto ptablet = request.add_tablets();
         ptablet->Swap(&tablet);
@@ -828,6 +835,10 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _keys_type = table_sink.keys_type;
+    _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
+    _miss_auto_increment_column = table_sink.miss_auto_increment_column;
+    _abort_delete = table_sink.abort_delete;
+    _auto_increment_slot_id = table_sink.auto_increment_slot_id;
     if (table_sink.__isset.write_quorum_type) {
         _write_quorum_type = table_sink.write_quorum_type;
     }
@@ -876,6 +887,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
     _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+    _alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -1142,6 +1154,10 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
         }
 
         {
+            SCOPED_TIMER(_alloc_auto_increment_timer);
+            RETURN_IF_ERROR(_fill_auto_increment_id(chunk));
+        }
+        {
             SCOPED_RAW_TIMER(&_validate_data_ns);
             _validate_selection.assign(num_rows, VALID_SEL_OK);
             _validate_data(state, chunk);
@@ -1348,6 +1364,57 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     } else {
         return Status::OK();
     }
+}
+
+Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
+    if (_auto_increment_slot_id == -1) {
+        return Status::OK();
+    }
+    _has_auto_increment = true;
+
+    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
+
+    return Status::OK();
+}
+
+Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescriptor* slot, int64_t table_id) {
+    ColumnPtr& col = chunk->get_column_by_slot_id(slot->id());
+    Status st;
+
+    // For simplicity, we set NULL Literal in auto increment column when planning if the user does not specify a value.
+    // We reuse NullableColumn to represent the auto-increment column because NullableColumn
+    // has null_column_data to indicate the which row has the null value. It means that we should replace the auto increment
+    // column value of this row with a system-generated value.
+    if (!col->is_nullable()) {
+        return Status::OK();
+    }
+
+    ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
+    std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+
+    uint32_t null_rows = SIMD::count_nonzero(filter);
+
+    switch (slot->type().type) {
+    case TYPE_BIGINT: {
+        std::vector<int64_t> ids(null_rows);
+        if (!_miss_auto_increment_column) {
+            RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, null_rows, ids));
+        } else {
+            // partial update does not specify an auto-increment column,
+            // it will be allocate in DeltaWriter.
+            ids.assign(null_rows, 0);
+        }
+        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))->fill_range(ids, filter));
+        break;
+    }
+    default:
+        auto msg = fmt::format("illegal type size for auto-increment column");
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+
+    return Status::OK();
 }
 
 bool OlapTableSink::is_close_done() {
@@ -1568,12 +1635,37 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             _validate_selection[j] &= 0x1;
         }
 
+        // update_column for auto increment column.
+        if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            // If _null_expr_in_auto_increment == true, it means that user specify a null value in auto
+            // increment column, we abort the entire chunk and append a single error msg. Because be know
+            // nothing about whether this row is specified by the user as null or setted during planning.
+            if (nullable->has_null() && _null_expr_in_auto_increment) {
+                for (size_t j = 0; j < num_rows; ++j) {
+                    _validate_selection[j] = VALID_SEL_FAILED;
+                }
+                std::stringstream ss;
+                ss << "NULL value in auto increment column '" << desc->col_name() << "'";
+#if BE_TEST
+                LOG(INFO) << ss.str();
+#else
+                if (!state->has_reached_max_error_msg_num()) {
+                    state->append_error_msg_to_file("", ss.str());
+                }
+#endif
+            }
+            chunk->update_column(nullable->data_column(), desc->id());
+        }
+
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
             ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
-        } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
+            // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
+        } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
+                   (!_has_auto_increment || _auto_increment_slot_id != desc->id())) {
             auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
@@ -1713,4 +1805,5 @@ Status OlapTableSink::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace starrocks::stream_load
+} // namespace stream_load
+} // namespace starrocks

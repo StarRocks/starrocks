@@ -50,7 +50,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
-import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
@@ -76,7 +75,6 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -664,17 +662,6 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, ConnectContext context) {
             ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdent();
-            if (user != null) {
-                user.analyze();
-            } else if (!statement.isAll()) {
-                statement.setUserIdent(context.getCurrentUserIdentity());
-            }
             return null;
         }
 

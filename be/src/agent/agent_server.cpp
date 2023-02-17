@@ -107,6 +107,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_release_snapshot;
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
+    std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -197,6 +198,9 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 1, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_update_tablet_meta_info);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 1, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_drop_auto_increment_map);
+
 #ifndef BE_TEST
         // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
         // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
@@ -253,6 +257,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_release_snapshot->shutdown();
         _thread_pool_move_dir->shutdown();
         _thread_pool_update_tablet_meta_info->shutdown();
+        _thread_pool_drop_auto_increment_map->shutdown();
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
@@ -319,6 +324,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::RELEASE_SNAPSHOT, release_snapshot_req);
             HANDLE_TYPE(TTaskType::MOVE, move_dir_req);
             HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, update_tablet_meta_info_req);
+            HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -435,6 +441,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::UPDATE_TABLET_META_INFO, all_tasks, run_update_meta_info_task,
                         UpdateTabletMetaInfoAgentTaskRequest, update_tablet_meta_info_req, _exec_env);
             break;
+        case TTaskType::DROP_AUTO_INCREMENT_MAP:
+            HANDLE_TASK(TTaskType::DROP_AUTO_INCREMENT_MAP, all_tasks, run_drop_auto_increment_map_task,
+                        DropAutoIncrementMapAgentTaskRequest, drop_auto_increment_map_req, _exec_env);
+            break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
             // should not run here
@@ -536,6 +546,8 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         return _thread_pool_alter_tablet.get();
     case TTaskType::CLEAR_TRANSACTION_TASK:
         return _thread_pool_clear_transaction.get();
+    case TTaskType::DROP_AUTO_INCREMENT_MAP:
+        return _thread_pool_drop_auto_increment_map.get();
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:
     case TTaskType::ROLLUP:

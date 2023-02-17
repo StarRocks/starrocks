@@ -506,6 +506,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return true;
     }
 
+    public boolean hasAutoIncrementColumn() {
+        List<Column> columns = this.getFullSchema();
+        for (Column col : columns) {
+            if (col.isAutoIncrement()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * onCreate is called when this table is created
      */

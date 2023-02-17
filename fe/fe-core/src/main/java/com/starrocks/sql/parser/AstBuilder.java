@@ -707,6 +707,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.NULL() != null) {
             isAllowNull = true;
         }
+        Boolean isAutoIncrement = null;
+        if (context.AUTO_INCREMENT() != null) {
+            isAutoIncrement = true;
+        }
+        if (isAutoIncrement != null && isAllowNull != null && isAllowNull == true) {
+            throw new ParsingException("AUTO_INCREMENT column %s must be NOT NULL ", columnName);
+        }
+        if (isAutoIncrement != null) {
+            isAllowNull = false;
+        }
         ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
         final StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
         if (defaultDescContext != null) {
@@ -726,7 +736,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
-                comment);
+                isAutoIncrement, comment);
     }
 
     @Override
@@ -3102,6 +3112,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddColumnClause(StarRocksParser.AddColumnClauseContext context) {
         ColumnDef columnDef = getColumnDef(context.columnDesc());
+        if (columnDef.isAutoIncrement()) {
+            throw new IllegalArgumentException(
+                "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+        }
         ColumnPosition columnPosition = null;
         if (context.FIRST() != null) {
             columnPosition = ColumnPosition.FIRST;
@@ -3119,6 +3133,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddColumnsClause(StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
+        for (ColumnDef columnDef : columnDefs) {
+            if (columnDef.isAutoIncrement()) {
+                throw new IllegalArgumentException(
+                    "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+            }
+        }
         String rollupName = null;
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
@@ -3139,6 +3159,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitModifyColumnClause(StarRocksParser.ModifyColumnClauseContext context) {
         ColumnDef columnDef = getColumnDef(context.columnDesc());
+        if (columnDef.isAutoIncrement()) {
+            throw new IllegalArgumentException(
+                "MODIFY COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+        }
         ColumnPosition columnPosition = null;
         if (context.FIRST() != null) {
             columnPosition = ColumnPosition.FIRST;
@@ -3998,7 +4022,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropUserStatement(StarRocksParser.DropUserStatementContext context) {
         UserIdentity user = (UserIdentity) visit(context.user());
-        return new DropUserStmt(user);
+        return new DropUserStmt(user, context.EXISTS() != null);
     }
 
     @Override
@@ -4032,7 +4056,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             userDesc = new UserDesc(user, authOption.getAuthPlugin(), authOption.getAuthString(),
                     authOption.isPasswordPlain());
         }
-        return new AlterUserStmt(userDesc);
+        return new AlterUserStmt(userDesc, context.EXISTS() != null);
     }
 
     @Override
@@ -4070,7 +4094,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> roles = new ArrayList<>();
         roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
                 s -> ((Identifier) s).getValue()).collect(toList()));
-        return new CreateRoleStmt(roles);
+        return new CreateRoleStmt(roles, context.NOT() != null);
     }
 
     @Override
@@ -4078,7 +4102,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> roles = new ArrayList<>();
         roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
                 s -> ((Identifier) s).getValue()).collect(toList()));
-        return new DropRoleStmt(roles);
+        return new DropRoleStmt(roles, context.EXISTS() != null);
     }
 
     @Override

@@ -253,6 +253,14 @@ public class ColumnTest {
     }
 
     @Test
+    public void testAutoIncrement() {
+        Column col = new Column("col", ScalarType.createType(PrimitiveType.BIGINT), true, null, Boolean.FALSE,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        col.setIsAutoIncrement(true);
+        Assert.assertTrue(col.isAutoIncrement() == true);
+    }
+
+    @Test
     public void testSchemaChangeAllowedInvolvingDecimalv3() throws DdlException {
         Column decimalColumn =
                 new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,

@@ -86,6 +86,7 @@ import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
+import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
 import com.starrocks.task.SnapshotTask;
@@ -218,7 +219,8 @@ public class LeaderImpl {
                 if (taskType != TTaskType.MAKE_SNAPSHOT && taskType != TTaskType.UPLOAD
                         && taskType != TTaskType.DOWNLOAD && taskType != TTaskType.MOVE
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
-                        && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO) {
+                        && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
+                        && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP) {
                     return result;
                 }
             }
@@ -277,6 +279,9 @@ public class LeaderImpl {
                     break;
                 case UPDATE_TABLET_META_INFO:
                     finishUpdateTabletMeta(task, request);
+                    break;
+                case DROP_AUTO_INCREMENT_MAP:
+                    finishDropAutoIncrementMapTask(task, request);
                     break;
                 default:
                     break;
@@ -760,6 +765,22 @@ public class LeaderImpl {
         DirMoveTask dirMoveTask = (DirMoveTask) task;
         if (GlobalStateMgr.getCurrentState().getBackupHandler().handleDirMoveTask(dirMoveTask, request)) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.MOVE, task.getSignature());
+        }
+    }
+
+    private void finishDropAutoIncrementMapTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            DropAutoIncrementMapTask dropAutoIncrementMapTask = (DropAutoIncrementMapTask) task;
+            if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+                dropAutoIncrementMapTask.countDownToZero(
+                        task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
+            } else {
+                dropAutoIncrementMapTask.countDownLatch(task.getBackendId());
+                LOG.debug("finish drop auto increment map. table id: {}, be: {}",
+                        dropAutoIncrementMapTask.tableId(), task.getBackendId());
+            }
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DROP_AUTO_INCREMENT_MAP, task.getSignature());
         }
     }
 

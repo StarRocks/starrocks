@@ -45,12 +45,14 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -61,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -124,7 +127,20 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
+            stmt.getUserIdentity().analyze();
+            if (stmt instanceof CreateUserStmt) {
+                CreateUserStmt createUserStmt = (CreateUserStmt) stmt;
+                if (authenticationManager.doesUserExist(createUserStmt.getUserIdentity()) && !createUserStmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE USER failed for " + createUserStmt.getUserIdentity()
+                            + " : user already exists");
+                }
+            } else {
+                AlterUserStmt alterUserStmt = (AlterUserStmt) stmt;
+                if (!authenticationManager.doesUserExist(stmt.getUserIdentity()) && !alterUserStmt.isIfExists()) {
+                    throw new SemanticException("Operation ALTER USER failed for " + alterUserStmt.getUserIdentity()
+                            + " : user not exists");
+                }
+            }
 
             byte[] password = MysqlPassword.EMPTY_PASSWORD;
             String authPluginUsing;
@@ -141,7 +157,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
             try {
                 AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
-                UserIdentity userIdentity = stmt.getUserIdent();
+                UserIdentity userIdentity = stmt.getUserIdentity();
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
                         userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
                 info.setAuthPlugin(authPluginUsing);
@@ -164,22 +180,49 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         @Override
+        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            UserIdentity userIdentity = stmt.getUserIdentity();
+            userIdentity.analyze();
+            if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
+                throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
+            }
+
+            if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
+                        " : cannot drop user" + UserIdentity.ROOT);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                analyseUser(user, true);
+            } else if (!statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            stmt.getRoles().forEach(r -> validRoleName(r, "Can not create role", true));
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+                }
+            }
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            stmt.getRoles().forEach(r -> validRoleName(r, "Can not drop role", true));
-            return null;
-        }
-
-        @Override
-        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), false);
-            if (stmt.getUserIdent().equals(UserIdentity.ROOT)) {
-                throw new SemanticException("cannot drop root!");
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
+                    throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
+                }
             }
             return null;
         }
@@ -376,9 +419,21 @@ public class PrivilegeStmtAnalyzerV2 {
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdentity(), true);
-            for (String roleName : stmt.getRoles()) {
-                validRoleName(roleName, "Cannot set role", true);
+            try {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+
+                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(roleName);
+                    Set<Long> roleIdsForUser = privilegeManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    if (roleId == null || !roleIdsForUser.contains(roleId)) {
+                        throw new SemanticException("Role " + roleName + " is not granted to " +
+                                stmt.getUserIdentity().toString());
+                    }
+                }
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
             }
+
             return null;
         }
 

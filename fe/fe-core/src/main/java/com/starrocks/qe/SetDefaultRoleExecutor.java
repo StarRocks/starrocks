@@ -16,7 +16,6 @@ package com.starrocks.qe;
 import com.starrocks.common.UserException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.UserIdentity;
@@ -40,10 +39,9 @@ public class SetDefaultRoleExecutor {
             roleIds = new HashSet<>();
             for (String roleName : stmt.getRoles()) {
                 Long roleId = manager.getRoleIdByNameAllowNull(roleName);
-                if (roleId == null || !roleIdsForUser.contains(roleId)) {
-                    throw new SemanticException("Role " + roleName + " is not granted to " + user.toString());
+                if (roleId != null && roleIdsForUser.contains(roleId)) {
+                    roleIds.add(roleId);
                 }
-                roleIds.add(roleId);
             }
         }
 
