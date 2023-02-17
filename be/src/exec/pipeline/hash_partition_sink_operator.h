@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/operator.h"
+#include "exec/vectorized/partition/chunks_partitioner.h"
 
 /**
  * TODO 

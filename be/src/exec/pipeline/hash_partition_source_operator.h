@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/vectorized/partition/chunks_partitioner.h"
 
 namespace starrocks::pipeline {
 class HashPartitionSourceOperator final : public SourceOperator {

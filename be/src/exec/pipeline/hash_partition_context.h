@@ -14,9 +14,10 @@
 
 #pragma once
 
-#include "exec/partition/chunks_partitioner.h"
+#include "exec/vectorized/partition/chunks_partitioner.h"
 
 namespace starrocks::pipeline {
+using namespace starrocks::vectorized;
 
 class HashPartitionContext;
 class HashPartitionContextFactory;

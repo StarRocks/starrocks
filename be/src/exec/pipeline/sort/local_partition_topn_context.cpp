@@ -48,7 +48,8 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     return _chunks_partitioner->prepare(state);
 }
 
-Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
+Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state,
+                                                                const vectorized::ChunkPtr& chunk) {
     auto st = _chunks_partitioner->offer<true>(
             chunk,
             [this, state](size_t partition_idx) {
