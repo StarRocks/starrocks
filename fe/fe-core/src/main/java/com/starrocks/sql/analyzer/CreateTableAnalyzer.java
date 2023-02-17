@@ -30,7 +30,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -74,14 +73,6 @@ public class CreateTableAnalyzer {
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
             return EngineType.defaultEngine().name();
-        }
-
-        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) && !Config.use_staros) {
-            throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
-        }
-
-        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) && Config.use_staros) {
-            throw new SemanticException("Disallow create OLAP table in this cluster");
         }
 
         try {

@@ -39,9 +39,10 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.RunMode;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -274,7 +275,8 @@ public class SystemInfoServiceTest {
         }
 
         // test removeWorker
-        Config.integrate_starmgr = true;
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {
             {
@@ -320,8 +322,6 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
-
-        Config.integrate_starmgr = false;
     }
 
     @Test

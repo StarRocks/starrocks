@@ -12,27 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.common;
+package com.starrocks.common;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.RunMode;
-
-public enum EngineType {
-    OLAP,
-    MYSQL,
-    BROKER,
-    ELASTICSEARCH,
-    HIVE,
-    ICEBERG,
-    HUDI,
-    JDBC,
-    STARROCKS,
-    FILE;
-
-    public static EngineType defaultEngine() {
-        if (Config.run_mode.equalsIgnoreCase(RunMode.SHAREDDDATA.name())) {
-            return STARROCKS;
-        }
-        return OLAP;
-    }
+public enum RunMode {
+    SHAREDDDATA,
+    SHAREDNOTHING;
 }

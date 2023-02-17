@@ -55,7 +55,7 @@ public class PseudoClusterTest {
 
     @Test
     public void testCreateLakeTable() throws Exception {
-        Config.use_staros = true;
+        Config.run_mode = "shared-data";
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -67,6 +67,6 @@ public class PseudoClusterTest {
             stmt.close();
             connection.close();
         }
-        Config.use_staros = false;
+        Config.run_mode = "shared-nothing";
     }
 }

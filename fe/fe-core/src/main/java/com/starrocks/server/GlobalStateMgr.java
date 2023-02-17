@@ -118,6 +118,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -491,6 +492,16 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private RunMode runMode = RunMode.SHAREDNOTHING;
+
+    public boolean isLocalMode() {
+        return runMode.equals(RunMode.SHAREDNOTHING);
+    }
+
+    public boolean isCloudNativeMode() {
+        return runMode.equals(RunMode.SHAREDDDATA);
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -649,7 +660,10 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        if (Config.use_staros) {
+        if (Config.run_mode.equals("shared-data")) {
+            // for debug
+            LOG.info("run mode is shared-data");
+            runMode = RunMode.SHAREDDDATA;
             this.starOSAgent = new StarOSAgent();
         }
 
@@ -972,7 +986,10 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init(null)) {
+        // for debug
+        LOG.info("isCloudNativeMode is {}", isCloudNativeMode);
+
+        if (isCloudNativeMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1171,7 +1188,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (Config.integrate_starmgr) {
+        if (isCloudNativeMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1238,7 +1255,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (Config.use_staros) {
+        if (isCloudNativeMode()) {
             shardDeleter.start();
         }
     }
@@ -1262,7 +1279,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (Config.use_staros) {
+        if (isCloudNativeMode()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();

@@ -79,7 +79,7 @@ public class DropPartitionTest {
         createDb(createDbStmtStr);
         createTable(createTableStr);
 
-        Config.use_staros = true;
+        Config.run_mode = "shared-data";
         StarOSAgent agent = new StarOSAgent();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -128,7 +128,7 @@ public class DropPartitionTest {
 
     @AfterClass
     public static void afterClass() {
-        Config.use_staros = false;
+        Config.run_mode = "shared-nothing";
     }
 
     private static void createDb(String sql) throws Exception {

@@ -55,12 +55,12 @@ public class CreateLakeTableTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-        Config.use_staros = true;
+        Config.run_mode = "shared-data";
     }
 
     @AfterClass
     public static void afterClass() {
-        Config.use_staros = false;
+        Config.run_mode = "shared-nothing";
     }
 
     private static void createTable(String sql) throws Exception {

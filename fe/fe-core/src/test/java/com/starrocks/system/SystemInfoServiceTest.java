@@ -16,8 +16,9 @@
 package com.starrocks.system;
 
 import com.starrocks.cluster.Cluster;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.RunMode;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -138,7 +139,7 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testDropBackend() throws Exception {
-        Config.integrate_starmgr = true;
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
@@ -159,13 +160,11 @@ public class SystemInfoServiceTest {
         service.dropBackend("newHost", 1000, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
-
-        Config.integrate_starmgr = false;
     }
 
     @Test
     public void testReplayDropBackend() throws Exception {
-        Config.integrate_starmgr = true;
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 
@@ -185,8 +184,6 @@ public class SystemInfoServiceTest {
         service.replayDropBackend(be);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
-
-        Config.integrate_starmgr = false;
     }
 
 
