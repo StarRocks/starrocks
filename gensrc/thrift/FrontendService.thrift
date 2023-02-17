@@ -357,9 +357,9 @@ struct TListTableStatusResult {
 }
 
 struct TMaterializedViewStatus {
-    1: required string id
-    2: required string database_name
-    3: required string name
+    1: optional string id
+    2: optional string database_name
+    3: optional string name
     4: optional string refresh_type 
     5: optional string is_active 
     6: optional string last_refresh_start_time
@@ -377,7 +377,7 @@ struct TMaterializedViewStatus {
 }
 
 struct TListMaterializedViewStatusResult {
-    1: required list<TMaterializedViewStatus> materialized_views
+    1: optional list<TMaterializedViewStatus> materialized_views
 }
 
 // Arguments to showTasks/ShowTaskRuns
