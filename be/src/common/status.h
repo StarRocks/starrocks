@@ -147,6 +147,8 @@ public:
 
     static Status ResourceBusy(const Slice& msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
 
+    static Status EAgain(const Slice& msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
@@ -177,6 +179,8 @@ public:
     bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+
+    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.

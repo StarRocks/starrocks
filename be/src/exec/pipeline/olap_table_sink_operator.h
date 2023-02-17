@@ -74,6 +74,9 @@ private:
 
     // STREAM MV
     bool _is_epoch_finished = false;
+
+    // temporarily save chunk during automatic partition creation
+    mutable ChunkPtr _automatic_partition_chunk;
 };
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {
