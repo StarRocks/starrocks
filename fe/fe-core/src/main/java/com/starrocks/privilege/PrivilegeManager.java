@@ -1406,12 +1406,15 @@ public class PrivilegeManager {
         return provider.getAvailablePrivType(objectType);
     }
 
-    public void createRole(CreateRoleStmt stmt) throws DdlException {
+    public void createRole(CreateRoleStmt stmt) {
         roleWriteLock();
         try {
             String roleName = stmt.getQualifiedRole();
             if (roleNameToId.containsKey(roleName)) {
-                throw new DdlException(String.format("Role %s already exists!", roleName));
+                // Existence verification has been performed in the Analyzer stage. If it exists here,
+                // it may be that other threads have performed the same operation, and return directly here
+                LOG.info("Operation CREATE ROLE failed for " + roleName + " : role " + roleName + " already exists");
+                return;
             }
             RolePrivilegeCollection collection = new RolePrivilegeCollection(
                     roleName, RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
@@ -1450,6 +1453,14 @@ public class PrivilegeManager {
         roleWriteLock();
         try {
             String roleName = stmt.getQualifiedRole();
+            if (!roleNameToId.containsKey(roleName)) {
+                // Existence verification has been performed in the Analyzer stage. If it not exists here,
+                // it may be that other threads have performed the same operation, and return directly here
+                LOG.info("Operation DROP ROLE failed for " + roleName + " : role " + roleName + " not exists");
+
+                return;
+            }
+
             long roleId = getRoleIdByNameNoLock(roleName);
             invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);

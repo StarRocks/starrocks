@@ -416,7 +416,8 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().alterUser(stmt);
+                    context.getGlobalStateMgr().getAuthenticationManager()
+                            .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
                 } else {
                     context.getGlobalStateMgr().getAuth().alterUser(stmt);
                 }
@@ -432,7 +433,6 @@ public class DDLStmtExecutor {
                 } else {
                     context.getGlobalStateMgr().getAuth().dropUser(stmt);
                 }
-
             });
             return null;
         }
