@@ -69,6 +69,8 @@ public class AnalyzeSingleTest {
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
 
         analyzeSuccess("select v1 as location from t0");
+
+        analyzeSuccess("select v1 as rank from t0");
     }
 
     @Test
@@ -609,4 +611,28 @@ public class AnalyzeSingleTest {
 
         analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testColumnAlias() {
+        analyzeFail("select * from test.t0 as t(a,b,c)", "You have an error in your SQL syntax");
+        analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t.a,* from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.column_0, * from (values(1,2,3)) t0")).getQueryRelation();
+        Assert.assertEquals("column_0,column_0,column_1,column_2",
+                String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+}
+>>>>>>> 111b49f38 ([BugFix] fix rank keyword (#17841))
