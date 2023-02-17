@@ -208,13 +208,14 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
-    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit, size_t num_builders)
-            : _pool(pool),
-              _limit(limit),
-              _num_active_builders(num_builders),
-              _ht_row_counts(num_builders),
-              _partial_in_filters(num_builders),
-              _partial_bloom_filter_build_params(num_builders) {}
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit) : _pool(pool), _limit(limit) {}
+
+    void incr_builder() {
+        _ht_row_counts.emplace_back(0);
+        _partial_in_filters.emplace_back();
+        _partial_bloom_filter_build_params.emplace_back();
+        _num_active_builders++;
+    }
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
@@ -383,7 +384,7 @@ public:
 private:
     ObjectPool* _pool;
     const size_t _limit;
-    std::atomic<size_t> _num_active_builders;
+    std::atomic<size_t> _num_active_builders{0};
     std::vector<size_t> _ht_row_counts;
     std::vector<RuntimeInFilters> _partial_in_filters;
     std::vector<OptRuntimeBloomFilterBuildParams> _partial_bloom_filter_build_params;

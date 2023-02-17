@@ -18,6 +18,7 @@
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+#include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
@@ -179,7 +180,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState* state, OpFactories& pred_operators) {
-    if (!_fragment_context->enable_adaptive_dop()) {
+    if (_force_disable_adaptive_dop || !_fragment_context->enable_adaptive_dop()) {
         return pred_operators;
     }
 

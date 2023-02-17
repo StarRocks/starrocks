@@ -110,6 +110,9 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
+    bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
+    void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
+
 private:
     OpFactories _do_maybe_interpolate_local_shuffle_exchange(
             RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
@@ -127,7 +130,10 @@ private:
     int32_t _next_pseudo_plan_node_id = Operator::s_pseudo_plan_node_id_upper_bound;
 
     const size_t _degree_of_parallelism;
+
     const bool _is_stream_pipeline;
+
+    bool _force_disable_adaptive_dop = false;
 };
 
 class PipelineBuilder {
