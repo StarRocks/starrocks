@@ -59,8 +59,6 @@ public:
 
     uint8_t* mutable_raw_data() override;
 
-    bool empty_null_map(const NullColumnPtr& null_map);
-
     size_t size() const override;
 
     size_t capacity() const override;
