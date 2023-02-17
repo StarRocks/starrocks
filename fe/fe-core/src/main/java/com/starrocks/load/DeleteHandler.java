@@ -54,6 +54,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -211,16 +212,25 @@ public class DeleteHandler implements Writable {
         Preconditions.checkState(partitionNames != null);
         boolean noPartitionSpecified = partitionNames.isEmpty();
         if (noPartitionSpecified) {
-            if (olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
                 partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
                 if (partitionNames.isEmpty()) {
                     LOG.info("The delete statement [{}] prunes all partitions",
                             stmt.getOrigStmt().originStmt);
                     return null;
                 }
-            } else if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+            } else if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                 // this is a unpartitioned table, use table name as partition name
                 partitionNames.add(olapTable.getName());
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                // TODO: support list partition prune
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                for (Long partitionId : partitionIds) {
+                    Partition partition = olapTable.getPartition(partitionId);
+                    partitionNames.add(partition.getName());
+                }
             }
         }
 
