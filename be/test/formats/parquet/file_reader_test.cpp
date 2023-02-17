@@ -1816,8 +1816,8 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
 
     std::string filepath = "./be/test/exec/test_data/parquet_data/struct_array_null.parquet";
     auto file = _create_file(filepath);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(filepath));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1840,7 +1840,6 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
 
     type_struct.children.emplace_back(type_array);
     type_struct.field_names.emplace_back("b");
-
 
     SlotDesc slot_descs[] = {
             {"id", type_int},
@@ -1908,8 +1907,8 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
 
     std::string filepath = "./be/test/exec/test_data/parquet_data/complex_subfield_not_null.parquet";
     auto file = _create_file(filepath);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(filepath));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1932,7 +1931,6 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
 
     type_struct.children.emplace_back(type_array);
     type_struct.field_names.emplace_back("b");
-
 
     SlotDesc slot_descs[] = {
             {"id", type_int},

@@ -56,12 +56,12 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
+#include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/rowset_update_state.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
@@ -962,7 +962,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
 
     std::vector<uint32_t> column_ids{3};
     ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, *tablet_schema, auto_increment_partial_update_state,
-                                    column_ids, &write_columns));
+                                       column_ids, &write_columns));
 
     auto segment = *Segment::open(fs, dst_file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);

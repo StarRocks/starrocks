@@ -332,7 +332,7 @@ class ParquetScannerTest : public ::testing::Test {
         _issue_16475_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17693_1.parquet",
                                          test_exec_dir + "/test_data/parquet_data/issue_17693_2.parquet"};
-        _issue_17822_file_names = 
+        _issue_17822_file_names =
                 std::vector<std::string>{test_exec_dir + "/test_data/parquet_data/issue_17822.parquet"};
     }
 
