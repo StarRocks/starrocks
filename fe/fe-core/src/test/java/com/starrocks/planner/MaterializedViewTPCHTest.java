@@ -24,7 +24,7 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
-public class MaterializedViewTPCHTest extends PlanTestBase {
+public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     private static final String MATERIALIZED_DB_NAME = "test";
 
     @BeforeClass
