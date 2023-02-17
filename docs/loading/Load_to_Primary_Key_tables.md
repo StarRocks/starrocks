@@ -2,7 +2,7 @@
 
 The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
 
-StarRocks also supports partial updates. This feature is in preview.
+StarRocks also supports partial updates.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
@@ -429,7 +429,7 @@ MySQL [test_db]> SELECT * FROM table3;
 
 As shown in the preceding query result, the record whose `id` is `101` in `example3.csv` has been deleted from `table3`, the record whose `id` is `102` in `example3.csv` has been updated to `table3`, and the record whose `id` is `103` in `example3.csv` has been inserted into `table3`.
 
-## Partial updates [Preview]
+## Partial updates
 
 Since v2.2, StarRocks supports updating only the specified columns of a table that uses the Primary Key model. This section uses CSV as an example to describe how to perform partial updates.
 
