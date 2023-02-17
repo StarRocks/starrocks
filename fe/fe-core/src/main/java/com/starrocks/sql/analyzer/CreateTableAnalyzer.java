@@ -76,14 +76,6 @@ public class CreateTableAnalyzer {
             return EngineType.defaultEngine().name();
         }
 
-        if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) && !RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
-            throw new SemanticException("Disallow create STARROCKS table in current run mode\"{}\"", RunMode.getCurrentRunMode());
-        }
-
-        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) && !RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
-            throw new SemanticException("Disallow create OLAP table in current run mode\"{}\"", RunMode.getCurrentRunMode());
-        }
-
         try {
             return EngineType.valueOf(engineName.toUpperCase()).name();
         } catch (IllegalArgumentException e) {
