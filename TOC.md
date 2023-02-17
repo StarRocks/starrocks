@@ -513,6 +513,9 @@
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](/sql-reference/sql-functions/bit-functions/bitor.md)
       + [bitxor](/sql-reference/sql-functions/bit-functions/bitxor.md)
+      + [bit_shift_left](/sql-reference/sql-functions/bit-functions/bit_shift_left.md)
+      + [bit_shift_right](/sql-reference/sql-functions/bit-functions/bit_shift_right.md)
+      + [bit_shift_right_logical](/sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + [cast函数](/sql-reference/sql-functions/cast.md)
     + [hash函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
     + 条件函数
