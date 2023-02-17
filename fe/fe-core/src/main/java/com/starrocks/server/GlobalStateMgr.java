@@ -196,7 +196,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVActiveChecker;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -414,8 +413,6 @@ public class GlobalStateMgr {
 
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private MVActiveChecker mvActiveChecker;
-
     private SmallFileMgr smallFileMgr;
 
     private DynamicPartitionScheduler dynamicPartitionScheduler;
@@ -606,8 +603,6 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
-
-        this.mvActiveChecker = new MVActiveChecker();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1199,8 +1194,6 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
-        // materialized view active checker
-        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
