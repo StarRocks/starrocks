@@ -188,7 +188,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT c1, c2, par_date, par_col FROM `hive0`.`partitioned_db`.`t1_par`;")
-                .withNewMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_join_mv1`\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_join_mv1`\n" +
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "PARTITION BY (`par_date`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
