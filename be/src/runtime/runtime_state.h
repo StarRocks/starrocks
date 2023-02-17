@@ -272,6 +272,11 @@ public:
 
     int64_t max_reservation() const { return _query_options.max_reservation; }
 
+    TSpillMode::type spill_mode() const {
+        DCHECK(_query_options.__isset.spill_mode);
+        return _query_options.spill_mode;
+    }
+
     bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
 
     bool enable_spill() const { return _query_options.enable_spilling; }

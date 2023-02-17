@@ -17,16 +17,21 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/vectorized/chunks_sorter_heap_sort.h"
 #include "exec/vectorized/chunks_sorter_spillable_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
+    if (state->spill_mode() == TSpillMode::FORCE) {
+        _chunks_sorter->set_spill_stragety(SpillStrategy::SPILL_ALL);
+    }
     return Status::OK();
 }
 
