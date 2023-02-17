@@ -1034,11 +1034,9 @@ struct TCreatePartitionRequest {
 
 struct TCreatePartitionResult {
     1: optional Status.TStatus status
-    // If the status is not OK, err_msg will be a specific error reason
-    2: optional string err_msg;
-    3: optional list<Descriptors.TOlapTablePartition> partitions
-    4: optional list<Descriptors.TTabletLocation> tablets
-    5: optional list<Descriptors.TNodeInfo> nodes
+    2: optional list<Descriptors.TOlapTablePartition> partitions
+    3: optional list<Descriptors.TTabletLocation> tablets
+    4: optional list<Descriptors.TNodeInfo> nodes
 }
 
 struct TAuthInfo {
