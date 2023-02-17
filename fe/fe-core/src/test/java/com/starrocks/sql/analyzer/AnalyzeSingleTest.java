@@ -543,6 +543,10 @@ public class AnalyzeSingleTest {
         list = SqlParser.parse("select array_contains([], cast('2021-01--1 08:00:00' as datetime)) --x;x\n from t0", 0);
         Assert.assertEquals(1, list.size());
         Assert.assertTrue(list.get(0) instanceof QueryStatement);
+
+        list = SqlParser.parse("select '\\'', ';';", 0);
+        Assert.assertEquals(1, list.size());
+        Assert.assertTrue(list.get(0) instanceof QueryStatement);
     }
 
     @Test

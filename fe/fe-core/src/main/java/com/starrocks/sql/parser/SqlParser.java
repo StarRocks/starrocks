@@ -125,7 +125,7 @@ public class SqlParser {
             if (!inString && (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`')) {
                 inString = true;
                 inStringStart = sql.charAt(i);
-            } else if (inString && (sql.charAt(i) == inStringStart)) {
+            } else if (inString && (sql.charAt(i) == inStringStart) && (sql.charAt(i - 1) != '\\')) {
                 inString = false;
             }
 
