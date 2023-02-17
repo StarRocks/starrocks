@@ -17,24 +17,20 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
 
-public class MaterializedViewTest extends PlanTestBase {
+public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTest.class);
     private static final String MATERIALIZED_DB_NAME = "test_mv";
-
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
@@ -115,72 +111,6 @@ public class MaterializedViewTest extends PlanTestBase {
         } catch (Exception e) {
             LOG.warn("drop database failed:", e);
         }
-    }
-
-    class MaterializedViewTestFixture {
-        private final String mv;
-        private final String query;
-
-        private String rewritePlan;
-        private Exception exception;
-        public MaterializedViewTestFixture(String mv, String query) {
-            this.mv = mv;
-            this.query = query;
-        }
-        public MaterializedViewTestFixture rewrite() {
-            // Get a faked distribution name
-            this.exception = null;
-            this.rewritePlan = "";
-
-            try {
-                LOG.info("start to create mv:" + mv);
-                ExecPlan mvPlan = getExecPlan(mv);
-                List<String> outputNames = mvPlan.getColNames();
-                String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                        "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                        " AS " +
-                        mv;
-                starRocksAssert.withMaterializedView(mvSQL);
-                this.rewritePlan = getFragmentPlan(query);
-                System.out.println(rewritePlan);
-            } catch (Exception e) {
-                LOG.warn("test rewwrite failed:", e);
-                this.exception = e;
-            } finally {
-                try {
-                    starRocksAssert.dropMaterializedView("mv0");
-                } catch (Exception e) {
-                    LOG.warn("drop materialized view failed:", e);
-                }
-            }
-            return this;
-        }
-
-        public MaterializedViewTestFixture ok() {
-            Assert.assertTrue(this.exception == null);
-            Assert.assertTrue(this.rewritePlan.contains("TABLE: mv0"));
-            return this;
-        }
-
-        public MaterializedViewTestFixture nonMatch() {
-            Assert.assertTrue(!this.rewritePlan.contains("TABLE: mv0"));
-            return this;
-        }
-
-        public MaterializedViewTestFixture contains(String expect) {
-            Assert.assertTrue(this.rewritePlan.contains(expect));
-            return this;
-        }
-    }
-
-    private MaterializedViewTestFixture testRewriteOK(String mv, String query) {
-        MaterializedViewTestFixture fixture = new MaterializedViewTestFixture(mv, query);
-        return fixture.rewrite().ok();
-    }
-
-    private MaterializedViewTestFixture testRewriteFail(String mv, String query) {
-        MaterializedViewTestFixture fixture = new MaterializedViewTestFixture(mv, query);
-        return fixture.rewrite().nonMatch();
     }
 
     @Test
