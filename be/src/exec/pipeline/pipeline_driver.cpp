@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
@@ -295,6 +296,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
+        }
+
+        // Run spill stragety
+        // TODO: FIXME
+        // a simple spill stragety
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        if (runtime_state->enable_spill() &&
+            sink_operator()->revocable_mem_bytes() > runtime_state->spill_operator_min_bytes() &&
+            !sink_operator()->need_spill()) {
+            auto spill_manager = _query_ctx->spill_manager();
+            if (query_mem_tracker->consumption() - spill_manager->pending_spilled_bytes() >
+                query_mem_tracker->limit() * runtime_state->spill_mem_limit_threshold()) {
+                spill_manager->update_spilled_bytes(sink_operator()->revocable_mem_bytes());
+                sink_operator()->mark_need_spill();
+            }
         }
 
         // no chunk moved in current round means that the driver is blocked.

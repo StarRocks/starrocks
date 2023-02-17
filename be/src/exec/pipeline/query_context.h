@@ -4,11 +4,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/spill/query_spill_manager.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/profile_report_worker.h"
@@ -144,6 +146,8 @@ public:
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
+    QuerySpillManager* spill_manager() { return _spill_manager.get(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -182,6 +186,8 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
+
+    std::unique_ptr<QuerySpillManager> _spill_manager;
 };
 
 class QueryContextManager {

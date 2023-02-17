@@ -314,9 +314,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
+    public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
+    public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
+    public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
-            .add(ENABLE_SPILLING)
             .add(MAX_EXECUTION_TIME)
             .add(PROFILING)
             .add(BATCH_SIZE)
@@ -562,6 +566,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_SPILLING)
+    private boolean enableSpilling = false;
+
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -784,6 +791,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 65535;
 
+    @VarAttr(name = SPILL_MEM_TABLE_SIZE)
+    private int spillMemTableSize = 1024 * 1024 * 100;
+    @VarAttr(name = SPILL_MEM_TABLE_NUM)
+    private int spillMemTableNum = 2;
+    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD)
+    private double spillMemLimitThreshold = 0.5;
+    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES)
+    private long spillOperatorMinBytes = 1024 * 1024 * 10;
+
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
@@ -972,6 +989,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableInsertStrict(boolean enableInsertStrict) {
         this.enableInsertStrict = enableInsertStrict;
+    }
+
+    public boolean getEnableSpilling() {
+        return enableSpilling;
+    }
+
+    public void setEnableSpilling(boolean enableSpilling) {
+        this.enableSpilling = enableSpilling;
     }
 
     public boolean getForwardToLeader() {
@@ -1468,7 +1493,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
-    
+
+    public int getSpillMemTableSize() {
+        return this.spillMemTableSize;
+    }
+
+    public int getSpillMemTableNum() {
+        return this.spillMemTableNum;
+    }
+
+    public double getSpillMemLimitThreshold() {
+        return this.spillMemLimitThreshold;
+    }
+
+    public long getSpillOperatorMinBytes() {
+        return this.spillOperatorMinBytes;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1497,7 +1538,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
-        tResult.setEnable_spilling(false);
+        tResult.setEnable_spilling(enableSpilling);
+        if (enableSpilling) {
+            tResult.setSpill_mem_table_size(spillMemTableSize);
+            tResult.setSpill_mem_table_num(spillMemTableNum);
+            tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+            tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
+        }
 
         // Compression Type
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
