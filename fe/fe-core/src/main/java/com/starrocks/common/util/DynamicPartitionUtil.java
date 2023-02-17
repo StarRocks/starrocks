@@ -120,7 +120,7 @@ public class DynamicPartitionUtil {
         } catch (NumberFormatException e) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_FORMAT, end);
         }
-        return DynamicPartitionProperty.MAX_END_OFFSET;
+        return DynamicPartitionProperty.DEFAULT_END_OFFSET;
     }
 
     private static void checkBuckets(String buckets) throws DdlException {
@@ -267,15 +267,6 @@ public class DynamicPartitionUtil {
         }
     }
 
-    private static void checkCreateHistoryPartition(String create) throws DdlException {
-        if (Strings.isNullOrEmpty(create)
-                || (!Boolean.TRUE.toString().equalsIgnoreCase(create)
-                && !Boolean.FALSE.toString().equalsIgnoreCase(create))) {
-            ErrorReport.reportDdlException(
-                    ErrorCode.ERROR_DYNAMIC_PARTITION_CREATE_HISTORY_PARTITION, create);
-        }
-    }
-
     private static void checkHistoryPartitionNum(String val) throws DdlException {
         if (Strings.isNullOrEmpty(val)) {
             throw new DdlException(
@@ -329,19 +320,12 @@ public class DynamicPartitionUtil {
             analyzedProperties.put(DynamicPartitionProperty.START, startValue);
         }
 
-        int end = DynamicPartitionProperty.MAX_END_OFFSET;
+        int end = DynamicPartitionProperty.DEFAULT_END_OFFSET;
         if (properties.containsKey(DynamicPartitionProperty.END)) {
             String endValue = properties.get(DynamicPartitionProperty.END);
             end = checkEnd(endValue);
             properties.remove(DynamicPartitionProperty.END);
             analyzedProperties.put(DynamicPartitionProperty.END, endValue);
-        }
-
-        if (properties.containsKey(DynamicPartitionProperty.CREATE_HISTORY_PARTITION)) {
-            String val = properties.get(DynamicPartitionProperty.CREATE_HISTORY_PARTITION);
-            checkCreateHistoryPartition(val);
-            properties.remove(DynamicPartitionProperty.CREATE_HISTORY_PARTITION);
-            analyzedProperties.put(DynamicPartitionProperty.CREATE_HISTORY_PARTITION, val);
         }
 
         if (properties.containsKey(DynamicPartitionProperty.HISTORY_PARTITION_NUM)) {
