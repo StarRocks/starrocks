@@ -54,9 +54,11 @@ public class DynamicPartitionProperty {
     public static final String START_DAY_OF_MONTH = "dynamic_partition.start_day_of_month";
     public static final String TIME_ZONE = "dynamic_partition.time_zone";
     public static final String REPLICATION_NUM = "dynamic_partition.replication_num";
-
+    public static final String HISTORY_PARTITION_NUM = "dynamic_partition.history_partition_num";
     public static final int MIN_START_OFFSET = Integer.MIN_VALUE;
+    public static final int DEFAULT_END_OFFSET = 0;
     public static final int NOT_SET_REPLICATION_NUM = -1;
+    public static final int NOT_SET_HISTORY_PARTITION_NUM = 0;
 
     private boolean exist;
 
@@ -70,7 +72,7 @@ public class DynamicPartitionProperty {
     private StartOfDate startOfMonth;
     private TimeZone tz = TimeUtils.getSystemTimeZone();
     private int replicationNum;
-
+    private int historyPartitionNum;
     public DynamicPartitionProperty(Map<String, String> properties) {
         if (properties != null && !properties.isEmpty()) {
             this.exist = true;
@@ -84,6 +86,8 @@ public class DynamicPartitionProperty {
             this.buckets = Integer.parseInt(properties.get(BUCKETS));
             this.replicationNum =
                     Integer.parseInt(properties.getOrDefault(REPLICATION_NUM, String.valueOf(NOT_SET_REPLICATION_NUM)));
+            this.historyPartitionNum = Integer.parseInt(properties.getOrDefault(
+                    HISTORY_PARTITION_NUM, String.valueOf(NOT_SET_HISTORY_PARTITION_NUM)));
             createStartOfs(properties);
         } else {
             this.exist = false;
@@ -164,6 +168,11 @@ public class DynamicPartitionProperty {
         return replicationNum;
     }
 
+
+    public int getHistoryPartitionNum() {
+        return historyPartitionNum;
+    }
+
     public String getPropString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
@@ -195,7 +204,8 @@ public class DynamicPartitionProperty {
                 + ",\n\"" + START + "\" = \"" + start + "\""
                 + ",\n\"" + END + "\" = \"" + end + "\""
                 + ",\n\"" + PREFIX + "\" = \"" + prefix + "\""
-                + ",\n\"" + BUCKETS + "\" = \"" + buckets + "\"";
+                + ",\n\"" + BUCKETS + "\" = \"" + buckets + "\""
+                + ",\n\"" + HISTORY_PARTITION_NUM + "\" = \"" + historyPartitionNum + "\"";
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
             res += ",\n\"" + REPLICATION_NUM + "\" = \"" + replicationNum + "\"";
         }
