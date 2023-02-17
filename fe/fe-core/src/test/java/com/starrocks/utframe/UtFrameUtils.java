@@ -558,11 +558,6 @@ public class UtFrameUtils {
             OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
 
-            // Should disable Dynamic Partition in replay dump test
-            if (replayTable.getTableProperty() != null) {
-                replayTable.getTableProperty().getDynamicPartitionProperty().disable();
-            }
-
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
             }
