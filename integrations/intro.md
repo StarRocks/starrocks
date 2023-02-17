@@ -1,10 +1,10 @@
-# 数据集成
+# 系统集成概述
 
 本文介绍如何与 StarRocks 进行集成（integration）。
 
 ## BI 工具
 
-[SuperSet](./superset_support.md)
+[Superset](./superset_support.md)
 
 ## 数据集成
 
@@ -23,8 +23,6 @@
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
 [Apache Kafka](https://docs.starrocks.io/en-us/main/loading/RoutineLoad.md)
-
-[Apache pulsar](https://docs.starrocks.io/en-us/main/loading/RoutineLoad.md)
 
 ## 集群管理
 

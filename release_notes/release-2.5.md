@@ -1,5 +1,27 @@
 # StarRocks version 2.5
 
+## 2.5.2
+
+发布日期： 2023 年 2 月 17 日
+
+### 新增特性
+
+- 访问 AWS S3 以及 AWS Glue 时支持基于 Instance Profile 和 Assumed Role 来进行认证和鉴权。 [#15958](https://github.com/StarRocks/starrocks/pull/15958)
+- 新增 3 个 bit 函数：bit_shift_left，bit_shift_right，bit_shift_right_logical。 [#14151](https://github.com/StarRocks/starrocks/pull/14151)
+
+### 问题修复
+
+修复了如下问题：
+
+- 无法刷新含有 MAP 或 ARRAY 数据类型的 Apache Hive 外表。[#17548](https://github.com/StarRocks/starrocks/pull/17548)
+- Superset 无法识别出物化视图列类型。[#17686](https://github.com/StarRocks/starrocks/pull/17686)
+- 在对接 BI 时因无法解析 SET GLOBAL/SESSION TRANSACTION 而导致的连接性问题。[#17295](https://github.com/StarRocks/starrocks/pull/17295)
+- Colocate 组内的动态分区表无法修改分桶数，并返回报错信息。[#17418](https://github.com/StarRocks/starrocks/pull/17418/)
+
+### 行为变更
+
+- 新增关键字 CHARACTER。[#17488](https://github.com/StarRocks/starrocks/pull/17488)
+
 ## 2.5.1
 
 发布日期： 2023 年 2 月 5 日
@@ -61,7 +83,7 @@
 - 支持在建表时自动设置适当的分桶数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - 导入优化
   - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
-  - 在单 HDFS 或单 Kerberos 环境下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
+  - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键模型表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
 - 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](../administration/information_schema.md)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
