@@ -15,6 +15,6 @@
 package com.starrocks.common;
 
 public enum RunMode {
-    SHAREDDDATA,
-    SHAREDNOTHING;
+    SHARED_DATA,
+    SHARED_NOTHING;
 }

@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -965,7 +966,7 @@ public class AlterTest {
 
     @Test
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = "shared-data";
+        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1044,12 +1045,12 @@ public class AlterTest {
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
-        Config.run_mode = "shared-nothing";
+        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     @Test
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = "shared-data";
+        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1134,7 +1135,7 @@ public class AlterTest {
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
-        Config.run_mode = "shared-nothing";
+        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     @Test
@@ -1997,7 +1998,7 @@ public class AlterTest {
 
     @Test
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = "shared-data";
+        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -2101,7 +2102,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
 
-        Config.run_mode = "shared-nothing";
+        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     @Test(expected = DdlException.class)

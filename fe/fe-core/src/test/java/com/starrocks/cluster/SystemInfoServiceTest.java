@@ -275,7 +275,7 @@ public class SystemInfoServiceTest {
         }
 
         // test removeWorker
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
 
         StarOSAgent starosAgent = new StarOSAgent();
         new Expectations(starosAgent) {

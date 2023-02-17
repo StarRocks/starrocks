@@ -139,7 +139,7 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testDropBackend() throws Exception {
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
@@ -164,7 +164,7 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testReplayDropBackend() throws Exception {
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 

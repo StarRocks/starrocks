@@ -492,14 +492,14 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
-    private RunMode runMode = RunMode.SHAREDNOTHING;
+    private RunMode runMode = RunMode.SHARED_NOTHING;
 
     public boolean isLocalMode() {
-        return runMode.equals(RunMode.SHAREDNOTHING);
+        return runMode.equals(RunMode.SHARED_NOTHING);
     }
 
     public boolean isCloudNativeMode() {
-        return runMode.equals(RunMode.SHAREDDDATA);
+        return runMode.equals(RunMode.SHARED_DATA);
     }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -578,9 +578,6 @@ public class GlobalStateMgr {
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCkptGlobalState) {
-        // check whether Config.run_mode was changed, exit if changed
-
-
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -663,9 +660,14 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
 
-        if (Config.run_mode.equals("shared-data")) {
-            runMode = RunMode.SHAREDDDATA;
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
+            runMode = RunMode.SHARED_DATA;
             this.starOSAgent = new StarOSAgent();
+        } else if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_NOTHING.name())) {
+            runMode = RunMode.SHARED_NOTHING;
+        } else {
+            LOG.error("Invalid run_mode config: {}, should be shared_data or shared_nothing", Config.run_mode);
+            System.exit(-1);
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());

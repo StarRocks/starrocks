@@ -30,7 +30,7 @@ public enum EngineType {
     FILE;
 
     public static EngineType defaultEngine() {
-        if (Config.run_mode.equalsIgnoreCase(RunMode.SHAREDDDATA.name())) {
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
             return STARROCKS;
         }
         return OLAP;

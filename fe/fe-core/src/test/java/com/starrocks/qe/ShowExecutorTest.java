@@ -766,7 +766,7 @@ public class ShowExecutorTest {
             }
         };
 
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
 
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -814,7 +814,7 @@ public class ShowExecutorTest {
         };
 
 
-        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHAREDDDATA);
+        Deencapsulation.setField(globalStateMgr, "runMode", RunMode.SHARED_DATA);
 
         ShowComputeNodesStmt stmt = new ShowComputeNodesStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);

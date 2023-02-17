@@ -1802,12 +1802,12 @@ public class Config extends ConfigBase {
     public static String starmgr_assume_role_credential_external_id = "";
 
     /**
-     * shared-data: means run on cloud-native
-     * shared-nothing: means run on local
+     * shared_data: means run on cloud-native
+     * shared_nothing: means run on local
      * hybrid: run on both, not support yet.
      */
     @ConfField
-    public static String run_mode = "shared-nothing";
+    public static String run_mode = "shared_nothing";
 
     /**
      * empty shard group clean threshold (by create time).

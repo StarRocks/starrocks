@@ -43,6 +43,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
@@ -79,7 +80,7 @@ public class DropPartitionTest {
         createDb(createDbStmtStr);
         createTable(createTableStr);
 
-        Config.run_mode = "shared-data";
+        Config.run_mode = RunMode.SHARED_DATA.name();
         StarOSAgent agent = new StarOSAgent();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -128,7 +129,7 @@ public class DropPartitionTest {
 
     @AfterClass
     public static void afterClass() {
-        Config.run_mode = "shared-nothing";
+        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     private static void createDb(String sql) throws Exception {

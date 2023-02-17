@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.RunMode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -55,12 +56,12 @@ public class CreateLakeTableTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
-        Config.run_mode = "shared-data";
+        Config.run_mode = RunMode.SHARED_DATA.name();
     }
 
     @AfterClass
     public static void afterClass() {
-        Config.run_mode = "shared-nothing";
+        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     private static void createTable(String sql) throws Exception {
