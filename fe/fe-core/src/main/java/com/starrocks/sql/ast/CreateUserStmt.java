@@ -34,15 +34,15 @@ import java.util.List;
  */
 public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
-    private final boolean ifNotExist;
+    private final boolean ifNotExists;
 
-    public CreateUserStmt(boolean ifNotExist, UserDesc userDesc, List<String> defaultRoles) {
+    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
         super(userDesc, SetRoleType.ROLE, defaultRoles);
-        this.ifNotExist = ifNotExist;
+        this.ifNotExists = ifNotExists;
     }
 
-    public boolean isIfNotExist() {
-        return ifNotExist;
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
     @Override

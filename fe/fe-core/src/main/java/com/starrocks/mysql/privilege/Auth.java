@@ -629,8 +629,8 @@ public class Auth implements Writable {
             role = null;
         }
 
-        createUserInternal(stmt.getUserIdent(), role,
-                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExist());
+        createUserInternal(stmt.getUserIdentity(), role,
+                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false, stmt.isIfNotExists());
     }
 
     // alter user
@@ -641,7 +641,7 @@ public class Auth implements Writable {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPluginName());
         }
         // alter user only support change password till now
-        setPasswordInternal(stmt.getUserIdent(),
+        setPasswordInternal(stmt.getUserIdentity(),
                 new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), null, true, false, false);
     }
 

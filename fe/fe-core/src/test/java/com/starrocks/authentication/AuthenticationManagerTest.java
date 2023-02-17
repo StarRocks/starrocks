@@ -15,7 +15,6 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -98,12 +97,7 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(user, testUser);
 
         // create twice fail
-        try {
-            masterManager.createUser(stmt);
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("failed to create user"));
-        }
+        masterManager.createUser(stmt);
 
         // master create test@10.1.1.1
         sql = "create user 'test'@'10.1.1.1' identified by 'abc'";
@@ -288,13 +282,8 @@ public class AuthenticationManagerTest {
         // can drop twice
         DDLStmtExecutor.execute(dropStmt, ctx);
 
-        // cannot alter twice
-        try {
-            DDLStmtExecutor.execute(stmt, ctx);
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("failed to alter user 'test'@'%'"));
-        }
+        // can alter twice
+        DDLStmtExecutor.execute(stmt, ctx);
 
         // still has max connection
         Assert.assertNotEquals(0, manager.getMaxConn("test"));
@@ -333,7 +322,7 @@ public class AuthenticationManagerTest {
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.alterUser(alterUserStmt);
+        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo());
         Assert.assertEquals(testUser, masterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
 

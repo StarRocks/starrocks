@@ -18,13 +18,19 @@ package com.starrocks.sql.ast;
 public class CreateRoleStmt extends DdlStmt {
 
     private final String role;
+    private final boolean ifNotExists;
 
-    public CreateRoleStmt(String role) {
+    public CreateRoleStmt(String role, boolean ifNotExists) {
         this.role = role;
+        this.ifNotExists = ifNotExists;
     }
 
     public String getQualifiedRole() {
         return role;
+    }
+
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
     @Override

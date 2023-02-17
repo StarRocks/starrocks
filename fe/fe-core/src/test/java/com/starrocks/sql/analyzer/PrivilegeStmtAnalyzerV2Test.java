@@ -81,20 +81,20 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testCreateUser() throws Exception {
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("10.1.1.1", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("10.1.1.1", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", stmt.getUserIdent().getHost());
+        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", stmt.getOriginalPassword());
 
         sql = "create user 'aaa~bbb'";
@@ -229,8 +229,8 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testAlterDropUser() throws Exception {
         String sql = "alter user test_user identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", alterUserStmt.getUserIdent().getQualifiedUser());
-        Assert.assertEquals("%", alterUserStmt.getUserIdent().getHost());
+        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
@@ -238,22 +238,27 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("cannot find user 'test'@'10.1.1.1'!"));
+            Assert.assertTrue(e.getMessage().contains("Operation ALTER USER failed for 'test'@'10.1.1.1' : user not exists"));
         }
 
-        sql = "drop user test";
-        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", dropUserStmt.getUserIdent().getQualifiedUser());
+
+        try {
+            sql = "drop user test";
+            DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'test'@'%' : user not exists"));
+        }
 
         sql = "drop user test_user";
-        dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", dropUserStmt.getUserIdent().getQualifiedUser());
+        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getQualifiedUser());
 
         sql = "drop user root";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("cannot drop root!"));
+            Assert.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'root'@'%' : cannot drop user'root'@'%'"));
         }
     }
 
@@ -295,7 +300,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop role: cannot find role bad_role"));
+            Assert.assertTrue(e.getMessage().contains("Operation DROP ROLE failed for bad_role : role not exists"));
         }
 
         sql = "grant test_role to test_user";
@@ -637,7 +642,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant ALL PRIVILEGES on table test.t0 to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
         Assert.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE " +
-                        "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+                "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant SELECT on all tables in all databases to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
@@ -688,5 +693,44 @@ public class PrivilegeStmtAnalyzerV2Test {
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
         Assert.assertEquals("GRANT IMPERSONATE ON USER 'test_user'@'%' TO USER 'test_user'@'%'",
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
+    }
+
+    @Test
+    public void testExistsCheck() throws Exception {
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user user_exists", context);
+        context.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+
+        analyzeSuccess("create user user_not_exists");
+        analyzeSuccess("create user if not exists user_not_exists");
+        analyzeFail("create user user_exists", "Operation CREATE USER failed for 'user_exists'@'%' : user already exists");
+        analyzeSuccess("create user if not exists user_exists");
+
+        analyzeSuccess("drop user user_exists");
+        analyzeSuccess("drop user if exists user_exists");
+        analyzeFail("drop user user_not_exists", "Operation DROP USER failed for 'user_not_exists'@'%' : user not exists");
+        analyzeSuccess("drop user if exists user_not_exists");
+
+        analyzeSuccess("alter user user_exists identified by 'xxx'");
+        analyzeSuccess("alter user if exists user_exists identified by 'xxx'");
+        analyzeFail("alter user user_not_exists identified by 'xxx'",
+                "Operation ALTER USER failed for 'user_not_exists'@'%' : user not exists");
+        analyzeSuccess("alter user if exists user_not_exists identified by 'xxx'");
+
+        context = AnalyzeTestUtil.getConnectContext();
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create role role_exists", context);
+        context.getGlobalStateMgr().getPrivilegeManager().createRole(createRoleStmt);
+
+        analyzeSuccess("create role role_not_exists");
+        analyzeSuccess("create role if not exists role_not_exists");
+        analyzeFail("create role role_exists", "Operation CREATE ROLE failed for role_exists : role already exists");
+        analyzeSuccess("create role if not exists role_exists");
+
+        analyzeSuccess("drop role role_exists");
+        analyzeSuccess("drop role if exists role_exists");
+        analyzeFail("drop role role_not_exists", "Operation DROP ROLE failed for role_not_exists : role not exists");
+        analyzeSuccess("drop role if exists role_not_exists");
     }
 }

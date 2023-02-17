@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 public class DropUserStmt extends DdlStmt {
     private final UserIdentity userIdent;
+    private final boolean ifExists;
 
-    public DropUserStmt(UserIdentity userIdent) {
+    public DropUserStmt(UserIdentity userIdent, boolean ifExists) {
         this.userIdent = userIdent;
+        this.ifExists = ifExists;
     }
 
     public UserIdentity getUserIdentity() {
         return userIdent;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override

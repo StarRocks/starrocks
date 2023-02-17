@@ -38,7 +38,7 @@ import com.starrocks.sql.ast.UserIdentity;
 
 // Description of user in SQL statement
 public class UserDesc {
-    private final UserIdentity userIdent;
+    private final UserIdentity userIdentity;
     private String password;
     private final boolean isPasswordPlain;
     private String authPlugin;
@@ -48,21 +48,21 @@ public class UserDesc {
         this(userIdent, "", false);
     }
 
-    public UserDesc(UserIdentity userIdent, String password, boolean isPasswordPlain) {
-        this.userIdent = userIdent;
+    public UserDesc(UserIdentity userIdentity, String password, boolean isPasswordPlain) {
+        this.userIdentity = userIdentity;
         this.password = password;
         this.isPasswordPlain = isPasswordPlain;
     }
 
-    public UserDesc(UserIdentity userIdent, String authPlugin, String authString, boolean isPasswordPlain) {
-        this.userIdent = userIdent;
+    public UserDesc(UserIdentity userIdentity, String authPlugin, String authString, boolean isPasswordPlain) {
+        this.userIdentity = userIdentity;
         this.authPlugin = authPlugin;
         this.authString = authString;
         this.isPasswordPlain = isPasswordPlain;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public String getPassword() {

@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
@@ -31,6 +33,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeShowTest {
@@ -119,7 +122,7 @@ public class AnalyzeShowTest {
     }
 
     @Test
-    public void testShowAuthentication() throws AnalysisException {
+    public void testShowAuthentication() throws Exception {
         ConnectContext connectContext = ConnectContext.get();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
@@ -134,9 +137,21 @@ public class AnalyzeShowTest {
         Assert.assertNull(stmt.getUserIdent());
 
         sql = "SHOW AUTHENTICATION FOR xx";
+        analyzeFail(sql, "cannot find user 'xx'@'%'!");
+
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user u1", context);
+        context.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+
+        sql = "SHOW AUTHENTICATION FOR u1";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("xx", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("u1", stmt.getUserIdent().getQualifiedUser());
+
+        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "drop user u1", context);
+        context.getGlobalStateMgr().getAuthenticationManager().dropUser(dropUserStmt);
     }
 
     @Test
