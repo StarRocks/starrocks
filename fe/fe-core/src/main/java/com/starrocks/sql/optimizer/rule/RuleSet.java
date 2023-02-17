@@ -124,7 +124,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRu
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
@@ -225,12 +225,12 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
                 new PartitionPruneRule(),
                 new DistributionPruneRule(),
-                RemoteScanPartitionPruneRule.HIVE_SCAN,
-                RemoteScanPartitionPruneRule.HUDI_SCAN,
-                RemoteScanPartitionPruneRule.ICEBERG_SCAN,
-                RemoteScanPartitionPruneRule.DELTALAKE_SCAN,
-                RemoteScanPartitionPruneRule.FILE_SCAN,
-                RemoteScanPartitionPruneRule.ES_SCAN
+                ExternalScanPartitionPruneRule.HIVE_SCAN,
+                ExternalScanPartitionPruneRule.HUDI_SCAN,
+                ExternalScanPartitionPruneRule.ICEBERG_SCAN,
+                ExternalScanPartitionPruneRule.DELTALAKE_SCAN,
+                ExternalScanPartitionPruneRule.FILE_SCAN,
+                ExternalScanPartitionPruneRule.ES_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(

@@ -35,7 +35,7 @@ import static org.junit.Assert.assertEquals;
 public class PushDownMinMaxConjunctsRuleTest {
     @Test
     public void transformIceberg(@Mocked IcebergTable table) {
-        RemoteScanPartitionPruneRule rule0 = RemoteScanPartitionPruneRule.ICEBERG_SCAN;
+        ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 
         PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),

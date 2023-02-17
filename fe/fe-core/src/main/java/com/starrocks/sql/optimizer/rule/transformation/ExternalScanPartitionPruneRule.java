@@ -28,25 +28,25 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class RemoteScanPartitionPruneRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
+public class ExternalScanPartitionPruneRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(ExternalScanPartitionPruneRule.class);
 
-    public static final RemoteScanPartitionPruneRule HIVE_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final RemoteScanPartitionPruneRule HUDI_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final RemoteScanPartitionPruneRule ICEBERG_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final RemoteScanPartitionPruneRule DELTALAKE_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
+    public static final ExternalScanPartitionPruneRule HIVE_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final ExternalScanPartitionPruneRule HUDI_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final ExternalScanPartitionPruneRule ICEBERG_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final ExternalScanPartitionPruneRule DELTALAKE_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
-    public static final RemoteScanPartitionPruneRule FILE_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final ExternalScanPartitionPruneRule FILE_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_FILE_SCAN);
 
-    public static final RemoteScanPartitionPruneRule ES_SCAN =
-            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final ExternalScanPartitionPruneRule ES_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ES_SCAN);
 
-    public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
+    public ExternalScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
     }
 
