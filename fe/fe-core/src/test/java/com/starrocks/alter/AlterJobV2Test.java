@@ -60,6 +60,8 @@ import java.util.Map;
 public class AlterJobV2Test {
     private static ConnectContext connectContext;
 
+    private static StarRocksAssert starRocksAssert;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1000;
@@ -70,7 +72,7 @@ public class AlterJobV2Test {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
@@ -195,60 +197,72 @@ public class AlterJobV2Test {
     }
 
     @Test
-    public void testModifyWithSelectStarMV() {
+    public void testModifyWithSelectStarMV() throws Exception {
         try {
-            String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
-                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT * FROM modify_column_test";
+            starRocksAssert.withTable("CREATE TABLE modify_column_test3(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv3 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                    "AS SELECT * FROM modify_column_test3";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             // modify column which not define in mv
-            String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
+            String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getDb("test").getTable("mv3");
             Assert.assertTrue(!mv.isActive());
         } catch (Exception e) {
             Assert.fail();
+        } finally {
+            starRocksAssert.dropTable("modify_column_test3");
         }
     }
 
     @Test
-    public void testModifyWithExpr() {
+    public void testModifyWithExpr() throws Exception {
         try {
-            String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
-                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test";
+            starRocksAssert.withTable("CREATE TABLE modify_column_test4(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                            "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv4 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test4";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             {
                 // modify column which not define in mv
-                String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
+                String alterStmtStr = "alter table test.modify_column_test4 modify column k3 varchar(10)";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
                 GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
                 waitForSchemaChangeAlterJobFinish();
-                MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+                MaterializedView mv = (MaterializedView) GlobalStateMgr
+                        .getCurrentState().getDb("test").getTable("mv4");
                 Assert.assertTrue(mv.isActive());
             }
 
             {
                 // TODO: How to distinguish columns used by MV?
                 // modify column which define in mv
-                String alterStmtStr = "alter table test.modify_column_test drop column k2";
+                String alterStmtStr = "alter table test.modify_column_test4 modify column k2 varchar(30) ";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
                 GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
                 waitForSchemaChangeAlterJobFinish();
-                MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+                MaterializedView mv = (MaterializedView) GlobalStateMgr
+                        .getCurrentState().getDb("test").getTable("mv4");
                 Assert.assertTrue(mv.isActive());
             }
         } catch (Exception e) {
             Assert.fail();
+        } finally {
+            starRocksAssert.dropTable("modify_column_test4");
         }
     }
 
@@ -269,6 +283,7 @@ public class AlterJobV2Test {
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
             Assert.assertTrue(mv.isActive());
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
     }
