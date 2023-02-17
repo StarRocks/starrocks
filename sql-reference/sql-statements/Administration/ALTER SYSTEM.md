@@ -44,7 +44,7 @@
     ALTER SYSTEM CREATE IMAGE
     ```
 
-    执行该语句会主动触发 FE 创建新的 Image（元数据快照）文件。该操作异步执行，您可以通过查看 FE 日志文件 **fe.log** 确认操作何时开始执行及结束。`triggering a new checkpoint manually...` 表明操作开始执行，`finished save image...` 则表明 Image 创建完成。
+    执行该语句会主动触发 Leader FE 创建新的 Image（元数据快照）文件。该操作异步执行，您可以通过查看 FE 日志文件 **fe.log** 确认操作何时开始执行及结束。`triggering a new checkpoint manually...` 表明操作开始执行，`finished save image...` 则表明 Image 创建完成。
 
 ### BE
 
