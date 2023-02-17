@@ -52,13 +52,17 @@ public class PartitionNames implements ParseNode, Writable {
     private final NodePosition pos;
 
     public PartitionNames(boolean isTemp, List<String> partitionNames) {
-        this.pos = NodePosition.ZERO;
+        this(isTemp, partitionNames, NodePosition.ZERO);
+    }
+
+    public PartitionNames(boolean isTemp, List<String> partitionNames, NodePosition pos) {
+        this.pos = pos;
         this.partitionNames = partitionNames;
         this.isTemp = isTemp;
     }
 
     public PartitionNames(PartitionNames other) {
-        this.pos = NodePosition.ZERO;
+        this.pos = other.pos;
         this.partitionNames = Lists.newArrayList(other.partitionNames);
         this.isTemp = other.isTemp;
     }

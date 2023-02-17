@@ -113,9 +113,9 @@ public class TableRelation extends Relation {
         if (alias != null) {
             if (name.getDb() != null) {
                 if (name.getCatalog() != null) {
-                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl(), NodePosition.ZERO);
+                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl(), name.getPos());
                 } else {
-                    return new TableName(name.getDb(), alias.getTbl());
+                    return new TableName(null, name.getDb(), alias.getTbl(), name.getPos());
                 }
             } else {
                 return alias;

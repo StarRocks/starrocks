@@ -31,6 +31,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,7 +44,11 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     private RangePartitionDesc rangePartitionDesc = null;
 
     public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr) {
-        super(expr.getPos());
+        this(rangePartitionDesc, expr, NodePosition.ZERO);
+    }
+
+    public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr, NodePosition pos) {
+        super(pos);
         this.rangePartitionDesc = rangePartitionDesc;
         this.expr = expr;
     }

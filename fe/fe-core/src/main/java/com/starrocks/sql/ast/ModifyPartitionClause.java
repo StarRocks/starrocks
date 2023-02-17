@@ -56,8 +56,8 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     // c'tor for 'Modify Partition(*)' clause
-    private ModifyPartitionClause(Map<String, String> properties) {
-        super(AlterOpType.MODIFY_PARTITION, NodePosition.ZERO);
+    private ModifyPartitionClause(Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.MODIFY_PARTITION, pos);
         this.partitionNames = Lists.newArrayList();
         this.properties = properties;
         this.needExpand = true;
@@ -65,12 +65,12 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     public static ModifyPartitionClause createStarClause(Map<String, String> properties) {
-        return new ModifyPartitionClause(properties);
+        return new ModifyPartitionClause(properties, NodePosition.ZERO);
     }
 
 
     public static ModifyPartitionClause createStarClause(Map<String, String> properties, NodePosition pos) {
-        return new ModifyPartitionClause(Lists.newArrayList(), properties, pos);
+        return new ModifyPartitionClause(properties, pos);
     }
 
     @Override

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.parser;
 
-import org.antlr.runtime.RecognitionException;
 import org.apache.commons.lang3.StringUtils;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -26,19 +25,15 @@ public class ParsingException extends RuntimeException {
 
     private final NodePosition pos;
 
-    public ParsingException(String detailMsg, RecognitionException cause, NodePosition pos) {
-        super(cause);
+    public ParsingException(String detailMsg, NodePosition pos) {
+        super(detailMsg);
         this.detailMsg = detailMsg;
         this.pos = pos;
     }
 
-    public ParsingException(String detailMsg, NodePosition pos) {
-        this(detailMsg, null, pos);
-    }
-
     // error message should contain position info. This method will be removed in the future.
     public ParsingException(String formatString, Object... args) {
-        this(format(formatString, args), null, NodePosition.ZERO);
+        this(format(formatString, args), NodePosition.ZERO);
     }
 
     @Override
