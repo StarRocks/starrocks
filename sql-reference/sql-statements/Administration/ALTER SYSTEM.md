@@ -38,6 +38,14 @@
     | ------------------ | -------- | ------------------------------------------------------------ |
     | host:edit_log_port | 是       | <ul><li>`host`：FE 机器的主机名或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`edit_log_port`：FE 上的 BDBJE 通信端口，默认为 `9010`。</li></ul> |
 
+- 创建 image。
+
+    ```SQL
+    ALTER SYSTEM CREATE IMAGE
+    ```
+
+    执行该语句会主动触发 FE 创建新的 Image（元数据快照）文件。该操作异步执行，您可以通过查看 FE 日志文件 **fe.log** 确认操作何时开始执行及结束。`triggering a new checkpoint manually...` 表明操作开始执行，`finished save image...` 则表明 Image 创建完成。
+
 ### BE
 
 - 添加 BE。 添加后，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 查看新增 BE 的状态。
