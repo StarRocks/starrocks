@@ -196,7 +196,12 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+<<<<<<< HEAD
 import com.starrocks.scheduler.mv.MVActiveChecker;
+=======
+import com.starrocks.scheduler.mv.MVJobExecutor;
+import com.starrocks.scheduler.mv.MVManager;
+>>>>>>> 464ac7697 ([Refactor] Remove unused MVActiveChecker (#17906))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -414,7 +419,11 @@ public class GlobalStateMgr {
 
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
+<<<<<<< HEAD
     private MVActiveChecker mvActiveChecker;
+=======
+    private MVJobExecutor mvMVJobExecutor;
+>>>>>>> 464ac7697 ([Refactor] Remove unused MVActiveChecker (#17906))
 
     private SmallFileMgr smallFileMgr;
 
@@ -606,8 +615,12 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+<<<<<<< HEAD
 
         this.mvActiveChecker = new MVActiveChecker();
+=======
+        this.mvMVJobExecutor = new MVJobExecutor();
+>>>>>>> 464ac7697 ([Refactor] Remove unused MVActiveChecker (#17906))
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1199,8 +1212,6 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
-        // materialized view active checker
-        // mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
