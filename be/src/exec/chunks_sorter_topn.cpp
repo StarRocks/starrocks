@@ -111,18 +111,24 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
         return nullptr;
     }
 
-    const size_t top_n_rid = _get_number_of_rows_to_sort() - 1;
+    const size_t max_value_row_id = _get_number_of_rows_to_sort() - 1;
     const auto& order_by_column = _merged_segment.order_by_columns[0];
+
+    // if we want build runtime filter,
+    // we should reserve at least "rows_to_sort" rows
+    if (max_value_row_id >= order_by_column->size()) {
+        return nullptr;
+    }
 
     if (_runtime_filter.empty()) {
         auto rf = type_dispatch_predicate<JoinRuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
                                                               detail::SortRuntimeFilterBuilder(), pool, order_by_column,
-                                                              top_n_rid, _sort_desc.descs[0].asc_order());
+                                                              max_value_row_id, _sort_desc.descs[0].asc_order());
         _runtime_filter.emplace_back(rf);
     } else {
         type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
                                                 detail::SortRuntimeFilterUpdater(), _runtime_filter.back(),
-                                                order_by_column, top_n_rid, _sort_desc.descs[0].asc_order());
+                                                order_by_column, max_value_row_id, _sort_desc.descs[0].asc_order());
     }
 
     return &_runtime_filter;
