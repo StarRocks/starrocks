@@ -37,7 +37,7 @@ class FragmentScanRangeAssignment extends
         HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
     public String toDebugString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("---------- FragmentScanRangeAssignment ----------");
+        sb.append("---------- FragmentScanRangeAssignment ----------\n");
         for (TNetworkAddress addr : keySet()) {
             Map<Integer, List<TScanRangeParams>> placement = get(addr);
             for (Integer scanNodeId : placement.keySet()) {

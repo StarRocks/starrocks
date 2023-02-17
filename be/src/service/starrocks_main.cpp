@@ -46,6 +46,8 @@
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
@@ -86,8 +88,26 @@ namespace starrocks {
 static void thrift_output(const char* x) {
     LOG(WARNING) << "thrift internal message: " << x;
 }
-
 } // namespace starrocks
+
+static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
+    Aws::Utils::Logging::LogLevel levels[] = {
+            Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
+            Aws::Utils::Logging::LogLevel::Error, Aws::Utils::Logging::LogLevel::Warn,
+            Aws::Utils::Logging::LogLevel::Info,  Aws::Utils::Logging::LogLevel::Debug,
+            Aws::Utils::Logging::LogLevel::Trace,
+    };
+    std::string slevel = boost::algorithm::to_upper_copy(s);
+    Aws::Utils::Logging::LogLevel level = Aws::Utils::Logging::LogLevel::Warn;
+    for (int idx = 0; idx < sizeof(levels) / sizeof(levels[0]); idx++) {
+        auto s = Aws::Utils::Logging::GetLogLevelName(levels[idx]);
+        if (s == slevel) {
+            level = levels[idx];
+            break;
+        }
+    }
+    return level;
+}
 
 extern int meta_tool_main(int argc, char** argv);
 
@@ -215,7 +235,10 @@ int main(int argc, char** argv) {
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
-        aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
+        auto level = parse_aws_sdk_log_level(starrocks::config::aws_sdk_logging_trace_level);
+        std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
+                  << "\n";
+        aws_sdk_options.loggingOptions.logLevel = level;
     }
     Aws::InitAPI(aws_sdk_options);
 
