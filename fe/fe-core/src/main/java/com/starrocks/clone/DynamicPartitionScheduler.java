@@ -170,13 +170,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
         int idx;
         int start = dynamicPartitionProperty.getStart();
+        int historyPartitionNum = dynamicPartitionProperty.getHistoryPartitionNum();
 
-        /// If specify start, create history partitions automatically
-        if (start != DynamicPartitionProperty.MIN_START_OFFSET) {
-            idx = start;
-        } else {
-            idx = 0;
-        }
+        // start < 0 , historyPartitionNum >= 0
+        idx = Math.max(start, -historyPartitionNum);
+
         for (; idx <= dynamicPartitionProperty.getEnd(); idx++) {
             String prevBorder =
                     DynamicPartitionUtil.getPartitionRangeString(dynamicPartitionProperty, now, idx, partitionFormat);
