@@ -53,8 +53,13 @@ private:
     Status _init_global_dicts(vectorized::TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
     void _update_counter();
+<<<<<<< HEAD
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
+=======
+    void _update_realtime_counter(Chunk* chunk);
+    void _decide_chunk_size(bool has_predicate);
+>>>>>>> 8f0314e54 ([Enhancement] Change storage chunk size when no predicate (#17987))
 
 private:
     vectorized::TabletReaderParams _params{};
