@@ -82,6 +82,7 @@ public class IcebergCachingFileIO implements FileIO {
     private static final long DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES = 16L * 1024L * 1024L * 1024L; // 16GB
 
     public static final String FILEIO_BUFFER_CHUNK_SIZE = "fileIO.buffer-chunk-size";
+    public static final String FILEIO_CACHE_MAX_CONTENT_LENGTH = "fileIO.cache.max_file_length";
     public static final String FILEIO_CACHE_MAX_TOTAL_BYTES = "fileIO.cache.max-total-bytes";
 
     private ContentCache fileContentCache;
@@ -108,7 +109,9 @@ public class IcebergCachingFileIO implements FileIO {
         long maxTotalBytes = PropertyUtil.propertyAsLong(properties, FILEIO_CACHE_MAX_TOTAL_BYTES,
                                                         DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES);
         long bufferChunkSize = PropertyUtil.propertyAsLong(properties, FILEIO_BUFFER_CHUNK_SIZE, DEFAULT_BUFFER_CHUNK_SIZE);
-        this.fileContentCache = new ContentCache(DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH, maxTotalBytes, bufferChunkSize);
+        long maxFileSize = PropertyUtil.propertyAsLong(properties, FILEIO_CACHE_MAX_CONTENT_LENGTH,
+                                                       DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH);
+        this.fileContentCache = new ContentCache(maxFileSize, maxTotalBytes, bufferChunkSize);
     }
 
     @Override
