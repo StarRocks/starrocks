@@ -330,9 +330,6 @@ public class Optimizer {
                 && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            // external table need to to re-compute scanOperatorPredicates because of the predicates of scan operator
-            // may changed
-            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         }
         return tree.getInputs().get(0);
     }

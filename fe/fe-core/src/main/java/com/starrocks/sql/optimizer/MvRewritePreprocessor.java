@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -32,11 +31,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.ArrayList;
@@ -121,14 +124,20 @@ public class MvRewritePreprocessor {
         }
     }
 
-    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext materializationContext) {
-        MaterializedView mv = materializationContext.getMv();
+    /**
+     * Make a LogicalOlapScanOperator by using MV's schema which includes:
+     *  - partition infos.
+     *  - distribution infos.
+     *  - original MV's predicates which can be deduced from MV opt expression and be used
+     *       for partition/distribution pruning.
+     */
+    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext) {
+        final MaterializedView mv = mvContext.getMv();
 
-        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
-        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
-        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+        final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+        final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
-        ColumnRefFactory columnRefFactory = materializationContext.getQueryRefFactory();
+        final ColumnRefFactory columnRefFactory = mvContext.getQueryRefFactory();
         int relationId = columnRefFactory.getNextRelationId();
         for (Column column : mv.getFullSchema()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
@@ -136,13 +145,14 @@ public class MvRewritePreprocessor {
                     column.isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
             columnRefFactory.updateColumnRefToColumns(columnRef, column, mv);
-            outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column);
             columnMetaToColRefMapBuilder.put(column, columnRef);
         }
 
-        Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+        // construct distribution
+        final Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+        // only hash distribution is supported
         Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
         HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
         List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
@@ -150,10 +160,10 @@ public class MvRewritePreprocessor {
         for (Column distributedColumn : distributedColumns) {
             hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
         }
-
-        HashDistributionDesc hashDistributionDesc =
+        final HashDistributionDesc hashDistributionDesc =
                 new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
 
+        // construct partition
         List<Long> selectPartitionIds = Lists.newArrayList();
         List<Long> selectTabletIds = Lists.newArrayList();
         Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
@@ -166,13 +176,46 @@ public class MvRewritePreprocessor {
                 selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
             }
         }
-        PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
+        final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
+
+        // NOTE:
+        // - To partition/distribution prune, need filter predicates that belong to MV.
+        // - Those predicates are only used for partition/distribution pruning and don't affect the real
+        // query compute.
+        // - TODO: after partition/distribution pruning, those predicates should be removed from mv rewrite result.
+        final OptExpression mvExpression = mvContext.getMvExpression();
+        final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
+        final ColumnRefSet mvOutputColumnSet = mvExpression.getOutputColumns();
+        final List<ScalarOperator> mvConjuncts = Lists.newArrayList();
+        // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
+        for (ScalarOperator conj : conjuncts) {
+            if (conj instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conj;
+                ScalarOperator left = binaryPredicate.getChild(0);
+                ScalarOperator right = binaryPredicate.getChild(1);
+                if (left.isColumnRef() && right.isConstant() &&
+                        mvOutputColumnSet.contains((ColumnRefOperator) left)) {
+                    mvConjuncts.add(conj);
+                } else if (right.isColumnRef() && left.isConstant() &&
+                        mvOutputColumnSet.contains((ColumnRefOperator) right)) {
+                    mvConjuncts.add(conj);
+                }
+            }
+        }
+        // Case2: compensated partition predicates which are pruned after mv's partition pruning.
+        // Compensate partition predicates and add them into mv predicate.
+        final ScalarOperator mvPartitionPredicate =
+                MvUtils.compensatePartitionPredicate(mvExpression, mvContext.getMvColumnRefFactory());
+        if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
+            mvConjuncts.add(mvPartitionPredicate);
+        }
+
         return new LogicalOlapScanOperator(mv,
                 colRefToColumnMetaMapBuilder.build(),
                 columnMetaToColRefMap,
                 DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
                 Operator.DEFAULT_LIMIT,
-                null,
+                Utils.compoundAnd(mvConjuncts),
                 mv.getBaseIndexId(),
                 selectPartitionIds,
                 partitionNames,

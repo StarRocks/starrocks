@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
@@ -26,7 +26,7 @@ import java.util.Set;
 public class MaterializationContext {
     private MaterializedView mv;
     // scan materialized view operator
-    private Operator scanMvOperator;
+    private LogicalOlapScanOperator scanMvOperator;
     // logical OptExpression for query of materialized view
     private OptExpression mvExpression;
 
@@ -42,6 +42,8 @@ public class MaterializationContext {
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
     private Set<String> mvPartitionNamesToRefresh;
+
+    private boolean hasMVUsed = false;
 
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
@@ -59,11 +61,11 @@ public class MaterializationContext {
         return mv;
     }
 
-    public Operator getScanMvOperator() {
+    public LogicalOlapScanOperator getScanMvOperator() {
         return scanMvOperator;
     }
 
-    public void setScanMvOperator(Operator scanMvOperator) {
+    public void setScanMvOperator(LogicalOlapScanOperator scanMvOperator) {
         this.scanMvOperator = scanMvOperator;
     }
 
@@ -109,5 +111,13 @@ public class MaterializationContext {
 
     public Set<String> getMvPartitionNamesToRefresh() {
         return mvPartitionNamesToRefresh;
+    }
+
+    public boolean hasMVUsed() {
+        return hasMVUsed;
+    }
+
+    public void setMVUsed(boolean hasMVUsed) {
+        this.hasMVUsed = hasMVUsed;
     }
 }
