@@ -73,7 +73,7 @@ public class OptExternalPartitionPruner {
             try {
                 partitionIds = partitionPrune(esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
             } catch (AnalysisException e) {
-                LOG.warn("Es Table partition prune failed. " + e);
+                LOG.warn("Es Table partition prune failed. ", e);
             }
 
             ArrayList<String> unPartitionedIndices = Lists.newArrayList();
@@ -108,14 +108,14 @@ public class OptExternalPartitionPruner {
                 classifyConjuncts(logicalScanOperator, columnToPartitionValuesMap);
                 computePartitionInfo(logicalScanOperator, columnToPartitionValuesMap, columnToNullPartitions);
             } catch (Exception e) {
-                LOG.warn("HMS table partition prune failed : " + e);
+                LOG.warn("HMS table partition prune failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
             }
 
             try {
                 computeMinMaxConjuncts(logicalScanOperator, context);
             } catch (Exception e) {
-                LOG.warn("Remote scan min max conjuncts exception : " + e);
+                LOG.warn("Remote scan min max conjuncts exception : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
             }
         }

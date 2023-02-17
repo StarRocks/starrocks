@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
@@ -50,7 +51,7 @@ public class OptDistributionPruner {
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
                                                       LogicalOlapScanOperator operator) {
         try {
-            com.starrocks.planner.DistributionPruner distributionPruner;
+            DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
                 distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),

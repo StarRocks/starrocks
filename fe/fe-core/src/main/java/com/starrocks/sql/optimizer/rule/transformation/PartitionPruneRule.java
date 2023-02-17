@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * This class does:
  * 1. Prune the Olap table partition ids, Dependency predicates push down scan node
- * 2. Prune predicate if the data of partitions is meets the predicate, to avoid execute predicate.
+ * 2. Prune predicate if the data of partitions meets the predicate, to avoid execute predicate.
  *
  *  Note:
  *   Partition value range always be Left-Closed-Right-Open interval
