@@ -28,6 +28,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -124,6 +125,19 @@ public class CreateTableAnalyzer {
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
+        int autoIncrementColumnCount = 0;
+        for (ColumnDef colDef : columnDefs) {
+            if (colDef.isAutoIncrement()) {
+                autoIncrementColumnCount++;
+                if (colDef.getType() != Type.BIGINT) {
+                    throw new IllegalArgumentException("The AUTO_INCREMENT column must be BIGINT");
+                }
+            }
+
+            if (autoIncrementColumnCount > 1) {
+                throw new IllegalArgumentException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement");
+            }
+        }
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
         if (statement.isOlapOrLakeEngine()) {

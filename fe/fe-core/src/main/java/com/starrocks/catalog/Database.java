@@ -509,6 +509,11 @@ public class Database extends MetaObject implements Writable {
             return null;
         }
 
+        if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId);
+            ((OlapTable) table).sendDropAutoIncrementMapTask();
+        }
+
         table.onDrop(this, isForceDrop, isReplay);
 
         dropTable(table.getName());

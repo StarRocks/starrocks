@@ -235,7 +235,7 @@ public class PlanFragmentBuilder {
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
-                view.writeQuorum(), view.enableReplicatedStorage());
+                view.writeQuorum(), view.enableReplicatedStorage(), false);
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;

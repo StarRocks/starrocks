@@ -208,6 +208,7 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     _set_flag(kHasBitmapIndexShift, column.has_bitmap_index());
     _set_flag(kHasPrecisionShift, column.has_precision());
     _set_flag(kHasScaleShift, column.has_frac());
+    _set_flag(kHasAutoIncrementShift, column.is_auto_increment());
 
     if (column.has_precision()) {
         DCHECK_LE(column.precision(), UINT8_MAX);
@@ -238,6 +239,7 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_type(logical_type_to_string(_type));
     column->set_is_key(is_key());
     column->set_is_nullable(is_nullable());
+    column->set_is_auto_increment(is_auto_increment());
     if (has_default_value()) {
         column->set_default_value(default_value());
     }

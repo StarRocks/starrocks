@@ -329,6 +329,10 @@ private:
 
     Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
 
+    Status _fill_auto_increment_id(Chunk* chunk);
+
+    Status _fill_auto_increment_id_internal(Chunk* chunk, SlotDescriptor* slot, int64_t table_id);
+
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
     bool has_intolerable_failure() {
@@ -433,6 +437,7 @@ private:
     RuntimeProfile::Counter* _send_rpc_timer = nullptr;
     RuntimeProfile::Counter* _client_rpc_timer = nullptr;
     RuntimeProfile::Counter* _server_rpc_timer = nullptr;
+    RuntimeProfile::Counter* _alloc_auto_increment_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;
@@ -453,6 +458,16 @@ private:
     bool _enable_replicated_storage = false;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+
+    SlotId _auto_increment_slot_id = -1;
+
+    bool _has_auto_increment = false;
+
+    bool _null_expr_in_auto_increment = false;
+
+    bool _miss_auto_increment_column = false;
+
+    bool _abort_delete = false;
 };
 
 } // namespace stream_load

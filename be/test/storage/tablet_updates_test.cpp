@@ -2993,7 +2993,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
         std::sort(rowids.begin(), rowids.end());
         rowids_by_rssid.emplace(i, rowids);
     }
-    tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns);
+    tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns, nullptr);
     auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
         std::stringstream ss;
         ss << "[";
@@ -3013,7 +3013,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     for (const auto& read_column : read_columns) {
         read_column->reset_column();
     }
-    tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns);
+    tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns, nullptr);
     ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
     ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }
