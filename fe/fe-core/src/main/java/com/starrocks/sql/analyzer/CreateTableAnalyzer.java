@@ -80,6 +80,10 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
         }
 
+        if (engineName.equalsIgnoreCase(EngineType.OLAP.name()) && Config.use_staros) {
+            throw new SemanticException("Disallow create OLAP table in this cluster");
+        }
+
         try {
             return EngineType.valueOf(engineName.toUpperCase()).name();
         } catch (IllegalArgumentException e) {
