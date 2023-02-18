@@ -326,6 +326,11 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
 
     // Parse the raw-text data. Translate the text string to internal format.
     switch (slot_desc->type().type) {
+    case TYPE_JSON: {
+        ASSIGN_OR_RETURN(auto value, JsonValue::parse(Slice(data, len)));
+        reinterpret_cast<JsonColumn*>(data_column)->append(std::move(value));
+        break;
+    }
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
         Slice value(data, len);
