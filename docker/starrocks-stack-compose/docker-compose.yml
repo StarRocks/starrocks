@@ -20,9 +20,9 @@ services:
       - "9030:9030"
     healthcheck:
       test: 'mysql -uroot -h127.0.0.1 -P 9030 -e "show backends\G" |grep "Alive: true"'
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 3
     networks: # network config, can be configured to your preferred port and ip address, if not specified, it will use default network and assign a dynamic ip
       starrocks-stack-network:
     #     Configure persistent volume to keep the StarRocks database state across container recreation.
@@ -43,6 +43,11 @@ services:
     ports:  # port mapping format "[host port]:[container port]", can be configured to your preferred port
       - "9000:9000"
       - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://minio.local.com:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     volumes:
       - ${HOME}/dv/minio/data:/data
     networks: # network config, can be configured to your preferred port and ip address, if not specified, it will use default network and assign a dynamic ip
@@ -62,5 +67,10 @@ services:
     restart: unless-stopped
     ports:  # port mapping format "[host port]:[container port]", can be configured to your preferred port
       - "8089:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://zeppelin.local.com:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks: # network config, can be configured to your preferred port and ip address, if not specified, it will use default network and assign a dynamic ip
       starrocks-stack-network:
