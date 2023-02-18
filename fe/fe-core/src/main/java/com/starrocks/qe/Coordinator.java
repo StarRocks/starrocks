@@ -930,7 +930,7 @@ public class Coordinator {
                                     SimpleScheduler.addToBlacklist(pair.first.backend.getId());
                                     throw new RpcException(pair.first.backend.getHost(), "rpc failed");
                                 default:
-                                    throw new UserException(errMsg);
+                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
                             }
                         }
                     }
@@ -1236,7 +1236,7 @@ public class Coordinator {
                                     SimpleScheduler.addToBlacklist(pair.first.backend.getId());
                                     throw new RpcException(pair.first.backend.getHost(), "rpc failed");
                                 default:
-                                    throw new UserException(errMsg);
+                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
                             }
                         }
                     }
