@@ -599,6 +599,9 @@
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
+  + Code Style Guides
+    + [protobuf style guides](./developers/code-style-guides/protobuf-guides.md)
+    + [thrift style guides](./developers/code-style-guides/thrift-guides.md)
   + [Use the debuginfo file for debugging](./developers/debuginfo.md)
   + Development Environment
     + [IDE Setup](./developers/development-environment/ide-setup.md)
