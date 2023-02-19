@@ -2,7 +2,7 @@
 # Please run this command from the git repo root directory to build:
 #
 #   - Use artifact image to package runtime container:
-#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/dengliu/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/be-ubuntu.Dockerfile -t be-ubuntu:latest .
+#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/be-ubuntu.Dockerfile -t be-ubuntu:latest .
 #   - Use locally build artifacts to package runtime container:
 #     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f docker/dockerfiles/be-ubuntu.Dockerfile -t be-ubuntu:latest .
 
