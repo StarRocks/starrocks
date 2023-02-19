@@ -1878,13 +1878,13 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     cast_expr.__isset.opcode = true;
     cast_expr.__isset.child_type = true;
 
-    EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
-    EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
+    EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
+    EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, "[]"));
-    EXPECT_EQ("[NULL, NULL, NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[a,b,c]"));
-    EXPECT_EQ("[NULL, NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
+    EXPECT_EQ("[NULL,NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[a,b,c]"));
+    EXPECT_EQ("[NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
 
-    EXPECT_EQ("[1.1, 2.2, 3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
+    EXPECT_EQ("[1.1,2.2,3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
     // test invalid input
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, ""));
@@ -1901,12 +1901,12 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
 
     // test cast to string array
-    EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
-    EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
+    EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
+    EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
     EXPECT_EQ(R"(['"a,"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
-    EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
-    EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
-    EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+    EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
+    EXPECT_EQ(R"(['a',' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
+    EXPECT_EQ(R"(['1','2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
     EXPECT_EQ(R"(['['])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['['])"));
     EXPECT_EQ(R"(['"'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"'])"));
     EXPECT_EQ(R"(['"xxx'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"xxx'])"));
@@ -1916,13 +1916,13 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     {
         // select cast('[[["1"]],[["1,3"],["2"],["1"]]]' as array<array<array<string>>>);
         auto type = gen_multi_array_type_desc(to_thrift(TYPE_VARCHAR), 3);
-        EXPECT_EQ(R"([[['1']], [['1,3'], ['2'], ['1']]])",
+        EXPECT_EQ(R"([[['1']],[['1,3'],['2'],['1']]])",
                   cast_string_to_array(cast_expr, type, R"([[["1"]],[["1,3"],["2"],["1"]]])"));
         // select  cast('[[["1"]],[["1"],["2"],["1"]]]' as array<array<array<string>>>);
-        EXPECT_EQ(R"([[['1']], [['1'], ['2'], ['1']]])",
+        EXPECT_EQ(R"([[['1']],[['1'],['2'],['1']]])",
                   cast_string_to_array(cast_expr, type, R"([[["1"]],[["1"],["2"],["1"]]])"));
         //  select cast('[[4],[[1, 2]]]' as array<array<array<string>>>);
-        EXPECT_EQ(R"([[['4']], [['1', '2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
+        EXPECT_EQ(R"([[['4']],[['1','2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
     }
 }
 
@@ -1996,21 +1996,21 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     cast_expr.__isset.opcode = true;
     cast_expr.__isset.child_type = true;
 
-    EXPECT_EQ("[1, 2, 3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
-    EXPECT_EQ("[1, 2, 3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
+    EXPECT_EQ("[1,2,3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
+    EXPECT_EQ("[1,2,3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "[]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, ""));
-    EXPECT_EQ("[NULL, NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
+    EXPECT_EQ("[NULL,NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
 
-    EXPECT_EQ("[1.1, 2.2, 3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
+    EXPECT_EQ("[1.1,2.2,3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
-    EXPECT_EQ(R"(['a', 'b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
-    EXPECT_EQ(R"(['a', 'b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
-    EXPECT_EQ(R"(['a', ' b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
-    EXPECT_EQ(R"(['1', '2'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+    EXPECT_EQ(R"(['a','b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
+    EXPECT_EQ(R"(['a','b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
+    EXPECT_EQ(R"(['a',' b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
+    EXPECT_EQ(R"(['1','2'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
 
-    EXPECT_EQ(R"([{"a": 1}, {"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
-    EXPECT_EQ(R"([null, {"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
+    EXPECT_EQ(R"([{"a": 1},{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
+    EXPECT_EQ(R"([null,{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 

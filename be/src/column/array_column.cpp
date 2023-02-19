@@ -502,7 +502,7 @@ std::string ArrayColumn::debug_item(uint32_t idx) const {
     ss << "[";
     for (size_t i = 0; i < array_size; ++i) {
         if (i > 0) {
-            ss << ", ";
+            ss << ",";
         }
         ss << _elements->debug_item(offset + i);
     }

@@ -411,8 +411,8 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("[1, 2, 3]", dst_column->debug_item(0));
-                ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
+                ASSERT_EQ("[1,2,3]", dst_column->debug_item(0));
+                ASSERT_EQ("[4,5,6]", dst_column->debug_item(1));
             }
 
             ASSERT_EQ(2, meta.num_rows());

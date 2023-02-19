@@ -1065,8 +1065,8 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
 
     EXPECT_EQ(2, chunk->num_rows());
 
-    EXPECT_EQ("[3, {Cc1: 'hello'}]", chunk->debug_row(0));
-    EXPECT_EQ("[4, {Cc1: 'World'}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {Cc1:'hello'}]", chunk->debug_row(0));
+    EXPECT_EQ("[4, {Cc1:'World'}]", chunk->debug_row(1));
 
     status = scanner->get_next(_runtime_state, &chunk);
     // Should be end of file in next read.
