@@ -57,7 +57,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.backup.LakeBackupJob;
-import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -311,30 +310,21 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
-                }
-
-                if (tbl.isLakeTable()) {
-                    t = TableType.LAKE;
-                }
-
-                if (t == TableType.LAKE && tbl.isOlapTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
-                    return;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
                 if (olapTbl.existTempPartitions()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                            "Do not support backup table with temp partitions");
+                            "Do not support backing up table with temp partitions");
                 }
 
                 PartitionNames partitionNames = tblRef.getPartitionNames();
                 if (partitionNames != null) {
                     if (partitionNames.isTemp()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                                "Do not support backuping temp partitions");
+                                "Do not support backing up temp partitions");
                     }
 
                     for (String partName : partitionNames.getPartitionNames()) {
@@ -432,7 +422,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
             checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
         }
 
-        TableType t = TableType.OLAP;
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
         if (backupMeta != null) {
             backupMeta.makeDummyMap();
@@ -443,22 +432,13 @@ public class BackupHandler extends LeaderDaemon implements Writable {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
                 if (remoteTbl.isLakeTable()) {
-                    t = TableType.LAKE;
-                }
-                if (t == TableType.LAKE && remoteTbl.isOlapTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, remoteTbl.getName());
+                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
             }
         }
-        if (t == TableType.OLAP) {
-            restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
-        } else {
-            restoreJob = new LakeRestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
-        }
+        restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
