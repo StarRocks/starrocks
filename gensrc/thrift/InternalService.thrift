@@ -47,15 +47,8 @@ include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
 include "RuntimeFilter.thrift"
 
-// constants for TQueryOptions.num_nodes
-const i32 NUM_NODES_ALL = 0
-const i32 NUM_NODES_ALL_RACKS = -1
-
 // constants for TPlanNodeId
 const i32 INVALID_PLAN_NODE_ID = -1
-
-// Constant default partition ID, must be < 0 to avoid collisions
-const i64 DEFAULT_PARTITION_ID = -1;
 
 enum TQueryType {
     SELECT,
@@ -76,11 +69,6 @@ enum TErrorHubType {
     MYSQL,
     BROKER,
     NULL_TYPE
-}
-
-enum TPrefetchMode {
-    NONE,
-    HT_BUCKET
 }
 
 struct TMysqlErrorHubInfo {
@@ -117,53 +105,16 @@ enum TTabletInternalParallelMode {
 
 // Query options with their respective defaults
 struct TQueryOptions {
-  1: optional bool abort_on_error = 0
   2: optional i32 max_errors = 0
-  3: optional bool disable_codegen = 1
   4: optional i32 batch_size = 0
-  5: optional i32 num_nodes = NUM_NODES_ALL
-  6: optional i64 max_scan_range_length = 0
-  7: optional i32 num_scanner_threads = 0
-  8: optional i32 max_io_buffers = 0
-  9: optional bool allow_unsupported_formats = 0
-  10: optional i64 default_order_by_limit = -1
-  11: optional string debug_action = ""
+  
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
   15: optional bool enable_profile = 0
-  16: optional i32 codegen_level = 0
-  // INT64::MAX
-  17: optional i64 kudu_latest_observed_ts = 9223372036854775807 // Deprecated
+
   18: optional TQueryType query_type = TQueryType.SELECT
-  19: optional i64 min_reservation = 0
-  20: optional i64 max_reservation = 107374182400
-  21: optional i64 initial_reservation_total_claims = 2147483647 // TODO chenhao
-  22: optional i64 buffer_pool_limit = 2147483648
 
-  // The default spillable buffer size in bytes, which may be overridden by the planner.
-  // Defaults to 2MB.
-  23: optional i64 default_spillable_buffer_size = 2097152;
-
-  // The minimum spillable buffer to use. The planner will not choose a size smaller than
-  // this. Defaults to 64KB.
-  24: optional i64 min_spillable_buffer_size = 65536;
-
-  // The maximum size of row that the query will reserve memory to process. Processing
-  // rows larger than this may result in a query failure. Defaults to 512KB, e.g.
-  // enough for a row with 15 32KB strings or many smaller columns.
-  //
-  // Different operators handle this option in different ways. E.g. some simply increase
-  // the size of all their buffers to fit this row size, whereas others may use more
-  // sophisticated strategies - e.g. reserving a small number of buffers large enough to
-  // fit maximum-sized rows.
-  25: optional i64 max_row_size = 524288;
-
-  // stream preaggregation
-  26: optional bool disable_stream_preaggregations = false;
-
-  // multithreaded degree of intra-node parallelism
-  27: optional i32 mt_dop = 0;
   // if this is a query option for LOAD, load_mem_limit should be set to limit the mem comsuption
   // of load channel.
   28: optional i64 load_mem_limit = 0;
@@ -176,8 +127,8 @@ struct TQueryOptions {
   // whether enable spilling to disk
   31: optional bool enable_spilling = false;
 
-  // Added by StarRocks:
   50: optional Types.TCompressionType transmission_compression_type;
+
   51: optional i64 runtime_join_filter_pushdown_limit;
   // Timeout in ms to wait until runtime filters are arrived.
   52: optional i32 runtime_filter_wait_timeout_ms = 200;

@@ -283,12 +283,6 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    int64_t min_reservation() const { return _query_options.min_reservation; }
-
-    int64_t max_reservation() const { return _query_options.max_reservation; }
-
-    bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
-
     bool enable_spill() const { return _query_options.enable_spilling; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
