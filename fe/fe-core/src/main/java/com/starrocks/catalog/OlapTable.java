@@ -2066,6 +2066,21 @@ public class OlapTable extends Table {
         return tableProperty.getStorageFormat();
     }
 
+    public void setStorageVolume(String storageVolume) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
+        tableProperty.buildStorageVolume();
+    }
+
+    public String getStorageVolume() {
+        if (tableProperty == null) {
+            return GlobalStateMgr.getCurrentState().isCloudNativeMode() ? "default" : "local";
+        }
+        return tableProperty.getStorageVolume();
+    }
+
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());

@@ -25,12 +25,11 @@ public enum EngineType {
     ICEBERG,
     HUDI,
     JDBC,
-    STARROCKS,
     FILE;
 
     public static EngineType defaultEngine() {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return STARROCKS;
+        if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
+            return null;
         }
         return OLAP;
     }

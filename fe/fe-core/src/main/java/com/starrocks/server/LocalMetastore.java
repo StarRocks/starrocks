@@ -2368,6 +2368,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         table.setStorageFormat(storageFormat);
 
+        // get storage volume
+        String storageVolume = GlobalStateMgr.getCurrentState().isCloudNativeMode() ? "default" : "local";
+        table.setStorageVolume(storageVolume);
+
         // get compression type
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
         try {

@@ -256,7 +256,6 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -2226,10 +2225,8 @@ public class GlobalStateMgr {
                 }
             }
         }
-        sb.append("\n) ENGINE=");
-        if (table.isLakeTable()) {
-            sb.append(EngineType.STARROCKS.name()).append(" ");
-        } else {
+        if (table.isLocalTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+            sb.append("\n) ENGINE=");
             sb.append(table.getType().name()).append(" ");
         }
 
@@ -2381,6 +2378,11 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
                 }
+
+                // storage volume
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
+                        .append("\" = \"");
+                sb.append(olapTable.getStorageVolume()).append("\"");
 
                 // write quorum
                 if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {

@@ -224,11 +224,11 @@ public class CreateTableStmt extends DdlStmt {
     }
 
     public boolean isLakeEngine() {
-        return engineName.equalsIgnoreCase(EngineType.STARROCKS.name());
+        return engineName == null;
     }
 
     public boolean isOlapOrLakeEngine() {
-        return isOlapEngine() || isLakeEngine();
+        return isOlapEngine() || engineName == null;
     }
 
     public String getCharsetName() {
