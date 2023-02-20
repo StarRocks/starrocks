@@ -24,10 +24,19 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 
 FROM ubuntu:22.04
 
-RUN apt-get update -y \
-        && apt-get install -y --no-install-recommends binutils-dev default-jdk python2 \
-           mysql-client curl vim tree net-tools less \
-        && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends binutils-dev default-jdk python2 \
+           mysql-client curl vim tree net-tools
+
+# Install timezone data. This is needed by Starrocks broker load.
+RUN apt-get install -yq tzdata && \
+    ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# Install perf tool for low-level performance debug
+RUN apt-get install -yq linux-tools-common linux-tools-generic
+
+RUN rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/lib/jvm/default-java
 
