@@ -12,7 +12,7 @@ This document is used to deploy the simplest StarRocks cluster, which contains o
 You need to download the docker compose yaml file of starrocks.
 
 ```sh
-wget https://raw.githubusercontent.com/StarRocks/starrocks/main/docker/docker-compose/docker-compose.yaml
+wget https://raw.githubusercontent.com/StarRocks/starrocks/main/docker/docker-compose/docker-compose.yml
 ```
 
 ## Step 2: Run StarRocks cluster
