@@ -30,8 +30,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// FOREIGN KEY: (column1, column2) REFERENCES catalog.database.table(column1', column2')
-// if catalog or database is not provided, use current catalog or current database instead.
+// foreign key constraint is used to guide optimizer rewrite for now,
+// and is not enforced during ingestion.
+// the foreign key property of data should be guaranteed by user.
+//
+// a table may have multi foreign key constraints.
 public class ForeignKeyConstraint {
     private static final Logger LOG = LogManager.getLogger(ForeignKeyConstraint.class);
 

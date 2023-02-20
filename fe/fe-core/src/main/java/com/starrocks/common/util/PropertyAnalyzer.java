@@ -772,7 +772,7 @@ public class PropertyAnalyzer {
 
                 OlapTable parentOlapTable = (OlapTable) parentTable;
                 if (!parentColumns.stream().allMatch(parentOlapTable::containColumn)) {
-                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                    throw new AnalysisException(String.format("some columns of:%s do not exist in parent table:%s",
                             parentColumns, parentOlapTable.getName()));
                 }
                 KeysType parentTableKeyType =

@@ -23,6 +23,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+// unique constraint is used to guide optimizer rewrite for now,
+// and is not enforced during ingestion.
+// the unique property of data should be guaranteed by user.
+//
+// a table may have multi unique constraints.
 public class UniqueConstraint {
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
