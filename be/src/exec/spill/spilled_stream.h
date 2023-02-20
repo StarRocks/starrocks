@@ -64,6 +64,8 @@ struct InputStreamWithTasks {
     std::vector<SpillRestoreTaskPtr> tasks;
 };
 
+// A collection of all spilled files in a partition.
+// A stream can be constructed from a SpilledFileGroup
 class SpilledFileGroup {
 public:
     SpilledFileGroup(const SpillFormater& formater) : _formater(formater) {}
