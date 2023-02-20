@@ -1198,7 +1198,13 @@ public class HdfsFsManager {
     public void pwrite(TBrokerFD fd, long offset, byte[] data) throws UserException {
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
-            long currentStreamOffset = fsDataOutputStream.getPos();
+
+            long currentStreamOffset = 0;
+            try {
+                currentStreamOffset = fsDataOutputStream.getPos();
+            } catch (Exception e) {
+                throw new UserException("get fs data outstream failed");
+            }
             if (currentStreamOffset != offset) {
                 throw new UserException("current outputstream offset is " + currentStreamOffset
                  + " not equal to request " + offset);
