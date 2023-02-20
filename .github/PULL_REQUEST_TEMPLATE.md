@@ -26,7 +26,7 @@ Fixes #
 
 ## Bugfix cherry-pick branch check:
 - [ ] I have checked the version labels which the pr will be auto backported to target branch
+  - [ ] 3.0
   - [ ] 2.5
   - [ ] 2.4
   - [ ] 2.3
-  - [ ] 2.2
