@@ -6,10 +6,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
-import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -19,7 +19,6 @@ import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
@@ -31,7 +30,6 @@ import java.util.Map;
 
 import static com.starrocks.connector.ClassUtils.getCompatibleParamClasses;
 import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveMetaClient {
@@ -64,9 +62,8 @@ public class HiveMetaClient {
             properties.put(HIVE_METASTORE_URIS, DUMMY_THRIFT_URI);
         }
 
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        conf.set("hive.metastore.client.socket.timeout", String.valueOf(Config.hive_meta_store_timeout_s));
+        conf.set("hive.metastore.uris", properties.get(HIVE_METASTORE_URIS));
         return new HiveMetaClient(conf);
     }
 
@@ -74,16 +71,8 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private RecyclableClient(HiveConf conf) throws MetaException {
-            if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        DLFProxyMetaStoreClient.class.getName());
-            } else if (GLUE_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        AWSCatalogMetastoreClient.class.getName());
-            } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
-            }
+            hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                    HiveMetaStoreClient.class.getName());
         }
 
         // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,

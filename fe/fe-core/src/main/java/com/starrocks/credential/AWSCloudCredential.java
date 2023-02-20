@@ -3,15 +3,10 @@
 package com.starrocks.credential;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
-import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
 import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
@@ -94,30 +89,13 @@ public class AWSCloudCredential implements CloudCredential {
         AWSCredentialsProvider awsCredentialsProvider = getBaseAWSCredentialsProvider();
         if (!iamRoleArn.isEmpty()) {
             // Generate random session name
-            String sessionName = UUID.randomUUID().toString();
-            STSAssumeRoleSessionCredentialsProvider.Builder builder =
-                    new STSAssumeRoleSessionCredentialsProvider.Builder(iamRoleArn, sessionName);
-            if (!externalId.isEmpty()) {
-                builder.withExternalId(externalId);
-            }
-            AWSSecurityTokenService token =
-                    AWSSecurityTokenServiceClientBuilder.standard().withCredentials(awsCredentialsProvider)
-                            .build();
-            builder.withStsClient(token);
-            awsCredentialsProvider = builder.build();
+
         }
         return awsCredentialsProvider;
     }
 
     private AWSCredentialsProvider getBaseAWSCredentialsProvider() {
-        if (useInstanceProfile) {
-            return new InstanceProfileCredentialsProvider(true);
-        } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
-            return new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
-        } else {
-            Preconditions.checkArgument(false, "Unreachable");
-            return new AnonymousAWSCredentialsProvider();
-        }
+        return null;
     }
 
     @Override
@@ -134,7 +112,6 @@ public class AWSCloudCredential implements CloudCredential {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
                 configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
-                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
             } else {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "com.amazonaws.auth.InstanceProfileCredentialsProvider");
@@ -150,7 +127,6 @@ public class AWSCloudCredential implements CloudCredential {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
                 configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
-                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
             } else {
                 configuration.set("fs.s3a.aws.credentials.provider",
                         "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
