@@ -133,7 +133,6 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-
 void OlapChunkSource::_decide_chunk_size(bool has_predicate) {
     bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
                                             [](auto& slot) { return slot->type().is_huge_type(); });
