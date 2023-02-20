@@ -21,6 +21,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -1958,5 +1959,19 @@ public class PrivilegeManager {
     // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
     public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
         roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
+    }
+
+    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
+        Table.TableType type = tbl.getType();
+        switch (type) {
+            case OLAP:
+                return checkAnyActionOnTable(currentUser, dbName, tbl.getName());
+            case MATERIALIZED_VIEW:
+                return checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
+            case VIEW:
+                return checkAnyActionOnView(currentUser, dbName, tbl.getName());
+            default:
+                return false;
+        }
     }
 }

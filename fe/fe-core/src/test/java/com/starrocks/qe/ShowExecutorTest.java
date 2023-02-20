@@ -294,7 +294,7 @@ public class ShowExecutorTest {
 
                 db.getTables();
                 minTimes = 0;
-                result = Lists.newArrayList(table);
+                result = Lists.newArrayList(table, mv);
 
                 db.getMaterializedViews();
                 minTimes = 0;
@@ -405,6 +405,8 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("testMv", resultSet.getString(0));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testTbl", resultSet.getString(0));
         Assert.assertFalse(resultSet.next());
@@ -578,6 +580,9 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("testMv", resultSet.getString(0));
+        Assert.assertEquals("VIEW", resultSet.getString(1));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testTbl", resultSet.getString(0));
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
@@ -984,8 +989,16 @@ public class ShowExecutorTest {
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testMv", resultSet.getString(1));
         Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(3));
-        Assert.assertEquals("10", resultSet.getString(4));
+        Assert.assertEquals("ASYNC", resultSet.getString(3));
+        Assert.assertEquals("true", resultSet.getString(4));
+        Assert.assertEquals("", resultSet.getString(5));
+        Assert.assertEquals("", resultSet.getString(6));
+        Assert.assertEquals("", resultSet.getString(7));
+        Assert.assertEquals("", resultSet.getString(8));
+        Assert.assertEquals("", resultSet.getString(9));
+        Assert.assertEquals("", resultSet.getString(10));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(11));
+        Assert.assertEquals("10", resultSet.getString(12));
         Assert.assertFalse(resultSet.next());
     }
 
