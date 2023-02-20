@@ -377,7 +377,7 @@ Status ExecEnv::init_mem_tracker() {
     int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
-    _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
+    _column_pool_mem_tracker = std::make_shared<MemTracker>(-1, "column_pool", _mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = new MemTracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
@@ -389,11 +389,8 @@ Status ExecEnv::init_mem_tracker() {
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
-<<<<<<< HEAD
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-=======
-    ForEach<ColumnPoolList>(op);
->>>>>>> b241adc46 ([BugFix] let _column_pool_memory_tracker be shared_ptr to avoid early deleted. (#17687))
+
     _init_storage_page_cache();
     return Status::OK();
 }
@@ -464,7 +461,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_chunk_allocator_mem_tracker);
     SAFE_DELETE(_update_mem_tracker);
     SAFE_DELETE(_page_cache_mem_tracker);
-    SAFE_DELETE(_column_pool_mem_tracker);
+    _column_pool_mem_tracker.reset();
     SAFE_DELETE(_schema_change_mem_tracker);
     SAFE_DELETE(_compaction_mem_tracker);
 

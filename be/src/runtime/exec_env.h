@@ -141,7 +141,7 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
-    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
+    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
@@ -259,7 +259,7 @@ private:
     MemTracker* _schema_change_mem_tracker = nullptr;
 
     // The memory used for column pool
-    MemTracker* _column_pool_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _column_pool_mem_tracker = nullptr;
 
     // The memory used for page cache
     MemTracker* _page_cache_mem_tracker = nullptr;
