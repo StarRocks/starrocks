@@ -73,11 +73,12 @@ public class MaterializedViewOptimizer {
         return outputExpressions;
     }
 
-    // try to get partitial partition predicate of partitioned mv.
-    // for example, mv1 has two partition: p1:[2022-01-01, 2022-01-02), p2:[2022-01-02, 2022-01-03).
-    // p1 is updated, p2 is outdated.
-    // mv1's base partition table is t1, partition column is k1.
-    // then this function will add predicate: k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
+    // try to get partial partition predicates of partitioned mv.
+    // eg, mv1's base partition table is t1, partition column is k1 and has two partition:
+    // p1:[2022-01-01, 2022-01-02), p1 is updated(refreshed),
+    // p2:[2022-01-02, 2022-01-03), p2 is outdated,
+    // then this function will add predicate:
+    // k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
     public boolean updateScanWithPartitionRange(MaterializedView mv,
                                                 OptExpression mvPlan,
                                                 Set<String> mvPartitionNamesToRefresh) {
@@ -91,7 +92,7 @@ public class MaterializedViewOptimizer {
                 getLatestPartitionRangeForTable(partitionByTable, partitionTableAndColumns.second,
                         mv, mvPartitionNamesToRefresh);
         if (latestBaseTableRanges.isEmpty()) {
-            // if do not have an uptodate partition, do not rewrite
+            // if there isn't an updated partition, do not rewrite
             return false;
         }
 
