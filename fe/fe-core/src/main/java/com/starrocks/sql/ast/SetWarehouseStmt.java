@@ -16,10 +16,9 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 
-public class UseWarehouseStmt extends StatementBase {
-    private final String warehouseName;
-
-    public UseWarehouseStmt(String warehouseName) {
+public class SetWarehouseStmt extends StatementBase {
+    private String warehouseName;
+    public SetWarehouseStmt(String warehouseName) {
         this.warehouseName = warehouseName;
     }
 
@@ -29,7 +28,7 @@ public class UseWarehouseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUseWarehouseStatement(this, context);
+        return visitor.visitSetWarehouseStatement(this, context);
     }
 
     @Override
@@ -37,4 +36,3 @@ public class UseWarehouseStmt extends StatementBase {
         return RedirectStatus.NO_FORWARD;
     }
 }
-
