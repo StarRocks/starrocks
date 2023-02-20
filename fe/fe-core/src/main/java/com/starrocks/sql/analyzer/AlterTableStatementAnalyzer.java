@@ -230,6 +230,10 @@ public class AlterTableStatementAnalyzer {
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
             }

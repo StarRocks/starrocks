@@ -811,7 +811,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
-                case OperationType.OP_ALTER_TABLE_PROPERTIES: {
+                case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1584,6 +1585,10 @@ public class EditLog {
 
     public void logModifyInMemory(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_IN_MEMORY, info);
+    }
+
+    public void logModifyConstraint(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, info);
     }
 
     public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
