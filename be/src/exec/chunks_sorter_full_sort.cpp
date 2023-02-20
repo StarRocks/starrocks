@@ -76,11 +76,13 @@ static void reserve_memory(Column* dst_col, const std::vector<ChunkPtr>& src_chu
 
 static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_chunks, size_t num_rows) {
     DCHECK(!src_chunks.empty());
+    // Columns like FixedLengthColumn have already reserved memory when invoke Chunk::clone_empty(num_rows).
     dst_chunk = src_chunks.front()->clone_empty(num_rows);
     const auto num_columns = dst_chunk->num_columns();
     for (auto i = 0; i < num_columns; ++i) {
         auto dst_col = dst_chunk->get_column_by_index(i);
         auto* dst_data_col = ColumnHelper::get_data_column(dst_col.get());
+        // Reserve memory room for bytes array in BinaryColumn here.
         if (dst_data_col->is_binary()) {
             reserve_memory<BinaryColumn>(dst_data_col, src_chunks, i);
         } else if (dst_col->is_large_binary()) {
@@ -126,6 +128,10 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
     _profiler->num_sorted_runs->set((int64_t)_sorted_chunks.size());
+    // In cascading merging phase, the height of merging tree is ceiling(log2(num_sorted_runs)) + 1,
+    // so when num_sorted_runs is 1 or 2, the height merging tree is less than 2, the sorted runs just be processed
+    // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
+    // columns's permutation in multiple passes.
     if (_eager_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _runtime_profile->add_info_string("LazyMaterialization", "false");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
@@ -144,9 +150,13 @@ void ChunksSorterFullSort::_assign_ordinals() {
     _chunk_idx_bits = std::max(1, _chunk_idx_bits);
     _offset_in_chunk_bits = (int)std::ceil(std::log2(_max_num_rows));
     _offset_in_chunk_bits = std::max(1, _offset_in_chunk_bits);
+    // 64 bit ordinal only used when data skew is extremely drastic, for an example, a PipelineDriver processes
+    // 4 billion rows, it may happen in product environment extremely rarely, if it really happens,
+    // 64 bit ordinal is adopted.
     auto use_64bit_ordinal = (_chunk_idx_bits + _offset_in_chunk_bits) > 32;
     _runtime_profile->add_info_string("LazyMaterializationUse64BitOrdinal",
                                       strings::Substitute("$0", use_64bit_ordinal));
+
     if (use_64bit_ordinal) {
         _assign_ordinals_tmpl<uint64_t>();
     } else {
@@ -171,8 +181,8 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         auto ordinal_column = OrdinalColumn<T>::create();
         auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
         raw::make_room(&ordinal_data, num_rows);
-        for (T off = 0; off < num_rows; ++off) {
-            ordinal_data[off] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | off);
+        for (T offset = 0; offset < num_rows; ++offset) {
+            ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }
         partial_sort_chunk->append_column(ordinal_column, ORDINAL_COLUMN_SLOT_ID);
         ++chunk_idx;
@@ -241,11 +251,10 @@ starrocks::ChunkPtr ChunksSorterFullSort::_lazy_materialize_tmpl(const starrocks
 Status ChunksSorterFullSort::done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     {
-        typeof(_sort_permutation) tmp;
-        tmp.swap(_sort_permutation);
+        _sort_permutation = {};
         _unsorted_chunk.reset();
     }
-    { RETURN_IF_ERROR(_merge_sorted(state)); }
+    RETURN_IF_ERROR(_merge_sorted(state));
 
     return Status::OK();
 }

@@ -102,18 +102,29 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    // In lazy materialization of cascading merging, an extra ordinal column of type FixedLengthColumn<uint32_t>(in
+    // very rare cases, data skew is drastic, maybe FixedLengthColumn<uint64_t>) is added to participate permutation
+    // in cascading merging phase. so only if the cost of permuting ordinal column is less that the permuting
+    // no-group-by output columns, then cascading can benefit from lazy materialization. for an example:
+    // select c0, c1, c2 from t group by c1,c2
+    // if c0 is bigint, the byte width of the element of c0 is 8, permuting c0 costs more than permuting ordinal column,
+    // but if c0 is tinyint, the byte width of the element of c0 is 1, obviously permuting ordinal column costs more.
+    // The permutation cost is proportion of the total size of bytes of the elements of non-group-by columns.
     int materialized_cost = 0;
     for (auto* slot : _materialized_tuple_desc->slots()) {
         if (eager_materialized_slots.count(slot->id())) {
             continue;
         }
+        // nullable column always contribute 1 byte to materialized cost.
         materialized_cost += slot->is_nullable();
         if (slot->type().is_string_type()) {
+            // Slice is 16 bytes
             materialized_cost += 16;
         } else {
             materialized_cost += std::max<int>(1, slot->type().get_slot_size());
         }
     }
+    // The ordinal column is almost always FixedLengthColumn<uint32_t>, so cost is sizeof(uint32_t)
     static constexpr auto ORDINAL_SORT_COST = 4;
     auto lazy_materialization = _tnode.sort_node.__isset.lazy_materialization && _tnode.sort_node.lazy_materialization;
     if (lazy_materialization && all_slot_ref && materialized_cost > ORDINAL_SORT_COST) {

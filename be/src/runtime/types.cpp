@@ -366,6 +366,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DATETIME_V1:
     case TYPE_NONE:
     case TYPE_MAX_VALUE:
+        DCHECK(false);
         break;
     }
     // For llvm complain

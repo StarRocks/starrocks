@@ -24,39 +24,12 @@ class ExprContext;
 struct ChunksSorterFullSortProfiler {
     ChunksSorterFullSortProfiler(RuntimeProfile* runtime_profile, MemTracker* parent_mem_tracker)
             : profile(runtime_profile) {
-        merge_unsorted_mem_tracker = std::make_shared<MemTracker>(
-                profile, std::make_tuple(true, true, true), "MergeUnsorted", -1, "local_sort_sink", parent_mem_tracker);
-
-        partial_sort_mem_tracker = std::make_shared<MemTracker>(
-                profile, std::make_tuple(true, true, true), "SortPartial", -1, "local_sort_sink", parent_mem_tracker);
-
-        merge_sorted_mem_tracker = std::make_shared<MemTracker>(
-                profile, std::make_tuple(true, true, true), "MergeSorted", -1, "local_sort_sink", parent_mem_tracker);
-        partial_sort_retention_memory = ADD_COUNTER(profile, "PartialSortRetentionMemory", TUnit::BYTES);
-        final_retention_memory = ADD_COUNTER(profile, "FinalRetentionMemory", TUnit::BYTES);
-        input_alloc_memory = ADD_COUNTER(profile, "InputAllocMemory", TUnit::BYTES);
         input_required_memory = ADD_COUNTER(profile, "InputRequiredMemory", TUnit::BYTES);
-        input_max_alloc_extra_memory = ADD_COUNTER(profile, "InputMaxAllocExtraMemory", TUnit::BYTES);
-        permutation_used_memory = ADD_COUNTER(profile, "PermutationUsedMemory", TUnit::BYTES);
-
-        unsorted_alloc_memory = ADD_COUNTER(profile, "UnsortedAllocMemory", TUnit::BYTES);
-        unsorted_required_memory = ADD_COUNTER(profile, "UnSortedRequiredMemory", TUnit::BYTES);
         num_sorted_runs = ADD_COUNTER(profile, "NumSortedRuns", TUnit::UNIT);
     }
 
     RuntimeProfile* profile{};
-    std::shared_ptr<MemTracker> merge_unsorted_mem_tracker{};
-    std::shared_ptr<MemTracker> partial_sort_mem_tracker{};
-    std::shared_ptr<MemTracker> merge_sorted_mem_tracker{};
-    RuntimeProfile::Counter* partial_sort_retention_memory = nullptr;
-    RuntimeProfile::Counter* final_retention_memory = nullptr;
-    RuntimeProfile::Counter* input_alloc_memory = nullptr;
     RuntimeProfile::Counter* input_required_memory = nullptr;
-    RuntimeProfile::Counter* input_max_alloc_extra_memory = nullptr;
-    RuntimeProfile::Counter* permutation_used_memory = nullptr;
-
-    RuntimeProfile::Counter* unsorted_alloc_memory = nullptr;
-    RuntimeProfile::Counter* unsorted_required_memory = nullptr;
     RuntimeProfile::Counter* num_sorted_runs = nullptr;
 };
 class ChunksSorterFullSort : public ChunksSorter {
