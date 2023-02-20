@@ -52,7 +52,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -73,6 +72,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
@@ -102,6 +102,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -162,6 +163,7 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
@@ -175,6 +177,7 @@ import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
@@ -290,19 +293,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
-        Table.TableType type = tbl.getType();
-        switch (type) {
-            case OLAP:
-                return PrivilegeManager.checkAnyActionOnTable(currentUser, dbName, tbl.getName());
-            case MATERIALIZED_VIEW:
-                return PrivilegeManager.checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
-            case VIEW:
-                return PrivilegeManager.checkAnyActionOnView(currentUser, dbName, tbl.getName());
-            default:
-                return false;
-        }
-    }
+
 
     @Override
     public TGetTablesResult getTableNames(TGetTablesParams params) throws TException {
@@ -333,7 +324,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
+                    if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -378,10 +369,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
-        if (params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType())) {
-            listMaterializedViewStatus(tablesResult, limit, matcher, currentUser, params.db);
-            return result;
-        }
         if (db != null) {
             db.readLock();
             try {
@@ -389,7 +376,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
+                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db, table)) {
                             continue;
                         }
                     } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -413,7 +400,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
-                                if (!checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
+                                if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, tableName.getDb(), tbl)) {
                                     break;
                                 }
                             } else {
@@ -439,49 +426,88 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    @Override
+    public TListMaterializedViewStatusResult listMaterializedViewStatus(TGetTablesParams params) throws TException {
+        LOG.debug("get list table request: {}", params);
+
+        PatternMatcher matcher = null;
+        if (params.isSetPattern()) {
+            matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
+                    CaseSensibility.TABLE.getCaseSensibility());
+        }
+
+        // database privs should be checked in analysis phrase
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+        }
+        Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
+        return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+    }
+
     // list MaterializedView table match pattern
-    public void listMaterializedViewStatus(List<TTableStatus> tablesResult, long limit, PatternMatcher matcher,
-                                           UserIdentity currentUser, String dbName) {
+    private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
+                                                                         UserIdentity currentUser, String dbName) {
+        TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
+        List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
+        result.setMaterialized_views(tablesResult);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
-            return;
+            return result;
         }
+
+        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, dbName);
+        for (List<String> rowSet : rowSets) {
+            TMaterializedViewStatus status = new TMaterializedViewStatus();
+            status.setId(rowSet.get(0));
+            status.setName(rowSet.get(1));
+            status.setDatabase_name(rowSet.get(2));
+            status.setRefresh_type(rowSet.get(3));
+            status.setIs_active(rowSet.get(4));
+            status.setLast_refresh_start_time(rowSet.get(5));
+            status.setLast_refresh_finished_time(rowSet.get(6));
+            status.setLast_refresh_duration(rowSet.get(7));
+            status.setLast_refresh_state(rowSet.get(8));
+            status.setInactive_code(rowSet.get(9));
+            status.setInactive_reason(rowSet.get(10));
+            status.setText(rowSet.get(11));
+            status.setRows(rowSet.get(12));
+            tablesResult.add(status);
+        }
+        return result;
+    }
+
+    private List<List<String>> listMaterializedViews(long limit, PatternMatcher matcher,
+                                                     UserIdentity currentUser, String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        List<MaterializedView> materializedViews = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndex>> singleTableMVs = Lists.newArrayList();
         db.readLock();
         try {
-            for (MaterializedView mvTable : db.getMaterializedViews()) {
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+            for (Table table : db.getTables()) {
+                if (Table.TableType.MATERIALIZED_VIEW == table.getType()) {
+                    MaterializedView mvTable = (MaterializedView) table;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, dbName, mvTable)) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                            mvTable.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
-                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                        mvTable.getName(), PrivPredicate.SHOW)) {
-                    continue;
-                }
-                if (matcher != null && !matcher.match(mvTable.getName())) {
-                    continue;
-                }
-                List<String> createTableStmt = Lists.newArrayList();
-                GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
-                String ddlSql = createTableStmt.get(0);
-                TTableStatus status = new TTableStatus();
-                status.setId(String.valueOf(mvTable.getId()));
-                status.setName(mvTable.getName());
-                status.setDdl_sql(ddlSql);
-                status.setRows(String.valueOf(mvTable.getRowCount()));
-                status.setType(mvTable.getMysqlType());
-                status.setComment(mvTable.getComment());
-                tablesResult.add(status);
-                if (limit > 0 && tablesResult.size() >= limit) {
-                    return;
-                }
-            }
-            for (Table table : db.getTables()) {
-                if (table.getType() == Table.TableType.OLAP) {
+                    if (matcher != null && !matcher.match(mvTable.getName())) {
+                        continue;
+                    }
+
+                    materializedViews.add(mvTable);
+                } else if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
                     List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
                     long baseIdx = olapTable.getBaseIndexId();
-
                     for (MaterializedIndex mvIdx : visibleMaterializedViews) {
                         if (baseIdx == mvIdx.getId()) {
                             continue;
@@ -489,50 +515,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
                             continue;
                         }
-                        MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
-                        TTableStatus status = new TTableStatus();
-                        status.setId(String.valueOf(mvIdx.getId()));
-                        status.setName(olapTable.getIndexNameById(mvIdx.getId()));
-                        if (mvMeta.getOriginStmt() == null) {
-                            StringBuilder originStmtBuilder = new StringBuilder(
-                                    "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
-                                            " as select ");
-                            String groupByString = "";
-                            for (Column column : mvMeta.getSchema()) {
-                                if (column.isKey()) {
-                                    groupByString += column.getName() + ",";
-                                }
-                            }
-                            originStmtBuilder.append(groupByString);
-                            for (Column column : mvMeta.getSchema()) {
-                                if (!column.isKey()) {
-                                    originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                                            .append(column.getName()).append(")").append(",");
-                                }
-                            }
-                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                            originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                                    .append(groupByString);
-                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                            status.setDdl_sql(originStmtBuilder.toString());
-                        } else {
-                            status.setDdl_sql(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
-                                    .replaceAll("[ ]+", " "));
-                        }
-                        status.setRows(String.valueOf(mvIdx.getRowCount()));
-                        // for materialized view used old logic
-                        status.setType("");
-                        status.setComment("");
-                        tablesResult.add(status);
-                        if (limit > 0 && tablesResult.size() >= limit) {
-                            return;
-                        }
+                        singleTableMVs.add(Pair.create(olapTable, mvIdx));
                     }
+                }
+
+                // check limit
+                int mvSize = materializedViews.size() + singleTableMVs.size();
+                if (limit > 0 && mvSize >= limit) {
+                    break;
                 }
             }
         } finally {
             db.readUnlock();
         }
+        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 
     @Override
@@ -803,7 +799,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!checkAnyActionOnTableLikeObject(currentUser, params.db, db.getTable(params.getTable_name()))) {
+                if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, params.db,
+                        db.getTable(params.getTable_name()))) {
                     return result;
                 }
             } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
@@ -844,7 +841,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
+                        if (!PrivilegeManager.checkAnyActionOnTableLikeObject(currentUser, fullName, db.getTable(tableName))) {
                             continue;
                         }
                     } else {

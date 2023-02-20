@@ -350,14 +350,34 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
-    // id for materialized view
-    21: optional string id
-    // row_count for materialized view
-    22: optional string rows
 }
 
 struct TListTableStatusResult {
     1: required list<TTableStatus> tables
+}
+
+struct TMaterializedViewStatus {
+    1: optional string id
+    2: optional string database_name
+    3: optional string name
+    4: optional string refresh_type 
+    5: optional string is_active 
+    6: optional string last_refresh_start_time
+    7: optional string last_refresh_finished_time
+    8: optional string last_refresh_duration
+    9: optional string last_refresh_state
+    10: optional string inactive_code
+    11: optional string inactive_reason 
+    12: optional string text
+    13: optional string rows
+
+    20: optional i64 last_check_time
+    21: optional i64 create_time
+    22: optional string ddl_sql
+}
+
+struct TListMaterializedViewStatusResult {
+    1: optional list<TMaterializedViewStatus> materialized_views
 }
 
 // Arguments to showTasks/ShowTaskRuns
@@ -1151,6 +1171,7 @@ service FrontendService {
     TMasterOpResult forward(TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
+    TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
