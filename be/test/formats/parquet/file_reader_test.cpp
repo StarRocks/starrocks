@@ -1843,7 +1843,6 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         type_struct.children.emplace_back(type_array);
         type_struct.field_names.emplace_back("b");
 
-
         SlotDesc slot_descs[] = {
                 {"id", type_int},
                 {"col", type_struct},
@@ -1891,12 +1890,10 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         EXPECT_EQ(524288, total_row_nums);
     }
 
-
     // With 1024 chunk size
     {
         auto file = _create_file(filepath);
-        auto file_reader = std::make_shared<FileReader>(1024, file.get(),
-                                                        std::filesystem::file_size(filepath));
+        auto file_reader = std::make_shared<FileReader>(1024, file.get(), std::filesystem::file_size(filepath));
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
@@ -1919,7 +1916,6 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
 
         type_struct.children.emplace_back(type_array);
         type_struct.field_names.emplace_back("b");
-
 
         SlotDesc slot_descs[] = {
                 {"id", type_int},
