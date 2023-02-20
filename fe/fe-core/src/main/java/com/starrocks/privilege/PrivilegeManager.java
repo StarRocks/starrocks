@@ -21,6 +21,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -66,9 +67,11 @@ public class PrivilegeManager {
     private static final Logger LOG = LogManager.getLogger(PrivilegeManager.class);
 
     // builtin roles and users
-    private static final String ROOT_ROLE_NAME = "root";
+    public static final String ROOT_ROLE_NAME = "root";
     public static final long ROOT_ROLE_ID = -1;
     public static final long DB_ADMIN_ROLE_ID = -2;
+
+    public static final String CLUSTER_ADMIN_ROLE_NAME = "cluster_admin";
     public static final long CLUSTER_ADMIN_ROLE_ID = -3;
     public static final long USER_ADMIN_ROLE_ID = -4;
     public static final long PUBLIC_ROLE_ID = -5;
@@ -432,8 +435,8 @@ public class PrivilegeManager {
 
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
-            if (stmt.getUserIdent() != null) {
-                grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdent());
+            if (stmt.getUserIdentity() != null) {
+                grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdentity());
             } else {
                 grantRoleToRole(stmt.getGranteeRole(), stmt.getRole());
             }
@@ -557,8 +560,8 @@ public class PrivilegeManager {
 
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
-            if (stmt.getUserIdent() != null) {
-                revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdent());
+            if (stmt.getUserIdentity() != null) {
+                revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdentity());
             } else {
                 revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRole());
             }
@@ -1296,33 +1299,22 @@ public class PrivilegeManager {
             try {
                 // 1. get all parent roles by default, but can be specified with `SET ROLE` statement
                 if (roleIds == null) {
-                    roleIds = userPrivilegeCollection.getAllRoles();
+                    roleIds = new HashSet<>(userPrivilegeCollection.getAllRoles());
                 }
 
                 // 2. get all predecessors base on step 1
-                Set<Long> parentRoleIds = new HashSet<>();
-                for (Long roleId : roleIds) {
-                    getAllPredecessorsInner(roleId, parentRoleIds);
-                }
+                // The main purpose of the secondary verification of UserPrivilegeCollection here is.
+                // Because the user's permissions may be revoke while the session is not disconnected,
+                // the role list stored in the session cannot be changed at this time
+                // (because the current session and the session initiated by the revoke operation may not be the same),
+                // but for the user The operation will cause the cache to invalid, so in the next load process after
+                // the cache fails, we need to determine whether the user still has access to this role.
+                Set<Long> validRoleIds = new HashSet<>(userPrivilegeCollection.getAllRoles());
+                validRoleIds.retainAll(roleIds);
+                validRoleIds = getAllPredecessorsUnlocked(validRoleIds);
 
                 // 3. merge privilege collections of all predecessors
-                for (long roleId : roleIds) {
-                    // Because the drop role is an asynchronous behavior, the parentRole may not exist.
-                    // Here, for the role that does not exist, choose to ignore it directly
-                    RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
-
-                    // The main purpose of the secondary verification of UserPrivilegeCollection here is.
-                    // Because the user's permissions may be revoke while the session is not disconnected,
-                    // the role list stored in the session cannot be changed at this time
-                    // (because the current session and the session initiated by the revoke operation may not be the same),
-                    // but for the user The operation will cause the cache to invalid, so in the next load process after
-                    // the cache fails, we need to determine whether the user still has access to this role.
-                    if (rolePrivilegeCollection != null && userPrivilegeCollection.getAllRoles().contains(roleId)) {
-                        collection.merge(rolePrivilegeCollection);
-                    }
-                }
-
-                for (long roleId : parentRoleIds) {
+                for (long roleId : validRoleIds) {
                     // Because the drop role is an asynchronous behavior, the parentRole may not exist.
                     // Here, for the role that does not exist, choose to ignore it directly
                     RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
@@ -1428,7 +1420,7 @@ public class PrivilegeManager {
         return collection;
     }
 
-    public List<String> getGranteeRolesToRole(String roleName) {
+    public List<String> getGranteeRoleDetailsForRole(String roleName) {
         roleReadLock();
         try {
             Long roleId = getRoleIdByNameAllowNull(roleName);
@@ -1480,7 +1472,7 @@ public class PrivilegeManager {
         }
     }
 
-    public List<String> getGranteeRoleToUser(UserIdentity userIdentity) {
+    public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
             UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
@@ -2127,5 +2119,19 @@ public class PrivilegeManager {
     // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
     public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
         roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
+    }
+
+    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, String dbName, Table tbl) {
+        Table.TableType type = tbl.getType();
+        switch (type) {
+            case OLAP:
+                return checkAnyActionOnTable(currentUser, dbName, tbl.getName());
+            case MATERIALIZED_VIEW:
+                return checkAnyActionOnMaterializedView(currentUser, dbName, tbl.getName());
+            case VIEW:
+                return checkAnyActionOnView(currentUser, dbName, tbl.getName());
+            default:
+                return false;
+        }
     }
 }

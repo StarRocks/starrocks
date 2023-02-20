@@ -75,7 +75,7 @@ public:
 
     Status finish_batch() override { return Status::OK(); }
 
-    void set_need_parse_levels(bool need_parse_levels) override {};
+    void set_need_parse_levels(bool need_parse_levels) override{};
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 

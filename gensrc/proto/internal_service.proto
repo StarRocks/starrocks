@@ -166,6 +166,9 @@ message PTabletWriterOpenRequest {
     optional string merge_condition = 26;
     optional bool miss_auto_increment_column = 27;
     optional bool abort_delete = 28;
+    // before data load, the all current partitions will be opened
+    // When the data load in progress, the partition created by automatic partition needs incremental open
+    optional bool is_incremental = 29;
 };
 
 message PTabletWriterOpenResult {
@@ -208,6 +211,9 @@ message PTabletWriterAddChunkRequest {
     repeated int64 partition_ids = 8;
     optional int64 txn_id = 9;
     optional int64 timeout_ms = 10;
+    // wait all sender close before rpc returning
+    // this is used for automatic partition creation
+    optional bool wait_all_sender_close = 11 [default = false];
 };
 
 message PTabletWriterAddChunksRequest {

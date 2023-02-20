@@ -319,6 +319,9 @@
       + [bitnot](./sql-reference/sql-functions/bit-functions/bitnot.md)
       + [bitor](./sql-reference/sql-functions/bit-functions/bitor.md)
       + [bitxor](./sql-reference/sql-functions/bit-functions/bitxor.md)
+      + [bit_shift_left](./sql-reference/sql-functions/bit-functions/bit_shift_left.md)
+      + [bit_shift_right](./sql-reference/sql-functions/bit-functions/bit_shift_right.md)
+      + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
@@ -596,6 +599,9 @@
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
+  + Code Style Guides
+    + [protobuf style guides](./developers/code-style-guides/protobuf-guides.md)
+    + [thrift style guides](./developers/code-style-guides/thrift-guides.md)
   + [Use the debuginfo file for debugging](./developers/debuginfo.md)
   + Development Environment
     + [IDE Setup](./developers/development-environment/ide-setup.md)
@@ -604,6 +610,9 @@
     + [Build_Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Integration
+  + [Integrate with StarRocks](./integrations/intro.md)
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)

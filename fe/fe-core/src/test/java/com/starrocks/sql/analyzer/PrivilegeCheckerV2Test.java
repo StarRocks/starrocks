@@ -2427,6 +2427,14 @@ public class PrivilegeCheckerV2Test {
         PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
                 "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
+        try {
+            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke root from root", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Can not revoke root role from root user", e.getMessage());
+        }
+
         ctxToTestUser();
         try {
             PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
@@ -2445,6 +2453,54 @@ public class PrivilegeCheckerV2Test {
         }
 
         sql = "drop role r1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testSetDefaultRole() throws Exception {
+        String sql = "create role r1, r2";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user u1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "create user u2";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        ctxToRoot();
+        sql = "grant r1 to u1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("u2", "%"));
+        try {
+            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                    "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(),
+                    "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+        }
+
+        sql = "drop user u1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop user u2";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+
+        sql = "drop role r1, r2";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }

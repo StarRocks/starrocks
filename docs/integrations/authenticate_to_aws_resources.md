@@ -159,8 +159,8 @@ The following figure provides a high-level explanation of the differences in mec
 
 ### Authentication parameters for accessing AWS Glue
 
-- If you use the instance profile-based credential method to access AWS Glue, set `aws.s3.use_instance_profile` to `true` when you create external catalogs.
-- If you use the assumed role-based credential method to access AWS Glue, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 when you create external catalogs.
+- If you use the instance profile-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` when you create external catalogs.
+- If you use the assumed role-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 when you create external catalogs.
 - If you use the IAM user-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user when you create external catalogs.
 
 ## Integration examples

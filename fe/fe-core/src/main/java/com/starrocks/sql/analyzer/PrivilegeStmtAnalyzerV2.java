@@ -445,8 +445,8 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), true);
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to user", true));
             } else {

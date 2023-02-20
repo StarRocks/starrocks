@@ -2,7 +2,7 @@
 # Please run this command from the git repo root directory to build:
 # DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifact-ubuntu.Dockerfile -t starrocks/artifact-ubuntu:tag .
 
-ARG builder=ghcr.io/StarRocks/starrocks/dev-env-ubuntu:latest
+ARG builder=ghcr.io/starrocks/starrocks/dev-env-ubuntu:latest
 
 FROM ${builder} as fe-builder
 # clean and build Frontend and Spark Dpp application
@@ -21,7 +21,7 @@ RUN BUILD_TYPE=${BUILD_TYPE} ./build.sh --be --clean -j `nproc`
 
 FROM busybox:latest
 
-LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
+LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
 COPY --from=fe-builder /build/starrocks/output /release/fe_artifacts
 COPY --from=be-builder /build/starrocks/output /release/be_artifacts

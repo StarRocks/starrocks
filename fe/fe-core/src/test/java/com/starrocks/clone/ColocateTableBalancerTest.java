@@ -182,6 +182,8 @@ public class ColocateTableBalancerTest {
         //  at com.starrocks.common.util.Daemon.run(Daemon.java:115)
         GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
+        GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
+
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));

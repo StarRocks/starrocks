@@ -12,7 +12,7 @@ DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io
 ```
 E.g.:
 ```shell
-DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/dengliu/starrocks/dev-env-ubuntu:latest ../..
+DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/starrocks/starrocks/dev-env-ubuntu:latest ../..
 ```
 ## 1.2 Publish image to ghcr
 ```
@@ -20,7 +20,7 @@ docker push ghcr.io/OWNER/starrocks/dev-env-ubuntu:<tag>
 ```
 E.g.:
 ```shell
-docker push ghcr.io/dengliu/starrocks/dev-env-ubuntu:latest
+docker push ghcr.io/starrocks/starrocks/dev-env-ubuntu:latest
 ```
 
 # 2 Starrocks artifacts image
@@ -36,7 +36,7 @@ DOCKER_BUILDKIT=1 docker build -f artifact-ubuntu.Dockerfile -t ghcr.io/OWNER/st
 ```
 E.g.
 ```shell
-DOCKER_BUILDKIT=1 docker build -f artifact-ubuntu.Dockerfile -t ghcr.io/dengliu/starrocks/artifact-ubuntu:latest ../..
+DOCKER_BUILDKIT=1 docker build -f artifact-ubuntu.Dockerfile -t ghcr.io/starrocks/starrocks/artifact-ubuntu:latest ../..
 ```
 
 ## 2.2 Publish image to ghcr
@@ -45,7 +45,7 @@ docker push ghcr.io/OWNER/starrocks/artifact-ubuntu:<tag>
 ```
 E.g.:
 ```shell
-docker push ghcr.io/dengliu/starrocks/artifact-ubuntu:latest
+docker push ghcr.io/starrocks/starrocks/artifact-ubuntu:latest
 ```
 
 
@@ -58,7 +58,7 @@ DOCKER_BUILDKIT=1 docker build -f be-ubuntu.Dockerfile -t ghcr.io/OWNER/starrock
 E.g.:
 - Use artifact image to package runtime container
 ```shell
-DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/dengliu/starrocks/artifact-ubuntu:latest -f be-ubuntu.Dockerfile -t be-ubuntu:latest ../..
+DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f be-ubuntu.Dockerfile -t be-ubuntu:latest ../..
 ```
 
 - Use locally build artifacts to package runtime container
@@ -72,7 +72,7 @@ docker push ghcr.io/OWNER/starrocks/be-ubuntu:<tag>
 ```
 E.g.:
 ```shell
-docker push ghcr.io/dengliu/starrocks/be-ubuntu:latest
+docker push ghcr.io/starrocks/starrocks/be-ubuntu:latest
 ```
 
 
@@ -85,7 +85,7 @@ DOCKER_BUILDKIT=1 docker build -f fe-ubuntu.Dockerfile -t ghcr.io/OWNER/starrock
 E.g.:
 - Use artifact image to package runtime container
 ```shell
-DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/dengliu/starrocks/artifact-ubuntu:latest -f fe-ubuntu.Dockerfile -t fe-ubuntu:latest ../..
+DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f fe-ubuntu.Dockerfile -t fe-ubuntu:latest ../..
 ```
 
 - Use locally build artifacts to package runtime container
@@ -99,5 +99,5 @@ docker push ghcr.io/OWNER/starrocks/fe-ubuntu:<tag>
 ```
 E.g.:
 ```shell
-docker push ghcr.io/dengliu/starrocks/fe-ubuntu:latest
+docker push ghcr.io/starrocks/starrocks/fe-ubuntu:latest
 ```

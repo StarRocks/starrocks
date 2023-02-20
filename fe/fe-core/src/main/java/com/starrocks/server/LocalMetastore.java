@@ -35,7 +35,6 @@
 package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
@@ -2883,12 +2882,14 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true);
-        if (CollectionUtils.isEmpty(chosenBackendIds)) {
-            List<Long> backendIds = systemInfoService.getBackendIds(true);
-            throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
-                    ", Current alive backend is [" + Joiner.on(",").join(backendIds) + "]");
+        if (!CollectionUtils.isEmpty(chosenBackendIds)) {
+            return chosenBackendIds;
+        } else if (replicationNum > 1) {
+            throw new DdlException(String.format("Unable to find %d alive nodes on different hosts to create %d replicas",
+                    replicationNum, replicationNum));
+        } else {
+            throw new DdlException("No alive nodes");
         }
-        return chosenBackendIds;
     }
 
     // Drop table

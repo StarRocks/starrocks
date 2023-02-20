@@ -99,6 +99,9 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
 
+    public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
+    public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
+
     public static LongCounterMetric COUNTER_LOAD_ADD;
     public static LongCounterMetric COUNTER_LOAD_FINISHED;
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
@@ -398,6 +401,13 @@ public final class MetricRepo {
         COUNTER_ROUTINE_LOAD_ERROR_ROWS = new LongCounterMetric("routine_load_error_rows", MetricUnit.ROWS,
                 "total error rows of routine load");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ERROR_ROWS);
+
+        COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
+        "current unfinished backup job");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
+        COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
+        "current unfinished restore job");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));

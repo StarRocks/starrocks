@@ -65,6 +65,14 @@ This statement is used to operate nodes in a system. (Administrator only!)
    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...])
    ```
 
+10. Create an image (metadata snapshot) file.
+
+   ```sql
+   ALTER SYSTEM CREATE IMAGE
+   ```
+
+   Executing this statement triggers the Leader FE to create a new image (metadata snapshot) file. It is an asynchronous operation. You can check the start time and end time of the operation by viewing the FE log file **fe.log**. "Triggering a new checkpoint manually..." indicates that the operation has started, and "finished save image..." indicates that the image is created.
+
 Note:
 
 1. host could be a host name and an ip address.

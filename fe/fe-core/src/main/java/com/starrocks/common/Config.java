@@ -211,6 +211,12 @@ public class Config extends ConfigBase {
     public static String big_query_log_delete_age = "7d";
 
     /**
+     * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
+     * to avoid creating too many partitions at one time.
+     */
+    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+
+    /**
      * plugin_dir:
      * plugin install directory
      */

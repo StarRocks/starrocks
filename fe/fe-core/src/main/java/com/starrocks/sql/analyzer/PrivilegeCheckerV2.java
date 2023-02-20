@@ -1101,8 +1101,8 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
-            if (statement.getGranteeRole().stream().anyMatch(
-                    r -> r.equalsIgnoreCase("root") || r.equalsIgnoreCase("cluster_admin"))) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeManager.CLUSTER_ADMIN_ROLE_NAME))) {
                 UserIdentity userIdentity = context.getCurrentUserIdentity();
                 if (!userIdentity.equals(UserIdentity.ROOT)) {
                     throw new SemanticException("Can not grant root or cluster_admin role except root user");
@@ -1117,20 +1117,16 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
-            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase("root"))) {
-                throw new SemanticException("Can not revoke root role");
-            }
-
-            if (statement.getGranteeRole().stream().anyMatch(
-                    r -> r.equalsIgnoreCase("root") || r.equalsIgnoreCase("cluster_admin"))) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeManager.CLUSTER_ADMIN_ROLE_NAME))) {
                 UserIdentity userIdentity = context.getCurrentUserIdentity();
                 if (!userIdentity.equals(UserIdentity.ROOT)) {
                     throw new SemanticException("Can not grant root or cluster_admin role except root user");
                 }
             }
 
-            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase("root"))) {
-                if (statement.getUserIdent() != null && statement.getUserIdent().equals(UserIdentity.ROOT)) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME))) {
+                if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
                     throw new SemanticException("Can not revoke root role from root user");
                 }
             }

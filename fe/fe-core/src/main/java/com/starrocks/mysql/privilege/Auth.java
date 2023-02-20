@@ -777,7 +777,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdentity(), true, false);
         } finally {
             writeUnlock();
         }
@@ -835,7 +835,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole().get(0), stmt.getUserIdentity(), false);
         } finally {
             writeUnlock();
         }

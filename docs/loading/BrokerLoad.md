@@ -16,7 +16,7 @@ From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to
 
 > **NOTE**
 >
-> Loading without the broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using the broker process.
+> Loading without the broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you can still load data by using the broker process.
 
 If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
 

@@ -1,7 +1,7 @@
 # This docker file build the Starrocks fe ubuntu image
 # Please run this command from the git repo root directory to build:
 #   - Use artifact image to package runtime container:
-#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/dengliu/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/fe-ubuntu.Dockerfile -t fe-ubuntu:latest .
+#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/fe-ubuntu.Dockerfile -t fe-ubuntu:latest .
 #   - Use locally build artifacts to package runtime container:
 #     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f docker/dockerfiles/fe-ubuntu.Dockerfile -t fe-ubuntu:latest .
 
