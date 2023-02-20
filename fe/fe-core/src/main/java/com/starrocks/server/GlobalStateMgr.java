@@ -3150,6 +3150,24 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("backup handler clean old jobs failed", t);
         }
+<<<<<<< HEAD
+=======
+        try {
+            streamLoadManager.cleanOldStreamLoadTasks();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
+        }
+        try {
+            taskManager.removeExpiredTasks();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire tasks failed", t);
+        }
+        try {
+            taskManager.removeExpiredTaskRuns();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire task runs history failed", t);
+        }
+>>>>>>> 22a29b33b (Fix bug clear expire task/taskrun before save image (#18084))
     }
 
     public void doTaskBackgroundJob() {
