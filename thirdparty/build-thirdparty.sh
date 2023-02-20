@@ -1027,8 +1027,8 @@ build_serdes() {
                 --enable-static \
                 --disable-shared
 
-    ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
+    make -j$PARALLEL
+    make install
     rm ${TP_INSTALL_DIR}/lib/libserdes.so*
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
