@@ -462,7 +462,7 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (GlobalStateMgr.getCurrentState().isCloudNativeMode() &&
+            if (GlobalStateMgr.getCurrentState().isSharedDataMode() &&
                     this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();

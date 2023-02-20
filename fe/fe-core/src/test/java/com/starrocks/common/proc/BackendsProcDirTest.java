@@ -125,7 +125,7 @@ public class BackendsProcDirTest {
                 minTimes = 0;
                 result = systemInfoService;
 
-                globalStateMgr.isCloudNativeMode();
+                globalStateMgr.isSharedDataMode();
                 minTimes = 0;
                 result = false;
             }

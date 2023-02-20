@@ -103,7 +103,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
-            if (GlobalStateMgr.getCurrentState().isLocalMode()) {
+            if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }

@@ -70,7 +70,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
-        if (GlobalStateMgr.getCurrentState().isCloudNativeMode()) {
+        if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
             builder.add("StarletPort").add("WorkerId");
         }
         TITLE_NAMES = builder.build();
@@ -193,7 +193,7 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
 
-            if (GlobalStateMgr.getCurrentState().isCloudNativeMode()) {
+            if (GlobalStateMgr.getCurrentState().isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));

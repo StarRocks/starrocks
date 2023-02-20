@@ -385,7 +385,7 @@ public class PropertyAnalyzer {
         // compute-storage-separation table will be created and in this case the replication_num will
         // be ignored, so there is no need to check whether the number of alive nodes is greater than the
         // replication_num.
-        if (GlobalStateMgr.getCurrentState().isLocalMode()) {
+        if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
             List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "

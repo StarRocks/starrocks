@@ -494,11 +494,11 @@ public class GlobalStateMgr {
 
     private RunMode runMode = RunMode.SHARED_NOTHING;
 
-    public boolean isLocalMode() {
+    public boolean isSharedNothingMode() {
         return runMode.equals(RunMode.SHARED_NOTHING);
     }
 
-    public boolean isCloudNativeMode() {
+    public boolean isSharedDataMode() {
         return runMode.equals(RunMode.SHARED_DATA);
     }
 
@@ -989,7 +989,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (isCloudNativeMode() && !starOSAgent.init(null)) {
+        if (isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1188,7 +1188,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (isCloudNativeMode()) {
+        if (isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1255,7 +1255,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (isCloudNativeMode()) {
+        if (isSharedDataMode()) {
             shardDeleter.start();
         }
     }
@@ -1279,7 +1279,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (isCloudNativeMode()) {
+        if (isSharedDataMode()) {
             compactionManager.start();
         }
         configRefreshDaemon.start();
