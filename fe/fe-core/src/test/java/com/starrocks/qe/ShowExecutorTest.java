@@ -41,6 +41,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -204,7 +205,7 @@ public class ShowExecutorTest {
             }
         };
 
-        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
                 "default_catalog", "testDb", "testTbl");
 
         // mock materialized view

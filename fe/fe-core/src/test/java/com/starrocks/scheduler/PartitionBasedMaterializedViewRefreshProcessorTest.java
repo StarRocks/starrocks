@@ -18,6 +18,7 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -676,11 +677,11 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         // mv need refresh with base table partition p1, p1 renamed with p10 after collect and before insert overwrite
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> olapTables = Maps.newHashMap();
-                List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            private Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
 
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     if (!baseTableInfo.getTable().isOlapTable()) {
                         continue;
                     }
@@ -728,10 +729,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> olapTables = Maps.newHashMap();
-                List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     if (!baseTableInfo.getTable().isOlapTable()) {
                         continue;
                     }
@@ -787,10 +788,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> olapTables = Maps.newHashMap();
-                List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     if (!baseTableInfo.getTable().isOlapTable()) {
                         continue;
                     }
@@ -878,10 +879,10 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> olapTables = Maps.newHashMap();
-                List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            private Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     if (!baseTableInfo.getTable().isOlapTable()) {
                         continue;
                     }

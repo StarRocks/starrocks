@@ -272,6 +272,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return nameToColumn.get(name);
     }
 
+    public boolean containColumn(String columnName) {
+        return nameToColumn.containsKey(columnName);
+    }
+
     public List<Column> getColumns() {
         return new ArrayList<>(nameToColumn.values());
     }

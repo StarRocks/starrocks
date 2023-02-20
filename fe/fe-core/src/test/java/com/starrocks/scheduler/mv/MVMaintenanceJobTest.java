@@ -16,6 +16,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -51,12 +52,12 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setName("view1");
         view.setMaintenancePlan(new ExecPlan());
 
-        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 1L);
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 1L);
         baseTableInfos.add(baseTableInfo1);
-        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 2L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 2L);
         baseTableInfos.add(baseTableInfo2);
-        MaterializedView.BaseTableInfo baseTableInfo3 = new MaterializedView.BaseTableInfo(100L, 2L);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 2L);
         baseTableInfos.add(baseTableInfo3);
 
         view.setBaseTableInfos(baseTableInfos);

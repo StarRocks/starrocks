@@ -144,6 +144,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private BinlogConfig binlogConfig;
 
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    private List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    private List<ForeignKeyConstraint> foreignKeyConstraints;
+
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -188,6 +195,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionLiveNumber();
+                break;
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                buildConstraint();
+                break;
             default:
                 break;
         }
@@ -334,6 +345,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildConstraint() {
+        uniqueConstraints = UniqueConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+
+        foreignKeyConstraints = ForeignKeyConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -446,6 +466,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
     public Map<Long, Long> getBinlogAvailaberVersions() {
         return binlogAvailabeVersions;
     }
@@ -487,5 +523,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildForceExternalTableQueryRewrite();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
+        buildConstraint();
     }
 }
