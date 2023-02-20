@@ -1,0 +1,8 @@
+{
+   "f_float": 3.14,
+   "f_bool": true,
+   "f_int": 123,
+   "f_float_in_string": "3.14",
+   "f_bool_in_string": "1",
+   "f_int_in_string": "123"
+}

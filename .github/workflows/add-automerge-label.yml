@@ -1,0 +1,17 @@
+name: label
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+
+jobs:
+  add-automerge-label:
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport') }}
+    steps:
+      - uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: automerge

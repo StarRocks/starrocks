@@ -1,0 +1,33 @@
+name: code-check
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - 'fe/**.java'
+
+jobs:
+  java-codestyle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Copy checkstyle files
+        run: cp fe/checkstyle* .
+
+      - name: Run java checkstyle
+        uses: dbelyaev/action-checkstyle@v0.6.1
+        with:
+          workdir: "./fe"
+          checkstyle_config: checkstyle.xml
+          reporter: 'github-pr-check'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_error: true
+          level: error

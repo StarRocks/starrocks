@@ -1,0 +1,44 @@
+{
+  "partitionToWriteStats" : {
+    "" : [ {
+      "fileId" : "0df0196b-f46f-43f5-8cf0-06fad7143af3-0",
+      "path" : ".0df0196b-f46f-43f5-8cf0-06fad7143af3-0_20230110191854854.log.1_0-69-73",
+      "prevCommit" : "20230110191854854",
+      "numWrites" : 1,
+      "numDeletes" : 0,
+      "numUpdateWrites" : 1,
+      "numInserts" : 0,
+      "totalWriteBytes" : 1756,
+      "totalWriteErrors" : 0,
+      "tempPath" : null,
+      "partitionPath" : "",
+      "totalLogRecords" : 0,
+      "totalLogFilesCompacted" : 0,
+      "totalLogSizeCompacted" : 0,
+      "totalUpdatedRecordsCompacted" : 0,
+      "totalLogBlocks" : 0,
+      "totalCorruptLogBlock" : 0,
+      "totalRollbackBlocks" : 0,
+      "fileSizeInBytes" : 1756,
+      "minEventTime" : null,
+      "maxEventTime" : null,
+      "runtimeStats" : {
+        "totalScanTime" : 0,
+        "totalUpsertTime" : 103,
+        "totalCreateTime" : 0
+      },
+      "logVersion" : 1,
+      "logOffset" : 0,
+      "baseFile" : "0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet",
+      "logFiles" : [ ".0df0196b-f46f-43f5-8cf0-06fad7143af3-0_20230110191854854.log.1_0-69-73" ],
+      "recordsStats" : {
+        "val" : null
+      }
+    } ]
+  },
+  "compacted" : false,
+  "extraMetadata" : {
+    "schema" : "{\"type\":\"record\",\"name\":\"test_hudi_mor2_record\",\"namespace\":\"hoodie.test_hudi_mor2\",\"fields\":[{\"name\":\"uuid\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"int\"},{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"c\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[\"null\",{\"type\":\"array\",\"items\":[\"null\",\"int\"]}]}],\"default\":null},{\"name\":\"d\",\"type\":[\"null\",{\"type\":\"map\",\"values\":[\"null\",{\"type\":\"array\",\"items\":[\"null\",\"int\"]}]}],\"default\":null},{\"name\":\"e\",\"type\":{\"type\":\"record\",\"name\":\"test_hudi_mor2_record_e\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[\"null\",\"int\"]}],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",{\"type\":\"map\",\"values\":[\"null\",\"int\"]}],\"default\":null},{\"name\":\"c\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"test_hudi_mor2_record_e_c\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",{\"type\":\"array\",\"items\":[\"null\",\"int\"]}],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"test_hudi_mor2_record_e_c_b\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"int\"],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null}]}],\"default\":null}]}],\"default\":null}]}}]}"
+  },
+  "operationType" : "UPSERT"
+}

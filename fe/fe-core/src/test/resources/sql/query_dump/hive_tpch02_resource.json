@@ -1,0 +1,86 @@
+{
+  "statement": "select\n    s_acctbal,\n    s_name,\n    n_name,\n    p_partkey,\n    p_mfgr,\n    s_address,\n    s_phone,\n    s_comment\nfrom\n    part,\n    supplier,\n    partsupp,\n    nation,\n    region\nwhere\n        p_partkey = ps_partkey\n  and s_suppkey = ps_suppkey\n  and p_size = 12\n  and p_type like '%COPPER'\n  and s_nationkey = n_nationkey\n  and n_regionkey = r_regionkey\n  and r_name = 'AMERICA'\n  and ps_supplycost = (\n    select\n        min(ps_supplycost)\n    from\n        partsupp,\n        supplier,\n        nation,\n        region\n    where\n            p_partkey = ps_partkey\n      and s_suppkey = ps_suppkey\n      and s_nationkey = n_nationkey\n      and n_regionkey = r_regionkey\n      and r_name = 'AMERICA'\n)\norder by\n    s_acctbal desc,\n    n_name,\n    s_name,\n    p_partkey limit 100;\n",
+  "resources": {
+    "emr_test": "{\"clazz\":\"HiveResource\",\"metastoreURIs\":\"thrift://172.26.194.238:9083\",\"properties\":{\"type\":\"hive\",\"hive.metastore.uris\":\"thrift://172.26.194.238:9083\"},\"name\":\"emr_test\",\"type\":\"HIVE\"}"
+  },
+  "table_meta": {
+    "tpch_100g_parquet_zlib.nation": "CREATE EXTERNAL TABLE `nation` (\n  `n_nationkey` int(11) NULL COMMENT \"\",\n  `n_name` varchar(65533) NULL COMMENT \"\",\n  `n_regionkey` int(11) NULL COMMENT \"\",\n  `n_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"nation\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
+    "tpch_100g_parquet_zlib.part": "CREATE EXTERNAL TABLE `part` (\n  `p_partkey` int(11) NULL COMMENT \"\",\n  `p_name` varchar(65533) NULL COMMENT \"\",\n  `p_mfgr` varchar(65533) NULL COMMENT \"\",\n  `p_brand` varchar(65533) NULL COMMENT \"\",\n  `p_type` varchar(65533) NULL COMMENT \"\",\n  `p_size` int(11) NULL COMMENT \"\",\n  `p_container` varchar(65533) NULL COMMENT \"\",\n  `p_retailprice` decimal64(15, 2) NULL COMMENT \"\",\n  `p_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"part\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
+    "tpch_100g_parquet_zlib.partsupp": "CREATE EXTERNAL TABLE `partsupp` (\n  `ps_partkey` int(11) NULL COMMENT \"\",\n  `ps_suppkey` int(11) NULL COMMENT \"\",\n  `ps_availqty` int(11) NULL COMMENT \"\",\n  `ps_supplycost` decimal64(15, 2) NULL COMMENT \"\",\n  `ps_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"partsupp\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
+    "tpch_100g_parquet_zlib.region": "CREATE EXTERNAL TABLE `region` (\n  `r_regionkey` int(11) NULL COMMENT \"\",\n  `r_name` varchar(65533) NULL COMMENT \"\",\n  `r_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"region\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
+    "tpch_100g_parquet_zlib.supplier": "CREATE EXTERNAL TABLE `supplier` (\n  `s_suppkey` int(11) NULL COMMENT \"\",\n  `s_name` varchar(65533) NULL COMMENT \"\",\n  `s_address` varchar(65533) NULL COMMENT \"\",\n  `s_nationkey` int(11) NULL COMMENT \"\",\n  `s_phone` varchar(65533) NULL COMMENT \"\",\n  `s_acctbal` decimal64(15, 2) NULL COMMENT \"\",\n  `s_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"supplier\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);"
+  },
+  "hms_table": {
+    "emr_test%tpch_100g_parquet_zlib%partsupp": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"8.0E7\",\"PartitionColumns\":[],\"DataColumns\":[\"ps_partkey\",\"ps_suppkey\",\"ps_availqty\",\"ps_supplycost\",\"ps_comment\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%tpch_100g_parquet_zlib%nation": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"25.0\",\"PartitionColumns\":[],\"DataColumns\":[\"n_nationkey\",\"n_name\",\"n_regionkey\",\"n_comment\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%tpch_100g_parquet_zlib%part": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"2.0E7\",\"PartitionColumns\":[],\"DataColumns\":[\"p_partkey\",\"p_name\",\"p_mfgr\",\"p_brand\",\"p_type\",\"p_size\",\"p_container\",\"p_retailprice\",\"p_comment\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%tpch_100g_parquet_zlib%supplier": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"1000000.0\",\"PartitionColumns\":[],\"DataColumns\":[\"s_suppkey\",\"s_name\",\"s_address\",\"s_nationkey\",\"s_phone\",\"s_acctbal\",\"s_comment\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%tpch_100g_parquet_zlib%region": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"5.0\",\"PartitionColumns\":[],\"DataColumns\":[\"r_regionkey\",\"r_name\",\"r_comment\"],\"PartitionNames\":[]}"
+    ]
+  },
+  "table_row_count": {},
+  "session_variables": "{\"enable_show_all_variables\":false,\"cbo_cte_reuse\":true,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate\":1.2,\"transmission_encode_level\":0,\"character_set_results\":\"utf8\",\"transaction_isolation\":\"REPEATABLE-READ\",\"enable_global_runtime_filter\":true,\"load_transmission_compression_type\":\"NO_COMPRESSION\",\"cbo_enable_low_cardinality_optimize\":true,\"enable_resource_group_v2\":true,\"new_planner_optimize_timeout\":30000,\"force_schedule_local\":false,\"cbo_enable_greedy_join_reorder\":true,\"load_mem_limit\":0,\"sql_safe_updates\":0,\"enable_local_shuffle_agg\":true,\"cbo_debug_alive_backend_number\":0,\"global_runtime_filter_probe_min_size\":102400,\"query_delivery_timeout\":300,\"net_write_timeout\":60,\"cbo_prune_shuffle_column_rate\":0.1,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"use_compute_nodes\":-1,\"collation_connection\":\"utf8_general_ci\",\"pipeline_sink_dop\":0,\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"profile_limit_fold\":true,\"exec_mem_limit\":2147483648,\"cbo_max_reorder_node_use_dp\":10,\"query_cache_force_populate\":false,\"runtime_filter_on_exchange_node\":false,\"disable_join_reorder\":false,\"enable_profile\":false,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"forward_to_leader\":false,\"query_timeout\":300,\"enable_pipeline_query_statistic\":true,\"cbo_max_reorder_node\":50,\"cboPushDownAggregateMode_v1\":-1,\"enable_deliver_batch_fragments\":true,\"enable_tablet_internal_parallel_v2\":true,\"interpolate_passthrough\":true,\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"prefer_compute_node\":false,\"broadcast_right_table_scale_factor\":10,\"disable_streaming_preaggregations\":false,\"parse_tokens_limit\":3500000,\"chunk_size\":4096,\"runtime_join_filter_push_down_limit\":1024000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_filter_unused_columns_in_scan_stage\":false,\"enable_scan_block_cache\":false,\"div_precision_increment\":4,\"auto_increment_increment\":1,\"sql_mode_v2\":32,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"cbo_cte_max_limit\":10,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"hive_partition_stats_sample_size\":3000,\"enable_optimizer_trace_log\":false,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"profile_timeout\":2,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"join_implementation_mode_v2\":\"auto\",\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"statistic_collect_parallel\":1,\"query_cache_type\":0,\"disable_colocate_join\":false,\"query_cache_entry_max_rows\":409600,\"max_pushdown_conditions_per_column\":-1,\"enable_exchange_pass_through\":true,\"query_cache_entry_max_bytes\":4194304,\"innodb_read_only\":true,\"enable_exchange_perf\":false,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"enable_query_cache\":false,\"enable_rewrite_groupingsets_to_union_all\":false,\"transmission_compression_type\":\"LZ4\",\"interactive_timeout\":3600,\"enable_replicated_storage\":false,\"max_allowed_packet\":1048576,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"enable_multicolumn_global_runtime_filter\":false,\"character_set_server\":\"utf8\",\"tablet_internal_parallel_mode\":\"auto\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"parallel_exchange_instance_num\":-1,\"enable_shared_scan\":false,\"enable_query_debug_trace\":false,\"allow_default_partition\":false}",
+  "column_statistics": {
+    "tpch_100g_parquet_zlib.nation": {
+      "n_nationkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "n_regionkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "n_name": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "tpch_100g_parquet_zlib.part": {
+      "p_partkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_type": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_mfgr": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_size": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "tpch_100g_parquet_zlib.partsupp": {
+      "ps_suppkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "ps_partkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "ps_supplycost": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "tpch_100g_parquet_zlib.supplier": {
+      "s_comment": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_phone": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_nationkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_name": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_address": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_acctbal": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_suppkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "tpch_100g_parquet_zlib.region": {
+      "r_regionkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "r_name": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    }
+  },
+  "be_number": 1,
+  "be_core_stat": {
+    "numOfHardwareCoresPerBe": "{\"13003\":104}",
+    "cachedAvgNumOfHardwareCores": 104
+  },
+  "exception": [],
+  "version": "UNKNOWN",
+  "commit_version": "87c0e1026"
+}

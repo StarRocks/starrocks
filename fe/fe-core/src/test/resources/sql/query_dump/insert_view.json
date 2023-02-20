@@ -1,0 +1,31 @@
+{
+  "statement":"insert into t3 select t9_c1,t9_c2 from t9;\n",
+  "table_meta":{
+    "test.t3":"CREATE TABLE `t3` (\n  `c1` int(11) NULL COMMENT \"\",\n  `c2` int(11) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`c1`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`c1`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);",
+    "test.t2":"CREATE TABLE `t2` (\n  `t2_c1` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\",\n  `t2_c2` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\",\n  `t2_c3` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\",\n  `t2_c4` varchar(10) NOT NULL DEFAULT \"\" COMMENT \"\",\n  `t2_c5` varchar(10) NOT NULL DEFAULT \"\" COMMENT \"\",\n  `t2_c6` varchar(10) NOT NULL DEFAULT \"\" COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`t2_c1`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`t2_c1`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"V2\",\n\"enable_persistent_index\" \u003d \"false\"\n);"
+  },
+  "table_row_count":{
+    "test.t2":{
+      "t2":0
+    }
+  },
+  "view_meta":{
+    "test.t5":"SELECT `test`.`t2`.`t2_c1` AS `t2_c1`, `test`.`t2`.`t2_c2` AS `t2_c2`, `test`.`t2`.`t2_c3` AS `t2_c3`, `test`.`t2`.`t2_c4` AS `t2_c4`, `test`.`t2`.`t2_c5` AS `t2_c5`, `test`.`t2`.`t2_c6` AS `t2_c6` FROM `test`.`t2`",
+    "test.t6":"SELECT `t2_c1` AS `t6_c1`, `t2_c2` AS `t6_c2`, sum(`t2_c3`) AS `t6_c3` FROM `test`.`t5` GROUP BY `t2_c1`, `t2_c2`",
+    "test.t8":"SELECT `t6_c1` AS `t6_c1`, `t6_c2` AS `t6_c2`, `t6_c3` + 1 AS `new_t6_c3` FROM `test`.`t6`",
+    "test.t9":"SELECT `t6_c1` + 1 AS `t9_c1`, `t6_c2` AS `t9_c2`, `new_t6_c3` - 1 AS ```new_t6_c3`` - 1` FROM `test`.`t8`"
+  },
+  "session_variables":"{\"enable_resource_group\":false,\"chunk_size\":4096,\"disable_bucket_join\":false,\"runtime_join_filter_push_down_limit\":1024000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"codegen_level\":0,\"cbo_cte_reuse\":false,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":false,\"enable_filter_unused_columns_in_scan_stage\":false,\"div_precision_increment\":4,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate\":1.2,\"auto_increment_increment\":1,\"foreign_key_checks\":true,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":false,\"character_set_results\":\"utf8\",\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"cbo_enable_dp_join_reorder\":true,\"cbo_enable_low_cardinality_optimize\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"single_node_exec_plan\":false,\"load_mem_limit\":0,\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"profiling\":false,\"sql_safe_updates\":0,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"global_runtime_filter_probe_min_size\":102400,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"enable_exchange_pass_through\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"normal\",\"broadcast_row_limit\":15000000,\"workgroup_id\":0,\"exec_mem_limit\":2147483648,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"enable_profile\":true,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"query_timeout\":30000,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"max_execution_time\":3000000,\"character_set_server\":\"utf8\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"sql_mode\":34,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false,\"allow_default_partition\":false}",
+  "column_statistics":{
+    "test.t2":{
+      "t2_c1":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "t2_c2":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    }
+  },
+  "be_number":2,
+  "exception":[
+
+  ],
+  "version":"UNKNOWN",
+  "commit_version":"6700f2dbf"
+}

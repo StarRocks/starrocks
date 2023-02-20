@@ -1,0 +1,24 @@
+{
+  "statement":"select t.t0a,\n       t.t0b,\n       t.t0c,\n       count(distinct t.t0d) as cnt\nFROM ods.t0 t\ngroup by t.t0a, t.t0b, t.t0c\norder by cnt desc;\n",
+  "table_meta":{
+    "ods.t0":"CREATE TABLE `t0` (\n  `t0a` varchar(32) NULL COMMENT \"\",\n  `plan_item_id` varchar(36) NULL COMMENT \"\",\n  `t0b` varchar(32) NULL COMMENT \"\",\n  `t0d` varchar(32) NULL COMMENT \"\",\n  `t0c` varchar(50) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`t0a`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`t0a`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);"
+  },
+  "table_row_count":{
+    "ods.t0":{
+      "t0":29952414
+    }
+  },
+  "session_variables":"{\"runtime_join_filter_push_down_limit\":1024000,\"codegen_level\":0,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":false,\"div_precision_increment\":4,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":3600,\"auto_increment_increment\":1,\"foreign_key_checks\":true,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":false,\"character_set_results\":\"utf8\",\"parallel_fragment_exec_instance_num\":2,\"max_scan_key_num\":-1,\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"force_preaggregation\",\"storage_engine\":\"olap\",\"cbo_enable_dp_join_reorder\":true,\"cbo_enable_low_cardinality_optimize\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"sql_select_limit\":9223372036854775807,\"profiling\":false,\"sql_safe_updates\":0,\"enable_pipeline_engine\":false,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"normal\",\"enable_new_planner_push_down_join_to_agg\":false,\"broadcast_row_limit\":15000000,\"exec_mem_limit\":8589934592,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"enable_profile\":false,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"query_timeout\":300,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"UTC\",\"max_execution_time\":3000000,\"character_set_server\":\"utf8\",\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"pipeline_query_expire_seconds\":300,\"sql_mode\":0,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":true}",
+  "column_statistics":{
+    "ods.t0":{
+      "t0b":"[-Infinity, Infinity, 0.0, 3.86593, 398.0] ESTIMATE",
+      "t0c":"[-Infinity, Infinity, 0.0, 11.97428, 1558.0] ESTIMATE",
+      "t0d":"[-Infinity, Infinity, 0.0, 7.94006, 2931.0] ESTIMATE",
+      "t0a":"[-Infinity, Infinity, 0.0, 4.0, 149.0] ESTIMATE"
+    }
+  },
+  "be_number":8,
+  "exception":[
+
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "statement": "SELECT * FROM sqlsmith.metrics_detail ref_0 INNER JOIN sqlsmith.colocate_table_2 ref_1 ON ref_0.value \u003d ref_1.v1 INNER JOIN sqlsmith.test_cross_join_20 ref_2 ON ref_1.k1 \u003d ref_2.id_datetime INNER JOIN sqlsmith.external_es_table_without_null ref_3\nON ref_0.timestamp \u003d ref_3.id_date INNER JOIN sqlsmith.test_cross_join_30 ref_4 ON ref_3.id_smallint \u003d ref_4.id_int INNER JOIN\nsqlsmith.es_ssb_10g_supplier ref_5 ON ref_3.id_char \u003d ref_5.s_name;\n",
+  "table_meta": {
+    "sqlsmith.colocate_table_2": "CREATE TABLE `colocate_table_2` (\n  `k1` datetime NOT NULL COMMENT \"\",\n  `k2` int(11) NOT NULL COMMENT \"\",\n  `v1` double SUM NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nAGGREGATE KEY(`k1`, `k2`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`k2`) BUCKETS 8 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"colocate_with\" \u003d \"group1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);",
+    "sqlsmith.test_cross_join_30": "CREATE TABLE `test_cross_join_30` (\n  `id_int` int(11) NOT NULL COMMENT \"\",\n  `id_double` double NOT NULL COMMENT \"\",\n  `id_varchar` varchar(100) NOT NULL COMMENT \"\",\n  `id_datetime` datetime NOT NULL COMMENT \"\",\n  `id_decimal` decimal128(20, 3) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`id_int`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`id_int`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);",
+    "sqlsmith.external_es_table_without_null": "CREATE TABLE `external_es_table_without_null` (\n  `id_int` int(11) NOT NULL COMMENT \"\",\n  `id_int1000` int(11) NOT NULL COMMENT \"\",\n  `id_tinyint` tinyint(4) NOT NULL COMMENT \"\",\n  `id_smallint` smallint(6) NOT NULL COMMENT \"\",\n  `id_float` float NOT NULL COMMENT \"\",\n  `id_double` double NOT NULL COMMENT \"\",\n  `id_char` char(255) NOT NULL COMMENT \"\",\n  `id_varchar` varchar(65533) NOT NULL COMMENT \"\",\n  `id_varchar_int` varchar(65533) NOT NULL COMMENT \"\",\n  `id_varchar_date` varchar(65533) NOT NULL COMMENT \"\",\n  `id_varchar_datetime` varchar(65533) NOT NULL COMMENT \"\",\n  `id_date` date NOT NULL COMMENT \"\",\n  `id_datatime` datetime NOT NULL COMMENT \"\",\n  `id_decimal` varchar(65533) NOT NULL COMMENT \"\",\n  `id_decimal10` varchar(65533) NOT NULL COMMENT \"\",\n  `id_boolean` boolean NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`id_int`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`id_int`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);",
+    "sqlsmith.es_ssb_10g_supplier": "CREATE TABLE `es_ssb_10g_supplier` (\n  `s_suppkey` int(11) NOT NULL COMMENT \"\",\n  `s_name` varchar(26) NOT NULL COMMENT \"\",\n  `s_address` varchar(26) NOT NULL COMMENT \"\",\n  `s_city` varchar(11) NOT NULL COMMENT \"\",\n  `s_nation` varchar(16) NOT NULL COMMENT \"\",\n  `s_region` varchar(13) NOT NULL COMMENT \"\",\n  `s_phone` varchar(16) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`s_suppkey`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);",
+    "sqlsmith.metrics_detail": "CREATE TABLE `metrics_detail` (\n  `tags_id` int(11) NULL COMMENT \"\",\n  `timestamp` datetime NULL COMMENT \"\",\n  `value` double SUM NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nAGGREGATE KEY(`tags_id`, `timestamp`)\nCOMMENT \"OLAP\"\nPARTITION BY RANGE(`timestamp`)\n(PARTITION p20200704 VALUES [(\u00270000-01-01 00:00:00\u0027), (\u00272020-07-05 00:00:00\u0027)))\nDISTRIBUTED BY HASH(`tags_id`) BUCKETS 32 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);",
+    "sqlsmith.test_cross_join_20": "CREATE TABLE `test_cross_join_20` (\n  `id_int` int(11) NOT NULL COMMENT \"\",\n  `id_double` double NOT NULL COMMENT \"\",\n  `id_varchar` varchar(100) NOT NULL COMMENT \"\",\n  `id_datetime` datetime NOT NULL COMMENT \"\",\n  `id_decimal` decimal128(20, 3) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`id_int`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`id_int`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);"
+  },
+  "table_row_count": {
+    "sqlsmith.test_cross_join_20": {
+      "test_cross_join_20": 1310720
+    },
+    "sqlsmith.metrics_detail": {
+      "p20200704": 8
+    },
+    "sqlsmith.colocate_table_2": {
+      "colocate_table_2": 65536
+    },
+    "sqlsmith.test_cross_join_30": {
+      "test_cross_join_30": 3145728
+    }
+  },
+  "session_variables": "{\"runtime_join_filter_push_down_limit\":1024000,\"codegen_level\":0,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"div_precision_increment\":4,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"auto_increment_increment\":1,\"foreign_key_checks\":true,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":false,\"character_set_results\":\"utf8\",\"parallel_fragment_exec_instance_num\":8,\"max_scan_key_num\":-1,\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"cbo_enable_dp_join_reorder\":true,\"cbo_enable_low_cardinality_optimize\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"sql_select_limit\":9223372036854775807,\"profiling\":false,\"sql_safe_updates\":0,\"enable_pipeline_engine\":false,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"normal\",\"enable_new_planner_push_down_join_to_agg\":false,\"broadcast_row_limit\":15000000,\"exec_mem_limit\":42949672960,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"enable_profile\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"query_timeout\":180,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"max_execution_time\":3000000,\"character_set_server\":\"utf8\",\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"pipeline_query_expire_seconds\":300,\"sql_mode\":0,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false}",
+  "column_statistics": {
+    "sqlsmith.es_ssb_10g_supplier": {
+      "s_city": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_phone": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_nation": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_name": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_address": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_suppkey": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_region": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.test_cross_join_20": {
+      "id_int": "[1.0, 1.0, 0.0, 4.0, 6.0] ESTIMATE",
+      "id_datetime": "[-8.773589074E9, -8.773589074E9, 0.0, 8.0, 1.0] ESTIMATE",
+      "id_decimal": "[16994.31, 1.6996758943E9, 0.0, 16.0, 8.0] ESTIMATE",
+      "id_double": "[-1.5892577847401443E9, -1.5892577847401443E9, 0.0, 8.0, 1.0] ESTIMATE",
+      "id_varchar": "[-Infinity, Infinity, 0.0, 6.0, 1.0] ESTIMATE"
+    },
+    "sqlsmith.external_es_table_without_null": {
+      "id_boolean": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_decimal10": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_char": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_varchar_int": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_varchar_date": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_int1000": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_varchar_datetime": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_date": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_float": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_datatime": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_int": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_smallint": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_decimal": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_tinyint": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_double": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "id_varchar": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.metrics_detail": {
+      "tags_id": "[1.0, 8.0, 0.0, 4.0, 8.0] ESTIMATE",
+      "value": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "timestamp": "[1.593828635E9, 1.593828875E9, 0.0, 8.0, 4.0] ESTIMATE"
+    },
+    "sqlsmith.colocate_table_2": {
+      "k1": "[1.5296832E9, 1.566727935E9, 0.0, 8.0, 65441.0] ESTIMATE",
+      "k2": "[-2.147483648E9, -2.147418113E9, 0.0, 4.0, 65378.0] ESTIMATE",
+      "v1": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.test_cross_join_30": {
+      "id_int": "[1.0, 1.0, 0.0, 4.0, 9.0] ESTIMATE",
+      "id_datetime": "[-8.773589074E9, -8.773589074E9, 0.0, 8.0, 1.0] ESTIMATE",
+      "id_decimal": "[16994.31, 1.6996758943E9, 0.0, 16.0, 8.0] ESTIMATE",
+      "id_double": "[-1.5892577847401443E9, -1.5892577847401443E9, 0.0, 8.0, 1.0] ESTIMATE",
+      "id_varchar": "[-Infinity, Infinity, 0.0, 6.0, 1.0] ESTIMATE"
+    }
+  },
+  "be_number": 3,
+  "exception": []
+}

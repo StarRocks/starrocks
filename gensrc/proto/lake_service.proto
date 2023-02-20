@@ -1,0 +1,189 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+syntax="proto2";
+
+package starrocks.lake;
+option java_package = "com.starrocks.proto";
+
+import "types.proto";
+
+option cc_generic_services = true;
+
+message PublishVersionRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;
+    // |base_version| would be |new_version - txn_ids_size()| now, define
+    // it explicitly for more clarity and better forward compatibility.
+    optional int64 base_version = 3;
+    optional int64 new_version = 4;
+}
+
+message PublishVersionResponse {
+    repeated int64 failed_tablets = 1;
+    // Mapping from tablet id to compaction score.
+    map<int64, double> compaction_scores = 2;
+}
+
+message AbortTxnRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;    
+}
+
+message AbortTxnResponse {
+    repeated int64 failed_tablets = 1;
+}
+
+message DeleteTabletRequest {
+    repeated int64 tablet_ids = 1;
+}
+
+message DeleteTabletResponse {
+    repeated int64 failed_tablets = 1;
+}
+
+message CompactRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional int64 version = 3;
+}
+
+message CompactResponse {
+    repeated int64 failed_tablets = 1;
+    optional int64 execution_time = 2; // ms
+    optional int64 num_input_bytes = 3;
+    optional int64 num_input_rows = 4;
+    optional int64 num_output_bytes = 5;
+    optional int64 num_output_rows = 6;
+}
+
+message DropTableRequest {
+    // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
+    optional int64 tablet_id = 1;
+}
+
+message DropTableResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+message DeleteDataRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional DeletePredicatePB delete_predicate = 3;
+}
+
+message DeleteDataResponse {
+    repeated int64 failed_tablets = 1;
+}
+
+message TabletStatRequest {
+    message TabletInfo {
+        optional int64 tablet_id = 1;
+        optional int64 version = 2;
+    }
+
+    repeated TabletInfo tablet_infos = 1;
+}
+
+message TabletStatResponse {
+    message TabletStat {
+        optional int64 tablet_id = 1;
+        optional int64 num_rows = 2;
+        optional int64 data_size = 3;
+    }
+
+    repeated TabletStat tablet_stats = 1;
+}
+
+// Rename file txn_{tablet_id}_{txn_id} to vtxn_{tablet_id}_{version}
+message PublishLogVersionRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional int64 version = 3;
+}
+
+message PublishLogVersionResponse {
+    repeated int64 failed_tablets = 1;
+}
+
+message LockTabletMetadataRequest {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    optional int64 expire_time = 3;
+}
+
+message LockTabletMetadataResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+message UnlockTabletMetadataRequest {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    optional int64 expire_time = 3;
+}
+
+message UnlockTabletMetadataResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+message UploadSnapshotsRequest {
+    map<int64, Snapshot> snapshots = 1;
+    optional string broker = 2;
+    map<string, string> broker_properties = 3;
+}
+
+message UploadSnapshotsResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+message Snapshot {
+    optional int64 version = 1;
+    optional string dest_path = 2;
+}
+
+message RestoreInfo {
+    optional int64 tablet_id = 1;
+    optional string snapshot_path = 2;
+}
+
+message RestoreSnapshotsRequest {
+    repeated RestoreInfo restore_infos = 1;
+    optional string broker = 2;
+    map<string, string> broker_properties = 3;
+}
+
+message RestoreSnapshotsResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+service LakeService {
+    rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
+    rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
+    rpc compact(CompactRequest) returns (CompactResponse);
+    rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
+    rpc drop_table(DropTableRequest) returns (DropTableResponse);
+    rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
+    rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
+    rpc lock_tablet_metadata(LockTabletMetadataRequest) returns (LockTabletMetadataResponse);
+    rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
+    rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
+    rpc restore_snapshots(RestoreSnapshotsRequest) returns (RestoreSnapshotsResponse);
+}
+

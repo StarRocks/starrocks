@@ -1,0 +1,20 @@
+
+Changes to original Implementation:
+
+ADD methods:
+  Optional<IOException> getException()
+  to get the exception stored by ICSVWriter, AbstractCSVWriter or CSVWriter
+
+  void resetError()
+  to reset the exception stored by ICSVWriter, AbstractCSVWriter or CSVWriter
+
+ADD Test-Cases:
+    getExceptionReturnsException()
+    getExceptionReturnsExceptionUsingPrintWriter()
+    resetException()
+    resetError()
+
+    to test the added methods
+
+
+Modifications Copyright (c) 2019 Kevin Kußmaul
