@@ -76,18 +76,7 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() {
             LOG(INFO) << "set disable_storage_page_cache:" << config::disable_storage_page_cache;
-            // 如果开启：那么设置pagecache的size到配置的size
-            // 如果关闭，那么对pagecache的size做逐出。因为这个时候读写流程已经不会走pagecache里，这时候可以直接对cache做逐出
-            // 关闭pagecache
             if (config::disable_storage_page_cache) {
-                // 有两个问题:
-                /*
-                 * 1. 如何和auto adjust这个配置做交互
-                 *    可以不用管这个issue，因为那边已经有了防呆操作
-                 * 2. set capacity支持为0的size吗
-                 *     做个单测试试
-                 */
-                // 如果关闭，那么对pagecache的size做逐出。因为这个时候读写流程已经不会走pagecache里，这时候可以直接对cache做逐出
                 StoragePageCache::instance()->set_capacity(0);
             } else {
                 int64_t cache_limit = _exec_env->get_storage_page_cache_size();
