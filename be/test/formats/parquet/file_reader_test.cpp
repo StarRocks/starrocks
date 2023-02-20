@@ -1813,80 +1813,160 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
     //    }
     //  }
     // }
-
     std::string filepath = "./be/test/exec/test_data/parquet_data/struct_array_null.parquet";
-    auto file = _create_file(filepath);
-    auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
 
-    // --------------init context---------------
-    auto ctx = _create_scan_context();
-
-    TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-
-    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-    type_struct.field_names.emplace_back("a");
-
-    TypeDescriptor type_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-
-    TypeDescriptor type_array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-    type_array_struct.field_names.emplace_back("c");
-    type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    type_array_struct.field_names.emplace_back("d");
-
-    type_array.children.emplace_back(type_array_struct);
-
-    type_struct.children.emplace_back(type_array);
-    type_struct.field_names.emplace_back("b");
-
-    SlotDesc slot_descs[] = {
-            {"id", type_int},
-            {"col", type_struct},
-            {""},
-    };
-
-    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
-    // --------------finish init context---------------
-
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
-
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-
-    EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
-    EXPECT_EQ("[2, {a:2,b:NULL}]", chunk->debug_row(1));
-    EXPECT_EQ("[3, {a:NULL,b:[NULL]}]", chunk->debug_row(2));
-    EXPECT_EQ("[4, {a:4,b:[NULL]}]", chunk->debug_row(3));
-    EXPECT_EQ("[5, {a:5,b:[NULL,{c:5,d:'hello'},{c:5,d:'world'},NULL,{c:5,d:NULL}]}]", chunk->debug_row(4));
-    EXPECT_EQ("[6, {a:NULL,b:[{c:6,d:'hello'},NULL,{c:NULL,d:'world'}]}]", chunk->debug_row(5));
-    EXPECT_EQ("[7, {a:7,b:[NULL,NULL,NULL,NULL]}]", chunk->debug_row(6));
-    EXPECT_EQ("[8, {a:8,b:[{c:8,d:'hello'},{c:NULL,d:'danny'},{c:8,d:'world'}]}]", chunk->debug_row(7));
-
-    size_t total_row_nums = 0;
-    chunk->check_or_die();
-    total_row_nums += chunk->num_rows();
-
+    // With config's vector chunk size
     {
-        while (!status.is_end_of_file()) {
-            chunk->reset();
-            status = file_reader->get_next(&chunk);
-            chunk->check_or_die();
-            total_row_nums += chunk->num_rows();
+        auto file = _create_file(filepath);
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                        std::filesystem::file_size(filepath));
+
+        // --------------init context---------------
+        auto ctx = _create_scan_context();
+
+        TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        type_struct.field_names.emplace_back("a");
+
+        TypeDescriptor type_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+
+        TypeDescriptor type_array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        type_array_struct.field_names.emplace_back("c");
+        type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+        type_array_struct.field_names.emplace_back("d");
+
+        type_array.children.emplace_back(type_array_struct);
+
+        type_struct.children.emplace_back(type_array);
+        type_struct.field_names.emplace_back("b");
+
+
+        SlotDesc slot_descs[] = {
+                {"id", type_int},
+                {"col", type_struct},
+                {""},
+        };
+
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+        // --------------finish init context---------------
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+        EXPECT_EQ("[2, {a:2,b:NULL}]", chunk->debug_row(1));
+        EXPECT_EQ("[3, {a:NULL,b:[NULL]}]", chunk->debug_row(2));
+        EXPECT_EQ("[4, {a:4,b:[NULL]}]", chunk->debug_row(3));
+        EXPECT_EQ("[5, {a:5,b:[NULL,{c:5,d:'hello'},{c:5,d:'world'},NULL,{c:5,d:NULL}]}]", chunk->debug_row(4));
+        EXPECT_EQ("[6, {a:NULL,b:[{c:6,d:'hello'},NULL,{c:NULL,d:'world'}]}]", chunk->debug_row(5));
+        EXPECT_EQ("[7, {a:7,b:[NULL,NULL,NULL,NULL]}]", chunk->debug_row(6));
+        EXPECT_EQ("[8, {a:8,b:[{c:8,d:'hello'},{c:NULL,d:'danny'},{c:8,d:'world'}]}]", chunk->debug_row(7));
+
+        size_t total_row_nums = 0;
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+
+        {
+            while (!status.is_end_of_file()) {
+                chunk->reset();
+                status = file_reader->get_next(&chunk);
+                chunk->check_or_die();
+                total_row_nums += chunk->num_rows();
+            }
         }
+        EXPECT_EQ(524288, total_row_nums);
     }
 
-    EXPECT_EQ(524288, total_row_nums);
+
+    // With 1024 chunk size
+    {
+        auto file = _create_file(filepath);
+        auto file_reader = std::make_shared<FileReader>(1024, file.get(),
+                                                        std::filesystem::file_size(filepath));
+
+        // --------------init context---------------
+        auto ctx = _create_scan_context();
+
+        TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        type_struct.field_names.emplace_back("a");
+
+        TypeDescriptor type_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+
+        TypeDescriptor type_array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        type_array_struct.field_names.emplace_back("c");
+        type_array_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+        type_array_struct.field_names.emplace_back("d");
+
+        type_array.children.emplace_back(type_array_struct);
+
+        type_struct.children.emplace_back(type_array);
+        type_struct.field_names.emplace_back("b");
+
+
+        SlotDesc slot_descs[] = {
+                {"id", type_int},
+                {"col", type_struct},
+                {""},
+        };
+
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+        // --------------finish init context---------------
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+        EXPECT_EQ("[2, {a:2,b:NULL}]", chunk->debug_row(1));
+        EXPECT_EQ("[3, {a:NULL,b:[NULL]}]", chunk->debug_row(2));
+        EXPECT_EQ("[4, {a:4,b:[NULL]}]", chunk->debug_row(3));
+        EXPECT_EQ("[5, {a:5,b:[NULL,{c:5,d:'hello'},{c:5,d:'world'},NULL,{c:5,d:NULL}]}]", chunk->debug_row(4));
+        EXPECT_EQ("[6, {a:NULL,b:[{c:6,d:'hello'},NULL,{c:NULL,d:'world'}]}]", chunk->debug_row(5));
+        EXPECT_EQ("[7, {a:7,b:[NULL,NULL,NULL,NULL]}]", chunk->debug_row(6));
+        EXPECT_EQ("[8, {a:8,b:[{c:8,d:'hello'},{c:NULL,d:'danny'},{c:8,d:'world'}]}]", chunk->debug_row(7));
+
+        size_t total_row_nums = 0;
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+
+        {
+            while (!status.is_end_of_file()) {
+                chunk->reset();
+                status = file_reader->get_next(&chunk);
+                chunk->check_or_die();
+                total_row_nums += chunk->num_rows();
+            }
+        }
+        EXPECT_EQ(524288, total_row_nums);
+    }
 }
 
 TEST_F(FileReaderTest, TestComplexTypeNotNull) {
