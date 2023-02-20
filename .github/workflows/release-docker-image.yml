@@ -50,3 +50,11 @@ jobs:
           do
             echo "Could not push ${REGISTRY}/be-ubuntu:${RELEASE_VERSION} trying again."
           done
+      - name: build and publish allin1 docker image
+        run: |
+          DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACTIMAGE=artifact-ubuntu:${RELEASE_VERSION} -f docker/dockerfiles/allin1/allin1-ubuntu.Dockerfile -t ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION} docker/dockerfiles/allin1
+          # Pushing to the GitHub packages docker registry regularly fails with "unknown blob" errors. The "fix" suggested by GitHub is looping.
+          until docker push ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION}
+          do
+            echo "Could not push ${REGISTRY}/allin1-ubuntu:${RELEASE_VERSION} trying again."
+          done
