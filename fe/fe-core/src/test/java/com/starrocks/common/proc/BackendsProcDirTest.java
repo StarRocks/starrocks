@@ -124,6 +124,10 @@ public class BackendsProcDirTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
+
+                globalStateMgr.isCloudNativeMode();
+                minTimes = 0;
+                result = false;
             }
         };
 
