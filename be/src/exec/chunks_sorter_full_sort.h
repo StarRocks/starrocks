@@ -66,14 +66,14 @@ private:
     Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
-    void _split_lazy_and_eager_chunks();
+    void _split_late_and_early_chunks();
     static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
     template <typename T>
-    ChunkPtr _late_materiallize_tmpl(const ChunkPtr& chunk);
+    ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting

@@ -133,11 +133,12 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
     // columns's permutation in multiple passes.
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
+        _early_materialized_slots.clear();
         _runtime_profile->add_info_string("LateMaterialization", "false");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
         _runtime_profile->add_info_string("LateMaterialization", "true");
-        _split_lazy_and_eager_chunks();
+        _split_late_and_early_chunks();
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
     }
@@ -189,7 +190,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
     }
 }
 
-void ChunksSorterFullSort::_split_lazy_and_eager_chunks() {
+void ChunksSorterFullSort::_split_late_and_early_chunks() {
     _early_materialized_chunks.reserve(_sorted_chunks.size());
     _late_materialized_chunks.reserve(_sorted_chunks.size());
     auto& slot_id_to_column_id = _sorted_chunks[0]->get_slot_id_to_index_map();
@@ -218,14 +219,14 @@ void ChunksSorterFullSort::_split_lazy_and_eager_chunks() {
 ChunkPtr ChunksSorterFullSort::_late_materialize(const starrocks::ChunkPtr& chunk) {
     auto use_64bit_ordinal = (_chunk_idx_bits + _offset_in_chunk_bits) > 32;
     if (use_64bit_ordinal) {
-        return _late_materiallize_tmpl<uint64_t>(chunk);
+        return _late_materialize_tmpl<uint64_t>(chunk);
     } else {
-        return _late_materiallize_tmpl<uint32_t>(chunk);
+        return _late_materialize_tmpl<uint32_t>(chunk);
     }
 }
 
 template <typename T>
-starrocks::ChunkPtr ChunksSorterFullSort::_late_materiallize_tmpl(const starrocks::ChunkPtr& sorted_eager_chunk) {
+starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks::ChunkPtr& sorted_eager_chunk) {
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
     auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
