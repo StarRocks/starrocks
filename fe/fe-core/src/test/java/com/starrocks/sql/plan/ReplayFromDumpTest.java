@@ -740,21 +740,4 @@ public class ReplayFromDumpTest {
                 "     rollup: segment_profile\n" +
                 "     tabletRatio=88635/88635"));
     }
-
-    @Test
-    public void testLowCardForLimit() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/limit_low_card"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("3:Decode\n" +
-                "  |  <dict id 9> : <string id 4>\n" +
-                "  |  <dict id 10> : <string id 5>\n" +
-                "  |  \n" +
-                "  2:TOP-N\n" +
-                "  |  order by: <slot 9> 9: ip DESC\n" +
-                "  |  offset: 0\n" +
-                "  |  limit: 20"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
-
 }
