@@ -57,14 +57,15 @@ StreamScanOperator::~StreamScanOperator() {
 }
 
 void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_source_index) {
-    auto tablet_id = _chunk_sources[chunk_source_index]->get_lane_owner();
+    //auto tablet_id = _chunk_sources[chunk_source_index]->get_lane_owner();
+    StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(_chunk_sources[chunk_source_index].get());
+    auto tablet_id = chunk_source->get_lane_owner();
     auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
     DCHECK(binlog_offset != nullptr);
-    _chunk_sources[chunk_source_index]->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
-    _chunk_sources[chunk_source_index]->set_epoch_limit(_current_epoch_info.max_scan_rows,
-                                                        _current_epoch_info.max_exec_millis);
-    _chunk_sources[chunk_source_index]->reset_status();
+    chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+    chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
+    chunk_source->reset_status();
 }
 
 // In order to not modify the code of ScanOperator,
@@ -84,44 +85,6 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
     });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
-    if (_lane_arbiter != nullptr) {
-        while (morsel != nullptr) {
-            auto [lane_owner, version] = morsel->get_lane_owner_and_version();
-            auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
-            if (acquire_result == query_cache::AR_BUSY) {
-                _morsel_queue->unget(std::move(morsel));
-                return Status::OK();
-            } else if (acquire_result == query_cache::AR_PROBE) {
-                auto hit = _cache_operator->probe_cache(lane_owner, version);
-                RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
-                if (!hit) {
-                    break;
-                }
-                auto [delta_version, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
-                if (!delta_rowsets.empty()) {
-                    // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
-                    // created from rowsets passed in to itself instead of capturing it from TabletManager again.
-                    morsel->set_from_version(delta_version);
-                    morsel->set_rowsets(delta_rowsets);
-                    break;
-                } else {
-                    ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
-                }
-            } else if (acquire_result == query_cache::AR_SKIP) {
-                ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
-            } else if (acquire_result == query_cache::AR_IO) {
-                // When both intra-tablet parallelism and multi-version cache mechanisms take effects, we must
-                // use delta rowsets instead of the ensemble of rowsets to fetch rows from disk for all of the
-                // morsels originated from the identical tablet.
-                auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
-                if (!delta_rowsets.empty()) {
-                    morsel->set_from_version(delta_verrsion);
-                    morsel->set_rowsets(delta_rowsets);
-                }
-                break;
-            }
-        }
-    }
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
 
@@ -247,15 +210,17 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
     for (int i = 0; i < chunk_source_size; i++) {
         ChunkSourcePtr chunk_source_ptr = _closed_chunk_sources.front();
         _closed_chunk_sources.pop();
-        chunk_source_ptr->reset_status();
+        StreamChunkSource* chunk_source = down_cast<StreamChunkSource*>(chunk_source_ptr.get());
+
+        chunk_source->reset_status();
         _old_chunk_sources.push(chunk_source_ptr);
 
-        auto tablet_id = chunk_source_ptr->get_lane_owner();
+        auto tablet_id = chunk_source->get_lane_owner();
         auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
         DCHECK(binlog_offset != nullptr);
-        chunk_source_ptr->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
-        chunk_source_ptr->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
+        chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+        chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
     }
 
     return Status::OK();
@@ -371,5 +336,25 @@ void StreamScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int c
 StreamChunkSource::StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                      ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
         : ConnectorChunkSource(scan_operator_id, runtime_profile, std::move(morsel), op, scan_node, chunk_buffer) {}
+
+Status StreamChunkSource::set_stream_offset(int64_t table_version, int64_t changelog_id) {
+    return _get_stream_data_source()->set_offset(table_version, changelog_id);
+}
+
+void StreamChunkSource::set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit) {
+    _epoch_rows_limit = epoch_rows_limit;
+    _epoch_time_limit = epoch_time_limit;
+}
+
+void StreamChunkSource::reset_status() {
+    _status = Status::OK();
+    _get_stream_data_source()->reset_status();
+}
+
+bool StreamChunkSource::_reach_eof() {
+    connector::StreamDataSource* data_source = _get_stream_data_source();
+    return (_epoch_rows_limit != -1 && data_source->num_rows_read_in_epoch() >= _epoch_rows_limit) ||
+           (_epoch_time_limit != -1 && data_source->cpu_time_spent_in_epoch() >= _epoch_time_limit);
+}
 
 } // namespace starrocks::pipeline

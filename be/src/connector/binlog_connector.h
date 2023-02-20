@@ -61,7 +61,7 @@ const std::string BINLOG_VERSION = g_PlanNodes_constants.BINLOG_VERSION_COLUMN_N
 const std::string BINLOG_SEQ_ID = g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME;
 const std::string BINLOG_TIMESTAMP = g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME;
 
-class BinlogDataSource final : public DataSource {
+class BinlogDataSource final : public StreamDataSource {
 public:
     ~BinlogDataSource() override = default;
 
@@ -78,6 +78,11 @@ public:
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
 
+    int64_t num_rows_read_in_epoch() const override;
+
+    // CPU time of this data source in the current epoch.
+    int64_t cpu_time_spent_in_epoch() const override;
+
 private:
     StatusOr<TabletSharedPtr> _get_tablet();
     BinlogMetaFieldMap _build_binlog_meta_fields(ColumnId start_cid);
@@ -93,6 +98,9 @@ private:
     int64_t _rows_read_number = 0;
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
+
+    int64_t _rows_read_in_epoch = 0;
+    int64_t _cpu_time_spent_in_epoch = 0;
 
     // Mock data for testing
     Status _mock_chunk(Chunk* chunk);

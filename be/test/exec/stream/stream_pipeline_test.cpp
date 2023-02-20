@@ -57,7 +57,7 @@ Status StreamPipelineTest::prepare() {
     _fragment_ctx->set_is_stream_pipeline(true);
     _fragment_ctx->set_is_stream_test(true);
 
-            _fragment_future = _fragment_ctx->finish_future();
+    _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_chunk_size(config::vector_chunk_size);

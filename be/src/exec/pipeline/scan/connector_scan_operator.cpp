@@ -203,7 +203,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     // Improve for select * from table limit x, x is small
-    if ((_limit != -1 && _rows_read >= _limit) || (_time_limit != -1 && _time_spent >= _time_limit)) {
+    if (_reach_eof()) {
         return Status::EndOfFile("limit reach");
     }
 
@@ -240,7 +240,6 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();
-        _time_spent += _cpu_time_spent_ns;
         _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
     }
@@ -248,14 +247,6 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return Status::EndOfFile("");
 }
 
-Status ConnectorChunkSource::set_stream_offset(int64_t table_version, int64_t changelog_id) {
-    return _data_source->set_offset(table_version, changelog_id);
-}
-
-void ConnectorChunkSource::set_epoch_limit(int64_t read_limit, int64_t epoch_time_limit) {
-    _limit = read_limit;
-    _time_limit = epoch_time_limit;
-}
 const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(
         const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);

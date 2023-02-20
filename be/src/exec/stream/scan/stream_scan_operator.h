@@ -31,6 +31,7 @@
 namespace starrocks::pipeline {
 
 class FragmentContext;
+class StreamChunkSource;
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
@@ -103,6 +104,24 @@ class StreamChunkSource : public ConnectorChunkSource {
 public:
     StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+
+    Status set_stream_offset(int64_t table_version, int64_t changelog_id);
+    void set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit);
+    void reset_status();
+    int64_t get_lane_owner() {
+        auto [lane_owner, version] = _morsel->get_lane_owner_and_version();
+        return lane_owner;
+    }
+
+protected:
+    bool _reach_eof() override;
+
+    connector::StreamDataSource* _get_stream_data_source() {
+        return down_cast<connector::StreamDataSource*>(_data_source.get());
+    }
+
+    int64_t _epoch_rows_limit = -1; // -1: not limit;
+    int64_t _epoch_time_limit = -1; // -1: not limit;
 };
 
 } // namespace starrocks::pipeline

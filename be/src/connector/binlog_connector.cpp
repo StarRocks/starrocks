@@ -45,10 +45,12 @@ Status BinlogDataSource::open(RuntimeState* state) {
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
 
+#ifndef NDEBUG
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
         return Status::OK();
     }
+#endif
 
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
@@ -62,15 +64,18 @@ void BinlogDataSource::close(RuntimeState* state) {}
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
 
+#ifndef NDEBUG
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
         return _mock_chunk_test(chunk);
     }
+#endif
 
     // TODO replace with BinlogReader
     _init_chunk(chunk, state->chunk_size());
     return _mock_chunk(chunk->get());
 }
+
 Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
     // todo return _binlog_reader->seek(table_version, changelog_id);
     _chunk_num = 0;
@@ -257,6 +262,14 @@ int64_t BinlogDataSource::num_bytes_read() const {
 }
 
 int64_t BinlogDataSource::cpu_time_spent() const {
+    return _cpu_time_ns;
+}
+
+int64_t BinlogDataSource::num_rows_read_in_epoch() const {
+    return _rows_read_number;
+}
+
+int64_t BinlogDataSource::cpu_time_spent_in_epoch() const {
     return _cpu_time_ns;
 }
 

@@ -66,15 +66,6 @@ public:
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
 
-    // stream API
-    virtual void reset_status() { _status = Status::OK(); }
-    virtual Status set_stream_offset(int64_t table_version, int64_t changelog_id) { return Status::OK(); }
-    virtual void set_epoch_limit(int64_t read_limit, int64_t time_limit) {}
-    virtual int64_t get_lane_owner() {
-        auto [lane_owner, version] = _morsel->get_lane_owner_and_version();
-        return lane_owner;
-    }
-
 protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) = 0;
