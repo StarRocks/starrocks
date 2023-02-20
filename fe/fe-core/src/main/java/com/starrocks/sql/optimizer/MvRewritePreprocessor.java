@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MvRewritePreprocessor {
     private final ConnectContext connectContext;
@@ -185,21 +186,15 @@ public class MvRewritePreprocessor {
         // - TODO: after partition/distribution pruning, those predicates should be removed from mv rewrite result.
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
-        final ColumnRefSet mvOutputColumnSet = mvExpression.getOutputColumns();
+        final List<ColumnRefOperator> mvOutputColumnRefOperators = mvExpression.getOutputColumns()
+                .getStream().map(id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
+                .collect(Collectors.toList());
         final List<ScalarOperator> mvConjuncts = Lists.newArrayList();
         // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
         for (ScalarOperator conj : conjuncts) {
-            if (conj instanceof BinaryPredicateOperator) {
-                BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conj;
-                ScalarOperator left = binaryPredicate.getChild(0);
-                ScalarOperator right = binaryPredicate.getChild(1);
-                if (left.isColumnRef() && right.isConstant() &&
-                        mvOutputColumnSet.contains((ColumnRefOperator) left)) {
-                    mvConjuncts.add(conj);
-                } else if (right.isColumnRef() && left.isConstant() &&
-                        mvOutputColumnSet.contains((ColumnRefOperator) right)) {
-                    mvConjuncts.add(conj);
-                }
+            List<ColumnRefOperator> conjColumnRefOperators = Utils.extractColumnRef(conj);
+            if (!conjColumnRefOperators.retainAll(mvOutputColumnRefOperators)) {
+                mvConjuncts.add(conj);
             }
         }
         // Case2: compensated partition predicates which are pruned after mv's partition pruning.

@@ -179,7 +179,7 @@ public class MaterializedViewRewriter {
         if (mvPartitionPredicate == null) {
             return Lists.newArrayList();
         }
-        ScalarOperator mvPredicate = MvUtils.getOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
+        ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
             mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
         }

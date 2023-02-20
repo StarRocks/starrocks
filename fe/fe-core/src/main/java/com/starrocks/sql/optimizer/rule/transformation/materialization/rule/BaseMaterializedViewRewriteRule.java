@@ -43,7 +43,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        return context.getCandidateMvs().stream().anyMatch(mv -> !mv.hasMVUsed());
+        return !context.getCandidateMvs().isEmpty();
     }
 
     @Override
@@ -61,17 +61,13 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         if (queryPartitionPredicate == null) {
             return Lists.newArrayList();
         }
-        ScalarOperator queryPredicate = MvUtils.getOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            if (mvContext.hasMVUsed()) {
-                continue;
-            }
-
             mvContext.setQueryExpression(queryExpression);
             mvContext.setOptimizerContext(context);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
@@ -79,7 +75,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     queryPredicateSplit);
             candidates = postRewriteMV(context, candidates);
             if (!candidates.isEmpty()) {
-                mvContext.setMVUsed(true);
                 results.addAll(candidates);
             }
         }
@@ -89,6 +84,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     /**
      * After plan is rewritten by MV, still do some actions for new MV's plan.
+     * 1. column prune
+     * 2. partition prune
+     * 3. bucket prune
      */
     private List<OptExpression> postRewriteMV(OptimizerContext context, List<OptExpression> candidates) {
         if (candidates == null || candidates.isEmpty()) {

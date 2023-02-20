@@ -43,8 +43,6 @@ public class MaterializationContext {
 
     private Set<String> mvPartitionNamesToRefresh;
 
-    private boolean hasMVUsed = false;
-
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
@@ -111,13 +109,5 @@ public class MaterializationContext {
 
     public Set<String> getMvPartitionNamesToRefresh() {
         return mvPartitionNamesToRefresh;
-    }
-
-    public boolean hasMVUsed() {
-        return hasMVUsed;
-    }
-
-    public void setMVUsed(boolean hasMVUsed) {
-        this.hasMVUsed = hasMVUsed;
     }
 }

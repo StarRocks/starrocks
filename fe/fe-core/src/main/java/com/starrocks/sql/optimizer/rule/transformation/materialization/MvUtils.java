@@ -320,8 +320,8 @@ public class MvUtils {
         return predicates;
     }
 
-    public static ScalarOperator getOptExprCompoundPredicate(OptExpression root,
-                                                             ReplaceColumnRefRewriter columnRefRewriter) {
+    public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
+                                                                 ReplaceColumnRefRewriter columnRefRewriter) {
         List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(root);
         ScalarOperator compoundPredicate = null;
         if (!conjuncts.isEmpty()) {
