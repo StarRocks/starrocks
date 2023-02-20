@@ -2,7 +2,7 @@
 # Please run this command from the git repo root directory to build:
 # DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifact-ubuntu.Dockerfile -t starrocks/artifact-ubuntu:tag .
 
-ARG builder=ghcr.io/starrocks/starrocks/dev-env-ubuntu:latest
+ARG builder=ghcr.io/starrocks/starrocks/dev-env-ubuntu:main
 
 FROM ${builder} as fe-builder
 # clean and build Frontend and Spark Dpp application
