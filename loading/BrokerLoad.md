@@ -16,7 +16,7 @@ Broker Load 还支持在导入过程中做数据的转换，具体请参见[导�
 
 > **说明**
 >
-> 无 Broker 进程的导入在某些场景下会受限。比如如果您配置了多套 HA 或者多个 Kerberos 配置时，不支持无 Broker 进程的导入。这种情况下，您可以继续通过 Broker 进程执行导入。
+> 无 Broker 进程的导入在某些场景下会受限。比如如果您配置了多 HDFS 集群或多 Kerberos 用户时，不支持无 Broker 进程的导入。这种情况下，您可以继续通过 Broker 进程执行导入。
 
 如果您继续通过 Brokers 来执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
