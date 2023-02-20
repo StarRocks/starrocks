@@ -1833,18 +1833,18 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         // --------------init context---------------
         auto ctx = _create_scan_context();
 
-        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
-        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
         type_struct.field_names.emplace_back("a");
 
-        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(LogicalType::TYPE_ARRAY);
+        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
 
-        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
         type_array_struct.field_names.emplace_back("c");
-        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
         type_array_struct.field_names.emplace_back("d");
 
         type_array.children.emplace_back(type_array_struct);
@@ -1910,18 +1910,18 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         // --------------init context---------------
         auto ctx = _create_scan_context();
 
-        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
-        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
         type_struct.field_names.emplace_back("a");
 
-        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(LogicalType::TYPE_ARRAY);
+        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
 
-        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
         type_array_struct.field_names.emplace_back("c");
-        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
         type_array_struct.field_names.emplace_back("d");
 
         type_array.children.emplace_back(type_array_struct);
@@ -2002,18 +2002,18 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     // --------------init context---------------
     auto ctx = _create_scan_context();
 
-    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
-    TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-    type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     type_struct.field_names.emplace_back("a");
 
-    TypeDescriptor type_array = TypeDescriptor::from_primtive_type(LogicalType::TYPE_ARRAY);
+    TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
 
-    TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
-    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     type_array_struct.field_names.emplace_back("c");
-    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_array_struct.field_names.emplace_back("d");
 
     type_array.children.emplace_back(type_array_struct);
