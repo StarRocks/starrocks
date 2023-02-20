@@ -325,16 +325,6 @@ public class IcebergScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
-        if (srIcebergTable.isCatalogTbl()) {
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    srIcebergTable.getCatalog(), srIcebergTable.getDb(), srIcebergTable.getTable());
-
-            output.append(prefix).append(
-                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
-            output.append("\n");
-        }
-
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
 
