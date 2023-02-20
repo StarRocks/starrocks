@@ -561,17 +561,6 @@ TEST(StructColumnTest, test_reference_memory_usage) {
     column->append_datum(DatumStruct{uint64_t(1), Slice("6")});
 
     ASSERT_EQ(0, column->Column::reference_memory_usage());
-
-    // std::vector<size_t> element_mem_usages = {15, 15, 15};
-    // size_t element_num = element_mem_usages.size();
-    // for (size_t start = 0; start < element_num; start++) {
-    //     size_t expected_usage = 0;
-    //     ASSERT_EQ(0, column->reference_memory_usage(start, 0));
-    //     for (size_t size = 1; start + size <= element_num; size++) {
-    //         expected_usage += element_mem_usages[start + size - 1];
-    //         ASSERT_EQ(expected_usage, column->reference_memory_usage(start, size));
-    //     }
-    // }
 }
 
 } // namespace starrocks

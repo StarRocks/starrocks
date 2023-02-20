@@ -370,9 +370,9 @@ public:
 
     virtual std::string debug_string() const { return {}; }
 
-    // memory usage includes container memory usage and element memory usage.
+    // memory usage includes container memory usage and reference memory usage.
     // 1. container memory usage: container capacity * type size.
-    // 2. element memory usage: element data size that is not in the container,
+    // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.

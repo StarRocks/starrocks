@@ -1212,16 +1212,16 @@ PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
         std::cout << "json size: " << column->Column::reference_memory_usage() << std::endl;
         ASSERT_EQ(12, column->Column::reference_memory_usage());
 
-        ASSERT_EQ(0, column->reference_memory_usage(0, 1));  // [] 1 offset, 0 element
-        ASSERT_EQ(2, column->reference_memory_usage(0, 2));  // [][1] 2 offset, 1 element
-        ASSERT_EQ(6, column->reference_memory_usage(0, 3));  // [][1][2, 3] 3 offset, 3 element
-        ASSERT_EQ(12, column->reference_memory_usage(0, 4)); // [][1][2, 3][4, 5, 6] 4 offset, 6 element
-        ASSERT_EQ(2, column->reference_memory_usage(1, 1));  // [1] 1 offset, 1 element
-        ASSERT_EQ(6, column->reference_memory_usage(1, 2));  // [1][2, 3] 2 offset, 3 element
-        ASSERT_EQ(12, column->reference_memory_usage(1, 3)); // [1][2, 3][4, 5, 6] 3 offset, 6 element
-        ASSERT_EQ(4, column->reference_memory_usage(2, 1));  // [2, 3] 1 offset, 2 element
-        ASSERT_EQ(10, column->reference_memory_usage(2, 2)); // [2, 3][4, 5, 6] 2 offset, 5 element
-        ASSERT_EQ(6, column->reference_memory_usage(3, 1));  // [4, 5, 6] 1 offset, 3 element
+        ASSERT_EQ(0, column->reference_memory_usage(0, 1));
+        ASSERT_EQ(2, column->reference_memory_usage(0, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(0, 3));
+        ASSERT_EQ(12, column->reference_memory_usage(0, 4));
+        ASSERT_EQ(2, column->reference_memory_usage(1, 1));
+        ASSERT_EQ(6, column->reference_memory_usage(1, 2));
+        ASSERT_EQ(12, column->reference_memory_usage(1, 3));
+        ASSERT_EQ(4, column->reference_memory_usage(2, 1));
+        ASSERT_EQ(10, column->reference_memory_usage(2, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(3, 1));
     }
 }
 
