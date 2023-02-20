@@ -30,11 +30,11 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
                                            const std::vector<bool>* is_asc_order,
                                            const std::vector<bool>* is_null_first, const std::string& sort_keys,
                                            int64_t max_buffered_rows, int64_t max_buffered_bytes,
-                                           const std::vector<SlotId>& eager_materialized_slots)
+                                           const std::vector<SlotId>& early_materialized_slots)
         : ChunksSorter(state, sort_exprs, is_asc_order, is_null_first, sort_keys, false),
           max_buffered_rows(static_cast<size_t>(max_buffered_rows)),
           max_buffered_bytes(max_buffered_bytes),
-          _eager_materialized_slots(eager_materialized_slots.begin(), eager_materialized_slots.end()) {}
+          _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {}
 
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 void ChunksSorterFullSort::setup_runtime(starrocks::RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
@@ -132,21 +132,21 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     // so when num_sorted_runs is 1 or 2, the height merging tree is less than 2, the sorted runs just be processed
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
     // columns's permutation in multiple passes.
-    if (_eager_materialized_slots.empty() || _sorted_chunks.size() < 3) {
+    if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _runtime_profile->add_info_string("LazyMaterialization", "false");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
         _runtime_profile->add_info_string("LazyMaterialization", "true");
         _split_lazy_and_eager_chunks();
         _assign_ordinals();
-        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _eager_materialized_chunks, &_merged_runs));
+        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
     }
 
     return Status::OK();
 }
 
 void ChunksSorterFullSort::_assign_ordinals() {
-    _chunk_idx_bits = (int)std::ceil(std::log2(_eager_materialized_chunks.size()));
+    _chunk_idx_bits = (int)std::ceil(std::log2(_early_materialized_chunks.size()));
     _chunk_idx_bits = std::max(1, _chunk_idx_bits);
     _offset_in_chunk_bits = (int)std::ceil(std::log2(_max_num_rows));
     _offset_in_chunk_bits = std::max(1, _offset_in_chunk_bits);
@@ -172,7 +172,7 @@ template <typename T>
 void ChunksSorterFullSort::_assign_ordinals_tmpl() {
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     size_t chunk_idx = 0;
-    for (auto& partial_sort_chunk : _eager_materialized_chunks) {
+    for (auto& partial_sort_chunk : _early_materialized_chunks) {
         if (partial_sort_chunk->is_empty()) {
             ++chunk_idx;
             continue;
@@ -190,8 +190,8 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
 }
 
 void ChunksSorterFullSort::_split_lazy_and_eager_chunks() {
-    _eager_materialized_chunks.reserve(_sorted_chunks.size());
-    _lazy_materialized_chunks.reserve(_sorted_chunks.size());
+    _early_materialized_chunks.reserve(_sorted_chunks.size());
+    _late_materialized_chunks.reserve(_sorted_chunks.size());
     auto& slot_id_to_column_id = _sorted_chunks[0]->get_slot_id_to_index_map();
     _column_id_to_slot_id.resize(slot_id_to_column_id.size());
     for (auto it : _sorted_chunks[0]->get_slot_id_to_index_map()) {
@@ -203,32 +203,32 @@ void ChunksSorterFullSort::_split_lazy_and_eager_chunks() {
         for (auto column_id = 0; column_id < chunk->num_columns(); ++column_id) {
             auto slot_id = _column_id_to_slot_id[column_id];
             auto column = chunk->columns()[column_id];
-            if (_eager_materialized_slots.count(slot_id)) {
+            if (_early_materialized_slots.count(slot_id)) {
                 eager_chunk->append_column(column, slot_id);
             } else {
                 lazy_chunk->append_column(column, slot_id);
             }
         }
-        _eager_materialized_chunks.push_back(std::move(eager_chunk));
-        _lazy_materialized_chunks.push_back(std::move(lazy_chunk));
+        _early_materialized_chunks.push_back(std::move(eager_chunk));
+        _late_materialized_chunks.push_back(std::move(lazy_chunk));
     }
     _sorted_chunks.clear();
 }
 
-ChunkPtr ChunksSorterFullSort::_lazy_materialize(const starrocks::ChunkPtr& chunk) {
+ChunkPtr ChunksSorterFullSort::_late_materialize(const starrocks::ChunkPtr& chunk) {
     auto use_64bit_ordinal = (_chunk_idx_bits + _offset_in_chunk_bits) > 32;
     if (use_64bit_ordinal) {
-        return _lazy_materialize_tmpl<uint64_t>(chunk);
+        return _late_materiallize_tmpl<uint64_t>(chunk);
     } else {
-        return _lazy_materialize_tmpl<uint32_t>(chunk);
+        return _late_materiallize_tmpl<uint32_t>(chunk);
     }
 }
 
 template <typename T>
-starrocks::ChunkPtr ChunksSorterFullSort::_lazy_materialize_tmpl(const starrocks::ChunkPtr& sorted_eager_chunk) {
+starrocks::ChunkPtr ChunksSorterFullSort::_late_materiallize_tmpl(const starrocks::ChunkPtr& sorted_eager_chunk) {
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
-    auto sorted_lazy_chunk = _lazy_materialized_chunks[0]->clone_empty(num_rows);
+    auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
     auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(ORDINAL_COLUMN_SLOT_ID);
     auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
     T _offset_in_chunk_mask = static_cast<T>((1L << _offset_in_chunk_bits) - 1);
@@ -236,11 +236,11 @@ starrocks::ChunkPtr ChunksSorterFullSort::_lazy_materialize_tmpl(const starrocks
         T ordinal = ordinal_data[i];
         T chunk_idx = ordinal >> _offset_in_chunk_bits;
         T off_in_chunk = ordinal & _offset_in_chunk_mask;
-        sorted_lazy_chunk->append(*_lazy_materialized_chunks[chunk_idx], off_in_chunk, 1);
+        sorted_lazy_chunk->append(*_late_materialized_chunks[chunk_idx], off_in_chunk, 1);
     }
     auto final_chunk = std::make_shared<Chunk>();
     for (auto slot_id : _column_id_to_slot_id) {
-        if (_eager_materialized_slots.count(slot_id)) {
+        if (_early_materialized_slots.count(slot_id)) {
             final_chunk->append_column(sorted_eager_chunk->get_column_by_slot_id(slot_id), slot_id);
         } else {
             final_chunk->append_column(sorted_lazy_chunk->get_column_by_slot_id(slot_id), slot_id);
@@ -270,8 +270,8 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     SortedRun& run = _merged_runs.front();
     *chunk = run.steal_chunk(chunk_size);
     if (*chunk != nullptr) {
-        if (!_eager_materialized_slots.empty()) {
-            *chunk = _lazy_materialize(*chunk);
+        if (!_early_materialized_slots.empty()) {
+            *chunk = _late_materialize(*chunk);
         }
         RETURN_IF_ERROR((*chunk)->downgrade());
     }

@@ -92,11 +92,11 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     DCHECK(_materialized_tuple_desc != nullptr);
 
     bool all_slot_ref = true;
-    std::unordered_set<SlotId> eager_materialized_slots;
+    std::unordered_set<SlotId> early_materialized_slots;
     for (ExprContext* expr_ctx : _sort_exec_exprs.lhs_ordering_expr_ctxs()) {
         auto* expr = expr_ctx->root();
         if (expr->is_slotref()) {
-            eager_materialized_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
+            early_materialized_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
         } else {
             all_slot_ref = false;
         }
@@ -112,7 +112,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // The permutation cost is proportion of the total size of bytes of the elements of non-group-by columns.
     int materialized_cost = 0;
     for (auto* slot : _materialized_tuple_desc->slots()) {
-        if (eager_materialized_slots.count(slot->id())) {
+        if (early_materialized_slots.count(slot->id())) {
             continue;
         }
         // nullable column always contribute 1 byte to materialized cost.
@@ -124,12 +124,12 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
             materialized_cost += std::max<int>(1, slot->type().get_slot_size());
         }
     }
-    // The ordinal column is almost always FixedLengthColumn<uint32_t>, so cost is sizeof(uint32_t)
-    static constexpr auto ORDINAL_SORT_COST = 4;
-    auto lazy_materialization = _tnode.sort_node.__isset.lazy_materialization && _tnode.sort_node.lazy_materialization;
-    if (lazy_materialization && all_slot_ref && materialized_cost > ORDINAL_SORT_COST) {
-        _eager_materialized_slots.insert(_eager_materialized_slots.begin(), eager_materialized_slots.begin(),
-                                         eager_materialized_slots.end());
+    // The ordinal column is almost always FixedLengthColumn<uint32_t>, so cost is sizeof(uint32_t) + 4(margin)
+    static constexpr auto ORDINAL_SORT_COST = 8;
+    auto late_materialization = _tnode.sort_node.__isset.late_materialization && _tnode.sort_node.late_materialization;
+    if (late_materialization && all_slot_ref && materialized_cost > ORDINAL_SORT_COST) {
+        _early_materialized_slots.insert(_early_materialized_slots.begin(), early_materialized_slots.begin(),
+                                         early_materialized_slots.end());
     }
 
     _runtime_profile->add_info_string("SortKeys", _sort_keys);
@@ -226,7 +226,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     } else {
         _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
                                                                 &_is_asc_order, &_is_null_first, _sort_keys, 1024000,
-                                                                16 * 1024 * 1024, _eager_materialized_slots);
+                                                                16 * 1024 * 1024, _early_materialized_slots);
     }
 
     bool eos = false;
@@ -304,7 +304,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                 context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
                 _is_null_first, _sort_keys, _offset, _limit, max_buffered_rows, max_buffered_bytes,
                 _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
-                _row_descriptor, _analytic_partition_exprs, _eager_materialized_slots);
+                _row_descriptor, _analytic_partition_exprs, _early_materialized_slots);
     }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);

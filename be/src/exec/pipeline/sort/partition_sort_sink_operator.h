@@ -94,7 +94,7 @@ public:
             const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
             TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
             const RowDescriptor& parent_node_child_row_desc, std::vector<ExprContext*> analytic_partition_exprs,
-            const std::vector<SlotId>& eager_materialized_slots)
+            const std::vector<SlotId>& early_materialized_slots)
             : OperatorFactory(id, "local_sort_sink", plan_node_id),
               _sort_context_factory(std::move(std::move(sort_context_factory))),
               _sort_exec_exprs(sort_exec_exprs),
@@ -111,7 +111,7 @@ public:
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
               _analytic_partition_exprs(std::move(analytic_partition_exprs)),
-              _eager_materialized_slots(eager_materialized_slots) {}
+              _early_materialized_slots(early_materialized_slots) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 
@@ -141,7 +141,7 @@ private:
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
-    std::vector<SlotId> _eager_materialized_slots;
+    std::vector<SlotId> _early_materialized_slots;
 };
 
 } // namespace pipeline

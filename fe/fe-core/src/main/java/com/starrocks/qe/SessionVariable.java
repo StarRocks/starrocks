@@ -358,7 +358,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
-    public static final String FULL_SORT_LAZY_MATERIALIZATION = "full_sort_lazy_materialization";
+    public static final String FULL_SORT_LAZY_MATERIALIZATION = "full_sort_late_materialization";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -890,8 +890,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedBytes = 16 * 1024 * 1024;
 
-    @VariableMgr.VarAttr(name = FULL_SORT_LAZY_MATERIALIZATION)
-    private boolean fullSortLazyMaterialization = false;
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = false;
 
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
@@ -909,12 +909,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return fullSortMaxBufferedBytes;
     }
 
-    public void setFullSortLazyMaterialization(boolean v) {
-        fullSortLazyMaterialization = v;
+    public void setFullSortLateMaterialization(boolean v) {
+        fullSortLateMaterialization = v;
     }
 
-    public boolean isFullSortLazyMaterialization() {
-        return fullSortLazyMaterialization;
+    public boolean isFullSortLateMaterialization() {
+        return fullSortLateMaterialization;
     }
 
     public boolean isActivateAllRolesOnLogin() {

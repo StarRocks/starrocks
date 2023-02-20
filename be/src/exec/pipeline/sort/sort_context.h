@@ -110,7 +110,6 @@ private:
     const int64_t _limit;
     const std::vector<ExprContext*> _sort_exprs;
     const SortDescs _sort_descs;
-    std::optional<std::unordered_set<SlotId>> _eager_materialized_slots;
     const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
 };
 

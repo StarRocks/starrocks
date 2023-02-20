@@ -44,7 +44,7 @@ public:
     ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                          const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
                          const std::string& sort_keys, int64_t max_buffered_rows, int64_t max_buffered_bytes,
-                         const std::vector<SlotId>& eager_materialized_slots);
+                         const std::vector<SlotId>& early_materialized_slots);
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.
@@ -71,9 +71,9 @@ private:
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
-    ChunkPtr _lazy_materialize(const ChunkPtr& chunk);
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
     template <typename T>
-    ChunkPtr _lazy_materialize_tmpl(const ChunkPtr& chunk);
+    ChunkPtr _late_materiallize_tmpl(const ChunkPtr& chunk);
 
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
@@ -95,13 +95,13 @@ private:
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
     // and other columns are lazy-materialized.
-    std::unordered_set<SlotId> _eager_materialized_slots;
+    std::unordered_set<SlotId> _early_materialized_slots;
     int _max_num_rows = 0;
     int _offset_in_chunk_bits = 0;
     int _chunk_idx_bits = 0;
     std::vector<SlotId> _column_id_to_slot_id;
-    std::vector<ChunkUniquePtr> _eager_materialized_chunks;
-    std::vector<ChunkUniquePtr> _lazy_materialized_chunks;
+    std::vector<ChunkUniquePtr> _early_materialized_chunks;
+    std::vector<ChunkUniquePtr> _late_materialized_chunks;
 };
 
 } // namespace starrocks
