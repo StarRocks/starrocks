@@ -228,6 +228,9 @@ set(EXEC_FILES
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp
+    spill/spiller.cpp
+    spill/spiller_factory.cpp
+    spill/spilled_stream.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/stream_aggregator.cpp
