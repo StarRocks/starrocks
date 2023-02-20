@@ -184,11 +184,9 @@ protected:
     std::string _file_struct_null_path =
             "./be/test/exec/test_data/parquet_scanner/file_reader_test_struct_null.parquet";
 
-    std::string _file_col_not_null_path =
-            "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
+    std::string _file_col_not_null_path = "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
 
-    std::string _file_map_null_path =
-            "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
+    std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -574,7 +572,7 @@ HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context
             {"c3", type_map_map},
             {"c4", type_map_array},
             {""},
-        };
+    };
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
@@ -1479,7 +1477,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-     EXPECT_EQ("[0, {F1:0,F2:'a',F3:[0,1,2]}]", chunk->debug_row(0));
+    EXPECT_EQ("[0, {F1:0,F2:'a',F3:[0,1,2]}]", chunk->debug_row(0));
 
     //    for (int i = 0; i < 1; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1662,7 +1660,6 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
-
     TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
     type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_struct.field_names.emplace_back("a");
@@ -1671,7 +1668,10 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_struct.field_names.emplace_back("b");
 
     SlotDesc slot_descs[] = {
-        {"col_int", type_int}, {"col_map", type_map}, {"col_struct", type_struct}, {""},
+            {"col_int", type_int},
+            {"col_map", type_map},
+            {"col_struct", type_struct},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1689,7 +1689,6 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
     chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
 
-
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
@@ -1704,8 +1703,8 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     // id: INT, b: ARRAY<ARRAY<INT>>
     const std::string filepath = "./be/test/exec/test_data/parquet_data/two_level_nested_array.parquet";
     auto file = _create_file(filepath);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(filepath));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1718,7 +1717,6 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     type_array_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     type_array.children.emplace_back(type_array_array);
-
 
     SlotDesc slot_descs[] = {
             {"id", type_int},
@@ -1769,7 +1767,7 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
 TEST_F(FileReaderTest, TestReadMapNull) {
     auto file = _create_file(_file_map_null_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                std::filesystem::file_size(_file_map_null_path));
+                                                    std::filesystem::file_size(_file_map_null_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1781,7 +1779,9 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     SlotDesc slot_descs[] = {
-        {"uuid", type_int}, {"c1", type_map}, {""},
+            {"uuid", type_int},
+            {"c1", type_map},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1852,7 +1852,6 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         type_struct.children.emplace_back(type_array);
         type_struct.field_names.emplace_back("b");
 
-
         SlotDesc slot_descs[] = {
                 {"id", type_int},
                 {"col", type_struct},
@@ -1900,12 +1899,10 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
         EXPECT_EQ(524288, total_row_nums);
     }
 
-
     // With 1024 chunk size
     {
         auto file = _create_file(filepath);
-        auto file_reader = std::make_shared<FileReader>(1024, file.get(),
-                                                        std::filesystem::file_size(filepath));
+        auto file_reader = std::make_shared<FileReader>(1024, file.get(), std::filesystem::file_size(filepath));
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
@@ -1928,7 +1925,6 @@ TEST_F(FileReaderTest, TestStructArrayNull) {
 
         type_struct.children.emplace_back(type_array);
         type_struct.field_names.emplace_back("b");
-
 
         SlotDesc slot_descs[] = {
                 {"id", type_int},

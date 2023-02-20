@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/size_tiered_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -19,7 +19,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/size_tiered_compaction_policy.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"

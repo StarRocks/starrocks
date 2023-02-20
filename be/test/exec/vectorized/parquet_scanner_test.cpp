@@ -578,4 +578,4 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
     validate(scanner, 3, check);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
