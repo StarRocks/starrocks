@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.List;
@@ -140,5 +141,9 @@ public class RewriteContext {
 
     public Set<ColumnRefOperator> getQueryColumnSet() {
         return queryColumnSet;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getMVColumnRefToScalarOp() {
+        return MvUtils.getColumnRefMap(getMvExpression(), getMvRefFactory());
     }
 }

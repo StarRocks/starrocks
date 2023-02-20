@@ -273,9 +273,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid = 5\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
-        PlanTestBase.assertContains(plan, "tabletRatio=6/6");
+        PlanTestBase.assertContains(plan, "tabletRatio=1/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
@@ -299,8 +300,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 7: empid = 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=1/6");
 
         String query7 = "select empid, deptno from emps where empid = 5";
         String plan7 = getFragmentPlan(query7);
@@ -369,8 +372,10 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: empid < 5\n" +
                 "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     rollup: mv_1\n" +
+                "     tabletRatio=6/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid < 4";
         String plan2 = getFragmentPlan(query2);
@@ -579,7 +584,11 @@ public class MvRewriteOptimizationTest {
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "mv_2");
+        PlanTestBase.assertContains(plan, "TABLE: mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 8: salary > 110.0, 6: empid <= 4\n" +
+                "     partitions=1/1\n" +
+                "     rollup: mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
@@ -1395,10 +1404,9 @@ public class MvRewriteOptimizationTest {
                 "  |----5:EXCHANGE");
         PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:OlapScanNode\n" +
-                "     TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: empid < 5, 9: empid > 2");
+        PlanTestBase.assertContains(plan1, "TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n",
+                "empid < 5,", "empid > 2");
 
         String query7 = "select deptno, empid from emps where empid < 5";
         String plan7 = getFragmentPlan(query7);
@@ -1503,7 +1511,7 @@ public class MvRewriteOptimizationTest {
 
         String query5 = "select * from multi_mv_1";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "multi_mv_3", "UNION");
+        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "UNION");
         dropMv("test", "multi_mv_1");
         dropMv("test", "multi_mv_2");
         dropMv("test", "multi_mv_3");
