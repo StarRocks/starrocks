@@ -544,7 +544,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? EngineType.defaultEngine().name() :
+                context.engineDesc() == null ? null :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 context.charsetDesc() == null ? null :
                         ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
@@ -757,7 +757,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 false,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 null,
-                EngineType.defaultEngine().name(),
+                EngineType.defaultEngine(),
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 context.partitionDesc() == null ? null : (PartitionDesc) visit(context.partitionDesc()),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),

@@ -73,7 +73,7 @@ public class CreateTableAnalyzer {
 
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
-            return EngineType.defaultEngine().name();
+            return EngineType.defaultEngine();
         }
 
         try {
@@ -110,7 +110,7 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
 
-        final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
+        final String engineName = analyzeEngineName(statement.getEngineName());
         statement.setEngineName(engineName);
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
@@ -211,11 +211,11 @@ public class CreateTableAnalyzer {
             }
 
             for (ColumnDef columnDef : columnDefs) {
-                if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
+                if (engineName.equalsIgnoreCase("mysql") && columnDef.getType().isComplexType()) {
                     throw new SemanticException("%s external table don't support complex type", engineName);
                 }
 
-                if (!engineName.equals("hive")) {
+                if (!engineName.equalsIgnoreCase("hive")) {
                     columnDef.setIsKey(true);
                 }
             }
@@ -303,7 +303,7 @@ public class CreateTableAnalyzer {
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
         } else {
-            if (engineName.equals(ELASTICSEARCH)) {
+            if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
             } else {
                 if (partitionDesc != null || distributionDesc != null) {

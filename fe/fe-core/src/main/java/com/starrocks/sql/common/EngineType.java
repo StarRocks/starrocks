@@ -18,6 +18,7 @@ import com.starrocks.server.RunMode;
 
 public enum EngineType {
     OLAP,
+    STARROCKS,
     MYSQL,
     BROKER,
     ELASTICSEARCH,
@@ -27,10 +28,10 @@ public enum EngineType {
     JDBC,
     FILE;
 
-    public static EngineType defaultEngine() {
+    public static String defaultEngine() {
         if (Config.run_mode.equalsIgnoreCase(RunMode.SHARED_DATA.name())) {
             return null;
         }
-        return OLAP;
+        return OLAP.name();
     }
 }

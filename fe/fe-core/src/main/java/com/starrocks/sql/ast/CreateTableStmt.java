@@ -23,6 +23,7 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -220,15 +221,18 @@ public class CreateTableStmt extends DdlStmt {
     }
 
     public boolean isOlapEngine() {
-        return engineName.equalsIgnoreCase(EngineType.OLAP.name());
+        if (engineName != null) {
+            return engineName.equalsIgnoreCase(EngineType.OLAP.name());
+        }
+        return engineName == null && GlobalStateMgr.getCurrentState().isLocalMode();
     }
 
     public boolean isLakeEngine() {
-        return engineName == null;
+        return engineName == null && GlobalStateMgr.getCurrentState().isCloudNativeMode();
     }
 
     public boolean isOlapOrLakeEngine() {
-        return isOlapEngine() || engineName == null;
+        return isOlapEngine() || isLakeEngine();
     }
 
     public String getCharsetName() {

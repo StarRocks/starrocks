@@ -2379,11 +2379,6 @@ public class GlobalStateMgr {
                     sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
                 }
 
-                // storage volume
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
-                        .append("\" = \"");
-                sb.append(olapTable.getStorageVolume()).append("\"");
-
                 // write quorum
                 if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
@@ -2453,6 +2448,11 @@ public class GlobalStateMgr {
                 }
             }
 
+            // storage volume
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
+                    .append("\" = \"");
+            sb.append(olapTable.getStorageVolume()).append("\"");
+
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");
@@ -2481,7 +2481,6 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
                         .append(externalOlapTable.getSourceTableName()).append("\"");
             }
-
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
@@ -2616,6 +2615,7 @@ public class GlobalStateMgr {
             sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
             sb.append("\n)");
         }
+
         sb.append(";");
 
         createTableStmt.add(sb.toString());
