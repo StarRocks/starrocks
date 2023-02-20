@@ -10,7 +10,7 @@
 
 > **说明**
 >
-> 无 Broker 进程的导出在某些场景下会受限。比如如果您配置了多套 HA 或者多个 Kerberos 配置时，不支持无 Broker 进程的导出。这种情况下，您需要继续通过 Broker 执行导出。
+> 无 Broker 进程的导出在某些场景下会受限。比如如果您配置了多 HDFS 集群或多 Kerberos 用户时，不支持无 Broker 进程的导出。这种情况下，您需要继续通过 Broker 执行导出。
 
 如果您需要通过 Brokers 来执行导出，则必须确保您的 StarRocks 集群中已部署 Broker。
 

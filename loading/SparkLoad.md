@@ -10,7 +10,7 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 自 StarRocks v2.5 起，Spark Load 不再需要借助 Broker 进程即可访问外部存储系统。
 > **说明**
 >
-> 使用无 Broker 进程的方式导入在某些场景下会受限。如果您配置了多套 HA 或者多个 Kerberos 配置时，暂时还不支持使用无 Broker 进程的方式导入。这种情况下，您必须继续通过 Broker 进程执行导入。
+> 使用无 Broker 进程的方式导入在某些场景下会受限。如果您配置了多 HDFS 集群或多 Kerberos 用户时，暂时还不支持使用无 Broker 进程的方式导入。这种情况下，您必须继续通过 Broker 进程执行导入。
 
 ## 使用说明
 
