@@ -314,7 +314,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
     } else if (_tnode.analytic_node.order_by_exprs.empty() && _tnode.analytic_node.__isset.use_hash_based_partition &&
                _tnode.analytic_node.use_hash_based_partition) {
-        // analytic has only partition by but withouth order by
+        // analytic has only partition by columns but no order by columns
         auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         HashPartitionContextFactoryPtr hash_partition_ctx_factory =
                 std::make_shared<HashPartitionContextFactory>(_tnode.analytic_node.partition_exprs);
