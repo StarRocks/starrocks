@@ -2,7 +2,11 @@
 # Please run this command from the git repo root directory to build:
 # DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/artifact-ubuntu.Dockerfile -t starrocks/artifact-ubuntu:tag .
 
+<<<<<<< HEAD
 ARG builder=ghcr.io/StarRocks/starrocks/dev-env-ubuntu:latest
+=======
+ARG builder=ghcr.io/starrocks/starrocks/dev-env-ubuntu:main
+>>>>>>> 5d1e95c69 ([Tool] Add allin1 docker image build to release-docker-image flow (#18089))
 
 FROM ${builder} as fe-builder
 # clean and build Frontend and Spark Dpp application

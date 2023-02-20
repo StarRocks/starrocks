@@ -12,7 +12,11 @@ DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io
 ```
 E.g.:
 ```shell
+<<<<<<< HEAD
 DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/dengliu/starrocks/dev-env-ubuntu:latest ../..
+=======
+DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/starrocks/starrocks/dev-env-ubuntu:main ../..
+>>>>>>> 5d1e95c69 ([Tool] Add allin1 docker image build to release-docker-image flow (#18089))
 ```
 ## 1.2 Publish image to ghcr
 ```
