@@ -36,7 +36,7 @@ public:
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
-    void mark_is_eof() { _eof = true; }
+    void mark_eof() { _eof = true; }
     bool eof() { return _eof; }
 
 private:
