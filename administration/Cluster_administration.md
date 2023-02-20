@@ -431,6 +431,10 @@ http://<fe_ip>:<fe_http_port>/api/<db_name>/<table_name>/_stream_load
 >
 > 回滚操作与升级操作的顺序相反，应当**先回滚 FE 节点，再回滚 BE 节点** 。错误的回滚顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
 
+### 前置工作
+
+回滚 StarRocks 2.2 及以后版本前，您需要在所有 FE 节点的配置文件 **fe.conf** 中增加配置项 `ignore_unknown_log_id=true`，否则回滚后系统可能无法启动。重启 StarRocks，CheckPoint 完成后，您需要将该设置项恢复为 `ignore_unknown_log_id=false`，然后重启 FE 以恢复正常配置。
+
 ### 下载安装文件
 
 在完成数据正确性验证后，将需要回滚的旧版本 BE 和 FE 节点安装包下载并分发至各自路径下。
@@ -557,10 +561,3 @@ admin set frontend config ("disable_colocate_balance"="false");
     ```
 
 4. 在升级下一台实例之前，您需要确认当前实例启动成功。
-
-### 关于 StarRocks 2.2.x 回滚至较早版本
-
-StarRocks 2.2 版本中 FE 节点新增了日志类型。如果直接从 2.2.x 回滚至较早版本，您可能会碰到较早版本的 FE 无法识别的错误。您可以通过以下方式解决：
-
-1. 在 **fe.conf** 中增加配置项 `ignore_unknown_log_id=true`，然后重启 FE。否则回滚后系统可能无法启动。
-2. Checkpoint 完成后，推荐您将该设置项恢复为 `ignore_unknown_log_id=false`，然后重启 FE 以恢复正常配置。
