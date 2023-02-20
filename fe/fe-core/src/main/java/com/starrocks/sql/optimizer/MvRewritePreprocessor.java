@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -36,7 +37,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -149,9 +149,10 @@ public class MvRewritePreprocessor {
             colRefToColumnMetaMapBuilder.put(columnRef, column);
             columnMetaToColRefMapBuilder.put(column, columnRef);
         }
+        final Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
 
         // construct distribution
-        final Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+        final Set<Integer>  mvPartitionDistributionColumnRef = Sets.newHashSet();
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         // only hash distribution is supported
         Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
@@ -186,14 +187,23 @@ public class MvRewritePreprocessor {
         // - TODO: after partition/distribution pruning, those predicates should be removed from mv rewrite result.
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
-        final List<ColumnRefOperator> mvOutputColumnRefOperators = mvExpression.getOutputColumns()
-                .getStream().map(id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
-                .collect(Collectors.toList());
+        final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
         final List<ScalarOperator> mvConjuncts = Lists.newArrayList();
+
+        // Construct partition/distribution key column refs to filter conjunctions which need to retain.
+        Set<String> mvPruneKeyColNames = Sets.newHashSet();
+        distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
+        mv.getPartitionNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
+        final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
+                        id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
+                .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
+                .map(colRef -> colRef.getId())
+                .collect(Collectors.toSet());
         // Case1: keeps original predicates which belong to MV table(which are not pruned after mv's partition pruning)
         for (ScalarOperator conj : conjuncts) {
-            List<ColumnRefOperator> conjColumnRefOperators = Utils.extractColumnRef(conj);
-            if (!conjColumnRefOperators.retainAll(mvOutputColumnRefOperators)) {
+            final List<Integer> conjColumnRefOperators =
+                    Utils.extractColumnRef(conj).stream().map(ref -> ref.getId()).collect(Collectors.toList());
+            if (mvPruneColumnIdSet.containsAll(conjColumnRefOperators)) {
                 mvConjuncts.add(conj);
             }
         }

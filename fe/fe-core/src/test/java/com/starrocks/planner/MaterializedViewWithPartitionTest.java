@@ -208,7 +208,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 < 2000\n" +
                         "     partitions=5/5")
                 .contains("PREDICATES: 9: c2 > 1999\n" +
                         "     partitions=5/5\n" +
@@ -219,7 +218,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 < 2000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: partial_mv_6")
                 .contains("PREDICATES: 9: c2 < 3000, 9: c2 > 1999\n" +
@@ -232,7 +230,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("partial_mv_6")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 <= 999, 6: c3 <= 999, 7: c2 < 2000\n" +
+                        "     PREDICATES: 7: c2 <= 999, 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=6/6");
@@ -518,7 +516,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 > 10\n" +
                         "     partitions=5/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=10/10");
@@ -527,7 +524,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 6: c3 <= 999, 7: c2 > 10\n" +
+                        "     PREDICATES: 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=6/6");
@@ -536,7 +533,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1, 7: c2 > 10\n" +
+                        "     PREDICATES: 5: c1 = 1\n" +
                         "     partitions=5/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=5/10");
@@ -545,7 +542,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1, 6: c3 <= 999, 7: c2 > 10\n" +
+                        "     PREDICATES: 5: c1 = 1, 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");
@@ -554,7 +551,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 >= 101, 5: c1 = 1, 6: c3 <= 999, 7: c2 > 10\n" +
+                        "     PREDICATES: 7: c2 >= 101, 5: c1 = 1, 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");
