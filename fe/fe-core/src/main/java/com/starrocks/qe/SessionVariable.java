@@ -358,7 +358,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
-    public static final String FULL_SORT_LAZY_MATERIALIZATION = "full_sort_late_materialization";
+    public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)

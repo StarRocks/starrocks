@@ -133,10 +133,10 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     // in at most one pass. there is no need to enable lazy materialization which eliminates non-order-by output
     // columns's permutation in multiple passes.
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
-        _runtime_profile->add_info_string("LazyMaterialization", "false");
+        _runtime_profile->add_info_string("LateMaterialization", "false");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
-        _runtime_profile->add_info_string("LazyMaterialization", "true");
+        _runtime_profile->add_info_string("LateMaterialization", "true");
         _split_lazy_and_eager_chunks();
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
@@ -154,7 +154,7 @@ void ChunksSorterFullSort::_assign_ordinals() {
     // 4 billion rows, it may happen in product environment extremely rarely, if it really happens,
     // 64 bit ordinal is adopted.
     auto use_64bit_ordinal = (_chunk_idx_bits + _offset_in_chunk_bits) > 32;
-    _runtime_profile->add_info_string("LazyMaterializationUse64BitOrdinal",
+    _runtime_profile->add_info_string("LateMaterializationUse64BitOrdinal",
                                       strings::Substitute("$0", use_64bit_ordinal));
 
     if (use_64bit_ordinal) {
