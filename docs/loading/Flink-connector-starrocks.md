@@ -116,9 +116,11 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 "'sink.buffer-flush.max-rows' = '1000000'," +
                 "'sink.buffer-flush.max-bytes' = '300000000'," +
                 "'sink.buffer-flush.interval-ms' = '5000'," +
-                // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                // Since 2.4, StarRocks support partial updates for primary key model. You can specify
+                // the columns to be updated by configuring the following two properties, and the '__op'
+                // column must be specified at the end of 'sink.properties.columns'.
                 // "'sink.properties.partial_update' = 'true'," +
-                // "'sink.properties.columns' = 'k1,k2,k3'," + 
+                // "'sink.properties.columns' = 'k1,k2,k3,__op'," + 
                 "'sink.properties.column_separator' = '\\x01'," +
                 "'sink.properties.row_delimiter' = '\\x02'," +
                 "'sink.max-retries' = '3'" +
