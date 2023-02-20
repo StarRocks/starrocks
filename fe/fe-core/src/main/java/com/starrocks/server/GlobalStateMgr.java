@@ -2225,11 +2225,10 @@ public class GlobalStateMgr {
                 }
             }
         }
-        if (table.isLocalTable() || table.getType() == TableType.OLAP_EXTERNAL) {
-            sb.append("\n) ENGINE=");
-            sb.append(table.getType().name()).append(" ");
-        }
 
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        
         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -2447,11 +2446,6 @@ public class GlobalStateMgr {
                     sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
                 }
             }
-
-            // storage volume
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
-                    .append("\" = \"");
-            sb.append(olapTable.getStorageVolume()).append("\"");
 
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
