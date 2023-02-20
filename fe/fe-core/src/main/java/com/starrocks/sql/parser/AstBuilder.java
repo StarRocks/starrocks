@@ -277,6 +277,7 @@ import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
+import com.starrocks.sql.ast.SetWarehouseStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -363,7 +364,6 @@ import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
-import com.starrocks.sql.ast.UseWarehouseStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
@@ -1485,14 +1485,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String whName = identifier.getValue();
         return new DropWarehouseStmt(context.IF() != null, whName);
     }
-
-    @Override
-    public ParseNode visitUseWarehouseStatement(StarRocksParser.UseWarehouseStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String warehouseName = identifier.getValue();
-        return new UseWarehouseStmt(warehouseName);
-    }
-
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
@@ -2953,6 +2945,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return visit(context.expression());
         }
+    }
+
+    @Override
+    public ParseNode visitSetWarehouseStatement(StarRocksParser.SetWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String warehouseName = identifier.getValue();
+        return new SetWarehouseStmt(warehouseName);
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
