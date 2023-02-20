@@ -263,8 +263,8 @@ All StarRocks versions support downgrading. You need to first downgrade the FEs,
 
 1. Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-  - For a minor version downgrading (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
-  - For a major version downgrading (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
+    - For a minor version downgrading (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+    - For a major version downgrading (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
 2. Before downgrading StarRocks v2.2 and later versions, you must add the item `ignore_unknown_log_id=true` to the FE configuration files **fe.conf** on all FE nodes. Otherwise, StarRocks may fail to restart. When CheckPoint is completed after StarRocks is restarted, you can then set `ignore_unknown_log_id` to `false`, and restart all FE nodes to allow the change to take effect.
 
