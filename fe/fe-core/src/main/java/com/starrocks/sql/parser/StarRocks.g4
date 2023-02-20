@@ -32,7 +32,6 @@ statement
     : queryStatement
 
     // Warehouse Statement
-    | useWarehouseStatement
     | createWarehouseStatement
     | dropWarehouseStatement
     | showWarehousesStatement
@@ -249,6 +248,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | setWarehouseStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -619,10 +619,6 @@ createWarehouseStatement
 
 showWarehousesStatement
     : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-useWarehouseStatement
-    : USE WAREHOUSE identifierOrString
     ;
 
 dropWarehouseStatement
@@ -1487,6 +1483,10 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
+    ;
+
+setWarehouseStatement
+    : SET WAREHOUSE identifierOrString
     ;
 
 unsupportedStatement
