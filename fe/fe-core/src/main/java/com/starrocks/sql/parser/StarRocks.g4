@@ -1817,7 +1817,7 @@ informationFunctionExpression
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE '(' ')'
-    | name = CATALOG ('(' ')')?
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
