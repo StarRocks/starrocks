@@ -31,11 +31,12 @@ class Spiller;
 class SpillerFactory : public std::enable_shared_from_this<SpillerFactory> {
 public:
     SpillerFactory() = default;
-    //
     ~SpillerFactory() = default;
+
     // create a spiller
     std::shared_ptr<Spiller> create(const SpilledOptions& options);
-    //
+
+    // release some resource in advance
     void close();
 
 private:
