@@ -1549,6 +1549,48 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testAsHasStarWithSameColumns() throws Exception {
+        String sql = "create materialized view testAsHasStar " +
+                "partition by ss " +
+                "distributed by hash(ss) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select a.k1 ss, a.*, b.* from tbl1 as a join tbl1 as b on a.k1=b.k1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k1'"));
+        } finally {
+            dropMv("testAsHasStar");
+        }
+    }
+
+    @Test
+    public void testMVWithSameColumns() throws Exception {
+        String sql = "create materialized view testAsHasStar " +
+                "partition by ss " +
+                "distributed by hash(ss) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select a.k1 ss, a.k2, b.k2 from tbl1 as a join tbl1 as b on a.k1=b.k1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k2'"));
+        } finally {
+            dropMv("testAsHasStar");
+        }
+    }
+
+    @Test
     public void testAsHasStarWithNondeterministicFunction() {
         String sql = "create materialized view mv1 " +
                 "distributed by hash(ss) buckets 10 " +
