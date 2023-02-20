@@ -35,6 +35,10 @@ public:
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
                                     TListTableStatusResult* table_result);
 
+    static Status list_materialized_view_status(const std::string& ip, const int32_t port,
+                                                const TGetTablesParams& request,
+                                                TListMaterializedViewStatusResult* result);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
