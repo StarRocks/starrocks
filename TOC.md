@@ -596,14 +596,11 @@
 + 性能测试
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
-<<<<<<< HEAD
-=======
 + 开发指南
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
 + 外部系统集成
   + [概述](./integrations/intro.md)
   + [配置 AWS 认证方式](./integrations/authenticate_to_aws_resources.md)
->>>>>>> 8f5732f ([Doc] update toc - Integration (#4493))
 + Release Notes
   + [v2.5](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
