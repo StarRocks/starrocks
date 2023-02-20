@@ -2076,7 +2076,7 @@ public class OlapTable extends Table {
 
     public String getStorageVolume() {
         if (tableProperty == null) {
-            return GlobalStateMgr.getCurrentState().isCloudNativeMode() ? "default" : "local";
+            return GlobalStateMgr.getCurrentState().isSharedDataMode() ? "default" : "local";
         }
         return tableProperty.getStorageVolume();
     }

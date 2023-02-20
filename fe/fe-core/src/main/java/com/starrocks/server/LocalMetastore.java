@@ -795,8 +795,8 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        if (stmt.isOlapOrLakeEngine()) {
-            createOlapOrLakeTable(db, stmt);
+        if (stmt.isOlapEngine()) {
+            createOlapTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
@@ -2007,11 +2007,9 @@ public class LocalMetastore implements ConnectorMetadata {
         olapTable.setColocateGroup(colocateGroup);
     }
 
-    // Create olap|lake table and related base index synchronously.
-    // Currently, there are two differences between lake table and olap table
-    // 1. Lake table needs to get storage group from StarMgr.
-    // 2. Tablet is different.
-    private void createOlapOrLakeTable(Database db, CreateTableStmt stmt) throws DdlException {
+    // Create olap table and related base index synchronously.
+    // when run on shared-data mode, olap table needs to get storage group from StarMgr.
+    private void createOlapTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         LOG.debug("begin create olap table: {}", tableName);
 
@@ -2115,7 +2113,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            if (stmt.isLakeEngine()) {
+            if (stmt.isOlapEngine() && GlobalStateMgr.getCurrentState().isSharedDataMode()) {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
                 // storage cache property
@@ -2237,7 +2235,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
 
-        if (table.hasAutoIncrementColumn() && stmt.isLakeEngine()) {
+        if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
+                && GlobalStateMgr.getCurrentState().isSharedDataMode()) {
             throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
         }
 
@@ -2369,7 +2368,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageFormat(storageFormat);
 
         // get storage volume
-        String storageVolume = GlobalStateMgr.getCurrentState().isCloudNativeMode() ? "default" : "local";
+        String storageVolume = GlobalStateMgr.getCurrentState().isSharedDataMode() ? "default" : "local";
         table.setStorageVolume(storageVolume);
 
         // get compression type

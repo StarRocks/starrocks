@@ -73,7 +73,7 @@ public class CreateTableAnalyzer {
 
     private static String analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
-            return EngineType.defaultEngine();
+            return EngineType.defaultEngine().name();
         }
 
         try {
@@ -136,7 +136,7 @@ public class CreateTableAnalyzer {
         }
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
-        if (statement.isOlapOrLakeEngine()) {
+        if (statement.isOlapEngine()) {
             // olap table or lake table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
@@ -232,7 +232,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapOrLakeEngine());
+                columnDef.analyze(statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -264,7 +264,7 @@ public class CreateTableAnalyzer {
         }
 
         DistributionDesc distributionDesc = statement.getDistributionDesc();
-        if (statement.isOlapOrLakeEngine()) {
+        if (statement.isOlapEngine()) {
             // analyze partition
             Map<String, String> properties = statement.getProperties();
             if (partitionDesc != null) {
@@ -332,7 +332,7 @@ public class CreateTableAnalyzer {
 
             for (IndexDef indexDef : indexDefs) {
                 indexDef.analyze();
-                if (!statement.isOlapOrLakeEngine()) {
+                if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version.");
                 }
                 for (String indexColName : indexDef.getColumns()) {

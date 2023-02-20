@@ -333,7 +333,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                GlobalStateMgr.getCurrentState().isCloudNativeMode() ? "default" : "local");
+                GlobalStateMgr.getCurrentState().isSharedDataMode() ? "default" : "local");
         return this;
     }
 
