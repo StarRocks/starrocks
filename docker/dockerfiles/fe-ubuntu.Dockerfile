@@ -25,10 +25,26 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 
 FROM ubuntu:22.04
 
+<<<<<<< HEAD
 RUN apt-get update -y \
         && apt-get install -y --no-install-recommends default-jdk \
            mysql-client curl vim tree net-tools \
         && rm -rf /var/lib/apt/lists/*
+=======
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends default-jdk \
+           mysql-client curl vim tree net-tools
+
+# Install timezone data. This is needed by Starrocks broker load.
+RUN apt-get install -yq tzdata && \
+    ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# Install perf tool for low-level performance debug
+RUN apt-get install -yq linux-tools-common linux-tools-generic
+
+RUN rm -rf /var/lib/apt/lists/*
+>>>>>>> 96e4c4d23 ([BugFix] Add timezone data to the ubuntu docker image (#18070))
 
 ENV JAVA_HOME=/lib/jvm/default-java
 
