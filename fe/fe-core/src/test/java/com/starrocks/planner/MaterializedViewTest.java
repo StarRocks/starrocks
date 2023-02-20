@@ -57,6 +57,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "DUPLICATE KEY(`deptno`)\n" +
                 "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
+                "    \"unique_constraints\" = \"deptno\"\n," +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         String locationsTable = "" +
@@ -93,15 +94,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "DUPLICATE KEY(`empid`)\n" +
                 "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
+                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME)
+                .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(deptsTable);
+                .withTable(ependentsTable);
     }
 
     @AfterClass
