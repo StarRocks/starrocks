@@ -1030,6 +1030,10 @@ build_serdes() {
     make -j$PARALLEL
     make install
     rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    # these symbols also be definition in librdkafka, change these symbols to be local.
+    objcopy --localize-symbol=cnd_timedwait ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=cnd_timedwait_ms ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=thrd_is_current ${TP_INSTALL_DIR}/lib/libserdes.a
     unset LIBS
     export CFLAGS=$OLD_CFLAGS
 }
