@@ -282,4 +282,7 @@ public class OperationType {
 
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+
+    // constraint properties
+    public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 }

@@ -90,6 +90,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -1899,6 +1900,48 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
+
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getUniqueConstraints();
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setUniqueConstraints(uniqueConstraints);
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getForeignKeyConstraints();
+    }
+
+    public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = foreignKeyConstraints
+                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
+    }
 
     @Override
     public void onCreate() {
