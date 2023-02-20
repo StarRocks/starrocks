@@ -22,13 +22,14 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class UseWarehouseStmtTest {
+public class SetWarehouseStmtTest {
     private static ConnectContext ctx;
 
     @BeforeClass
@@ -44,15 +45,12 @@ public class UseWarehouseStmtTest {
 
     @Test
     public void testParserAndAnalyzer() {
-        String sql = "use warehouse aaa";
+        String sql = "set warehouse aaa";
         AnalyzeTestUtil.analyzeSuccess(sql);
-
-        String sql_2 = "USE xxx aaa";
-        AnalyzeTestUtil.analyzeFail(sql_2);
     }
 
     @Test
-    public void testUse(@Mocked WarehouseManager warehouseMgr) throws Exception {
+    public void testSetWarehouse(@Mocked WarehouseManager warehouseMgr) throws Exception {
         new Expectations() {
             {
                 warehouseMgr.warehouseExists("aaa");
@@ -62,12 +60,13 @@ public class UseWarehouseStmtTest {
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        StmtExecutor executor = new StmtExecutor(ctx, "use warehouse aaa");
+        StmtExecutor executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("SET WAREHOUSE aaa"), ctx));
         executor.execute();
 
         Assert.assertEquals("aaa", ctx.getCurrentWarehouse());
 
-        executor = new StmtExecutor(ctx, "use xxx aaa");
+        executor = new StmtExecutor(ctx, "set xxx=aaa");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
     }

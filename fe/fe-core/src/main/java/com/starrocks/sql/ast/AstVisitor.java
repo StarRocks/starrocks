@@ -103,10 +103,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitUseWarehouseStatement(UseWarehouseStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
@@ -733,6 +729,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetUserPropertyStatement(SetUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
