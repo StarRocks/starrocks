@@ -273,14 +273,15 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     for (; levels_pos < _levels_decoded && rows_read < *num_rows; ++levels_pos) {
         rows_read += _rep_levels[levels_pos] == 0;
     }
-    if (levels_pos < _levels_decoded) {
-        // means rows_read == *num_rows, but notice, ++levels_pos in for-loop will take one step forward, so we need -1
+
+    if (rows_read == *num_rows) {
+        // Notice, ++levels_pos in for-loop will take one step forward, so we need -1
         levels_pos--;
         DCHECK_EQ(0, _rep_levels[levels_pos]);
     } // else {
-      //    means  rows_read < *num_rows, levels_pos >= _levels_decoded,
-      //    so we need to decode more levels to obtain a complete line or
-      //    we have read all the records in this column chunk.
+      //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
+      //  so we need to decode more levels to obtain a complete line or
+      //  we have read all the records in this column chunk.
     // }
 
     VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
