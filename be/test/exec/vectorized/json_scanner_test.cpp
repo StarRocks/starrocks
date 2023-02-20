@@ -262,7 +262,7 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     EXPECT_EQ(2, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[['10.10.0.1', '10.20.1.1'], [10, 20]]", chunk->debug_row(0));
+    EXPECT_EQ("[['10.10.0.1','10.20.1.1'], [10,20]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_two_level_array) {
@@ -292,7 +292,7 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[[[10, 20], [30, 40]]]", chunk->debug_row(0));
+    EXPECT_EQ("[[[10,20],[30,40]]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_invalid_column_in_array) {
@@ -384,7 +384,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[[NULL, NULL]]", chunk->debug_row(0));
+    EXPECT_EQ("[[NULL,NULL]]", chunk->debug_row(0));
 }
 
 TEST_F(JsonScannerTest, test_json_with_long_string) {

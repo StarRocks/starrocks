@@ -4686,7 +4686,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_STREQ(dest_column->debug_string().c_str(),
-                     "[['5', '666', '33'], ['5', '666', '33'], ['5', '666', '33']]");
+                     "[['5','666','33'], ['5','666','33'], ['5','666','33']]");
     }
     // test normal
     {
@@ -4694,7 +4694,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 1);
-        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5', '666', '33']]");
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','666','33']]");
     }
 }
 

@@ -333,11 +333,11 @@ std::string StructColumn::debug_item(uint32_t idx) const {
     for (size_t i = 0; i < _fields.size(); i++) {
         const auto& field = _fields[i];
         ss << _field_names->get_slice(i).to_string();
-        ss << ": ";
+        ss << ":";
         ss << field->debug_item(idx);
         if (i < _fields.size() - 1) {
             // Add struct field separator, last field don't need ','.
-            ss << ", ";
+            ss << ",";
         }
     }
     ss << '}';

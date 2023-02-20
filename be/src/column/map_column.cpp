@@ -495,16 +495,16 @@ std::string MapColumn::debug_item(uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     std::stringstream ss;
-    ss << "[";
+    ss << "{";
     for (size_t i = 0; i < map_size; ++i) {
         if (i > 0) {
-            ss << ", ";
+            ss << ",";
         }
         ss << _keys->debug_item(offset + i);
-        ss << "->";
+        ss << ":";
         ss << _values->debug_item(offset + i);
     }
-    ss << "]";
+    ss << "}";
     return ss.str();
 }
 

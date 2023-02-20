@@ -626,7 +626,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     aggregator->aggregate_values(0, 2, loops.data(), false);
 
     ASSERT_EQ(1, agg->size());
-    EXPECT_EQ("['2', '3', '4']", agg->debug_item(0));
+    EXPECT_EQ("['2','3','4']", agg->debug_item(0));
 
     // second chunk column
     src->reset_column();
@@ -648,8 +648,8 @@ TEST(ColumnAggregator, testArrayReplace) {
     aggregator->aggregate_values(0, 3, loops.data(), false);
 
     EXPECT_EQ(3, agg->size());
-    EXPECT_EQ("['10', '11']", agg->debug_item(1));
-    EXPECT_EQ("['17', '18']", agg->debug_item(2));
+    EXPECT_EQ("['10','11']", agg->debug_item(1));
+    EXPECT_EQ("['17','18']", agg->debug_item(2));
 
     // third chunk column
     src->reset_column();
@@ -669,7 +669,7 @@ TEST(ColumnAggregator, testArrayReplace) {
 
     EXPECT_EQ(5, agg->size());
     EXPECT_EQ("['19']", agg->debug_item(3));
-    EXPECT_EQ("['20', '21', '22', '23', '24', '25', '26', '27', '28', '29']", agg->debug_item(4));
+    EXPECT_EQ("['20','21','22','23','24','25','26','27','28','29']", agg->debug_item(4));
 }
 
 // NOLINTNEXTLINE

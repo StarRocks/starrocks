@@ -322,8 +322,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
     auto c2 = vectorized::ArrayColumn::create(elem1, off2);
 
     ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
-    ASSERT_EQ("[1, 2, 3]", c2->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c2->debug_item(1));
+    ASSERT_EQ("[1,2,3]", c2->debug_item(0));
+    ASSERT_EQ("[4,5,6]", c2->debug_item(1));
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
@@ -335,8 +335,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
         c2 = vectorized::ArrayColumn::create(elem1, off2);
 
         ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
-        ASSERT_EQ("[1, 2, 3]", c2->debug_item(0));
-        ASSERT_EQ("[4, 5, 6]", c2->debug_item(1));
+        ASSERT_EQ("[1,2,3]", c2->debug_item(0));
+        ASSERT_EQ("[4,5,6]", c2->debug_item(1));
     }
 }
 
