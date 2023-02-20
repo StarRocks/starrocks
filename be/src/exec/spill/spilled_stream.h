@@ -58,6 +58,12 @@ private:
 };
 using SpillRestoreTaskPtr = std::shared_ptr<SpillRestoreTask>;
 
+// spilled input stream with restore tasks
+struct InputStreamWithTasks {
+    std::shared_ptr<SpilledInputStream> stream;
+    std::vector<SpillRestoreTaskPtr> tasks;
+};
+
 class SpilledFileGroup {
 public:
     SpilledFileGroup(const SpillFormater& formater) : _formater(formater) {}
@@ -65,12 +71,10 @@ public:
     // not thread safe
     void append_file(std::shared_ptr<SpillFile> file) { _files.emplace_back(std::move(file)); }
 
-    auto as_flat_stream(std::weak_ptr<SpillerFactory> factory)
-            -> StatusOr<std::pair<std::shared_ptr<SpilledInputStream>, std::vector<SpillRestoreTaskPtr>>>;
+    StatusOr<InputStreamWithTasks> as_flat_stream(std::weak_ptr<SpillerFactory> factory);
 
-    auto as_sorted_stream(std::weak_ptr<SpillerFactory> factory, RuntimeState* state, const SortExecExprs* sort_exprs,
-                          const SortDescs* descs)
-            -> StatusOr<std::pair<std::shared_ptr<SpilledInputStream>, std::vector<SpillRestoreTaskPtr>>>;
+    StatusOr<InputStreamWithTasks> as_sorted_stream(std::weak_ptr<SpillerFactory> factory, RuntimeState* state,
+                                                    const SortExecExprs* sort_exprs, const SortDescs* descs);
 
     const std::vector<std::shared_ptr<SpillFile>>& files() const { return _files; }
 

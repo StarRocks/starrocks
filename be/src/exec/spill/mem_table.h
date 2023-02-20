@@ -30,6 +30,18 @@
 namespace starrocks {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
 
+//  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
+// depending on the requirements of the upper layer
+
+// usage:
+//
+// auto mem_table = create();
+// while (!mem_table->is_full()) {
+//     mem_table->append(next_chunk());
+// }
+// mem_table->done();
+// mem_table->flush();
+
 class SpilledMemTable {
 public:
     SpilledMemTable(RuntimeState* state, size_t max_buffer_size, MemTracker* parent)
@@ -37,9 +49,15 @@ public:
         _tracker = std::make_unique<MemTracker>(-1, "spill-mem-table");
     }
     virtual ~SpilledMemTable() = default;
+
     bool is_full() { return _tracker->consumption() >= _max_buffer_size; };
+    // append data to mem table
     virtual Status append(ChunkPtr chunk) = 0;
+    // all of data has been added
+    // done will be called in pipeline executor threads
     virtual Status done() = 0;
+    // flush all data to callback, then release the memory in memory table
+    // flush will be called in IO threads
     virtual Status flush(FlushCallBack callback) = 0;
 
 protected:

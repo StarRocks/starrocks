@@ -38,14 +38,13 @@
 namespace starrocks {
 // TODO: implements SpilledFileStream
 
-auto SpilledFileGroup::as_flat_stream(std::weak_ptr<SpillerFactory> factory)
-        -> StatusOr<std::pair<std::shared_ptr<SpilledInputStream>, std::vector<SpillRestoreTaskPtr>>> {
-    return Status::NotSupported("");
+StatusOr<InputStreamWithTasks> SpilledFileGroup::as_flat_stream(std::weak_ptr<SpillerFactory> factory) {
+    return Status::NotSupported("TODO: implements");
 }
 
-auto SpilledFileGroup::as_sorted_stream(std::weak_ptr<SpillerFactory> factory, RuntimeState* state,
-                                        const SortExecExprs* sort_exprs, const SortDescs* descs)
-        -> StatusOr<std::pair<std::shared_ptr<SpilledInputStream>, std::vector<SpillRestoreTaskPtr>>> {
+StatusOr<InputStreamWithTasks> SpilledFileGroup::as_sorted_stream(std::weak_ptr<SpillerFactory> factory,
+                                                                  RuntimeState* state, const SortExecExprs* sort_exprs,
+                                                                  const SortDescs* descs) {
     return Status::NotSupported("TODO: implements");
 }
 
