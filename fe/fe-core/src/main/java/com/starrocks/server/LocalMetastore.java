@@ -41,6 +41,11 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+<<<<<<< HEAD
+=======
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -52,6 +57,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
@@ -79,6 +85,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
@@ -2284,6 +2291,14 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         olapTable.setCompressionType(compressionType);
 
+        try {
+            processConstraint(db, table, properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(
+                    String.format("processing constraint failed when creating table:%s. exception msg:%s",
+                            table.getName(), e.getMessage()), e);
+        }
+
         // a set to record every new tablet created when create table
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
@@ -2403,6 +2418,20 @@ public class LocalMetastore implements ConnectorMetadata {
             if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
                 colocateTableIndex.removeTable(tableId);
             }
+        }
+    }
+
+    private void processConstraint(
+            Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+        if (uniqueConstraints != null) {
+            olapTable.setUniqueConstraints(uniqueConstraints);
+        }
+
+        List<ForeignKeyConstraint> foreignKeyConstraints =
+                PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
+        if (foreignKeyConstraints != null) {
+            olapTable.setForeignKeyConstraint(foreignKeyConstraints);
         }
     }
 
@@ -3475,9 +3504,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            List<MaterializedView.BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
             if (baseTableInfos != null) {
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
                         MvId mvId = new MvId(db.getId(), table.getId());
@@ -3962,6 +3991,28 @@ public class LocalMetastore implements ConnectorMetadata {
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         editLog.logModifyInMemory(info);
+    }
+
+    // The caller need to hold the db write lock
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties) throws DdlException {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table:%s does not exist", tableName));
+        }
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            olapTable.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildConstraint();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), olapTable.getId(), properties);
+        editLog.logModifyConstraint(info);
     }
 
     // The caller need to hold the db write lock

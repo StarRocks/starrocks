@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -336,7 +337,7 @@ public class CreateMaterializedViewTest {
             partitionFunctionCallExpr.collect(SlotRef.class, slotRefs);
             SlotRef partitionSlotRef = slotRefs.get(0);
             Assert.assertEquals("k1", partitionSlotRef.getColumnName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> tableSlotRefs = Lists.newArrayList();
@@ -563,7 +564,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpr instanceof SlotRef);
             SlotRef partitionSlotRef = (SlotRef) partitionExpr;
             Assert.assertEquals("s1", partitionSlotRef.getColumnName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(2, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
@@ -628,7 +629,7 @@ public class CreateMaterializedViewTest {
             Partition partition = materializedView.getPartitions().iterator().next();
             Assert.assertNotNull(partition);
             Assert.assertEquals("mv1", partition.getName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
             Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
@@ -965,7 +966,7 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement statementBase =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            List<MaterializedView.BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
         } catch (Exception e) {
             Assert.fail(e.getMessage());

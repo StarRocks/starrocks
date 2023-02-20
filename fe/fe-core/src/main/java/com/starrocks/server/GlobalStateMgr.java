@@ -39,6 +39,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
+<<<<<<< HEAD
+=======
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.binlog.BinlogManager;
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -53,6 +59,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -287,6 +294,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -1345,7 +1353,7 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (MaterializedView.BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
                         LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
@@ -2283,11 +2291,106 @@ public class GlobalStateMgr {
                 sb.append(olapTable.enableReplicatedStorage()).append("\"");
             }
 
+<<<<<<< HEAD
             // write quorum
             if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
                         .append("\" = \"");
                 sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+=======
+                // binlog config
+                if (olapTable.containsBinlogConfig()) {
+                    // binlog_version
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getVersion()).append("\"");
+                    // binlog_enable
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogEnable()).append("\"");
+                    // binlog_ttl
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogTtlSecond()).append("\"");
+                    // binlog_max_size
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
+                }
+
+                // write quorum
+                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                            .append("\" = \"");
+                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // storage media
+                Map<String, String> properties = olapTable.getTableProperty().getProperties();
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
+
+                // partition live number
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
+                }
+
+                // unique constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+                }
+
+                // foreign key constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                            .append("\" = \"");
+                    List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
+                    List<String> constraintStrs = Lists.newArrayList();
+                    for (ForeignKeyConstraint constraint : constraints) {
+                        BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                        StringBuilder constraintSb = new StringBuilder();
+                        constraintSb.append("(");
+                        String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                        constraintSb.append(baseColumns);
+                        constraintSb.append(")");
+                        constraintSb.append(" REFERENCES ");
+                        if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                            Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
+                            constraintSb.append(parentDb.getFullName());
+                            constraintSb.append(".");
+                            Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
+                            constraintSb.append(parentTable.getName());
+                        } else {
+                            constraintSb.append(parentTableInfo);
+                        }
+
+                        constraintSb.append("(");
+                        String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                                .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                        constraintSb.append(parentColumns);
+                        constraintSb.append(")");
+                        constraintStrs.add(constraintSb.toString());
+                    }
+
+                    sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+                }
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
             }
 
             // compression type
@@ -3035,6 +3138,17 @@ public class GlobalStateMgr {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
 
+<<<<<<< HEAD
+=======
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        localMetastore.modifyBinlogMeta(db, table, binlogConfig);
+    }
+
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties) throws DdlException {
+        localMetastore.modifyTableConstraint(db, tableName, properties);
+    }
+
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
     }

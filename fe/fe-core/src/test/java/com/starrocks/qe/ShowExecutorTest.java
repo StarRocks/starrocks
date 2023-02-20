@@ -27,6 +27,11 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Catalog;
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -180,6 +185,12 @@ public class ShowExecutorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
+                "default_catalog", "testDb", "testTbl");
+
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
         // mock materialized view
         MaterializedView mv = new MaterializedView();
         new Expectations(mv) {

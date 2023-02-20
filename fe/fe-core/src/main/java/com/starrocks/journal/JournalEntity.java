@@ -592,7 +592,15 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+<<<<<<< HEAD
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+=======
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

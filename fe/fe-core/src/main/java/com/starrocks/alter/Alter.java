@@ -609,7 +609,16 @@ public class Alter {
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
+<<<<<<< HEAD
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
+=======
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
@@ -628,6 +637,22 @@ public class Alter {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
+<<<<<<< HEAD
+=======
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+                    boolean isSuccess = ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
+                            properties, TTabletMetaType.BINLOG_CONFIG);
+                    if (!isSuccess) {
+                        throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                    }
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
+                } else {
+                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

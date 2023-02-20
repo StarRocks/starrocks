@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.catalog;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -61,8 +60,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
-
 /**
  * meta structure for materialized view
  */
@@ -77,6 +74,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         INCREMENTAL
     }
 
+<<<<<<< HEAD
     public static class BaseTableInfo {
         @SerializedName(value = "catalogName")
         private final String catalogName;
@@ -193,6 +191,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
     }
 
+=======
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
@@ -529,7 +529,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
 
-        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {

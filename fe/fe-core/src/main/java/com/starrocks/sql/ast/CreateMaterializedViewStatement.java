@@ -5,9 +5,15 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.plan.ExecPlan;
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
 
 import java.util.List;
 import java.util.Map;
@@ -39,7 +45,17 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
 
     private String simpleViewDef;
+<<<<<<< HEAD
     // for create column in mv
+=======
+    private List<BaseTableInfo> baseTableInfos;
+
+    // Maintenance information
+    ExecPlan maintenancePlan;
+    ColumnRefFactory columnRefFactory;
+
+    // Sink table information
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<MaterializedView.BaseTableInfo> baseTableInfos;
     private Column partitionColumn;
@@ -156,11 +172,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public List<MaterializedView.BaseTableInfo> getBaseTableInfos() {
+    public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
 
-    public void setBaseTableInfos(List<MaterializedView.BaseTableInfo> baseTableInfos) {
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
         this.baseTableInfos = baseTableInfos;
     }
 

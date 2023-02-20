@@ -120,6 +120,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
+<<<<<<< HEAD
+=======
+    // partitionId -> binlogAvailabeVersion
+    private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
+
+    private BinlogConfig binlogConfig;
+
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    private List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    private List<ForeignKeyConstraint> foreignKeyConstraints;
+
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -156,6 +171,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
+<<<<<<< HEAD
+=======
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+                buildBinlogConfig();
+                break;
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
+                buildBinlogAvailableVersion();
+                break;
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionLiveNumber();
+                break;
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                buildConstraint();
+                break;
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
             default:
                 break;
         }
@@ -263,6 +293,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
+        return this;
+    }
+
+    public TableProperty buildConstraint() {
+        uniqueConstraints = UniqueConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+
+        foreignKeyConstraints = ForeignKeyConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
         return this;
     }
 
@@ -374,6 +413,43 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public BinlogConfig getBinlogConfig() {
+        return binlogConfig;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
+    public Map<Long, Long> getBinlogAvailaberVersions() {
+        return binlogAvailabeVersions;
+    }
+
+    public void clearBinlogAvailableVersion() {
+        binlogAvailabeVersions.clear();
+        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext();) {
+            Map.Entry<String, String> entry = it.next();
+            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
+                it.remove();
+            }
+        }
+    }
+
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -398,5 +474,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildReplicatedStorage();
         buildForceExternalTableQueryRewrite();
+<<<<<<< HEAD
+=======
+        buildBinlogConfig();
+        buildBinlogAvailableVersion();
+        buildConstraint();
+>>>>>>> 92b487597 ([Enhancement] add unique constraint and foreign key constrain for mv rewrite (#17934))
     }
 }
