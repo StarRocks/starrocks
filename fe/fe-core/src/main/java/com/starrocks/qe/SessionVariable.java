@@ -35,13 +35,11 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -130,7 +128,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CODEGEN_LEVEL = "codegen_level";
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
-    public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
@@ -549,9 +546,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int chunkSize = 4096;
 
     public static final int PIPELINE_BATCH_SIZE = 4096;
-
-    @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
-    private boolean disableStreamPreaggregations = false;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
@@ -1675,17 +1669,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setQuery_mem_limit(queryMemLimit);
         }
 
-        tResult.setMin_reservation(0);
-        tResult.setMax_reservation(maxExecMemByte);
-        tResult.setInitial_reservation_total_claims(maxExecMemByte);
-        tResult.setBuffer_pool_limit(maxExecMemByte);
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
-        tResult.setCodegen_level(0);
         tResult.setBatch_size(chunkSize);
-        tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 
         if (maxScanKeyNum > -1) {
@@ -1776,55 +1764,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_67) {
-            int codegenLevel = in.readInt();
-            netBufferLength = in.readInt();
-            sqlSafeUpdates = in.readInt();
-            timeZone = Text.readString(in);
-            netReadTimeout = in.readInt();
-            netWriteTimeout = in.readInt();
-            waitTimeout = in.readInt();
-            interactiveTimeout = in.readInt();
-            queryCacheType = in.readInt();
-            autoIncrementIncrement = in.readInt();
-            maxAllowedPacket = in.readInt();
-            sqlSelectLimit = in.readLong();
-            sqlAutoIsNull = in.readBoolean();
-            collationDatabase = Text.readString(in);
-            collationConnection = Text.readString(in);
-            charsetServer = Text.readString(in);
-            charsetResults = Text.readString(in);
-            charsetConnection = Text.readString(in);
-            charsetClient = Text.readString(in);
-            txIsolation = Text.readString(in);
-            autoCommit = in.readBoolean();
-            // Deprecated variable, keep it just for compatibility
-            // resourceGroup = Text.readString(in);
-            Text.readString(in);
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
-                sqlMode = in.readLong();
-            } else {
-                // read old version SQL mode
-                Text.readString(in);
-                sqlMode = 0L;
-            }
-            enableProfile = in.readBoolean();
-            queryTimeoutS = in.readInt();
-            maxExecMemByte = in.readLong();
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {
-                collationServer = Text.readString(in);
-            }
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_38) {
-                int batchSize = in.readInt();
-                disableStreamPreaggregations = in.readBoolean();
-                parallelExecInstanceNum = in.readInt();
-            }
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_62) {
-                exchangeInstanceParallel = in.readInt();
-            }
-        } else {
-            readFromJson(in);
-        }
+        readFromJson(in);
     }
 
     private void readFromJson(DataInput in) throws IOException {
