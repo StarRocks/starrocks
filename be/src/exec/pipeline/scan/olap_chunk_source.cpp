@@ -133,10 +133,10 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-void OlapChunkSource::_decide_chunk_size() {
+void OlapChunkSource::_decide_chunk_size(bool has_predicate) {
     bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
                                             [](auto& slot) { return slot->type().is_huge_type(); });
-    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
+    if (!has_predicate && _limit != -1 && _limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _limit;
     } else {
@@ -159,11 +159,11 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
     _morsel->init_tablet_reader_params(&_params);
-    _decide_chunk_size();
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(&parser, &preds));
+    _decide_chunk_size(!preds.empty());
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
