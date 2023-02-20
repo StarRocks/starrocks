@@ -38,7 +38,9 @@ public:
     // If need_levels is not set, read_records may not records levels information, this will
     // improve performance. So set this flag when you only needs it.
     // TODO(zc): to recosiderate to move this flag to StoredColumnReaderOptions
-    virtual void set_needs_levels(bool need_levels) {}
+    // StoredColumnReaderOptions is shared by all StoredColumnReader, but we only want set StoredColumnReader specifically,
+    // so currently we can't put need_parse_levels into StoredColumnReaderOptions.
+    virtual void set_need_parse_levels(bool need_parse_levels) {}
 
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
