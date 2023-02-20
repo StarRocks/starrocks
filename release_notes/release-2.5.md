@@ -1,27 +1,5 @@
 # StarRocks version 2.5
 
-## 2.5.2
-
-发布日期： 2023 年 2 月 17 日
-
-### 新增特性
-
-- 访问 AWS S3 以及 AWS Glue 时支持基于 Instance Profile 和 Assumed Role 来进行认证和鉴权。 [#15958](https://github.com/StarRocks/starrocks/pull/15958)
-- 新增 3 个 bit 函数：bit_shift_left，bit_shift_right，bit_shift_right_logical。 [#14151](https://github.com/StarRocks/starrocks/pull/14151)
-
-### 问题修复
-
-修复了如下问题：
-
-- 无法刷新含有 MAP 或 ARRAY 数据类型的 Apache Hive 外表。[#17548](https://github.com/StarRocks/starrocks/pull/17548)
-- Superset 无法识别出物化视图列类型。[#17686](https://github.com/StarRocks/starrocks/pull/17686)
-- 在对接 BI 时因无法解析 SET GLOBAL/SESSION TRANSACTION 而导致的连接性问题。[#17295](https://github.com/StarRocks/starrocks/pull/17295)
-- Colocate 组内的动态分区表无法修改分桶数，并返回报错信息。[#17418](https://github.com/StarRocks/starrocks/pull/17418/)
-
-### 行为变更
-
-- 新增关键字 CHARACTER。[#17488](https://github.com/StarRocks/starrocks/pull/17488)
-
 ## 2.5.1
 
 发布日期： 2023 年 2 月 5 日
