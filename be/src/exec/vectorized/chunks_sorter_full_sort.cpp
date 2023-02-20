@@ -115,6 +115,7 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
     _profiler->num_sorted_runs->set((int64_t)_sorted_chunks.size());
     if (_eager_materialized_slots.empty() || _sorted_chunks.size() < 3) {
+        _eager_materialized_slots.clear();
         _runtime_profile->add_info_string("LazyMaterialization", "false");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
