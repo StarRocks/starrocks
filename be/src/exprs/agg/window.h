@@ -458,6 +458,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             if (this->data(state).default_is_null) {
                 this->data(state).is_null = true;
             } else {
+                this->data(state).is_null = false;
                 this->data(state).value = this->data(state).default_value;
             }
             return;
