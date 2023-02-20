@@ -12,7 +12,7 @@ DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io
 ```
 E.g.:
 ```shell
-DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/starrocks/starrocks/dev-env-ubuntu:latest ../..
+DOCKER_BUILDKIT=1 docker build --rm=true -f dev-env-ubuntu.Dockerfile -t ghcr.io/starrocks/starrocks/dev-env-ubuntu:main ../..
 ```
 ## 1.2 Publish image to ghcr
 ```
