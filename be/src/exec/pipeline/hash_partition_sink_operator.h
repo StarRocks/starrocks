@@ -19,8 +19,26 @@
 #include "exec/pipeline/operator.h"
 
 /**
- * TODO 
- * 1. disable downgrade
+ * HashPartition{Sink/Source}Operator pair is used to reorder the input sequence by
+ * grouping rows into different partitions, and each partition is defined by (partition by columns). 
+ * And for rows in the same partition, the order between them is arbitrary.
+ *
+ * Here is an example:
+ *  pc1: partition by column 1
+ *  pc2: partition by column 2
+ *
+ * pc1 pc2 c3 c4
+ * 1   2   9  8
+ * 1   3   4  6
+ * 1   2   5  8
+ * 1   3   2  6
+ *
+ * one possible output can be:
+ * pc1 pc2 c3 c4
+ * 1   2   9  8
+ * 1   2   5  8
+ * 1   3   4  5
+ * 1   3   2  6
  */
 namespace starrocks::pipeline {
 class HashPartitionSinkOperator final : public Operator {
