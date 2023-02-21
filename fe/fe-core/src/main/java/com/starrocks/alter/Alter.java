@@ -671,7 +671,7 @@ public class Alter {
                         throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                     }
                 } else {
-                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
+                    throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             }
         }
