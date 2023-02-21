@@ -75,7 +75,6 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() {
-            LOG(INFO) << "set disable_storage_page_cache:" << config::disable_storage_page_cache;
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
