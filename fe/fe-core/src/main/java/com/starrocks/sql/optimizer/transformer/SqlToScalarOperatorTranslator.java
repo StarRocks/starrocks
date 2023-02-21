@@ -335,8 +335,77 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+<<<<<<< HEAD
         public ScalarOperator visitLikePredicate(LikePredicate node, Void context) throws SemanticException {
             ScalarOperator[] children = node.getChildren().stream().map(this::visit).toArray(ScalarOperator[]::new);
+=======
+        public ScalarOperator visitInPredicate(InPredicate node, Context context)
+                throws SemanticException {
+            List<Expr> lhsSubQueries = Lists.newArrayList();
+            node.getChild(0).collect(Subquery.class, lhsSubQueries);
+            if (!lhsSubQueries.isEmpty()) {
+                throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
+            }
+            if (!(node.getChild(1) instanceof Subquery)) {
+                return new InPredicateOperator(node.isNotIn(),
+                        node.getChildren().stream()
+                                .map(child -> visit(child, context))
+                                .toArray(ScalarOperator[]::new));
+            }
+
+            QueryStatement queryStatement = ((Subquery) node.getChild(1)).getQueryStatement();
+            LogicalPlan subqueryPlan = getSubqueryPlan(queryStatement);
+
+            List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
+            ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(0),
+                    builder.getExpressionMapping(), leftCorrelationColumns, columnRefFactory);
+
+            if (leftCorrelationColumns.size() > 0) {
+                throw new SemanticException("Unsupported complex nested in-subquery");
+            }
+
+            List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
+            if (rightColRefs.size() > 1) {
+                throw new SemanticException("subquery must return a single column when used in InPredicate");
+            }
+            ColumnRefOperator rightColRef = rightColRefs.get(0);
+
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            ScalarOperator inPredicateOperator =
+                    rewriter.rewrite(new InPredicateOperator(node.isNotIn(), true, leftColRef, rightColRef),
+                            ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
+            ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
+                    inPredicateOperator.getType(), inPredicateOperator.isNullable());
+            ((Subquery) node.getChild(1)).setUseSemiAnti(context.useSemiAnti);
+
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(inPredicateOperator)
+                    .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti).build();
+
+            SubqueryOperator subqueryOperator = new SubqueryOperator(rightColRef.getType(), queryStatement,
+                    applyOperator, subqueryPlan.getRootBuilder());
+
+            subqueryPlaceholders.put(outputPredicateRef, subqueryOperator);
+
+            return outputPredicateRef;
+        }
+
+        @Override
+        public ScalarOperator visitIsNullPredicate(IsNullPredicate node, Context context)
+                throws SemanticException {
+            return new IsNullPredicateOperator(node.isNotNull(),
+                    visit(node.getChild(0), context.clone(node)));
+        }
+
+        @Override
+        public ScalarOperator visitLikePredicate(LikePredicate node, Context context)
+                throws SemanticException {
+            ScalarOperator[] children = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .toArray(ScalarOperator[]::new);
+>>>>>>> f02d65bf0 ([BugFix] Ban subquery in left-side child of in-predicates (#18193))
 
             if (LikePredicate.Operator.LIKE.equals(node.getOp())) {
                 return new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, children);
