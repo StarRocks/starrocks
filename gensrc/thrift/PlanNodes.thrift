@@ -320,9 +320,9 @@ struct THdfsScanRange {
     9: optional list<string> hudi_logs
 
     // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
-    10: optional bool use_hudi_jni_reader;
+    10: optional bool use_hudi_jni_reader
 
-    11: optional list<TIcebergDeleteFile> delete_files;
+    11: optional list<TIcebergDeleteFile> delete_files
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
