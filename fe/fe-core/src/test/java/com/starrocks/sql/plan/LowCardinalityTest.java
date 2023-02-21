@@ -3,7 +3,9 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import org.junit.AfterClass;
@@ -1119,7 +1121,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select max(upper(S_ADDRESS)) from supplier_nullable";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  5:Decode\n" +
                 "  |  <dict id 14> : <string id 10>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 14> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])\n" +
@@ -1481,5 +1483,37 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <slot 23> : 23: S_ADDRESS\n" +
                 "  |  \n" +
                 "  8:MERGING-EXCHANGE");
+    }
+
+    @Test
+    public void testLogicalProperty() throws Exception {
+        String sql = "select cast(max(s_address) as date) from supplier where s_suppkey = 1 group by S_PHONE";
+        ExecPlan execPlan = getExecPlan(sql);
+        OlapScanNode olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 10> : DictExpr(12: S_ADDRESS,[CAST(<place-holder> AS DATE)])\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(11: S_ADDRESS)\n" +
+                "  |  group by: 5: S_PHONE");
+    }
+
+    @Test
+    public void testLowCardForLimit() throws Exception {
+        String sql = "SELECT * from (SELECT t_a_0.`S_ADDRESS` AS f_ax_0, t_a_0.`S_ADDRESS` AS f_ax_1 FROM " +
+                "(select * from (select * from supplier limit 20000) b) t_a_0) t_a_1 ORDER BY t_a_1.f_ax_0 desc LIMIT 0,20;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Decode\n" +
+                "  |  <dict id 9> : <string id 3>\n" +
+                "  |  \n" +
+                "  2:TOP-N\n" +
+                "  |  order by: <slot 9> 9: S_ADDRESS DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 20");
+
     }
 }
