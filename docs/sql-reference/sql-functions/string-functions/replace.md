@@ -3,6 +3,7 @@
 ## Description
 
 This function uses repl to replace a sequence of characters in str that matches pattern.
+Note: Prior to 3.0, it was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
 
 ## Syntax
 

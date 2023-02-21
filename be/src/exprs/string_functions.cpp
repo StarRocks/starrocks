@@ -2922,9 +2922,11 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
 struct ReplaceState {
     bool only_null{false};
+
     bool const_pattern{false};
-    std::string pattern;
     bool const_repl{false};
+
+    std::string pattern;
     std::string repl;
 };
 
