@@ -27,6 +27,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -179,6 +180,9 @@ public class ShowExecutorTest {
                 result = null;
             }
         };
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
+                "default_catalog", "testDb", "testTbl");
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
