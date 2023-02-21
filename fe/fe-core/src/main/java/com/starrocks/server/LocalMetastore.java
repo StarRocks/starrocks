@@ -1447,8 +1447,12 @@ public class LocalMetastore implements ConnectorMetadata {
             } else if (partitionInfo.isRangePartition()) {
                 ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(
                         info.asRangePartitionPersistInfo());
+            } else if (partitionType == PartitionType.UNPARTITIONED) {
+                // insert overwrite job will create temp partition and replace the single partition.
+                partitionInfo.addPartition(partition.getId(), info.getDataProperty(), info.getReplicationNum(),
+                        info.isInMemory(), info.getStorageCacheInfo());
             } else {
-                throw new DdlException("Only support adding partition to range/list partitioned table");
+                throw new DdlException("Unsupported partition type: " + partitionType.name());
             }
 
             if (!isCheckpointThread()) {
