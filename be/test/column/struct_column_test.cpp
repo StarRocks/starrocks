@@ -518,10 +518,36 @@ TEST(StructColumnTest, test_assign) {
     ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(1));
 }
 
+<<<<<<< HEAD
 TEST(StructColumnTest, test_element_memory_usage) {
     auto field_name = BinaryColumn::create();
     field_name->append_string("id");
     field_name->append_string("name");
+=======
+TEST(StructColumnTest, test_unnamed) {
+    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    Columns fields{id, name};
+    auto column = StructColumn::create(fields);
+
+    ASSERT_TRUE(column->is_struct());
+    ASSERT_FALSE(column->is_nullable());
+    ASSERT_EQ(0, column->size());
+
+    DatumStruct struct1{uint64_t(1), Slice("smith")};
+    DatumStruct struct2{uint64_t(2), Slice("cruise")};
+    column->append_datum(struct1);
+    column->append_datum(struct2);
+
+    ASSERT_EQ(column->size(), 2);
+    ASSERT_EQ("{1,'smith'}", column->debug_item(0));
+    ASSERT_EQ("{2,'cruise'}", column->debug_item(1));
+
+    ASSERT_EQ("{1,'smith'}, {2,'cruise'}", column->debug_string());
+}
+
+TEST(StructColumnTest, test_reference_memory_usage) {
+>>>>>>> 03bf99af4b ([BugFix] rename element_memory_usage to reference_memory_usage and fix incorrect result (#18090))
     auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
     auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     Columns fields{id, name};
@@ -531,18 +557,7 @@ TEST(StructColumnTest, test_element_memory_usage) {
     column->append_datum(DatumStruct{uint64_t(1), Slice("4")});
     column->append_datum(DatumStruct{uint64_t(1), Slice("6")});
 
-    ASSERT_EQ(45, column->Column::element_memory_usage());
-
-    std::vector<size_t> element_mem_usages = {15, 15, 15};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(0, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
-    }
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
 } // namespace starrocks::vectorized

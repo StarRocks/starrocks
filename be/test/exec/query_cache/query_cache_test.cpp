@@ -97,18 +97,18 @@ TEST_F(QueryCacheTest, testCacheManager) {
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 1360);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 1360);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 1360);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
         auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));

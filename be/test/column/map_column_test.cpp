@@ -1195,7 +1195,88 @@ PARALLEL_TEST(MapColumnTest, test_assign) {
     ASSERT_EQ(0, c0->values_column()->size());
 }
 
+<<<<<<< HEAD
 PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
+=======
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapColumnTest, test_euqals) {
+    // lhs: {1:1,2:2}, {4:4,3:3}, {null:null}, {1:null}
+    // rhs: {2:2,1:1}, {4:4}, {null, 1}, {1, 1}
+    MapColumn::Ptr lhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+        lhs = MapColumn::create(keys, values, offsets);
+    }
+    {
+        DatumMap map;
+        map[(int32_t)1] = (int32_t)1;
+        map[(int32_t)2] = (int32_t)2;
+        lhs->append_datum(map);
+    }
+    {
+        DatumMap map;
+        map[(int32_t)4] = (int32_t)4;
+        map[(int32_t)3] = (int32_t)3;
+        lhs->append_datum(map);
+    }
+    {
+        lhs->keys_column()->append_nulls(1);
+        lhs->values_column()->append_nulls(1);
+        lhs->offsets_column()->append(lhs->keys_column()->size());
+    }
+    {
+        DatumMap map;
+        map[(int32_t)1] = Datum();
+        lhs->append_datum(map);
+    }
+
+    MapColumn::Ptr rhs;
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+        rhs = MapColumn::create(keys, values, offsets);
+    }
+    {
+        DatumMap map;
+        map[(int32_t)2] = (int32_t)2;
+        map[(int32_t)1] = (int32_t)1;
+        rhs->append_datum(map);
+    }
+    {
+        DatumMap map;
+        map[(int32_t)3] = (int32_t)4;
+        map[(int32_t)4] = (int32_t)4;
+        rhs->append_datum(map);
+    }
+    {
+        rhs->keys_column()->append_nulls(1);
+        rhs->values_column()->append_datum(Datum((int32_t)1));
+        rhs->offsets_column()->append(rhs->keys_column()->size());
+    }
+    {
+        DatumMap map;
+        map[(int32_t)1] = (int32_t)1;
+        rhs->append_datum(map);
+    }
+    ASSERT_TRUE(lhs->equals(0, *rhs, 0));
+    ASSERT_FALSE(lhs->equals(1, *rhs, 1));
+    ASSERT_FALSE(lhs->equals(2, *rhs, 2));
+    ASSERT_FALSE(lhs->equals(3, *rhs, 3));
+}
+
+PARALLEL_TEST(MapColumnTest, test_reference_memory_usage) {
+>>>>>>> 03bf99af4b ([BugFix] rename element_memory_usage to reference_memory_usage and fix incorrect result (#18090))
     auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                     NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                     UInt32Column::create());
@@ -1205,17 +1286,6 @@ PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
     column->append_datum(DatumMap{{1, 2}});
     column->append_datum(DatumMap{{3, 4}, {5, 6}});
 
-    ASSERT_EQ(42, column->Column::element_memory_usage());
-
-    std::vector<size_t> element_mem_usages = {4, 14, 24};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(0, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
-    }
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 } // namespace starrocks::vectorized

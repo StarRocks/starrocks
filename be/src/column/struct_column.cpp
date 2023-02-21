@@ -387,14 +387,14 @@ size_t StructColumn::container_memory_usage() const {
     return memory_usage;
 }
 
-size_t StructColumn::element_memory_usage(size_t from, size_t size) const {
+size_t StructColumn::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t memorg_usage = 0;
     for (const auto& column : _fields) {
-        memorg_usage += column->element_memory_usage(from, size);
+        memorg_usage += column->reference_memory_usage(from, size);
     }
 
-    // Do not need to include _field_names's element_memory_usage, because it's BinaryColumn, always return 0.
+    // Do not need to include _field_names's reference_memory_usage, because it's BinaryColumn, always return 0.
     return memorg_usage;
 }
 
