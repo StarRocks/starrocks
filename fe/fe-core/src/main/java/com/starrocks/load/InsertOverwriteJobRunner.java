@@ -304,6 +304,8 @@ public class InsertOverwriteJobRunner {
                 // not to move it to trash
                 sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
 
+                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable);
+
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
