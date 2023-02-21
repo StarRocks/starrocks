@@ -30,6 +30,8 @@ public:
         int64_t write_cache_count = 0;
         int64_t read_cache_bytes = 0;
         int64_t write_cache_bytes = 0;
+        int64_t reject_cache_count = 0;
+        int64_t write_cache_fail_count = 0;
     };
 
     static constexpr int64_t BLOCK_SIZE = 1 * 1024 * 1024;
@@ -45,7 +47,7 @@ public:
 
     StatusOr<int64_t> get_size() override;
 
-    const Stats& stats() { return _stats; }
+    const Stats& stats();
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
@@ -57,6 +59,7 @@ private:
     std::string _buffer;
     Stats _stats;
     int64_t _size;
+    int64_t _cache_rejects = 0;
     bool _enable_populate_cache = false;
 };
 

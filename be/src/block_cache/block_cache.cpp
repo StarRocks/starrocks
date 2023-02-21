@@ -98,6 +98,10 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
     return Status::OK();
 }
 
+std::unordered_map<std::string, double> BlockCache::cache_stats() {
+    return _kv_cache->cache_stats();
+}
+
 Status BlockCache::shutdown() {
     return _kv_cache->shutdown();
 }

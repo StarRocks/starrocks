@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "block_cache/block_cache.h"
+#include "common/config.h"
 #include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
@@ -39,6 +40,11 @@ CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<
     int64_t file_size = _size;
     memcpy(data + 8, &file_size, sizeof(file_size));
     _buffer.reserve(BlockCache::instance()->block_size());
+
+    if (config::block_cache_report_stats) {
+        auto stats = BlockCache::instance()->cache_stats();
+        _cache_rejects = static_cast<int64_t>(stats["navy_rejected"]);
+    }
 #endif
 }
 
@@ -92,6 +98,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 _stats.write_cache_count += 1;
                 _stats.write_cache_bytes += load_size;
             } else {
+                _stats.write_cache_fail_count += 1;
                 LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
                 // Failed to write cache, but we can keep processing query.
             }
@@ -142,6 +149,18 @@ StatusOr<int64_t> CacheInputStream::position() {
 
 StatusOr<int64_t> CacheInputStream::get_size() {
     return _stream->get_size();
+}
+
+const CacheInputStream::Stats& CacheInputStream::stats() {
+    // The following reject stats parameters are only used for debug. They are not accurate because the same
+    // delta value may be added multiple times by different threads.
+    if (config::block_cache_report_stats) {
+        auto stats = BlockCache::instance()->cache_stats();
+        uint64_t rejects = static_cast<int64_t>(stats["navy_rejected"]);
+        _stats.reject_cache_count += (rejects - _cache_rejects);
+        _cache_rejects = rejects;
+    }
+    return _stats;
 }
 
 } // namespace starrocks::io

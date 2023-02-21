@@ -44,6 +44,8 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove_cache(const CacheKey& cache_key, off_t offset, size_t size);
 
+    std::unordered_map<std::string, double> cache_stats();
+
     // Shutdown the cache instance to save some state meta
     Status shutdown();
 
