@@ -1,5 +1,17 @@
 # StarRocks version 2.3
 
+## 2.3.9
+
+发布日期： 2023 年 2 月 20 日
+
+### 问题修复
+
+- Schema Change 过程中，如果发生 Tablet Clone，并且副本所在 BE 节点发生变化，会导致 Schema Change 失败。[#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- `group_concat()` 函数返回结果被截断。[#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- 执行 Broker Load 通过腾讯大数据处理套件（Tencent Big Data Suite，TBDS） 从 HDFS 导入数据时报 `invalid hadoop.security.authentication.tbds.securekey` 的错误，显示不支持通过 TBDS 提供的 HDFS 权限认证访问 HDFS。[#14125](https://github.com/StarRocks/starrocks/pull/14125)、[#15693](https://github.com/StarRocks/starrocks/pull/15693)
+- 在一些情况下，CBO 比较算子是否相等的逻辑发生错误。[#17227](https://github.com/StarRocks/starrocks/pull/17227)、[#17199](https://github.com/StarRocks/starrocks/pull/17199)
+- 连接非 Leader FE 节点，发送请求 `USE <catalog_name>.<database_name>`，非 Leader 节点中将请求转发给 Leader FE 时，没有转发 `catalog_name`，导致 Leader FE 使用 `default_catalog`，因此无法找到对应的 database。[#17302](https://github.com/StarRocks/starrocks/pull/17302)
+
 ## 2.3.8
 
 发布日期： 2023 年 2 月 2 日
