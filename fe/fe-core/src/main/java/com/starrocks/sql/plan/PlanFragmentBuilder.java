@@ -23,6 +23,11 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+>>>>>>> 65563d518 ([BugFix] Use rollup not table to check UnUsedOutputColumns (#18208))
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -284,7 +289,8 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
 
@@ -303,6 +309,7 @@ public class PlanFragmentBuilder {
             // so the columns in complex pred, it useful for the stage after scan
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
+<<<<<<< HEAD
             Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
             if (referenceTable.getKeysType().isAggregationFamily() ||
                     referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -312,6 +319,16 @@ public class PlanFragmentBuilder {
                         aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
                     }
                 }
+=======
+            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
+                aggOrPrimaryKeyTableValueColumnNames =
+                        materializedIndexMeta.getSchema().stream()
+                                .filter(col -> !col.isKey())
+                                .map(Column::getName)
+                                .collect(Collectors.toSet());
+>>>>>>> 65563d518 ([BugFix] Use rollup not table to check UnUsedOutputColumns (#18208))
             }
 
             for (ScalarOperator predicate : predicates) {
