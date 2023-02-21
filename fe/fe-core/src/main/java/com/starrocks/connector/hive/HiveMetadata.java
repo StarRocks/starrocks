@@ -30,6 +30,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,6 +45,7 @@ import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static java.lang.String.format;
 
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
@@ -101,6 +103,10 @@ public class HiveMetadata implements ConnectorMetadata {
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
+        }
+
+        if (!table.isHiveTable()) {
+            throw new SemanticException(format("Cannot query not hive type table '%s'", tblName));
         }
 
         return table;

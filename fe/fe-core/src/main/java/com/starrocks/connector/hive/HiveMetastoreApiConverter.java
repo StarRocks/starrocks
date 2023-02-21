@@ -69,6 +69,8 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getTypeInfoFromTypeString;
+import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
+import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 
 public class HiveMetastoreApiConverter {
     private static final Logger LOG = LogManager.getLogger(HiveMetastoreApiConverter.class);
@@ -76,13 +78,18 @@ public class HiveMetastoreApiConverter {
     public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = ConnectorTableId.createGenerator();
     private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
 
-    private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
+    public static boolean isDeltaLakeTable(Map<String, String> tableParams) {
         return tableParams.containsKey(SPARK_SQL_SOURCE_PROVIDER) &&
                 tableParams.get(SPARK_SQL_SOURCE_PROVIDER).equalsIgnoreCase("delta");
     }
 
     public static boolean isHudiTable(String inputFormat) {
         return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+    }
+
+    public static boolean isIcebergTable(Map<String, String> tableParams) {
+        return tableParams.containsKey(TABLE_TYPE_PROP) &&
+                tableParams.get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
     }
 
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
