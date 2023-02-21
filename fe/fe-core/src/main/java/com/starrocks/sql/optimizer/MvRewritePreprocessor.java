@@ -95,9 +95,11 @@ public class MvRewritePreprocessor {
                 continue;
             }
 
+            List<Table> sourceTables = MvUtils.getAllTables(mvPlan);
             List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
             MaterializationContext materializationContext =
-                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory, mvColumnRefFactory, partitionNamesToRefresh);
+                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
+                            mvColumnRefFactory, partitionNamesToRefresh, sourceTables);
             // generate scan mv plan here to reuse it in rule applications
             LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
             materializationContext.setScanMvOperator(scanMvOp);
