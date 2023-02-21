@@ -714,6 +714,7 @@ std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
     auto chunks_data_ref = std::make_shared<ChunksDataRef>(0);
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
+        // to reduce peak memory usage
         chunk->mutable_data()->shrink_to_fit();
         chunk->set_data_size(chunk->data().size());
         chunks_data_ref->data_bytes += chunk->data().capacity();
@@ -730,6 +731,12 @@ std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
         }
         chunks_data_ref->data_buffer.push_back(std::move(shared_data));
         chunks_data_ref->data_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
+        chunk->clear_data();
+
+        // If the request is too big, free the memory in order to avoid OOM
+        if (_is_large_chunk(chunk->data_size())) {
+            chunk->mutable_data()->shrink_to_fit();
+        }
     }
     return chunks_data_ref;
 }
