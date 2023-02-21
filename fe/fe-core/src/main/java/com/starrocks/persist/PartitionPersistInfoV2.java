@@ -27,7 +27,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class PartitionPersistInfoV2 implements Writable {
+public abstract class PartitionPersistInfoV2 implements Writable {
 
     @SerializedName("dbId")
     private Long dbId;
