@@ -2,7 +2,7 @@
 
 ## 2.5.2
 
-Release date: February 17, 2023
+Release date: February 21, 2023
 
 ### New Features
 
