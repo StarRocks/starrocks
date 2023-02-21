@@ -83,7 +83,7 @@ public class StarOSAgentTest {
             }
         };
 
-        starosAgent.registerAndBootstrapService();
+        starosAgent.initServiceAndWorkerInfo();
         Assert.assertEquals("1", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
@@ -102,7 +102,7 @@ public class StarOSAgentTest {
             }
         };
 
-        starosAgent.registerAndBootstrapService();
+        starosAgent.initServiceAndWorkerInfo();
         Assert.assertEquals("3", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
@@ -121,7 +121,7 @@ public class StarOSAgentTest {
             }
         };
 
-        starosAgent.registerAndBootstrapService();
+        starosAgent.initServiceAndWorkerInfo();
         Assert.assertEquals("4", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 

@@ -16,6 +16,7 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -41,12 +42,14 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -132,7 +136,7 @@ public class StarOSAgent {
     }
 
 
-    public boolean registerAndBootstrapService() {
+    public boolean initServiceAndWorkerInfo() {
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
@@ -153,6 +157,26 @@ public class StarOSAgent {
                 } else {
                     getServiceId();
                 }
+            }
+
+            try {
+                ImmutableCollection<ComputeNode> backends = GlobalStateMgr.getCurrentSystemInfo().getBackends(false);
+                List<WorkerInfo> workerInfos = listWorkerInfo();
+                Map<String, WorkerInfo> workerIpToInfos =
+                        workerInfos.stream().collect(Collectors.toMap(WorkerInfo::getIpPort, Function.identity()));
+                for (ComputeNode node : backends) {
+                    if (node.getStarletPort() != 0) {
+                        String workerIpPort = node.getHost() + ":" + node.getStarletPort();
+                        WorkerInfo workerInfo = workerIpToInfos.get(workerIpPort);
+                        if (workerInfo != null) {
+                            workerToId.put(workerIpPort, workerInfo.getWorkerId());
+                            workerToBackend.put(workerInfo.getWorkerId(), node.getId());
+                        }
+                    }
+                }
+            } catch (StarClientException e) {
+                // it's ok to fail here
+                LOG.warn("Fail to list worker info when init service, {}", e.getMessage());
             }
         }
         return true;
@@ -506,6 +530,16 @@ public class StarOSAgent {
             LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
         }
         return false; // return false if any error happens
+    }
+
+    private List<WorkerInfo> listWorkerInfo() throws StarClientException {
+        prepare();
+
+        List<WorkerGroupDetailInfo> infos = client.listWorkerGroup(serviceId,
+                Lists.newArrayList(0L /* default worker group */),
+                true /* includeWorkersInfo */);
+        Preconditions.checkState(infos.size() == 1);
+        return infos.get(0).getWorkersInfoList();
     }
 
     // Mocked
