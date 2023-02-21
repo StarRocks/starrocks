@@ -676,7 +676,7 @@ public class Alter {
                         || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
                 } else {
-                    throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
+                    throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             }
         }
