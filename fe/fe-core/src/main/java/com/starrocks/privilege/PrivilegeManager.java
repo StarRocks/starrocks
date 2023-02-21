@@ -231,9 +231,14 @@ public class PrivilegeManager {
         List<PEntryObject> objects = new ArrayList<>();
         switch (objectType) {
             case TABLE:
+                objects.add(provider.generateObject(objectType,
+                        Lists.newArrayList("*", "*", "*"), globalStateMgr));
+                collection.grant(objectType, actionList, objects, false);
+                break;
             case VIEW:
             case MATERIALIZED_VIEW:
             case FUNCTION:
+            case DATABASE:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*", "*"), globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
@@ -244,7 +249,6 @@ public class PrivilegeManager {
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case DATABASE:
             case RESOURCE:
             case CATALOG:
             case RESOURCE_GROUP:
