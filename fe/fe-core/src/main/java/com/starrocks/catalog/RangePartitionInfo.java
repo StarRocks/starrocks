@@ -207,18 +207,40 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
+<<<<<<< HEAD
     public void handleNewRangePartitionDescs(List<PartitionDesc> partitionDescs,
                                              List<Partition> partitionList, Set<String> existPartitionNameSet,
+=======
+    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+        Range<PartitionKey> range = null;
+        try {
+            PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
+            range = Range.closedOpen(shadowPartitionKey, shadowPartitionKey);
+            setRangeInternal(partitionId, false, range);
+        } catch (IllegalArgumentException e) {
+            // Range.closedOpen may throw this if (lower > upper)
+            throw new DdlException("Invalid key range: " + e.getMessage());
+        }
+        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
+        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToInMemory.put(partitionId, false);
+        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
+                Config.lake_default_storage_cache_ttl_seconds, false));
+        return range;
+    }
+
+    public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,
+                                             Set<String> existPartitionNameSet,
+>>>>>>> cdd6426b6 ([BugFix] Fix bug existing partitions send unnecessary requests to BE (#18164))
                                              boolean isTemp) throws DdlException {
-        int len = partitionDescs.size();
-        for (int i = 0; i < len; i++) {
-            if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
-                long partitionId = partitionList.get(i).getId();
-                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionDescs.get(i);
+        for (Partition partition : partitionMap.keySet()) {
+            if (!existPartitionNameSet.contains(partition.getName())) {
+                long partitionId = partition.getId();
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionMap.get(partition);
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {
-                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionDescs.get(i), isTemp);
+                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionMap.get(partition), isTemp);
                     setRangeInternal(partitionId, isTemp, range);
                 } catch (IllegalArgumentException e) {
                     // Range.closedOpen may throw this if (lower > upper)
