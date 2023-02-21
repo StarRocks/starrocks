@@ -167,12 +167,6 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         for (Table table : tblNameMap.values()) {
             table.write(out);
         }
-
-        out.writeInt(tblAutoIncrementIdMap.size());
-        for (Map.Entry<Long, Long> entry : tblAutoIncrementIdMap.entrySet()) {
-            out.writeLong(entry.getKey());
-            out.writeLong(entry.getValue());
-        }
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -181,13 +175,6 @@ public class BackupMeta implements Writable, GsonPostProcessable {
             Table tbl = Table.read(in);
             tblNameMap.put(tbl.getName(), tbl);
             tblIdMap.put(tbl.getId(), tbl);
-        }
-
-        int autoIncrementSize = in.readInt();
-        for (int i = 0; i < autoIncrementSize; ++i) {
-            Long tableId = in.readLong();
-            Long id = in.readLong();
-            tblAutoIncrementIdMap.put(tableId, id);
         }
     }
 
