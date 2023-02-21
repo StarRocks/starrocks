@@ -78,7 +78,7 @@ public class CreateTableAnalyzer {
 
 
         if (engineName.equalsIgnoreCase(EngineType.STARROCKS.name()) &&
-                !GlobalStateMgr.getCurrentState().isSharedDataMode()) {
+                GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
             throw new SemanticException("Engine %s needs 'run_mode = shared_data' config in fe.conf", engineName);
         }
 
