@@ -1337,12 +1337,27 @@ public class PrivilegeCheckerV2Test {
                     "Access denied for user 'test' to database '" + testDbName + "'");
         }
 
-        // Test `use database` : check any privilege on tables under db
+        // Test `use database` : check any privilege on tables in db
         verifyGrantRevoke(
                 "use " + testDbName + ";",
                 "grant select on " + testDbName + ".tbl1 to test",
                 "revoke select on " + testDbName + ".tbl1 from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `use database` : check any privilege on any function in db
+        Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+        FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
+        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            db1.addFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+        verifyGrantRevoke(
+                "use db1",
+                "grant drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test",
+                "revoke drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test",
+                "Access denied for user 'test' to database 'db1'");
 
         // Test `recover database xxx`: check DROP on db and CREATE_DATABASE on internal catalog
         verifyMultiGrantRevoke(
@@ -2219,7 +2234,7 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
-    public void testDropFunc() throws Exception {
+    public void testFunc() throws Exception {
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
@@ -2249,6 +2264,34 @@ public class PrivilegeCheckerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Unknown function"));
         }
+
+        // test select from only function without table
+        Config.enable_udf = true;
+        ctxToTestUser();
+        try {
+            UtFrameUtils.parseStmtWithNewParser("select db1.MY_UDF_JSON_GET('a', 'b')",
+                    starRocksAssert.getCtx());
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied. Found UDF: db1.my_udf_json_get and need the USAGE privilege for FUNCTION"));
+        }
+        grantRevokeSqlAsRoot("grant USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test");
+        // parse success after grant usage
+        UtFrameUtils.parseStmtWithNewParser("select db1.MY_UDF_JSON_GET('a', 'b')",
+                starRocksAssert.getCtx());
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                "select db1.MY_UDF_JSON_GET(k2, k3) from db1.tbl1",
+                starRocksAssert.getCtx());
+        try {
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(
+                    "SELECT command denied to user 'test'@'localhost' for table 'tbl1'"));
+        }
+        grantRevokeSqlAsRoot("revoke USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test");
+        Config.enable_udf = false;
     }
 
     @Test
@@ -2274,6 +2317,19 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on GLOBAL FUNCTION my_udf_json_get(string,string) to test",
                 "revoke drop on GLOBAL FUNCTION my_udf_json_get(string,string) from test",
                 "Access denied; you need (at least one of) the DROP GLOBAL FUNCTION privilege(s) for this operation");
+
+        Config.enable_udf = true;
+        ctxToTestUser();
+        try {
+            UtFrameUtils.parseStmtWithNewParser("select my_udf_json_get('a', 'b')",
+                    starRocksAssert.getCtx());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied. Found UDF: __global_udf_db__.my_udf_json_get" +
+                            " and need the USAGE privilege for GLOBAL FUNCTION"));
+        }
+        Config.enable_udf = false;
     }
 
     @Test
@@ -2354,7 +2410,7 @@ public class PrivilegeCheckerV2Test {
             Assert.fail();
         } catch (StarRocksPlannerException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
-            Assert.assertTrue(e.getMessage().contains("need the USAGE priv for GLOBAL FUNCTION"));
+            Assert.assertTrue(e.getMessage().contains("need the USAGE privilege for GLOBAL FUNCTION"));
         }
 
         // grant usage on global function

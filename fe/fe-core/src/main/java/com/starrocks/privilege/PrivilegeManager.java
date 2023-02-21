@@ -991,7 +991,15 @@ public class PrivilegeManager {
                     ObjectType.MATERIALIZED_VIEW,
                     Lists.newArrayList(db, "*"),
                     manager.globalStateMgr);
-            return manager.provider.searchAnyActionOnObject(ObjectType.MATERIALIZED_VIEW, allMvInDbObject, collection);
+            if (manager.provider.searchAnyActionOnObject(ObjectType.MATERIALIZED_VIEW, allMvInDbObject, collection)) {
+                return true;
+            }
+            // 5. check for any action on any function in this db
+            PEntryObject allFunctionsInDbObject = manager.provider.generateObject(
+                    ObjectType.FUNCTION,
+                    Lists.newArrayList(db, "*"),
+                    manager.globalStateMgr);
+            return manager.provider.searchAnyActionOnObject(ObjectType.FUNCTION, allFunctionsInDbObject, collection);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking any action on or in database {}, message: {}",
                     db, e.getMessage());
