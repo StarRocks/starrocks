@@ -1092,14 +1092,15 @@ public class LocalMetastore implements ConnectorMetadata {
     private Map<Partition, PartitionDesc> createPartitionMap(Database db, OlapTable copiedTable,
                                                              List<PartitionDesc> partitionDescs,
                                                              HashMap<String, Set<Long>> partitionNameToTabletSet,
-                                                             Set<Long> tabletIdSetForAll, Set<String> existPartitionName)
+                                                             Set<Long> tabletIdSetForAll,
+                                                             Set<String> existPartitionNameSet)
             throws DdlException {
         Map<Partition, PartitionDesc> partitionMap = Maps.newHashMap();
         for (PartitionDesc partitionDesc : partitionDescs) {
             long partitionId = getNextId();
             DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
             String partitionName = partitionDesc.getPartitionName();
-            if (existPartitionName.contains(partitionName)) {
+            if (existPartitionNameSet.contains(partitionName)) {
                 continue;
             }
             Long version = partitionDesc.getVersionInfo();
