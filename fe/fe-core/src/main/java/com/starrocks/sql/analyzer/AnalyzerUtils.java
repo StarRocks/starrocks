@@ -48,7 +48,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -158,7 +158,7 @@ public class AnalyzerUtils {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             // check SELECT action on any object(table/view/mv) in db
-            if (!PrivilegeManager.checkActionInDb(session, dbName, PrivilegeType.SELECT)) {
+            if (!PrivilegeActions.checkActionInDb(session, dbName, PrivilegeType.SELECT)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                                 "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
                         fnName, dbName), ErrorType.USER_ERROR);
@@ -185,7 +185,7 @@ public class AnalyzerUtils {
 
         String name = fn.signatureString();
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
+            if (!PrivilegeActions.checkGlobalFunctionAction(session, name,
                     PrivilegeType.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                                 "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
