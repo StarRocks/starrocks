@@ -137,7 +137,7 @@ void CollectStatsSourceOperatorFactory::adjust_dop() {
                 break;
             }
         }
-        amp_factor = std::min(max_amp_factor, max_amp_factor);
+        amp_factor = std::min(max_amp_factor, amp_factor);
         amp_factor = std::max<size_t>(1, amp_factor);
     }
     if (amp_factor != 1) {
