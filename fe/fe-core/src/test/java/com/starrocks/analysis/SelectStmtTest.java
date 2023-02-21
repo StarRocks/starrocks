@@ -258,4 +258,16 @@ public class SelectStmtTest {
         sql = "select current_catalog";
         starRocksAssert.query(sql).explainQuery();
     }
+
+    @Test
+    public void testBanSubqueryAppearsInLeftSideChildOfInPredicates()
+            throws Exception {
+        String sql = "select k1, count(k2) from db1.tbl1 group by k1 " +
+                "having (exists (select k1 from db1.tbl1 where NULL)) in (select k1 from db1.tbl1 where NULL);";
+        try {
+            UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Subquery in left-side child of in-predicate is not supported"));
+        }
+    }
 }
