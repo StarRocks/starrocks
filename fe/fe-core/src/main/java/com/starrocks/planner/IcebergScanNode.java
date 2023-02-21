@@ -257,7 +257,7 @@ public class IcebergScanNode extends ScanNode {
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("FileStat.ScanSetup.PlanTime")) {
             for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                    srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
+                    srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate, false).planTasks()) {
                 for (FileScanTask task : combinedScanTask.files()) {
                     DataFile file = task.file();
                     LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());

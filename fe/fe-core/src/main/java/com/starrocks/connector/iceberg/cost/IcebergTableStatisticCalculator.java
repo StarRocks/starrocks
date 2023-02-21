@@ -230,7 +230,7 @@ public class IcebergTableStatisticCalculator {
         ((IcebergCachingFileIO) icebergTable.io()).getFileIOWithCacheHit().set(0);
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicate);
+                snapshot.get(), icebergPredicate, true);
 
         IcebergFileStats icebergFileStats = null;
 
