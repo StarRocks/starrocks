@@ -335,6 +335,8 @@ public class AlterTest {
 
     @Test
     public void testRenameMaterializedView() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable1\n" +
                         "(\n" +
@@ -372,6 +374,7 @@ public class AlterTest {
 
     @Test
     public void testCouldNotFindMaterializedView() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable1\n" +
                         "(\n" +
@@ -422,6 +425,8 @@ public class AlterTest {
 
     @Test
     public void testRenameTable() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testRenameTable1\n" +
                         "(\n" +
@@ -442,6 +447,8 @@ public class AlterTest {
 
     @Test
     public void testChangeMaterializedViewRefreshScheme() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable2\n" +
                         "(\n" +
@@ -475,6 +482,8 @@ public class AlterTest {
 
     @Test
     public void testRefreshMaterializedView() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable3\n" +
                         "(\n" +
@@ -505,6 +514,8 @@ public class AlterTest {
 
     @Test
     public void testCancelRefreshMaterializedView() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable4\n" +
                         "(\n" +
@@ -759,6 +770,8 @@ public class AlterTest {
 
     @Test
     public void testSetDynamicPropertiesInNormalTable() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         String tableName = "no_dynamic_table";
         String createOlapTblStmt = "CREATE TABLE test.`" + tableName + "` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
@@ -796,6 +809,7 @@ public class AlterTest {
 
     @Test
     public void testSetDynamicPropertiesInDynamicPartitionTable() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         String tableName = "dynamic_table";
         String createOlapTblStmt = "CREATE TABLE test.`" + tableName + "` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
@@ -840,6 +854,8 @@ public class AlterTest {
 
     @Test
     public void testSwapTable() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         String stmt1 = "CREATE TABLE test.replace1\n" +
                 "(\n" +
                 "    k1 int, k2 int, k3 int sum\n" +
@@ -919,6 +935,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsDay() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -966,7 +984,6 @@ public class AlterTest {
 
     @Test
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1001,6 +1018,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_lake_partition";
@@ -1045,12 +1063,10 @@ public class AlterTest {
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
-        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     @Test
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1088,6 +1104,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists site_access";
@@ -1163,6 +1180,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitions5Day() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 DATE,\n" +
@@ -1203,6 +1222,8 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testCatalogAddPartitionsDayConflictException() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_exception (\n" +
                 "      k2 DATE,\n" +
@@ -1233,6 +1254,7 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsWeekWithoutCheck() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         ConnectContext ctx = starRocksAssert.getCtx();
         Config.enable_create_partial_partition_in_batch = true;
         String createSQL = "CREATE TABLE test.test_partition_week (\n" +
@@ -1275,6 +1297,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsWeekWithCheck() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_week (\n" +
                 "      k2 DATE,\n" +
@@ -1359,6 +1383,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsYear() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1403,6 +1429,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsNumber() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      k2 INT,\n" +
@@ -1444,6 +1472,7 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsAtomicRange() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
@@ -1543,6 +1572,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsWithoutPartitions() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table if exists test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -1592,6 +1623,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsIfNotExist() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_partition_exists (\n" +
                 "      k2 DATE,\n" +
@@ -1637,6 +1670,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddPartitionsSameNameShouldNotThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_partition_exists2 (\n" +
                 "      k2 DATE,\n" +
@@ -1682,6 +1717,7 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testCatalogAddPartitionsShouldThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_partition_exists3 (\n" +
                 "      k2 DATE,\n" +
@@ -1750,6 +1786,8 @@ public class AlterTest {
 
     @Test
     public void testAddMultiItemListPartition() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
@@ -1792,11 +1830,12 @@ public class AlterTest {
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
     }
 
     @Test
     public void testAddSingleItemListPartition() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
@@ -1842,6 +1881,7 @@ public class AlterTest {
 
     @Test
     public void testSingleItemPartitionPersistInfo() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
@@ -1918,6 +1958,8 @@ public class AlterTest {
 
     @Test
     public void testMultiItemPartitionPersistInfo() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
                 "      id BIGINT,\n" +
@@ -1998,7 +2040,6 @@ public class AlterTest {
 
     @Test
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
-        Config.run_mode = RunMode.SHARED_DATA.name();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -2032,6 +2073,7 @@ public class AlterTest {
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_DATA);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.new_table (\n" +
@@ -2101,12 +2143,12 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         file.delete();
-
-        Config.run_mode = RunMode.SHARED_NOTHING.name();
     }
 
     @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
                 "      id BIGINT,\n" +
@@ -2137,6 +2179,8 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
                 "      id BIGINT,\n" +
@@ -2171,6 +2215,8 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
                 "      id BIGINT,\n" +
@@ -2201,6 +2247,7 @@ public class AlterTest {
 
     @Test(expected = DdlException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +
                 "      id BIGINT,\n" +
@@ -2233,6 +2280,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogAddColumn() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -2281,6 +2330,8 @@ public class AlterTest {
 
     @Test
     public void testCatalogDropColumn() throws Exception {
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "runMode", RunMode.SHARED_NOTHING);
+
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
