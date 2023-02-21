@@ -109,11 +109,15 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preWriteCommitLog(TransactionState txnState) {
-        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
+        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED
+                || txnState.getTransactionStatus() == TransactionStatus.PREPARED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
-            long version = partition.getNextVersion();
+            long version = -1;
+            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                version = partition.getNextVersion();
+            }
             PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         }
