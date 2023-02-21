@@ -754,4 +754,13 @@ public class PrivilegeStmtAnalyzerV2Test {
         analyzeFail("drop role role_not_exists", "Operation DROP ROLE failed for role_not_exists : role not exists");
         analyzeSuccess("drop role if exists role_not_exists");
     }
+
+    @Test
+    public void testGrantFunction() {
+        String sql = "GRANT usage ON GLOBAL_FUNCTION xxx to user test_user";
+        analyzeFail(sql, "cannot find function: xxx");
+
+        sql = "GRANT usage ON FUNCTION db1.xxx to user test_user";
+        analyzeFail(sql, "cannot find function: xxx");
+    }
 }

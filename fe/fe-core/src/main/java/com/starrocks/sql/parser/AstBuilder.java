@@ -92,6 +92,7 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
@@ -2237,9 +2238,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (formatPropsContext.booleanValue() != null) {
                 trimspace = Boolean.parseBoolean(formatPropsContext.booleanValue().getText());
             }
-            csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0), 
-                                      escape == null ? 0 : (byte) escape.charAt(0), 
-                                      skipheader, trimspace);
+            csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0),
+                    escape == null ? 0 : (byte) escape.charAt(0),
+                    skipheader, trimspace);
         } else {
             csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         }
@@ -3113,7 +3114,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         ColumnDef columnDef = getColumnDef(context.columnDesc());
         if (columnDef.isAutoIncrement()) {
             throw new IllegalArgumentException(
-                "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+                    "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
         }
         ColumnPosition columnPosition = null;
         if (context.FIRST() != null) {
@@ -3135,7 +3136,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (ColumnDef columnDef : columnDefs) {
             if (columnDef.isAutoIncrement()) {
                 throw new IllegalArgumentException(
-                    "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+                        "ADD COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
             }
         }
         String rollupName = null;
@@ -3160,7 +3161,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         ColumnDef columnDef = getColumnDef(context.columnDesc());
         if (columnDef.isAutoIncrement()) {
             throw new IllegalArgumentException(
-                "MODIFY COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
+                    "MODIFY COLUMN does not support AUTO_INCREMENT attribute. column: " + columnDef.getName());
         }
         ColumnPosition columnPosition = null;
         if (context.FIRST() != null) {
@@ -4301,17 +4302,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        objectTypeUnResolved = extendPrivilegeType(context.GLOBAL() != null, objectTypeUnResolved);
-
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
-        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setFunctionArgsDef(argsDef);
-        objects.setFunctionName(functionName);
-
-        return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
+        GrantRevokePrivilegeObjects objects = buildGrantRevokePrivWithFunction(context.privFunctionObjectNameList(),
+                context.GLOBAL() != null);
+        return new GrantPrivilegeStmt(privilegeList, extendPrivilegeType(context.GLOBAL() != null, "FUNCTION"),
                 (GrantRevokeClause) visit(context.grantRevokeClause()), objects, context.WITH() != null);
     }
 
@@ -4319,18 +4312,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        String objectTypeUnResolved = ((Identifier) visit(context.privObjectType())).getValue().toUpperCase();
-        objectTypeUnResolved = extendPrivilegeType(context.GLOBAL() != null, objectTypeUnResolved);
-
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
-        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
-        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setFunctionArgsDef(argsDef);
-        objects.setFunctionName(functionName);
-
-        return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
+        GrantRevokePrivilegeObjects objects = buildGrantRevokePrivWithFunction(context.privFunctionObjectNameList(),
+                context.GLOBAL() != null);
+        return new RevokePrivilegeStmt(privilegeList, extendPrivilegeType(context.GLOBAL() != null, "FUNCTION"),
                 (GrantRevokeClause) visit(context.grantRevokeClause()), objects);
+    }
+
+    private GrantRevokePrivilegeObjects buildGrantRevokePrivWithFunction(
+            StarRocksParser.PrivFunctionObjectNameListContext context, boolean isGlobal) {
+        List<Pair<FunctionName, FunctionArgsDef>> functions = new ArrayList<>();
+        int functionSize = context.qualifiedName().size();
+        List<StarRocksParser.TypeListContext> typeListContexts = context.typeList();
+        for (int i = 0; i < functionSize; ++i) {
+            StarRocksParser.QualifiedNameContext qualifiedNameContext = context.qualifiedName(i);
+            QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
+            FunctionName functionName;
+            if (qualifiedName.getParts().size() == 1) {
+                functionName = new FunctionName(qualifiedName.getParts().get(0));
+            } else if (qualifiedName.getParts().size() == 2) {
+                functionName = new FunctionName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
+            } else {
+                throw new SemanticException("Error function format " + qualifiedName);
+            }
+
+            if (isGlobal) {
+                functionName.setAsGlobalFunction();
+            }
+
+            FunctionArgsDef argsDef = getFunctionArgsDef(typeListContexts.get(i));
+            functions.add(Pair.create(functionName, argsDef));
+        }
+
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctions(functions);
+
+        return objects;
     }
 
     public String extendPrivilegeType(boolean isGlobal, String type) {
