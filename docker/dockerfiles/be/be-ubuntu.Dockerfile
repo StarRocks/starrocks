@@ -35,7 +35,7 @@ RUN apt-get install -yq tzdata && \
 
 # Install perf tool for low-level performance debug
 RUN apt-get install -yq linux-tools-common linux-tools-generic
-RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /root/.bashrc
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 
 RUN rm -rf /var/lib/apt/lists/*
 
