@@ -71,7 +71,12 @@ public:
     Status set_finished(int32_t driver_seq);
 
     bool is_downstream_ready() const;
+    size_t upstream_dop() const { return _upstream_dop; }
     size_t downstream_dop() const { return _downstream_dop; }
+    void set_upstream_dop(size_t upstream_dop) { _upstream_dop = upstream_dop; }
+    void set_downstream_dop(size_t downstream_dop) { _downstream_dop = downstream_dop; }
+
+    const size_t max_output_amplification() const { return _max_output_amplification; }
 
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
@@ -92,10 +97,11 @@ private:
 
     // _upstream_dop and _downstream_dop are DOP of CollectStatsSinkOperator and CollectStatsSourceOperator.
     // They are both power of two, and upstream_dop is times of downstream_dop.
-    const size_t _upstream_dop;
+    size_t _upstream_dop;
     size_t _downstream_dop;
 
     const size_t _max_block_rows_per_driver_seq;
+    const size_t _max_output_amplification;
 
     std::vector<BufferChunkQueue> _buffer_chunk_queue_per_driver_seq;
     std::vector<uint8_t> _is_finishing_per_driver_seq;
