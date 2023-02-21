@@ -37,8 +37,8 @@ public class HudiScannerUtils {
         builder.append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         DATETIME_FORMATTER = builder.toFormatter();
 
-        HIVE_TYPE_MAPPING.put("TimestampMicros", "timestamp");
-        HIVE_TYPE_MAPPING.put("TimestampMillis", "timestamp");
+        HIVE_TYPE_MAPPING.put("timestamp-micros", "timestamp");
+        HIVE_TYPE_MAPPING.put("timestamp-millis", "timestamp");
 
         TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MICROS, TimeUnit.MICROSECONDS);
         TIMESTAMP_UNIT_MAPPING.put(ColumnType.TypeValue.DATETIME_MILLIS, TimeUnit.MILLISECONDS);
