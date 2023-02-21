@@ -87,11 +87,4 @@ public class SelectListItem implements ParseNode {
         this.alias = alias;
     }
 
-    public List<Expr> getStarExpandedExprs() {
-        return starExpandedExprs;
-    }
-
-    public void setStarExpandedExprs(List<Expr> starExpandedExprs) {
-        this.starExpandedExprs = starExpandedExprs;
-    }
 }

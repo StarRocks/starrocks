@@ -574,7 +574,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
-            Set<String> modifiedColumns = getModifiedColumns(tbl);
+            // Before schema change, collect modified columns for related mvs.
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = tbl.getPartition(partitionId);
@@ -634,7 +635,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.span.end();
     }
 
-    private Set<String> getModifiedColumns(OlapTable tbl) {
+    private Set<String> collectModifiedColumnsForRelatedMVs(OlapTable tbl) {
         if (tbl.getRelatedMaterializedViews().isEmpty()) {
             return Sets.newHashSet();
         }

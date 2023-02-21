@@ -206,7 +206,7 @@ public class MaterializedViewAnalyzer {
             // for select star, use `analyze` to deduce its child's output and validate select list then.
             for (SelectRelation selectRelation : selectRelations) {
                 // check alias except * and SlotRef
-                validateSelectItem(selectRelation.getSelectList());
+                validateSelectItem(selectRelation);
             }
 
             // convert queryStatement to sql and set
@@ -283,19 +283,13 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void validateSelectItem(SelectList selectList) {
-            List<SelectListItem> selectListItems = selectList.getItems();
-            for (SelectListItem selectListItem : selectListItems) {
+        private void validateSelectItem(SelectRelation selectRelation) {
+            for (SelectListItem selectListItem : selectRelation.getSelectList().getItems()) {
                 Preconditions.checkState((selectListItem.getExpr() instanceof SlotRef)
                         || selectListItem.getAlias() != null);
-                if (selectListItem.isStar() && selectListItem.getStarExpandedExprs() != null) {
-                    for (Expr expandExpr : selectListItem.getStarExpandedExprs()) {
-                        checkNondeterministicFunction(expandExpr);
-                    }
-                } else if (selectListItem.getExpr() != null) {
-                    // check select item has nondeterministic function
-                    checkNondeterministicFunction(selectListItem.getExpr());
-                }
+            }
+            for (Expr expr : selectRelation.getOutputExpr()) {
+                checkNondeterministicFunction(expr);
             }
         }
 

@@ -240,9 +240,6 @@ public class SelectAnalyzer {
                     outputExpressionBuilder.add(fieldReference);
                 }
                 outputFields.addAll(fields);
-
-                item.setStarExpandedExprs(
-                        fields.stream().map(field -> field.getOriginExpression()).collect(Collectors.toList()));
             } else {
                 String name;
                 if (item.getExpr() instanceof SlotRef) {
