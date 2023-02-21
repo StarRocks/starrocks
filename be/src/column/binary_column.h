@@ -289,9 +289,7 @@ public:
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
-        return _offsets[from + size] - _offsets[from] + size * sizeof(T);
-    }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<BinaryColumnBase<T>&>(rhs);

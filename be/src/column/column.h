@@ -372,19 +372,23 @@ public:
 
     virtual std::string debug_string() const { return {}; }
 
+<<<<<<< HEAD
     // used for automatic partition item in this column
     virtual std::string raw_item_value(size_t idx) const { return debug_item(idx); }
 
     // memory usage includes container memory usage and element memory usage.
+=======
+    // memory usage includes container memory usage and reference memory usage.
+>>>>>>> 03bf99af4b ([BugFix] rename element_memory_usage to reference_memory_usage and fix incorrect result (#18090))
     // 1. container memory usage: container capacity * type size.
-    // 2. element memory usage: element data size that is not in the container,
+    // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.
-    virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
+    virtual size_t memory_usage() const { return container_memory_usage() + reference_memory_usage(); }
     virtual size_t container_memory_usage() const = 0;
-    virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const = 0;
+    virtual size_t reference_memory_usage() const { return reference_memory_usage(0, size()); }
+    virtual size_t reference_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
