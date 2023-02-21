@@ -578,7 +578,6 @@
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ [Integrate with StarRocks](./integrations/intro.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
