@@ -156,8 +156,10 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
     if (request.common().__isset.adaptive_dop_param) {
         _fragment_ctx->set_enable_adaptive_dop(true);
-        const auto& tparam = request.common().adaptive_dop_param;
-        _fragment_ctx->adaptive_dop_param().max_block_rows_per_driver_seq = tparam.max_block_rows_per_driver_seq;
+        const auto& tadaptive_dop_param = request.common().adaptive_dop_param;
+        auto& adaptive_dop_param = _fragment_ctx->adaptive_dop_param();
+        adaptive_dop_param.max_block_rows_per_driver_seq = tadaptive_dop_param.max_block_rows_per_driver_seq;
+        adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)

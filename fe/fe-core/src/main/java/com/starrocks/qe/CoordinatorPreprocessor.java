@@ -1547,6 +1547,8 @@ public class CoordinatorPreprocessor {
                         commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
                         commonParams.adaptive_dop_param.setMax_block_rows_per_driver_seq(
                                 sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
+                        commonParams.adaptive_dop_param.setMax_output_amplification_factor(
+                                sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
             }

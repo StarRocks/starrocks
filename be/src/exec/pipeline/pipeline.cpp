@@ -142,4 +142,38 @@ Status Pipeline::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 
+struct OutputAmplificationAddCalculator {
+    size_t operator()(size_t accumulate, size_t value) const { return accumulate + value; }
+};
+
+struct OutputAmplificationMaxCalculator {
+    size_t operator()(size_t accumulate, size_t value) const { return std::max(accumulate, value); }
+};
+
+template <typename Calculator>
+size_t calculate_output_amplification(const Drivers& drivers) {
+    Calculator calculator;
+    size_t result = 0;
+    for (const auto& driver : drivers) {
+        result = calculator(result, driver->sink_operator()->output_amplification_factor());
+    }
+    return std::max<size_t>(1, result);
+}
+
+size_t Pipeline::output_amplification_factor() const {
+    if (_drivers.empty()) {
+        return 1;
+    }
+
+    auto* first_sink = _drivers[0]->sink_operator();
+    switch (first_sink->intra_pipeline_amplification_type()) {
+    case Operator::OutputAmplificationType::ADD:
+        return calculate_output_amplification<OutputAmplificationAddCalculator>(_drivers);
+    case Operator::OutputAmplificationType::MAX:
+        return calculate_output_amplification<OutputAmplificationMaxCalculator>(_drivers);
+    }
+
+    return 1;
+}
+
 } // namespace starrocks::pipeline
