@@ -517,7 +517,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser("grant grant on system to test_user", ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+            Assert.assertTrue(e.getMessage().contains(
+                    "Operation not permitted, 'GRANT' cannot be granted to user or role directly"));
         }
     }
 
@@ -670,16 +671,16 @@ public class PrivilegeStmtAnalyzerV2Test {
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant GRANT on system to user test_user";
-        analyzeFail(sql, "cannot grant/revoke system privilege: GRANT");
+        analyzeFail(sql, "Operation not permitted, 'GRANT' cannot be granted to user or role directly");
 
         sql = "revoke GRANT on system from role root";
-        analyzeFail(sql, "cannot grant/revoke system privilege: GRANT");
+        analyzeFail(sql, "Operation not permitted, 'GRANT' cannot be granted to user or role directly");
 
         sql = "grant NODE on system to user test_user";
-        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
         sql = "revoke NODE on system from role root";
-        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
         sql = "grant CREATE_RESOURCE on system to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
@@ -687,7 +688,7 @@ public class PrivilegeStmtAnalyzerV2Test {
                 AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant NODE, CREATE_RESOURCE on system to user test_user";
-        analyzeFail(sql, "cannot grant/revoke system privilege: NODE");
+        analyzeFail(sql, "Operation not permitted, 'NODE' cannot be granted to user or role directly");
 
         sql = "grant IMPERSONATE on user test_user to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);

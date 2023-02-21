@@ -80,6 +80,8 @@ public enum ErrorCode {
             "%s command denied to user '%s'@'%s' for table '%s'"),
     ERR_MV_ACCESS_DENIED_ERROR(1143, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for materialized view '%s'"),
+    ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
+            "%s command denied to user '%s'@'%s' for function '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
