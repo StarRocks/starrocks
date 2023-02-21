@@ -1,8 +1,8 @@
 # StarRocks version 2.5
 
-<!-- ## 2.5.2
+## 2.5.2
 
-Release date: February 20, 2023
+Release date: February 21, 2023
 
 ### New Features
 
@@ -20,7 +20,7 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-- Added CHARACTER to the reserved keyword list. [#17488](https://github.com/StarRocks/starrocks/pull/17488)-->
+- Added CHARACTER to the reserved keyword list. [#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
 
