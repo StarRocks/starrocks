@@ -83,8 +83,71 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
     return SourceOperatorFactory::AdaptiveState::INACTIVE;
 }
 
-size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
-    return _ctx->downstream_dop();
+/// Adjust DOP according to the dependent pipelines.
+/// - Constraints:
+///   - DOP *= output_amplification_factor.
+///   - DOP >= DOP of dependent pipelines.
+///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
+void CollectStatsSourceOperatorFactory::adjust_dop() {
+    if (!is_adaptive_group_active()) {
+        return;
+    }
+
+    if (_has_adjusted_dop) {
+        return;
+    }
+
+    DeferOp defer([this] {
+        _has_adjusted_dop = true;
+        // Set the new source dop to context, which is adjusted according to the dependent pipelines.
+        _ctx->set_downstream_dop(_degree_of_parallelism);
+    });
+
+    const size_t upstream_dop = _ctx->upstream_dop();
+    const size_t downstream_dop = _ctx->downstream_dop();
+    const int64_t max_output_amplification_factor = _ctx->max_output_amplification_factor();
+    const auto& dependent_pipelines = group_dependent_pipelines();
+
+    // 1. Use the source dop from context, which is adjusted by CsSink.
+    _degree_of_parallelism = downstream_dop;
+    if (_degree_of_parallelism == upstream_dop) {
+        return;
+    }
+
+    // 2. DOP should be >= max_dependent_dop.
+    size_t max_dependent_dop = 1;
+    for (const auto& pipeline : dependent_pipelines) {
+        max_dependent_dop = std::max(max_dependent_dop, pipeline->degree_of_parallelism());
+    }
+    if (max_dependent_dop >= upstream_dop) {
+        _degree_of_parallelism = upstream_dop;
+        return;
+    }
+
+    // 3. DOP should be multiplied output_amplification_factor of dependent pipelines.
+    size_t max_amp_factor = std::max<size_t>(1, upstream_dop / _degree_of_parallelism);
+    if (max_output_amplification_factor > 0 && max_output_amplification_factor < max_amp_factor) {
+        max_amp_factor = max_output_amplification_factor;
+    }
+    size_t amp_factor = 1;
+    if (max_amp_factor != 1) {
+        for (const auto& dependent_pipeline : dependent_pipelines) {
+            amp_factor *= dependent_pipeline->output_amplification_factor();
+            if (amp_factor >= max_amp_factor) {
+                break;
+            }
+        }
+        amp_factor = std::min(max_amp_factor, amp_factor);
+        amp_factor = std::max<size_t>(1, amp_factor);
+    }
+    if (amp_factor != 1) {
+        _degree_of_parallelism *= amp_factor;
+        _degree_of_parallelism = compute_max_le_power2(_degree_of_parallelism);
+    }
+
+    _degree_of_parallelism = std::max<size_t>(1, _degree_of_parallelism);
+    _degree_of_parallelism = std::max<size_t>(_degree_of_parallelism, max_dependent_dop);
+    _degree_of_parallelism = std::min<size_t>(_degree_of_parallelism, upstream_dop);
 }
 
 } // namespace starrocks::pipeline

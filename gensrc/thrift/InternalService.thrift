@@ -251,6 +251,7 @@ enum InternalServiceVersion {
 
 struct TAdaptiveDopParam {
   1: optional i64 max_block_rows_per_driver_seq
+  2: optional i64 max_output_amplification_factor
 }
 
 // ExecPlanFragment

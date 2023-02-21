@@ -84,8 +84,8 @@ std::string PassthroughState::name() const {
 
 PassthroughState::PassthroughState(CollectStatsContext* const ctx)
         : CollectStatsState(ctx),
-          _in_chunk_queue_per_driver_seq(ctx->_upstream_dop),
-          _unpluging_per_driver_seq(ctx->_upstream_dop) {}
+          _in_chunk_queue_per_driver_seq(ctx->_max_dop),
+          _unpluging_per_driver_seq(ctx->_max_dop) {}
 
 bool PassthroughState::need_input(int32_t driver_seq) const {
     return _in_chunk_queue_per_driver_seq[driver_seq].size_approx() < MAX_PASSTHROUGH_CHUNKS_PER_DRIVER_SEQ;
@@ -154,8 +154,8 @@ bool PassthroughState::is_upstream_finished(int32_t driver_seq) const {
 
 /// RoundRobinState.
 RoundRobinState::RoundRobinState(CollectStatsContext* const ctx) : CollectStatsState(ctx) {
-    _info_per_driver_seq.reserve(ctx->_upstream_dop);
-    for (int i = 0; i < ctx->_upstream_dop; i++) {
+    _info_per_driver_seq.reserve(ctx->_max_dop);
+    for (int i = 0; i < ctx->_max_dop; i++) {
         _info_per_driver_seq.emplace_back(i, _ctx->_runtime_state->chunk_size());
     }
 }
@@ -216,13 +216,14 @@ bool RoundRobinState::is_upstream_finished(int32_t driver_seq) const {
 }
 
 /// CollectStatsContext.
-CollectStatsContext::CollectStatsContext(RuntimeState* const runtime_state, size_t dop, const AdaptiveDopParam& param)
-        : _upstream_dop(dop),
-          _downstream_dop(dop),
+CollectStatsContext::CollectStatsContext(RuntimeState* const runtime_state, size_t max_dop,
+                                         const AdaptiveDopParam& param)
+        : _max_dop(max_dop),
           _max_block_rows_per_driver_seq(param.max_block_rows_per_driver_seq),
-          _buffer_chunk_queue_per_driver_seq(dop),
-          _is_finishing_per_driver_seq(dop),
-          _is_finished_per_driver_seq(dop),
+          _max_output_amplification_factor(param.max_output_amplification_factor),
+          _buffer_chunk_queue_per_driver_seq(max_dop),
+          _is_finishing_per_driver_seq(max_dop),
+          _is_finished_per_driver_seq(max_dop),
           _runtime_state(runtime_state) {
     _state_payloads[CollectStatsStateEnum::BLOCK] = std::make_unique<BlockState>(this);
     _state_payloads[CollectStatsStateEnum::PASSTHROUGH] = std::make_unique<PassthroughState>(this);

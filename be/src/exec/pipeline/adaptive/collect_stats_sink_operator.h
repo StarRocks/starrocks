@@ -46,9 +46,7 @@ public:
     CollectStatsSinkOperatorFactory(int32_t id, int32_t plan_node_id, CollectStatsContextPtr ctx);
     ~CollectStatsSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CollectStatsSinkOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     CollectStatsContextPtr _ctx;

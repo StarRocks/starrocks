@@ -161,6 +161,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
     public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ =
             "runtime_adaptive_dop_max_block_rows_per_driver_seq";
+    public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR =
+            "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
@@ -389,6 +391,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
+
+    // Effective when it is positive.
+    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR, flag = VariableMgr.INVISIBLE)
+    private long adaptiveDopMaxOutputAmplificationFactor = 0;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -882,7 +888,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long fullSortMaxBufferedRows = 1024000;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedBytes = 16 * 1024 * 1024;
+    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
     private boolean fullSortLateMaterialization = false;
@@ -1323,6 +1329,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {
         return adaptiveDopMaxBlockRowsPerDriverSeq;
+    }
+
+    public long getAdaptiveDopMaxOutputAmplificationFactor() {
+        return adaptiveDopMaxOutputAmplificationFactor;
     }
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
