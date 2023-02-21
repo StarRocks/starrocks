@@ -47,6 +47,7 @@ install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
 # here we update oss library from hadoop-aliyun-2.7.2.jar to jindosdk-4.6.2 to consistent with the oss library in FE and BE
 wget http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz
 tar xzf broker_thirdparty_jars.tar.gz
+# Base64 in hadoop-aliyun-2.7.2.jar has compatibility issues with tbds
 rm broker_thirdparty_jars/hadoop-aliyun-2.7.2.jar
 mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
 rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz
