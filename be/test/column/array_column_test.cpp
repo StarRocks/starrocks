@@ -1155,43 +1155,74 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
     ASSERT_EQ("[]", res->debug_item(6));
 }
 
-PARALLEL_TEST(ArrayColumnTest, test_element_memory_usage) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto column = ArrayColumn::create(elements, offsets);
 
-    // insert [],[1],[2, 3],[4, 5, 6]
-    offsets->append(0);
+        // insert [],[1],[2, 3],[4, 5, 6]
+        offsets->append(0);
 
-    elements->append_datum(1);
-    offsets->append(1);
+        elements->append_datum(1);
+        offsets->append(1);
 
-    elements->append_datum(2);
-    elements->append_datum(3);
-    offsets->append(3);
+        elements->append_datum(2);
+        elements->append_datum(3);
+        offsets->append(3);
 
-    elements->append_datum(4);
-    elements->append_datum(5);
-    elements->append_datum(6);
-    offsets->append(6);
+        elements->append_datum(4);
+        elements->append_datum(5);
+        elements->append_datum(6);
+        offsets->append(6);
 
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[1]", column->debug_item(1));
-    ASSERT_EQ("[2,3]", column->debug_item(2));
-    ASSERT_EQ("[4,5,6]", column->debug_item(3));
+        ASSERT_EQ("[]", column->debug_item(0));
+        ASSERT_EQ("[1]", column->debug_item(1));
+        ASSERT_EQ("[2,3]", column->debug_item(2));
+        ASSERT_EQ("[4,5,6]", column->debug_item(3));
 
-    // 1 element occupy 4 + 1 = 5 bytes, 1 offset occupy 4 bytes
-    ASSERT_EQ(46, column->Column::element_memory_usage());
-    ASSERT_EQ(4, column->element_memory_usage(0, 1));  // [] 1 offset, 0 element
-    ASSERT_EQ(13, column->element_memory_usage(0, 2)); // [][1] 2 offset, 1 element
-    ASSERT_EQ(27, column->element_memory_usage(0, 3)); // [][1][2, 3] 3 offset, 3 element
-    ASSERT_EQ(46, column->element_memory_usage(0, 4)); // [][1][2, 3][4, 5, 6] 4 offset, 6 element
-    ASSERT_EQ(9, column->element_memory_usage(1, 1));  // [1] 1 offset, 1 element
-    ASSERT_EQ(23, column->element_memory_usage(1, 2)); // [1][2, 3] 2 offset, 3 element
-    ASSERT_EQ(42, column->element_memory_usage(1, 3)); // [1][2, 3][4, 5, 6] 3 offset, 6 element
-    ASSERT_EQ(14, column->element_memory_usage(2, 1)); // [2, 3] 1 offset, 2 element
-    ASSERT_EQ(33, column->element_memory_usage(2, 2)); // [2, 3][4, 5, 6] 2 offset, 5 element
-    ASSERT_EQ(19, column->element_memory_usage(3, 1)); // [4, 5, 6] 1 offset, 3 element
+        // fixed-length elements have no reference memory
+        ASSERT_EQ(0, column->Column::reference_memory_usage());
+    }
+
+    {
+        auto offsets = UInt32Column::create();
+        auto elements = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        auto column = ArrayColumn::create(elements, offsets);
+
+        auto append_json_value = [&](const std::string& json_str) {
+            auto json_value = JsonValue::parse(json_str).value();
+            elements->append_datum(&json_value);
+        };
+        // insert [],["1"],["2","3"],["4","5","6"]
+        offsets->append(0);
+
+        append_json_value("1");
+        offsets->append(1);
+
+        append_json_value("2");
+        append_json_value("3");
+        offsets->append(3);
+
+        append_json_value("4");
+        append_json_value("5");
+        append_json_value("6");
+        offsets->append(6);
+
+        std::cout << "json size: " << column->Column::reference_memory_usage() << std::endl;
+        ASSERT_EQ(12, column->Column::reference_memory_usage());
+
+        ASSERT_EQ(0, column->reference_memory_usage(0, 1));
+        ASSERT_EQ(2, column->reference_memory_usage(0, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(0, 3));
+        ASSERT_EQ(12, column->reference_memory_usage(0, 4));
+        ASSERT_EQ(2, column->reference_memory_usage(1, 1));
+        ASSERT_EQ(6, column->reference_memory_usage(1, 2));
+        ASSERT_EQ(12, column->reference_memory_usage(1, 3));
+        ASSERT_EQ(4, column->reference_memory_usage(2, 1));
+        ASSERT_EQ(10, column->reference_memory_usage(2, 2));
+        ASSERT_EQ(6, column->reference_memory_usage(3, 1));
+    }
 }
 
 } // namespace starrocks
