@@ -268,11 +268,12 @@ from mail_merge;
 * 字符串类型：CHAR、VARCHAR
 * 时间类型：DATE、DATETIME
 * 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
+* 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果指定的当前行之前若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回从窗口开始到当前行之前若干行之间的最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 **语法：**
 
 ~~~SQL
-LAG(expr[, offset[, default]])
+LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
@@ -360,10 +361,12 @@ from mail_merge;
 
 `LEAD()` 支持的数据类型与 [LAG](#使用-lag-窗口函数) 相同。
 
+* 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果指定的当前行之后若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回从当前行之后若干行到窗口结束之间的第一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
+
 语法：
 
 ~~~Haskell
-LEAD(expr[, offset[, default]])
+LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
