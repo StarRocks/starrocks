@@ -887,7 +887,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long fullSortMaxBufferedRows = 1024000;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
-    private long fullSortMaxBufferedBytes = 16 * 1024 * 1024;
+    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
     private boolean fullSortLateMaterialization = false;
