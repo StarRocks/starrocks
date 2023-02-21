@@ -740,5 +740,4 @@ public class ReplayFromDumpTest {
                 "     rollup: segment_profile\n" +
                 "     tabletRatio=88635/88635"));
     }
-
 }
