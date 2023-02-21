@@ -92,7 +92,7 @@ public:
                                                                         const SortExecExprs& sort_exec_exprs,
                                                                         const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile);
+    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
