@@ -245,7 +245,7 @@ public class AstToStringBuilder {
             if (statement.getRole() != null) {
                 sqlBuilder.append(" ROLE ").append(statement.getRole());
             } else {
-                sqlBuilder.append(statement.getUserIdent());
+                sqlBuilder.append(statement.getUserIdentity());
             }
 
             return sqlBuilder.toString();
