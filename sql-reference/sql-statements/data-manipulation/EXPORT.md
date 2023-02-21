@@ -42,7 +42,7 @@ WITH BROKER
   - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为 `true`，表示包含。
 
 - `broker`：导出使用的 Broker。
-- `broker_properties`: 用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
+- `broker_properties`: 用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [BROKER LOAD](BROKER%20LOAD.md)。
 
   语法：
 
