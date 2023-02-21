@@ -33,7 +33,7 @@
 
 namespace starrocks {
 
-HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers)
+HashJoiner::HashJoiner(const HashJoinerParam& param)
         : _hash_join_node(param._hash_join_node),
           _pool(param._pool),
           _join_type(param._hash_join_node.join_op),
@@ -49,9 +49,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _is_buildable(param._is_buildable),
-          _read_only_join_probers(read_only_join_probers) {
+          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -64,8 +62,6 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
 }
 
 Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile) {
-    DCHECK(_is_buildable);
-
     if (_runtime_state == nullptr) {
         _runtime_state = state;
     }
@@ -93,9 +89,6 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
 
     _probe_column_count = _ht.get_probe_column_count();
     _build_column_count = _ht.get_build_column_count();
-
-    // The join builder also corresponds to a join prober.
-    _num_unfinished_probers.store(_read_only_join_probers.size() + 1, std::memory_order_release);
 
     return Status::OK();
 }
@@ -301,19 +294,34 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
 
     _probe_column_count = src_join_builder->_probe_column_count;
     _build_column_count = src_join_builder->_build_column_count;
-}
 
-void HashJoiner::set_builder_finished() {
-    set_finished();
-    for (auto& prober : _read_only_join_probers) {
-        prober->set_finished();
-    }
+    _has_referenced_hash_table = true;
+
+    // _phase may be EOS.
+    auto old_phase = HashJoinPhase::BUILD;
+    _phase.compare_exchange_strong(old_phase, src_join_builder->_phase.load());
 }
 
 void HashJoiner::set_prober_finished() {
-    if (--_num_unfinished_probers == 0) {
+    if (++_num_finished_probers == _num_probers) {
         set_finished();
     }
+}
+void HashJoiner::decr_prober(RuntimeState* state) {
+    // HashJoinProbeOperator may be instantiated lazily, so join_builder is ref for prober
+    // in HashJoinBuildOperator::prepare and unref when all the probers are closed here.
+    if (++_num_closed_probers == _num_probers) {
+        unref(state);
+    }
+}
+
+size_t HashJoiner::avg_keys_perf_bucket() const {
+    size_t used_bucket_count = _ht.get_used_bucket_count();
+    if (used_bucket_count == 0) {
+        return 0;
+    }
+    size_t count = _ht.get_row_count() / used_bucket_count;
+    return count;
 }
 
 Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {

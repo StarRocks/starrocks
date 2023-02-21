@@ -26,6 +26,7 @@ CollectStatsSinkOperator::CollectStatsSinkOperator(OperatorFactory* factory, int
 Status CollectStatsSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _ctx->ref();
+    _ctx->incr_sinker();
 
     return Status::OK();
 }
@@ -60,5 +61,9 @@ Status CollectStatsSinkOperator::set_finishing(RuntimeState* state) {
 CollectStatsSinkOperatorFactory::CollectStatsSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                                                  CollectStatsContextPtr ctx)
         : OperatorFactory(id, "collect_stats_sink", plan_node_id), _ctx(std::move(ctx)) {}
+
+OperatorPtr CollectStatsSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return std::make_shared<CollectStatsSinkOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
+}
 
 } // namespace starrocks::pipeline

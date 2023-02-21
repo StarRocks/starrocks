@@ -73,12 +73,13 @@ StatusOr<ChunkPtr> LazyInstantiateDriversOperator::pull_chunk(RuntimeState* stat
             continue;
         }
 
+        leader_source_op->adjust_dop();
         size_t leader_dop = leader_source_op->degree_of_parallelism();
         bool adjust_dop = leader_dop != original_leader_dop;
 
         for (auto& pipeline : pipelines) {
             if (adjust_dop) {
-                pipeline->source_operator_factory()->set_max_dop(leader_dop);
+                pipeline->source_operator_factory()->adjust_max_dop(leader_dop);
             }
             pipeline->instantiate_drivers(state);
             ready_pipelines.emplace_back(std::move(pipeline));

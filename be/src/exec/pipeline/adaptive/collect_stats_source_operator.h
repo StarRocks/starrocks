@@ -52,14 +52,14 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     SourceOperatorFactory::AdaptiveState adaptive_state() const override;
-    size_t degree_of_parallelism() const override;
+    void adjust_dop() override;
 
 private:
     static constexpr size_t ABSENT_ADJUSTED_DOP = 0;
 
     CollectStatsContextPtr _ctx;
 
-    mutable size_t _adjusted_dop = ABSENT_ADJUSTED_DOP;
+    bool _has_adjusted_dop = false;
 };
 
 } // namespace starrocks::pipeline

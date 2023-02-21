@@ -53,7 +53,7 @@ enum class CollectStatsStateEnum { BLOCK = 0, PASSTHROUGH, ROUND_ROBIN };
 ///   - and passes chunks from the i-th pipeline#1 driver to the j-th pipeline#2 driver, where j=i%new_dop.
 class CollectStatsContext final : public ContextWithDependency {
 public:
-    CollectStatsContext(RuntimeState* const runtime_state, size_t dop, const AdaptiveDopParam& param);
+    CollectStatsContext(RuntimeState* const runtime_state, size_t max_dop, const AdaptiveDopParam& param);
     ~CollectStatsContext() override = default;
 
     std::string readable_state() const;
@@ -71,7 +71,12 @@ public:
     Status set_finished(int32_t driver_seq);
 
     bool is_downstream_ready() const;
+    size_t upstream_dop() const { return _upstream_dop; }
     size_t downstream_dop() const { return _downstream_dop; }
+    void set_downstream_dop(size_t downstream_dop) { _downstream_dop = downstream_dop; }
+    void incr_sinker() { ++_upstream_dop; }
+
+    const int64_t max_output_amplification_factor() const { return _max_output_amplification_factor; }
 
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
@@ -92,10 +97,12 @@ private:
 
     // _upstream_dop and _downstream_dop are DOP of CollectStatsSinkOperator and CollectStatsSourceOperator.
     // They are both power of two, and upstream_dop is times of downstream_dop.
-    const size_t _upstream_dop;
-    size_t _downstream_dop;
+    const size_t _max_dop;
+    size_t _upstream_dop = 0;
+    size_t _downstream_dop = 0;
 
     const size_t _max_block_rows_per_driver_seq;
+    const int64_t _max_output_amplification_factor;
 
     std::vector<BufferChunkQueue> _buffer_chunk_queue_per_driver_seq;
     std::vector<uint8_t> _is_finishing_per_driver_seq;
@@ -127,7 +134,7 @@ protected:
 class BlockState final : public CollectStatsState {
 public:
     BlockState(CollectStatsContext* const ctx)
-            : CollectStatsState(ctx), _max_buffer_rows(ctx->_max_block_rows_per_driver_seq * ctx->_upstream_dop) {}
+            : CollectStatsState(ctx), _max_buffer_rows(ctx->_max_block_rows_per_driver_seq * ctx->_max_dop) {}
     ~BlockState() override = default;
 
     std::string name() const override;
