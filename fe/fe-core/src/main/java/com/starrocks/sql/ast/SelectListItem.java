@@ -20,16 +20,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 
-import java.util.List;
-
 public class SelectListItem implements ParseNode {
     private Expr expr;
     // for "[name.]*"
     private final TableName tblName;
     private final boolean isStar;
     private String alias;
-
-    private List<Expr> starExpandedExprs;
 
     public SelectListItem(Expr expr, String alias) {
         super();

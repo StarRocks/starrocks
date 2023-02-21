@@ -240,6 +240,7 @@ public class SelectAnalyzer {
                     outputExpressionBuilder.add(fieldReference);
                 }
                 outputFields.addAll(fields);
+                
             } else {
                 String name;
                 if (item.getExpr() instanceof SlotRef) {
