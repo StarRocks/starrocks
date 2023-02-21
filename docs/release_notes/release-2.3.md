@@ -1,5 +1,17 @@
 # StarRocks version 2.3
 
+## 2.3.9
+
+Release date: February 20, 2023
+
+### Bug Fixes
+
+- During a schema change, if a tablet clone is triggered and the BE nodes on which the tablet replicas reside change, the schema change fails. [#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- The string returned by the group_concat() function is truncated. [#16948](https://github.com/StarRocks/starrocks/pull/16948)
+- When you use Broker Load to load data from HDFS through Tencent Big Data Suite (TBDS), an error `invalid hadoop.security.authentication.tbds.securekey` occurs, indicating that StarrRocks cannot access HDFS by using the authentication information provided by TBDS. [#14125](https://github.com/StarRocks/starrocks/pull/14125) [#15693](https://github.com/StarRocks/starrocks/pull/15693)
+- In some cases, CBO may use incorrect logic to compare whether two operators are equivalent. [#17227](https://github.com/StarRocks/starrocks/pull/17227) [#17199](https://github.com/StarRocks/starrocks/pull/17199)
+- When you connect to a non-Leader FE node and send the SQL statement `USE <catalog_name>.<database_name>`, the non-Leader FE node forwards the SQL statement, with `<catalog_name>` excluded, to the Leader FE node. As a result, the Leader FE node chooses to use the `default_catalog` and eventually fails to find the specified database. [#17302](https://github.com/StarRocks/starrocks/pull/17302)
+
 ## 2.3.8
 
 Release date: February 2, 2023
