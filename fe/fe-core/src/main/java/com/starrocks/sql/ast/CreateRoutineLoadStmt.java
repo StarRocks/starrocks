@@ -516,11 +516,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 jsonPaths = jobProperties.get(JSONPATHS);
                 jsonRoot = jobProperties.get(JSONROOT);
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
+            } else if (format.equalsIgnoreCase("avro")) {
+                format = "avro";
             } else {
                 throw new UserException("Format type is invalid. format=`" + format + "`");
             }
-        } else if (format.equalsIgnoreCase("avro")) {
-            format = "avro";
         } else {
             format = "csv"; // default csv
         }
