@@ -29,6 +29,7 @@
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -74,9 +75,12 @@ static int print_unique_id(char* buffer, const TUniqueId& uid) {
     return 36;
 }
 
+// heap may broken when call dump trace info.
+// so we shouldn't allocate any memory allocate function here
 static void dump_trace_info() {
     static bool start_dump = false;
     if (!start_dump) {
+        // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         char buffer[256] = {};
@@ -87,6 +91,15 @@ static void dump_trace_info() {
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+        // dump memory usage
+        auto trackers = ExecEnv::GetInstance()->mem_trackers();
+        // copy tracker to add reference
+        for (auto tracker : trackers) {
+            if (tracker) {
+                size_t len = tracker->debug_string(buffer, sizeof(buffer));
+                wt = write(STDERR_FILENO, buffer, len);
+            }
+        }
     }
     start_dump = true;
 }
