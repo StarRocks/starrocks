@@ -14,18 +14,19 @@
 
 package com.starrocks.sql.ast;
 
-public class DropRoleStmt extends DdlStmt {
+import java.util.List;
 
-    private final String role;
+public class DropRoleStmt extends DdlStmt {
+    private final List<String> roles;
     private final boolean ifExists;
 
-    public DropRoleStmt(String role, boolean ifExists) {
-        this.role = role;
+    public DropRoleStmt(List<String> roles, boolean ifExists) {
+        this.roles = roles;
         this.ifExists = ifExists;
     }
 
-    public String getQualifiedRole() {
-        return role;
+    public List<String> getRoles() {
+        return roles;
     }
 
     public boolean isIfExists() {

@@ -1043,9 +1043,9 @@ public class AuthTest {
         String selectRoleName = "select_role";
         String createRoleSql = String.format("CREATE ROLE %s", selectRoleName);
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
-        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
         auth.createRole(createRoleStmt);
-        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getRoles().get(0)));
 
         // 3. grant select privilege to role
         GrantPrivilegeStmt grantStmt = null;

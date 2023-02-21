@@ -63,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {
@@ -206,20 +207,22 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            String roleName = stmt.getQualifiedRole();
-            FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-            if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
-                throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (privilegeManager.checkRoleExists(roleName) && !stmt.isIfNotExists()) {
+                    throw new SemanticException("Operation CREATE ROLE failed for " + roleName + " : role already exists");
+                }
             }
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            String roleName = stmt.getQualifiedRole();
-            FeNameFormat.checkRoleName(roleName, true, "Can not create role");
-            if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
-                throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
+            for (String roleName : stmt.getRoles()) {
+                FeNameFormat.checkRoleName(roleName, true, "Can not create role");
+                if (!privilegeManager.checkRoleExists(roleName) && !stmt.isIfExists()) {
+                    throw new SemanticException("Operation DROP ROLE failed for " + roleName + " : role not exists");
+                }
             }
             return null;
         }
@@ -415,10 +418,22 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdentifier(), true);
-            for (String roleName : stmt.getRoles()) {
-                validRoleName(roleName, "Cannot set role", true);
+            analyseUser(stmt.getUserIdentity(), true);
+            try {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+
+                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(roleName);
+                    Set<Long> roleIdsForUser = privilegeManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    if (roleId == null || !roleIdsForUser.contains(roleId)) {
+                        throw new SemanticException("Role " + roleName + " is not granted to " +
+                                stmt.getUserIdentity().toString());
+                    }
+                }
+            } catch (PrivilegeException e) {
+                throw new SemanticException(e.getMessage());
             }
+
             return null;
         }
 
@@ -430,8 +445,8 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), true);
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to user", true));
             } else {

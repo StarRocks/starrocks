@@ -29,4 +29,9 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
     public GrantRoleStmt(List<String> granteeRole, String role) {
         super(granteeRole, role);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitGrantRoleStatement(this, context);
+    }
 }

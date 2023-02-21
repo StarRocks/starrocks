@@ -22,23 +22,23 @@ import java.util.List;
 // GRANT role1 TO ROLE role2   supported on new RBAC framework
 public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     protected List<String> granteeRole;
-    protected UserIdentity userIdent;
+    protected UserIdentity userIdentity;
     protected String role;
 
-    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent) {
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity) {
         this.granteeRole = granteeRole;
-        this.userIdent = userIdent;
+        this.userIdentity = userIdentity;
         this.role = null;
     }
 
     protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role) {
         this.granteeRole = granteeRole;
-        this.userIdent = null;
+        this.userIdentity = null;
         this.role = role;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public List<String> getGranteeRole() {

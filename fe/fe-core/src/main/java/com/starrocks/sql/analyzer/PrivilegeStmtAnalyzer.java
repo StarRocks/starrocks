@@ -101,10 +101,10 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() == null) {
+            if (stmt.getUserIdentity() == null) {
                 throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
             }
-            analyseUser(stmt.getUserIdent(), session, true);
+            analyseUser(stmt.getUserIdentity(), session, true);
             stmt.getGranteeRole().forEach(role -> analyseRoleName(role, session, true, "Can not granted/revoke role to user"));
             return null;
         }
@@ -314,7 +314,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
+            validRoleName(stmt.getRoles().get(0), false, "Can not create role");
             return null;
         }
 
@@ -331,7 +331,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
+            validRoleName(stmt.getRoles().get(0), false, "Can not drop role");
             return null;
         }
     }
