@@ -131,10 +131,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.tablet_schema = _tablet_schema.get();
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
+    rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version;
     }
+    rs_opts.rowid_range_option = params.rowid_range_option;
+    rs_opts.short_key_ranges = params.short_key_ranges;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
