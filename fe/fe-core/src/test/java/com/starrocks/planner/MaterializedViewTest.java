@@ -178,23 +178,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testSwapOuterJoin() {
         for (String joinType : outerJoinTypes) {
-            String mv = "select count(*) from " +
+            String mv = "select count(*) as col1 from " +
                     "emps " + joinType + " join locations on emps.locationid = locations.locationid";
             testRewriteOK(mv, "select count(*)  + 1 from " +
                     "emps " + joinType + " join locations on emps.locationid = locations.locationid");
 
             // outer join cannot swap join orders
-            testRewriteFail(mv, "select count(*) from " +
+            testRewriteFail(mv, "select count(*) as col1 from " +
                     "locations " + joinType + " join emps on emps.locationid = locations.locationid");
-            testRewriteFail(mv, "select count(*) + 1 from " +
+            testRewriteFail(mv, "select count(*) + 1 as col1 from " +
                     "locations " + joinType + " join emps on emps.locationid = locations.locationid");
 
             // outer join cannot change join type
             if (joinType.equalsIgnoreCase("right")) {
-                testRewriteFail(mv, "select count(*) from " +
+                testRewriteFail(mv, "select count(*)  as col1 from " +
                         "emps left join locations on emps.locationid = locations.locationid");
             } else {
-                testRewriteFail(mv, "select count(*) from " +
+                testRewriteFail(mv, "select count(*) as col1 from " +
                         "emps right join locations on emps.locationid = locations.locationid");
             }
         }
@@ -314,7 +314,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate9() {
-        testRewriteOK("select sum(salary), count(salary) + 1 from emps",
+        testRewriteOK("select sum(salary) as col1, count(salary) + 1 from emps",
                 "select sum(salary), count(salary) + 1 from emps");
         testRewriteFail("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
