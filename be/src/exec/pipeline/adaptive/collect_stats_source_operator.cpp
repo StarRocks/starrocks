@@ -105,7 +105,7 @@ void CollectStatsSourceOperatorFactory::adjust_dop() {
 
     const size_t upstream_dop = _ctx->upstream_dop();
     const size_t downstream_dop = _ctx->downstream_dop();
-    const size_t max_output_amplification_factor = _ctx->max_output_amplification_factor();
+    const int64_t max_output_amplification_factor = _ctx->max_output_amplification_factor();
     const auto& dependent_pipelines = group_dependent_pipelines();
 
     // 1. Use the source dop from context, which is adjusted by CsSink.
@@ -126,7 +126,7 @@ void CollectStatsSourceOperatorFactory::adjust_dop() {
 
     // 3. DOP should be multiplied output_amplification_factor of dependent pipelines.
     size_t max_amp_factor = std::max<size_t>(1, upstream_dop / _degree_of_parallelism);
-    if (max_output_amplification_factor != 0 && max_output_amplification_factor < max_amp_factor) {
+    if (max_output_amplification_factor > 0 && max_output_amplification_factor < max_amp_factor) {
         max_amp_factor = max_output_amplification_factor;
     }
     size_t amp_factor = 1;
