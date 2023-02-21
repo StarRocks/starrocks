@@ -713,6 +713,9 @@ struct TSortNode {
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
   26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+  27: optional i64 max_buffered_rows;
+  28: optional i64 max_buffered_bytes;
+  29: optional bool late_materialization;
 }
 
 enum TAnalyticWindowType {
