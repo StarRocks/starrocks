@@ -45,7 +45,7 @@ WITH BROKER
     ```
 
     可以指定如下参数：
-
+    
     ```plain text
     column_separator: 指定导出的列分隔符，默认为\t。
     line_delimiter: 指定导出的行分隔符，默认为\n。
@@ -67,10 +67,6 @@ WITH BROKER
     这里需要指定具体的 broker name, 以及所需的 broker 属性。
 
     对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节中搜索 broker_properties。
-
-- `broker_properties`
-
-   用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
 
 ## 示例
 
