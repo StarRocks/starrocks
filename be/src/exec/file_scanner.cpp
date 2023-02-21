@@ -242,6 +242,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         compression = CompressionTypePB::DEFLATE;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_ZSTD) {
         compression = CompressionTypePB::ZSTD;
+    } else if (range_desc.format_type == TFileFormatType::FORMAT_AVRO) {
+        compression = CompressionTypePB::NO_COMPRESSION;
     } else {
         return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(range_desc.format_type));
     }
