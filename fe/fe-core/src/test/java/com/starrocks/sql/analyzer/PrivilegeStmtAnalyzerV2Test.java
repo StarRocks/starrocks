@@ -203,7 +203,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            Assert.assertTrue(e.getMessage().contains("cannot find catalog"));
         }
 
         sql = "grant drop on database dbx to test_user";
@@ -491,7 +491,8 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("cannot find catalog"));
         }
 
         sql = "grant impersonate on ALL users in all databases to test_user";
