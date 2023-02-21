@@ -73,8 +73,6 @@ void CollectStatsSourceOperatorFactory::close(RuntimeState* state) {
 }
 
 OperatorPtr CollectStatsSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    // DOP will be recomputed when its group is ready, see CollectStatsSourceOperatorFactory::degree_of_parallelism.
-    _ctx->set_downstream_dop(degree_of_parallelism);
     return std::make_shared<CollectStatsSourceOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
 }
 
@@ -85,31 +83,35 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
     return SourceOperatorFactory::AdaptiveState::INACTIVE;
 }
 
-/// Recompute DOP once, only when its group is active.
-/// - DOP should be multiplied by output_amplification_factor of dependent pipelines.
+/// Adjust DOP according to the dependent pipelines.
 /// - Constraints:
 ///   - DOP *= output_amplification_factor.
-///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
 ///   - DOP >= DOP of dependent pipelines.
-size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
-    // Recompute DOP once, only when its group is active.
+///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
+void CollectStatsSourceOperatorFactory::adjust_dop() {
     if (!is_adaptive_group_active()) {
-        return _ctx->downstream_dop();
+        return;
     }
 
-    if (_adjusted_dop != ABSENT_ADJUSTED_DOP) {
-        return _adjusted_dop;
+    if (_has_adjusted_dop) {
+        return;
     }
 
-    const size_t downstream_dop = _ctx->downstream_dop();
+    DeferOp defer([this] {
+        _has_adjusted_dop = true;
+        // Set the new source dop to context, which is adjusted according to the dependent pipelines.
+        _ctx->set_downstream_dop(_degree_of_parallelism);
+    });
+
     const size_t upstream_dop = _ctx->upstream_dop();
+    const size_t downstream_dop = _ctx->downstream_dop();
     const size_t max_output_amplification_factor = _ctx->max_output_amplification_factor();
     const auto& dependent_pipelines = group_dependent_pipelines();
 
     // 1. Use the source dop from context, which is adjusted by CsSink.
-    _adjusted_dop = downstream_dop;
-    if (_adjusted_dop == upstream_dop) {
-        return _adjusted_dop;
+    _degree_of_parallelism = downstream_dop;
+    if (_degree_of_parallelism == upstream_dop) {
+        return;
     }
 
     // 2. DOP should be >= max_dependent_dop.
@@ -118,12 +120,12 @@ size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
         max_dependent_dop = std::max(max_dependent_dop, pipeline->degree_of_parallelism());
     }
     if (max_dependent_dop >= upstream_dop) {
-        _adjusted_dop = upstream_dop;
-        return _adjusted_dop;
+        _degree_of_parallelism = upstream_dop;
+        return;
     }
 
     // 3. DOP should be multiplied output_amplification_factor of dependent pipelines.
-    size_t max_amp_factor = std::max<size_t>(1, upstream_dop / downstream_dop);
+    size_t max_amp_factor = std::max<size_t>(1, upstream_dop / _degree_of_parallelism);
     if (max_output_amplification_factor != 0 && max_output_amplification_factor < max_amp_factor) {
         max_amp_factor = max_output_amplification_factor;
     }
@@ -139,15 +141,13 @@ size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
         amp_factor = std::max<size_t>(1, amp_factor);
     }
     if (amp_factor != 1) {
-        _adjusted_dop *= amp_factor;
-        _adjusted_dop = compute_max_le_power2(_adjusted_dop);
+        _degree_of_parallelism *= amp_factor;
+        _degree_of_parallelism = compute_max_le_power2(_degree_of_parallelism);
     }
 
-    _adjusted_dop = std::max<size_t>(1, _adjusted_dop);
-    _adjusted_dop = std::max<size_t>(_adjusted_dop, max_dependent_dop);
-    _adjusted_dop = std::min<size_t>(_adjusted_dop, upstream_dop);
-
-    return _adjusted_dop;
+    _degree_of_parallelism = std::max<size_t>(1, _degree_of_parallelism);
+    _degree_of_parallelism = std::max<size_t>(_degree_of_parallelism, max_dependent_dop);
+    _degree_of_parallelism = std::min<size_t>(_degree_of_parallelism, upstream_dop);
 }
 
 } // namespace starrocks::pipeline

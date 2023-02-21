@@ -26,6 +26,7 @@ CollectStatsSinkOperator::CollectStatsSinkOperator(OperatorFactory* factory, int
 Status CollectStatsSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _ctx->ref();
+    _ctx->incr_sinker();
 
     return Status::OK();
 }
@@ -62,8 +63,6 @@ CollectStatsSinkOperatorFactory::CollectStatsSinkOperatorFactory(int32_t id, int
         : OperatorFactory(id, "collect_stats_sink", plan_node_id), _ctx(std::move(ctx)) {}
 
 OperatorPtr CollectStatsSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    // DOP of CsSink may also be modified in runtime, eg. CsSource#1->CsSink#2.
-    _ctx->set_upstream_dop(degree_of_parallelism);
     return std::make_shared<CollectStatsSinkOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
 }
 
