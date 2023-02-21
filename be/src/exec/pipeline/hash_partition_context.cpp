@@ -50,7 +50,7 @@ void HashPartitionContext::sink_complete() {
 }
 
 bool HashPartitionContext::has_output() {
-    return _is_sink_complete && (!_chunks_partitioner->is_hash_map_eos() || _chunk != nullptr);
+    return _is_sink_complete && (!_chunks_partitioner->is_hash_map_eos() || _acc.has_output());
 }
 
 bool HashPartitionContext::is_finished() {
@@ -61,31 +61,20 @@ bool HashPartitionContext::is_finished() {
 }
 
 StatusOr<ChunkPtr> HashPartitionContext::pull_one_chunk(RuntimeState* state) {
-    ChunkPtr output = nullptr;
     if (!_chunks_partitioner->is_hash_map_eos()) {
         _chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
-            if (_chunk == nullptr) {
-                if (chunk->num_rows() < state->chunk_size()) {
-                    _chunk = std::move(chunk);
-                    return true;
-                } else {
-                    output = std::move(chunk);
-                    return false;
-                }
-            } else if (_chunk->num_rows() + chunk->num_rows() <= state->chunk_size()) {
-                _chunk->append(*chunk);
-                chunk = nullptr;
-                return true;
-            } else {
-                output = std::move(_chunk);
-                _chunk = std::move(chunk);
-                return false;
-            }
+            _acc.push(std::move(chunk));
+            return _acc.need_input();
         });
-    } else if (_chunk != nullptr) {
-        output = std::move(_chunk);
+        if (_chunks_partitioner->is_hash_map_eos()) {
+            _acc.finalize();
+        }
     }
-    return output;
+    if (_acc.has_output()) {
+        return std::move(_acc.pull());
+    } else {
+        return nullptr;
+    }
 }
 
 HashPartitionContext* HashPartitionContextFactory::create(int32_t driver_sequence) {

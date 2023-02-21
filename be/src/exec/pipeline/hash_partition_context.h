@@ -15,6 +15,7 @@
 #pragma once
 
 #include "exec/partition/chunks_partitioner.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -56,7 +57,7 @@ private:
 
     ChunksPartitionerPtr _chunks_partitioner;
 
-    ChunkPtr _chunk = nullptr;
+    ChunkPipelineAccumulator _acc;
 };
 
 class HashPartitionContextFactory {
