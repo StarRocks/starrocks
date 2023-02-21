@@ -240,18 +240,17 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
-    public void handleNewRangePartitionDescs(List<PartitionDesc> partitionDescs,
-                                             List<Partition> partitionList, Set<String> existPartitionNameSet,
+    public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,
+                                             Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
-        int len = partitionDescs.size();
-        for (int i = 0; i < len; i++) {
-            if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
-                long partitionId = partitionList.get(i).getId();
-                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionDescs.get(i);
+        for (Partition partition : partitionMap.keySet()) {
+            if (!existPartitionNameSet.contains(partition.getName())) {
+                long partitionId = partition.getId();
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionMap.get(partition);
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {
-                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionDescs.get(i), isTemp);
+                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionMap.get(partition), isTemp);
                     setRangeInternal(partitionId, isTemp, range);
                 } catch (IllegalArgumentException e) {
                     // Range.closedOpen may throw this if (lower > upper)

@@ -309,16 +309,15 @@ public class ListPartitionInfo extends PartitionInfo {
         return "";
     }
 
-    public void handleNewListPartitionDescs(List<PartitionDesc> partitionDescs, List<Partition> partitionList,
+    public void handleNewListPartitionDescs(Map<Partition, PartitionDesc> partitionMap,
                                             Set<String> existPartitionNameSet, boolean isTempPartition)
             throws DdlException {
         try {
-            for (int i = 0; i < partitionDescs.size(); i++) {
-                Partition partition = partitionList.get(i);
+            for (Partition partition : partitionMap.keySet()) {
                 String name = partition.getName();
                 if (!existPartitionNameSet.contains(name)) {
                     long partitionId = partition.getId();
-                    PartitionDesc partitionDesc = partitionDescs.get(i);
+                    PartitionDesc partitionDesc = partitionMap.get(partition);
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
                     this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
                     this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
