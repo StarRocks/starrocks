@@ -125,10 +125,12 @@ private:
     void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
                                    NewPartitionCallback&& new_partition_cb,
                                    PartitionChunkConsumer&& partition_chunk_consumer) {
-        _is_downgrade = hash_map_with_key.template append_chunk<EnableDowngrade>(
-                chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
-                std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+        if (!_is_downgrade) {
+            _is_downgrade = hash_map_with_key.template append_chunk<EnableDowngrade>(
+                    chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
+                    std::forward<NewPartitionCallback>(new_partition_cb),
+                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+        }
         if (_is_downgrade) {
             std::lock_guard<std::mutex> l(_buffer_lock);
             _downgrade_buffer.push(chunk);
