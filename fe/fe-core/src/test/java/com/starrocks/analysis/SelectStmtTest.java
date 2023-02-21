@@ -34,15 +34,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
-import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.ProjectNode;
-import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
@@ -255,5 +249,13 @@ public class SelectStmtTest {
         for (String sql : Arrays.asList(sql0, sql1, sql2)) {
             assertNoCastStringAsStringInPlan(sql);
         }
+    }
+
+    @Test
+    public void testCatalogFunSupport() throws Exception {
+        String sql = "select current_catalog()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_catalog";
+        starRocksAssert.query(sql).explainQuery();
     }
 }
