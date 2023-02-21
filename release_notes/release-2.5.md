@@ -9,6 +9,11 @@
 - 访问 AWS S3 以及 AWS Glue 时支持基于 Instance Profile 和 Assumed Role 来进行认证和鉴权。 [#15958](https://github.com/StarRocks/starrocks/pull/15958)
 - 新增 3 个 bit 函数：[bit_shift_left](../sql-reference/sql-functions/bit-functions/bit_shift_left.md)，[bit_shift_right](../sql-reference/sql-functions/bit-functions/bit_shift_right.md)，[bit_shift_right_logical](../sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)。 [#14151](https://github.com/StarRocks/starrocks/pull/14151)
 
+### 功能优化
+
+- 优化了部分内存释放的逻辑，在查询中包含大量的聚合查询时可以显著的降低内存峰值使用。 [#16913](https://github.com/StarRocks/starrocks/pull/16913)
+- 优化了排序的内存使用，对于部分带有窗口函数的查询或者是排序查询，可以减少一倍以上的内存消耗。 [#16937](https://github.com/StarRocks/starrocks/pull/16937) [#17362](https://github.com/StarRocks/starrocks/pull/17362) [#17408](https://github.com/StarRocks/starrocks/pull/17408)
+
 ### 问题修复
 
 修复了如下问题：
@@ -17,6 +22,7 @@
 - Superset 无法识别出物化视图列类型。[#17686](https://github.com/StarRocks/starrocks/pull/17686)
 - 在对接 BI 时因无法解析 SET GLOBAL/SESSION TRANSACTION 而导致的连接性问题。[#17295](https://github.com/StarRocks/starrocks/pull/17295)
 - Colocate 组内的动态分区表无法修改分桶数，并返回报错信息。[#17418](https://github.com/StarRocks/starrocks/pull/17418/)
+- 修复了在 prepare 阶段失败可能导致的潜在问题。 [#17323](https://github.com/StarRocks/starrocks/pull/17323)
 
 ### 行为变更
 
