@@ -99,7 +99,7 @@ public class Partition extends MetaObject implements Writable {
     /**
      * committed version(hash): after txn is committed, set committed version(hash)
      * visible version(hash): after txn is published, set visible version
-     * next version(hash): next version is set after finished committing, it should equals to committed version + 1
+     * next version(hash): next version is set after finished committing, it should equal to committed version + 1
      */
 
     // not have committedVersion because committedVersion = nextVersion - 1

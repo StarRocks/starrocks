@@ -886,7 +886,7 @@ public class TransactionState implements Writable {
         // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
         // We have to send publish version task to all backends
         if (publishBackends.isEmpty()) {
-            // note: tasks are sended to all backends including dead ones, or else
+            // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
