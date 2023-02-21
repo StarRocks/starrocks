@@ -1189,8 +1189,10 @@ public class ExpressionAnalyzer {
                 try {
                     for (Long roleId : session.getCurrentRoleIds()) {
                         RolePrivilegeCollection rolePrivilegeCollection =
-                                manager.getRolePrivilegeCollectionUnlocked(roleId, true);
-                        roleName.add(rolePrivilegeCollection.getName());
+                                manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                        if (rolePrivilegeCollection != null) {
+                            roleName.add(rolePrivilegeCollection.getName());
+                        }
                     }
                 } catch (PrivilegeException e) {
                     throw new SemanticException(e.getMessage());

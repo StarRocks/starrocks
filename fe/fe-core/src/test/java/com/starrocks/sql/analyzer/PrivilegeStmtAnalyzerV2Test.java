@@ -266,12 +266,12 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testRole() throws Exception {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         sql = "create role test_role2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role2", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role2", createStmt.getRoles().get(0));
         ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
 
         // bad name
@@ -285,7 +285,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "drop role test_role";
         DropRoleStmt dropStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", dropStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", dropStmt.getRoles().get(0));
 
         sql = "drop role ___";
         try {
@@ -306,12 +306,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant test_role to test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("[test_role]", grantRoleStmt.getGranteeRole().toString());
-        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
 
         sql = "grant test_role, test_role2 to test_user";
         grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("[test_role, test_role2]", grantRoleStmt.getGranteeRole().toString());
-        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
 
         sql = "grant ___ to test_user";
         try {
@@ -320,6 +320,9 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
+
+        sql = "create role r1, r2";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
@@ -368,6 +371,9 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("Cannot set role: cannot find role bad_role"));
         }
 
+        sql = "drop role role1, role2";
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
         for (int i = 1; i != 4; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);
         }
@@ -408,6 +414,21 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("role1",
                 privilegeManager.getRolePrivilegeCollectionUnlocked(roleId.get(0), true).getName());
 
+        sql = "set default role xxx to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find role xxx!"));
+        }
+
+        sql = "set default role role3 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Role role3 is not granted to 'test_user'@'%'"));
+        }
 
         for (int i = 1; i != 4; ++i) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role role" + i, ctx), ctx);

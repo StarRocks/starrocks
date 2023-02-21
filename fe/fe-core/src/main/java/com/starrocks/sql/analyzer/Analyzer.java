@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
@@ -680,6 +681,12 @@ public class Analyzer {
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
