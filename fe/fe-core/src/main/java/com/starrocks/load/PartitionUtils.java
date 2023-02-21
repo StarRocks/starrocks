@@ -27,7 +27,11 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.AddPartitionsInfo;
+import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -55,13 +59,15 @@ public class PartitionUtils {
                     .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
+            List<PartitionPersistInfoV2> partitionInfoV2List = Lists.newArrayListWithCapacity(newTempPartitions.size());
             for (int i = 0; i < newTempPartitions.size(); i++) {
                 targetTable.addTempPartition(newTempPartitions.get(i));
                 long sourcePartitionId = sourcePartitions.get(i).getId();
                 partitionInfo.addPartition(newTempPartitions.get(i).getId(),
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
-                        partitionInfo.getIsInMemory(sourcePartitionId));
+                        partitionInfo.getIsInMemory(sourcePartitionId),
+                        partitionInfo.getStorageCacheInfo(sourcePartitionId));
                 Partition partition = newTempPartitions.get(i);
                 // range is null for UNPARTITIONED type
                 Range<PartitionKey> range = null;
@@ -71,17 +77,41 @@ public class PartitionUtils {
                             rangePartitionInfo.getRange(sourcePartitionId));
                     range = rangePartitionInfo.getRange(partition.getId());
                 }
-                PartitionPersistInfo info =
-                        new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                range,
-                                partitionInfo.getDataProperty(partition.getId()),
+                if (targetTable.isLakeTable()) {
+                    PartitionPersistInfoV2 info = null;
+                    if (range != null) {
+                        info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
+                                partition, partitionInfo.getDataProperty(partition.getId()),
                                 partitionInfo.getReplicationNum(partition.getId()),
-                                partitionInfo.getIsInMemory(partition.getId()),
-                                true);
-                partitionInfoList.add(info);
+                                partitionInfo.getIsInMemory(partition.getId()), true,
+                                range, partitionInfo.getStorageCacheInfo(partition.getId()));
+                    } else {
+                        info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
+                                partition, partitionInfo.getDataProperty(partition.getId()),
+                                partitionInfo.getReplicationNum(partition.getId()),
+                                partitionInfo.getIsInMemory(partition.getId()), true,
+                                partitionInfo.getStorageCacheInfo(partition.getId()));
+                    }
+                    partitionInfoV2List.add(info);
+                } else {
+                    PartitionPersistInfo info =
+                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
+                                    range,
+                                    partitionInfo.getDataProperty(partition.getId()),
+                                    partitionInfo.getReplicationNum(partition.getId()),
+                                    partitionInfo.getIsInMemory(partition.getId()),
+                                    true);
+                    partitionInfoList.add(info);
+                }
             }
-            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
+
+            if (targetTable.isLakeTable()) {
+                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
+            } else {
+                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
+            }
         } finally {
             db.writeUnlock();
         }
