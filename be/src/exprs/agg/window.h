@@ -298,6 +298,7 @@ template <PrimitiveType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
+    uint64_t count = 0;
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
@@ -479,6 +480,13 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             this->data(state).is_null = true;
             return;
         }
+
+        // only calculate once
+        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+            return;
+        }
+
+        this->data(state).count++;
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
