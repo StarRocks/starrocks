@@ -2,7 +2,7 @@
 
 Hudi Catalog 是一种 External Catalog。通过 Hudi Catalog，您不需要执行数据导入就可以直接查询 Apache Hudi 里的数据。
 
-此外，您还可以基于 Hudi Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Hudi Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.4 版本开始支持 Hudi Catalog。
 
 为保证正常访问 Hudi 数据，StarRocks 集群必须集成以下两个关键组件：
 
