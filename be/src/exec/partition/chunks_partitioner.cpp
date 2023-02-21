@@ -39,15 +39,15 @@ Status ChunksPartitioner::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
+ChunkPtr ChunksPartitioner::consume_from_passthrough_buffer() {
     ChunkPtr chunk = nullptr;
-    if (_downgrade_buffer.empty()) {
+    if (_passthrough_buffer.empty()) {
         return chunk;
     }
     {
         std::lock_guard<std::mutex> l(_buffer_lock);
-        chunk = _downgrade_buffer.front();
-        _downgrade_buffer.pop();
+        chunk = _passthrough_buffer.front();
+        _passthrough_buffer.pop();
     }
     return chunk;
 }

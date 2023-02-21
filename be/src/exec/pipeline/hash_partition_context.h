@@ -33,7 +33,7 @@ public:
     // Add one chunk to partitioner
     Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
 
-    // Pull one chunk from sorters or downgrade_buffer
+    // Pull one chunk from sorters or passthrough_buffer
     StatusOr<ChunkPtr> pull_one_chunk(RuntimeState* state);
 
     // Notify that there is no further input for partitiner

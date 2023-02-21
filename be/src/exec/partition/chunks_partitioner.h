@@ -51,21 +51,21 @@ public:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <bool EnableDowngrade, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     Status offer(const ChunkPtr& chunk, NewPartitionCallback&& new_partition_cb,
                  PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!_partition_it.has_value());
 
-        if (!_is_downgrade) {
+        if (!_is_passthrough) {
             for (size_t i = 0; i < _partition_exprs.size(); i++) {
                 ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
             }
         }
 
         TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
-            _split_chunk_by_partition<EnableDowngrade>(*hash_map_with_key, chunk,
-                                                       std::forward<NewPartitionCallback>(new_partition_cb),
-                                                       std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            _split_chunk_by_partition<EnablePassthrough>(
+                    *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
+                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }));
 
         return Status::OK();
@@ -74,9 +74,9 @@ public:
     // Number of partitions
     int32_t num_partitions() { return _hash_map_variant.size(); }
 
-    bool is_downgrade() const { return _is_downgrade; }
+    bool is_passthrough() const { return _is_passthrough; }
 
-    bool is_downgrade_buffer_empty() const { return _downgrade_buffer.empty(); }
+    bool is_passthrough_buffer_empty() const { return _passthrough_buffer.empty(); }
 
     bool is_hash_map_eos() const { return _hash_map_eos && (!_hash_map_variant.is_nullable() || _null_key_eos); }
 
@@ -111,8 +111,8 @@ public:
         return Status::OK();
     }
 
-    // Fetch one chunk from downgrade buffer if any
-    ChunkPtr consume_from_downgrade_buffer();
+    // Fetch one chunk from passthrough buffer if any
+    ChunkPtr consume_from_passthrough_buffer();
 
 private:
     bool _is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,
@@ -120,20 +120,20 @@ private:
                                           bool* has_null);
     void _init_hash_map_variant();
 
-    template <bool EnableDowngrade, typename HashMapWithKey, typename NewPartitionCallback,
+    template <bool EnablePassthrough, typename HashMapWithKey, typename NewPartitionCallback,
               typename PartitionChunkConsumer>
     void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
                                    NewPartitionCallback&& new_partition_cb,
                                    PartitionChunkConsumer&& partition_chunk_consumer) {
-        if (!_is_downgrade) {
-            _is_downgrade = hash_map_with_key.template append_chunk<EnableDowngrade>(
+        if (!_is_passthrough) {
+            _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
                     chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
                     std::forward<NewPartitionCallback>(new_partition_cb),
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }
-        if (_is_downgrade) {
+        if (_is_passthrough) {
             std::lock_guard<std::mutex> l(_buffer_lock);
-            _downgrade_buffer.push(chunk);
+            _passthrough_buffer.push(chunk);
         }
     }
 
@@ -237,9 +237,9 @@ private:
     // Hash map which holds chunks of different partitions
     PartitionHashMapVariant _hash_map_variant;
 
-    bool _is_downgrade = false;
+    bool _is_passthrough = false;
     // We simply buffer chunks when partition cardinality is high
-    std::queue<ChunkPtr> _downgrade_buffer;
+    std::queue<ChunkPtr> _passthrough_buffer;
     std::mutex _buffer_lock;
 
     // Iterator of partitions
