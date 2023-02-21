@@ -87,11 +87,11 @@ REFRESH MANUAL
 PROPERTIES (
     "replication_num" = "1"
 )
-as select
-              c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
-   from
+AS SELECT
+              c_custkey, c_phone, c_acctbal, count(1) AS c_count, sum(c_acctbal) AS c_sum
+   FROM
               customer
-   group by c_custkey, c_phone, c_acctbal; 
+   GROUP BY c_custkey, c_phone, c_acctbal; 
 
 REFRESH MATERIALIZED VIEW customer_mv;
 ```
