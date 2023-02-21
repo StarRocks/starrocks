@@ -4,6 +4,8 @@
 
 Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及以上版本支持通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。
 
+此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+
 ## 使用限制
 
 - StarRocks 支持查询如下格式的 Hive 数据：Parquet、ORC 和 CSV。
