@@ -51,6 +51,7 @@ private:
 
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs _sort_exec_exprs;
+    std::vector<SlotId> _early_materialized_slots{};
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     std::vector<OrderByType> _order_by_types;

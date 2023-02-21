@@ -193,6 +193,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        msg.sort_node.setMax_buffered_rows(sessionVariable.getFullSortMaxBufferedRows());
+        msg.sort_node.setMax_buffered_bytes(sessionVariable.getFullSortMaxBufferedBytes());
+        msg.sort_node.setLate_materialization(sessionVariable.isFullSortLateMaterialization());
 
         if (info.getPartitionExprs() != null) {
             msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
