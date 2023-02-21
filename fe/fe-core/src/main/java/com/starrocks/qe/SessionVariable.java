@@ -161,7 +161,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
     public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ =
             "runtime_adaptive_dop_max_block_rows_per_driver_seq";
-    public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION = "runtime_adaptive_dop_max_output_amplification";
+    public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR =
+        "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
@@ -392,8 +393,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
 
     // Effective when it is positive.
-    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION, flag = VariableMgr.INVISIBLE)
-    private long adaptiveDopMaxOutputAmplification = 0;
+    @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR, flag = VariableMgr.INVISIBLE)
+    private long adaptiveDopMaxOutputAmplificationFactor = 0;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -1330,8 +1331,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return adaptiveDopMaxBlockRowsPerDriverSeq;
     }
 
-    public long getAdaptiveDopMaxOutputAmplification() {
-        return adaptiveDopMaxOutputAmplification;
+    public long getAdaptiveDopMaxOutputAmplificationFactor() {
+        return adaptiveDopMaxOutputAmplificationFactor;
     }
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {

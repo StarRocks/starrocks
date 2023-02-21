@@ -220,7 +220,7 @@ CollectStatsContext::CollectStatsContext(RuntimeState* const runtime_state, size
         : _upstream_dop(dop),
           _downstream_dop(dop),
           _max_block_rows_per_driver_seq(param.max_block_rows_per_driver_seq),
-          _max_output_amplification(param.max_output_amplification),
+          _max_output_amplification_factor(param.max_output_amplification_factor),
           _buffer_chunk_queue_per_driver_seq(dop),
           _is_finishing_per_driver_seq(dop),
           _is_finished_per_driver_seq(dop),

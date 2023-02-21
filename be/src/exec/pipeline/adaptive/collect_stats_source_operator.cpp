@@ -85,13 +85,14 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
     return SourceOperatorFactory::AdaptiveState::INACTIVE;
 }
 
-/// Recompute DOP when its group is ready.
-/// - DOP should multiply by output_amplification of dependent pipelines.
+/// Recompute DOP once, only when its group is active.
+/// - DOP should be multiplied by output_amplification_factor of dependent pipelines.
 /// - Constraints:
-///   - DOP *= output_amplification.
+///   - DOP *= output_amplification_factor.
 ///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
 ///   - DOP >= DOP of dependent pipelines.
 size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
+    // Recompute DOP once, only when its group is active.
     if (!is_adaptive_group_active()) {
         return _ctx->downstream_dop();
     }
@@ -100,36 +101,45 @@ size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
         return _adjusted_dop;
     }
 
-    _adjusted_dop = _ctx->downstream_dop();
+    const size_t downstream_dop = _ctx->downstream_dop();
     const size_t upstream_dop = _ctx->upstream_dop();
+    const size_t max_output_amplification_factor = _ctx->max_output_amplification_factor();
     const auto& dependent_pipelines = group_dependent_pipelines();
-    // _adjusted_dop reaches the max dop (upstream_dop).
+
+    // 1. Use the source dop from context, which is adjusted by CsSink.
+    _adjusted_dop = downstream_dop;
     if (_adjusted_dop == upstream_dop) {
         return _adjusted_dop;
     }
 
+    // 2. DOP cannot be >= max_dependent_dop.
     size_t max_dependent_dop = 1;
     for (const auto& pipeline : dependent_pipelines) {
         max_dependent_dop = std::max(max_dependent_dop, pipeline->degree_of_parallelism());
     }
-    // max(_adjusted_dop, max_dependent_dop) reaches the max dop (upstream_dop).
     if (max_dependent_dop >= upstream_dop) {
         _adjusted_dop = upstream_dop;
         return _adjusted_dop;
     }
 
-    size_t max_output_amplification = _ctx->max_output_amplification();
-    size_t output_amplification = 1;
-    if (max_output_amplification != 1) {
-        for (const auto& dependent_pipeline : dependent_pipelines) {
-            output_amplification *= dependent_pipeline->output_amplification();
-        }
-        if (max_output_amplification > 0) {
-            output_amplification = std::min(output_amplification, max_output_amplification);
-        }
+    // 3. DOP should be multiplied output_amplification_factor of dependent pipelines.
+    size_t max_amp_factor = std::max<size_t>(1, upstream_dop / downstream_dop);
+    if (max_output_amplification_factor != 0 && max_output_amplification_factor < max_amp_factor) {
+        max_amp_factor = max_output_amplification_factor;
     }
-    if (output_amplification != 1) {
-        _adjusted_dop *= output_amplification;
+    size_t amp_factor = 1;
+    if (max_amp_factor != 1) {
+        for (const auto& dependent_pipeline : dependent_pipelines) {
+            amp_factor *= dependent_pipeline->output_amplification_factor();
+            if (amp_factor >= max_amp_factor) {
+                break;
+            }
+        }
+        amp_factor = std::min(max_amp_factor, max_amp_factor);
+        amp_factor = std::max<size_t>(1, amp_factor);
+    }
+    if (amp_factor != 1) {
+        _adjusted_dop *= amp_factor;
         _adjusted_dop = compute_max_le_power2(_adjusted_dop);
     }
 

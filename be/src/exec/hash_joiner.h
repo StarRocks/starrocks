@@ -172,7 +172,7 @@ public:
     Columns string_key_columns() { return _string_key_columns; }
     Status reset_probe(RuntimeState* state);
 
-    size_t num_distinct_keys_approx() const;
+    size_t avg_keys_perf_bucket() const;
 
 private:
     static bool _has_null(const ColumnPtr& column);

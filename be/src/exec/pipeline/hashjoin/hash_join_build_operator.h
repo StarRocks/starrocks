@@ -55,12 +55,12 @@ public:
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_builder.get());
     }
 
-    size_t output_amplification() const override;
+    size_t output_amplification_factor() const override;
 
 private:
     HashJoinerPtr _join_builder;
     PartialRuntimeFilterMerger* _partial_rf_merger;
-    mutable size_t _num_distinct_keys_approx = 0;
+    mutable size_t _avg_keys_perf_bucket = 0;
     std::atomic<bool> _is_finished = false;
 
     const TJoinDistributionMode::type _distribution_mode;

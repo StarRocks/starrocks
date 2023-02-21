@@ -60,18 +60,18 @@ StatusOr<ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
     return Status::NotSupported(msg);
 }
 
-size_t HashJoinBuildOperator::output_amplification() const {
-    if (_num_distinct_keys_approx > 0) {
-        return _num_distinct_keys_approx;
+size_t HashJoinBuildOperator::output_amplification_factor() const {
+    if (_avg_keys_perf_bucket > 0) {
+        return _avg_keys_perf_bucket;
     }
 
-    _num_distinct_keys_approx = _join_builder->num_distinct_keys_approx();
-    _num_distinct_keys_approx = std::max<size_t>(_num_distinct_keys_approx, 1);
+    _avg_keys_perf_bucket = _join_builder->avg_keys_perf_bucket();
+    _avg_keys_perf_bucket = std::max<size_t>(_avg_keys_perf_bucket, 1);
 
-    auto* counter = ADD_COUNTER(_unique_metrics, "NumDistinctKeysApprox", TUnit::UNIT);
-    COUNTER_SET(counter, static_cast<int64_t>(_num_distinct_keys_approx));
+    auto* counter = ADD_COUNTER(_unique_metrics, "AvgKeysPerBuckets", TUnit::UNIT);
+    COUNTER_SET(counter, static_cast<int64_t>(_avg_keys_perf_bucket));
 
-    return _num_distinct_keys_approx;
+    return _avg_keys_perf_bucket;
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {

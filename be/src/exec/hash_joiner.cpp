@@ -315,7 +315,7 @@ void HashJoiner::decr_prober(RuntimeState* state) {
     }
 }
 
-size_t HashJoiner::num_distinct_keys_approx() const {
+size_t HashJoiner::avg_keys_perf_bucket() const {
     size_t used_bucket_count = _ht.get_used_bucket_count();
     if (used_bucket_count == 0) {
         return 0;

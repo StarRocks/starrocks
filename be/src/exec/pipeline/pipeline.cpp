@@ -155,12 +155,12 @@ size_t calculate_output_amplification(const Drivers& drivers) {
     Calculator calculator;
     size_t result = 0;
     for (const auto& driver : drivers) {
-        result = calculator(result, driver->sink_operator()->output_amplification());
+        result = calculator(result, driver->sink_operator()->output_amplification_factor());
     }
     return std::max<size_t>(1, result);
 }
 
-size_t Pipeline::output_amplification() const {
+size_t Pipeline::output_amplification_factor() const {
     if (_drivers.empty()) {
         return 1;
     }

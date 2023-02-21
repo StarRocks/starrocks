@@ -76,7 +76,7 @@ public:
     void set_upstream_dop(size_t upstream_dop) { _upstream_dop = upstream_dop; }
     void set_downstream_dop(size_t downstream_dop) { _downstream_dop = downstream_dop; }
 
-    const size_t max_output_amplification() const { return _max_output_amplification; }
+    const size_t max_output_amplification_factor() const { return _max_output_amplification_factor; }
 
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
@@ -101,7 +101,7 @@ private:
     size_t _downstream_dop;
 
     const size_t _max_block_rows_per_driver_seq;
-    const size_t _max_output_amplification;
+    const size_t _max_output_amplification_factor;
 
     std::vector<BufferChunkQueue> _buffer_chunk_queue_per_driver_seq;
     std::vector<uint8_t> _is_finishing_per_driver_seq;
