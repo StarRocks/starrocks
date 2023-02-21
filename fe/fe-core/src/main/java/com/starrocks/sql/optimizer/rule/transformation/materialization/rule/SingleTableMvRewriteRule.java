@@ -67,7 +67,6 @@ public class SingleTableMvRewriteRule extends Rule {
             context.getMemo().copyIn(input.getGroupExpression().getGroup(), expression);
         }
 
-        // prune cte column depend on prune right child first
         for (int i = input.getInputs().size() - 1; i >= 0; i--) {
             rewrite(input.getInputs().get(i), context);
         }

@@ -45,20 +45,20 @@ public class MaterializationContext {
 
     private Set<String> mvPartitionNamesToRefresh;
 
-    private List<Table> sourceTables;
+    private List<Table> baseTables;
 
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
                                   ColumnRefFactory mvColumnRefFactory,
                                   Set<String> mvPartitionNamesToRefresh,
-                                  List<Table> sourceTables) {
+                                  List<Table> baseTables) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
         this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
-        this.sourceTables = sourceTables;
+        this.baseTables = baseTables;
     }
 
     public MaterializedView getMv() {
@@ -117,11 +117,11 @@ public class MaterializationContext {
         return mvPartitionNamesToRefresh;
     }
 
-    public List<Table> getSourceTables() {
-        return sourceTables;
+    public List<Table> getBaseTables() {
+        return baseTables;
     }
 
     public boolean hasMultiTables() {
-        return sourceTables != null && sourceTables.size() > 1;
+        return baseTables != null && baseTables.size() > 1;
     }
 }

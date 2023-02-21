@@ -145,6 +145,8 @@ public class MvUtils {
     }
 
     // get all ref table scan descs within and below root
+    // the operator tree must match the rule pattern we define and now we only support SPJG pattern tree rewrite.
+    // so here LogicalScanOperator's children must be LogicalScanOperator or LogicalJoinOperator
     public static List<TableScanDesc> getTableScanDescs(OptExpression root) {
         TableScanContext scanContext = new TableScanContext();
         OptExpressionVisitor joinFinder = new OptExpressionVisitor<Void, TableScanContext>() {

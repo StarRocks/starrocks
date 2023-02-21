@@ -1604,4 +1604,46 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "where emps.name = 'Bill'";
         testRewriteOK(mv, query);
     }
+
+    @Test
+    public void testViewDeltaJoinUKFK11() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "inner join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK12() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join dependents using (empid)"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK13() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "inner join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
 }

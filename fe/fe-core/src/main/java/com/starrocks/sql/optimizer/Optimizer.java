@@ -415,7 +415,10 @@ public class Optimizer {
 
         if (!context.getCandidateMvs().isEmpty()
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
-            new SingleTableMvRewriteRule().transform(tree, context);
+            if (rootTaskContext.getOptimizerContext().getCandidateMvs()
+                    .stream().anyMatch(context -> context.hasMultiTables())) {
+                new SingleTableMvRewriteRule().transform(tree, context);
+            }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

@@ -424,7 +424,7 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isUniqueKeys(OlapTable table, List<String> keys) {
-        KeysType tableKeyType = getTableKeysType(table);
+        KeysType tableKeyType = table.getKeysType();
         if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
             List<String> tableKeyColumns = table.getKeyColumns()
                     .stream().map(column -> column.getName()).collect(Collectors.toList());
@@ -447,10 +447,6 @@ public class MaterializedViewRewriter {
         Optional<ColumnRefOperator> columnRef = scanOperator.getColumnMetaToColRefMap().values()
                 .stream().filter(col -> col.getName().equals(columnName)).findFirst();
         return columnRef.isPresent() ? columnRef.get() : null;
-    }
-
-    private KeysType getTableKeysType(OlapTable olapTable) {
-        return olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId()).getKeysType();
     }
 
     private boolean isJoinMatch(OptExpression queryExpression,
