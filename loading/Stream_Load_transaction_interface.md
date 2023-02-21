@@ -1,6 +1,6 @@
 # 使用 Stream Load 事务接口导入
 
-为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 提供了 Stream Load 事务接口。
+为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 2.4 版本提供了 Stream Load 事务接口。
 
 本文介绍 Stream Load 事务接口、以及如何使用该事务接口把数据导入到 StarRocks 中。
 
