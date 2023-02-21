@@ -248,7 +248,7 @@ CREATE ANALYZE FULL DATABASE db_name;
 -- Automatically collect full stats of specified columns in a table.
 CREATE ANALYZE TABLE tbl_name(c1, c2, c3); 
 
--- Automatically collect stats of all database, exclude specified database 'db_name'
+-- Automatically collect stats of all databases, excluding specified database 'db_name'.
 CREATE ANALYZE ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name\."
 );
@@ -260,7 +260,7 @@ Automatic sampled collection
 -- Automatically collect stats of all tables in a database with default settings.
 CREATE ANALYZE SAMPLE DATABASE db_name;
 
--- Automatically collect stats of all tables in a database, exclude specified table 'db_name.tbl_name'
+-- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
    "statistic_exclude_pattern" = "db_name\.tbl_name"
 );
