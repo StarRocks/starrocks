@@ -714,10 +714,10 @@ std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
     auto chunks_data_ref = std::make_shared<ChunksDataRef>(0);
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
+        chunk->mutable_data()->shrink_to_fit();
         chunk->set_data_size(chunk->data().size());
-
-        chunks_data_ref->data_bytes += chunk->data().size();
-
+        chunks_data_ref->data_bytes += chunk->data().capacity();
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         auto shared_data = std::make_shared<std::string>();
         chunk->mutable_data()->swap(*shared_data);
         if (UNLIKELY(chunk->data_size() != shared_data->size())) {
@@ -728,13 +728,8 @@ std::shared_ptr<ChunksDataRef> ExchangeSinkOperator::construct_brpc_attachment(
         if (UNLIKELY(res != 0)) {
             throw std::runtime_error("append user data to brpc iobuf error.");
         }
-        chunk->clear_data();
         chunks_data_ref->data_buffer.push_back(std::move(shared_data));
-
-        // If the request is too big, free the memory in order to avoid OOM
-        if (_is_large_chunk(chunk->data_size())) {
-            chunk->mutable_data()->shrink_to_fit();
-        }
+        chunks_data_ref->data_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
     }
     return chunks_data_ref;
 }
