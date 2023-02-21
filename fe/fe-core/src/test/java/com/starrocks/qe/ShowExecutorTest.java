@@ -85,6 +85,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -1114,5 +1115,21 @@ public class ShowExecutorTest {
                 "comment \"hive_test\"\n" +
                 "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
                 "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        ShowGrantsStmt stmt = new ShowGrantsStmt("root");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        resultSet.getResultRows().forEach(System.out::println);
+        String expectString1 = "root, null, GRANT CREATE_TABLE, DROP, ALTER, CREATE_VIEW, CREATE_FUNCTION, " +
+                "CREATE_MATERIALIZED_VIEW ON ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString1)));
+        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
+                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                l.toString().contains(expectString2)));
     }
 }

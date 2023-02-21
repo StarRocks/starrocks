@@ -109,7 +109,8 @@ public class RBACExecutorTest {
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
         Assert.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO  ROLE r0]," +
-                " [r0, default, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]", resultSet.getResultRows().toString());
+                " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
+                resultSet.getResultRows().toString());
     }
 
     @Test

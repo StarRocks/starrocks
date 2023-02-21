@@ -148,7 +148,7 @@ public class PrivilegeCollectionTest {
         TablePEntryObject table1 = new TablePEntryObject("1", "2");
         TablePEntryObject allTablesInDb = new TablePEntryObject("1", TablePEntryObject.ALL_TABLES_UUID);
         TablePEntryObject allTablesInALLDb = new TablePEntryObject(
-                TablePEntryObject.ALL_DATABASE_UUID, TablePEntryObject.ALL_TABLES_UUID);
+                TablePEntryObject.ALL_DATABASES_UUID, TablePEntryObject.ALL_TABLES_UUID);
 
         // grant select,insert on db1.table1
         collection.grant(table, Arrays.asList(select, insert), Arrays.asList(table1), false);
