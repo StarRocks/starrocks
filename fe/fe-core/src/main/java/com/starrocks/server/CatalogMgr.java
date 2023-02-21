@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -152,6 +153,10 @@ public class CatalogMgr {
 
     public static boolean isInternalCatalog(String name) {
         return name.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public static boolean isInternalCatalog(long catalogId) {
+        return catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
     }
 
     public void replayCreateCatalog(Catalog catalog) throws DdlException {
@@ -271,6 +276,10 @@ public class CatalogMgr {
 
     public Catalog getCatalogByName(String name) {
         return catalogs.get(name);
+    }
+
+    public Optional<Catalog> getCatalogById(long id) {
+        return catalogs.values().stream().filter(catalog -> catalog.getId() == id).findFirst();
     }
 
     public Map<String, Catalog> getCatalogs() {
