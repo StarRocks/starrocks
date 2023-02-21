@@ -92,6 +92,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
+    public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     /*
      * configure the mem limit of load process on BE.
      * Previously users used exec_mem_limit to set memory limits.
@@ -313,6 +314,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARALLEL_EXCHANGE_INSTANCE_NUM)
     private int exchangeInstanceParallel = -1;
+
+    @VariableMgr.VarAttr(name = MAX_PARALLEL_SCAN_INSTANCE_NUM)
+    private int maxParallelScanInstanceNum = -1;
 
     @VariableMgr.VarAttr(name = SQL_SAFE_UPDATES)
     private int sqlSafeUpdates = 0;
@@ -666,6 +670,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getExchangeInstanceParallel() {
         return exchangeInstanceParallel;
+    }
+
+    public int getMaxParallelScanInstanceNum() {
+        return maxParallelScanInstanceNum;
     }
 
     public boolean getEnableInsertStrict() {

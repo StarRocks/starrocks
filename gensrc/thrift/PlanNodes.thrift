@@ -337,6 +337,7 @@ struct TOlapScanNode {
   3: required list<Types.TPrimitiveType> key_column_type
   4: required bool is_preaggregation
   5: optional string sort_column
+  6: optional i32 max_parallel_scan_instance_num
   // For profile attributes' printing: `Rollup` `Predicates`
   20: optional string rollup_name
   21: optional string sql_predicates
