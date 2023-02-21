@@ -270,8 +270,7 @@ public class AlterJobV2Test {
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getDb("test").getTable("mv5");
-            // TODO: should be inactive.
-            Assert.assertTrue(mv.isActive());
+            Assert.assertTrue(!mv.isActive());
         } catch (Exception e) {
             Assert.fail();
         } finally {
