@@ -76,7 +76,7 @@ public:
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
 
-    void setup_runtime(RuntimeProfile* profile) override;
+    void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 
