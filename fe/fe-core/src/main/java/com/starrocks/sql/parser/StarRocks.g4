@@ -1273,7 +1273,7 @@ grantPrivilegeStatement
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantTablePrivBrief
     | GRANT privilegeTypeList ON privObjectType (privObjectNameList)?
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithType
-    | GRANT privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantPrivWithFunc
     | GRANT privilegeTypeList ON ALL privObjectType
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? TO grantRevokeClause
@@ -1286,7 +1286,7 @@ revokePrivilegeStatement
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeTablePrivBrief
     | REVOKE privilegeTypeList ON privObjectType (privObjectNameList)?
         FROM grantRevokeClause                                                                          #revokePrivWithType
-    | REVOKE privilegeTypeList ON GLOBAL? privObjectType qualifiedName '(' typeList ')'
+    | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         FROM grantRevokeClause                                                                          #revokePrivWithFunc
     | REVOKE privilegeTypeList ON ALL privObjectType
         (IN isAll=ALL DATABASES| IN DATABASE identifierOrString)? FROM grantRevokeClause                #revokeOnAll
@@ -1310,6 +1310,10 @@ privObjectName
 
 privObjectNameList
     : privObjectName (',' privObjectName)*
+    ;
+
+privFunctionObjectNameList
+    : qualifiedName '(' typeList ')' (',' qualifiedName '(' typeList ')')*
     ;
 
 privilegeTypeList

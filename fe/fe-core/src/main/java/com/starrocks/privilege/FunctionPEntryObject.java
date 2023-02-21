@@ -59,6 +59,7 @@ public class FunctionPEntryObject implements PEntryObject {
         if (tokens.get(0).equals("*")) {
             dbId = ALL_DATABASE_ID;
             funcSig = ALL_FUNCTIONS_SIG;
+            return new FunctionPEntryObject(dbId, funcSig);
         } else {
             Database database = mgr.getDb(tokens.get(0));
             if (database == null) {
@@ -68,12 +69,16 @@ public class FunctionPEntryObject implements PEntryObject {
 
             if (tokens.get(1).equals("*")) {
                 funcSig = ALL_FUNCTIONS_SIG;
+                return new FunctionPEntryObject(dbId, funcSig);
             } else {
                 funcSig = tokens.get(1);
+                FunctionPEntryObject functionPEntryObject = new FunctionPEntryObject(dbId, funcSig);
+                if (!functionPEntryObject.validate(mgr)) {
+                    throw new PrivObjNotFoundException("cannot find function: " + funcSig);
+                }
+                return functionPEntryObject;
             }
         }
-
-        return new FunctionPEntryObject(dbId, funcSig);
     }
 
     @Override
