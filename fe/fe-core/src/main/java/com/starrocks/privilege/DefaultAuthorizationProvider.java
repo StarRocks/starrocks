@@ -216,7 +216,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         if (objectType.equals(ObjectType.SYSTEM)) {
             for (PrivilegeType badAction : BAD_SYSTEM_ACTIONS) {
                 if (privilegeTypes.contains(badAction)) {
-                    throw new PrivilegeException("cannot grant/revoke system privilege: " + badAction);
+                    throw new PrivilegeException("Operation not permitted, '" + badAction.toString() +
+                            "' cannot be granted to user or role directly, use built-in role instead");
                 }
             }
         }

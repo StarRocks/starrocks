@@ -47,12 +47,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -137,74 +135,53 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext session, FunctionName fnName,
+    private static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
                                              Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
-            dbName = session.getDatabase();
+            dbName = context.getDatabase();
         }
 
-        Database db = session.getGlobalStateMgr().getDb(dbName);
+        Database db = context.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
         }
 
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
-        }
-
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // check SELECT action on any object(table/view/mv) in db
-            if (!PrivilegeManager.checkActionInDb(session, dbName, PrivilegeType.SELECT)) {
+        try {
+            db.readLock();
+            Function search = new Function(fnName, argTypes, Type.INVALID, false);
+            Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null && !PrivilegeManager.checkFunctionAction(context, fn.dbName(),
+                    fn.signatureString(), PrivilegeType.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
-                                "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
-                        fnName, dbName), ErrorType.USER_ERROR);
-            }
-        } else {
-            if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
                         ErrorType.USER_ERROR);
             }
 
+            return fn;
+        } finally {
+            db.readUnlock();
         }
-        return fn;
     }
 
-    private static Function getGlobalUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = session.getGlobalStateMgr().getGlobalFunctionMgr()
+        Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
+        if (fn != null && !PrivilegeManager.checkGlobalFunctionAction(context,
+                fn.signatureString(), PrivilegeType.USAGE)) {
+            throw new StarRocksPlannerException(String.format("Access denied. " +
+                            "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
+                    ErrorType.USER_ERROR);
         }
 
-        String name = fn.signatureString();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
-                    PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                                "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
-                        name), ErrorType.USER_ERROR);
-            }
-        } else {
-            if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE priv for GLOBAL", name),
-                        ErrorType.USER_ERROR);
-            }
-        }
         return fn;
     }
 
-    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
-        Function fn = getDBUdfFunction(session, fnName, argTypes);
+    public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
+        Function fn = getDBUdfFunction(context, fnName, argTypes);
         if (fn == null) {
-            fn = getGlobalUdfFunction(session, fnName, argTypes);
+            fn = getGlobalUdfFunction(context, fnName, argTypes);
         }
         if (fn != null) {
             if (!Config.enable_udf) {
@@ -215,10 +192,10 @@ public class AnalyzerUtils {
         return fn;
     }
 
-    //Get all the db used, the query needs to add locks to them
-    public static Map<String, Database> collectAllDatabase(ConnectContext session, StatementBase statementBase) {
+    // Get all the db used, the query needs to add locks to them
+    public static Map<String, Database> collectAllDatabase(ConnectContext context, StatementBase statementBase) {
         Map<String, Database> dbs = Maps.newHashMap();
-        new AnalyzerUtils.DBCollector(dbs, session).visit(statementBase);
+        new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
     }
 
