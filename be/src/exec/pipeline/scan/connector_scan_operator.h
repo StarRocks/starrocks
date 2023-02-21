@@ -89,14 +89,16 @@ public:
     void close(RuntimeState* state) override;
 
 protected:
-    Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
     virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }
+    connector::DataSourcePtr _data_source;
+    [[maybe_unused]] ConnectorScanNode* _scan_node;
+
+private:
+    Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
-    connector::DataSourcePtr _data_source;
-    [[maybe_unused]] ConnectorScanNode* _scan_node;
-    const int64_t _limit = -1; // -1: no limit
+    const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
     const RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
