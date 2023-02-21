@@ -4535,7 +4535,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 || context.name.getText().equalsIgnoreCase("schema")
                 || context.name.getText().equalsIgnoreCase("user")
                 || context.name.getText().equalsIgnoreCase("current_user")
+<<<<<<< HEAD
                 || context.name.getText().equalsIgnoreCase("connection_id")) {
+=======
+                || context.name.getText().equalsIgnoreCase("connection_id")
+                || context.name.getText().equalsIgnoreCase("current_role")
+                || context.name.getText().equalsIgnoreCase("current_catalog")) {
+>>>>>>> 361ff4e63 ([Feature] Support select current_catalog (#17604))
             return new InformationFunction(context.name.getText().toUpperCase());
         }
         throw new ParsingException("Unknown special function " + context.name.getText());

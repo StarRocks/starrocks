@@ -1764,6 +1764,11 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
+<<<<<<< HEAD
+=======
+    | name = CURRENT_ROLE '(' ')'
+    | name = CURRENT_CATALOG ('(' ')')?
+>>>>>>> 361ff4e63 ([Feature] Support select current_catalog (#17604))
     ;
 
 specialDateTimeExpression

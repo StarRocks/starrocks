@@ -359,6 +359,7 @@ WITH: 'WITH';
 WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
+CURRENT_CATALOG: 'CURRENT_CATALOG';
 
 EQ  : '=';
 NEQ : '<>' | '!=';

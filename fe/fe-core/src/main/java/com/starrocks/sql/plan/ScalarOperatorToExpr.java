@@ -447,6 +447,11 @@ public class ScalarOperatorToExpr {
                 case "schema":
                 case "user":
                 case "current_user":
+<<<<<<< HEAD
+=======
+                case "current_role":
+                case "current_catalog":
+>>>>>>> 361ff4e63 ([Feature] Support select current_catalog (#17604))
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
