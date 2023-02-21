@@ -112,7 +112,7 @@ size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
         return _adjusted_dop;
     }
 
-    // 2. DOP cannot be >= max_dependent_dop.
+    // 2. DOP should be >= max_dependent_dop.
     size_t max_dependent_dop = 1;
     for (const auto& pipeline : dependent_pipelines) {
         max_dependent_dop = std::max(max_dependent_dop, pipeline->degree_of_parallelism());
