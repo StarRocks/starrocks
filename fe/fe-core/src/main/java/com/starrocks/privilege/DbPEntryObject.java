@@ -16,50 +16,81 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalog;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class DbPEntryObject implements PEntryObject {
+    public static final long ALL_CATALOGS_ID = -10000;
     public static final String ALL_DATABASES_UUID = "ALL_DATABASES_UUID"; // represent all databases
 
+    @SerializedName(value = "ci")
+    private long catalogId;
     @SerializedName(value = "i")
     private String uuid;
+
+    protected DbPEntryObject(long catalogId, String uuid) {
+        this.catalogId = catalogId;
+        this.uuid = uuid;
+    }
+
+    protected DbPEntryObject(String uuid) {
+        this.catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+        this.uuid = uuid;
+    }
 
     public String getUUID() {
         return uuid;
     }
 
-    protected DbPEntryObject(String uuid) {
-        this.uuid = uuid;
+    public long getCatalogId() {
+        return catalogId;
     }
 
     public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
-        if (tokens.size() != 1) {
-            throw new PrivilegeException("invalid object tokens, should have one: " + tokens);
+        String catalogName = null;
+        long catalogId;
+        if (tokens.size() == 2) {
+            // This is true only when we are initializing built-in roles like root and db_admin
+            if (tokens.get(0).equals("*")) {
+                return new DbPEntryObject(ALL_CATALOGS_ID, ALL_DATABASES_UUID);
+            }
+            catalogName = tokens.get(0);
+            tokens = tokens.subList(1, tokens.size());
+        } else if (tokens.size() != 1) {
+            throw new PrivilegeException(
+                    "invalid object tokens, should have one, current: " + tokens);
+        }
+
+        // Default to internal_catalog when no catalog explicitly selected.
+        if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+        } else {
+            Catalog catalog = mgr.getCatalogMgr().getCatalogByName(catalogName);
+            if (catalog == null) {
+                throw new PrivObjNotFoundException("cannot find catalog: " + catalogName);
+            }
+            catalogId = catalog.getId();
         }
 
         if (tokens.get(0).equals("*")) {
-            return new DbPEntryObject(ALL_DATABASES_UUID);
+            return new DbPEntryObject(catalogId, ALL_DATABASES_UUID);
         }
 
-        Database database = mgr.getDb(tokens.get(0));
+        Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
         if (database == null) {
             throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
         }
-        return new DbPEntryObject(database.getUUID());
-    }
-
-    public static DbPEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        // only support ON ALL DATABASE
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException("invalid ALL statement for databases! only support ON ALL DATABASES");
-        }
-        return new DbPEntryObject(ALL_DATABASES_UUID);
+        return new DbPEntryObject(catalogId, database.getUUID());
     }
 
     /**
@@ -75,26 +106,37 @@ public class DbPEntryObject implements PEntryObject {
             return false;
         }
         DbPEntryObject other = (DbPEntryObject) obj;
-        if (Objects.equals(other.uuid, ALL_DATABASES_UUID)) {
+        if (other.catalogId == ALL_CATALOGS_ID) {
             return true;
         }
-        return Objects.equals(other.uuid, uuid);
+        if (Objects.equals(other.uuid, ALL_DATABASES_UUID)) {
+            return this.catalogId == other.catalogId;
+        }
+        return this.catalogId == other.catalogId && Objects.equals(other.uuid, this.uuid);
     }
 
     @Override
     public boolean isFuzzyMatching() {
-        return ALL_DATABASES_UUID.equals(uuid);
+        return ALL_CATALOGS_ID == catalogId || ALL_DATABASES_UUID.equals(uuid);
     }
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        // TODO(yiming): change validation method for external catalog
-        return globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+        if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+            return globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+        } else {
+            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
+            if (!catalog.isPresent()) {
+                return false;
+            }
+            String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
+            return globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName) != null;
+        }
     }
 
     @Override
     public PEntryObject clone() {
-        return new DbPEntryObject(uuid);
+        return new DbPEntryObject(catalogId, uuid);
     }
 
     @Override
@@ -103,16 +145,24 @@ public class DbPEntryObject implements PEntryObject {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
         DbPEntryObject o = (DbPEntryObject) obj;
-        // Always put the fuzzy matching object at the front of the privilege entry list
-        // when sorting in ascendant order.
-        if (Objects.equals(this.uuid, o.uuid)) {
-            return 0;
-        } else if (Objects.equals(this.uuid, ALL_DATABASES_UUID)) {
+        if (this.catalogId == o.catalogId) {
+            // Always put the fuzzy matching object at the front of the privilege entry list
+            // when sorting in ascendant order.
+            if (Objects.equals(this.uuid, o.uuid)) {
+                return 0;
+            } else if (Objects.equals(this.uuid, ALL_DATABASES_UUID)) {
+                return -1;
+            } else if (Objects.equals(o.uuid, ALL_DATABASES_UUID)) {
+                return 1;
+            } else {
+                return this.uuid.compareTo(o.uuid);
+            }
+        } else if (this.catalogId == ALL_CATALOGS_ID) {
             return -1;
-        } else if (Objects.equals(o.uuid, ALL_DATABASES_UUID)) {
+        } else if (o.catalogId == ALL_CATALOGS_ID) {
             return 1;
         } else {
-            return this.uuid.compareTo(o.uuid);
+            return (int) (this.catalogId - o.catalogId);
         }
     }
 
@@ -125,12 +175,12 @@ public class DbPEntryObject implements PEntryObject {
             return false;
         }
         DbPEntryObject that = (DbPEntryObject) o;
-        return Objects.equals(uuid, that.uuid);
+        return this.catalogId == that.catalogId && Objects.equals(uuid, that.uuid);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(uuid);
+        return Objects.hash(catalogId, uuid);
     }
 
     @Override
@@ -138,12 +188,15 @@ public class DbPEntryObject implements PEntryObject {
         if (uuid.equalsIgnoreCase(ALL_DATABASES_UUID)) {
             return "ALL DATABASES";
         } else {
-            // TODO(yiming): change it for external catalog
-            Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(uuid));
-            if (database == null) {
-                throw new MetaNotFoundException("Can't find database : " + uuid);
+            if (CatalogMgr.isInternalCatalog(catalogId)) {
+                Database database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(uuid));
+                if (database == null) {
+                    throw new MetaNotFoundException("Can't find database : " + uuid);
+                }
+                return database.getFullName();
+            } else {
+                return ExternalCatalog.getDbNameFromUUID(uuid);
             }
-            return database.getFullName();
         }
     }
 }

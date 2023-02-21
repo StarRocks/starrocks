@@ -37,7 +37,7 @@ public class ViewPEntryObject extends TablePEntryObject {
         String tblUUID;
 
         if (tokens.get(0).equals("*")) {
-            dbUUID = ALL_DATABASE_UUID;
+            dbUUID = ALL_DATABASES_UUID;
             tblUUID = ALL_TABLES_UUID;
         } else {
             Database database = mgr.getDb(tokens.get(0));
