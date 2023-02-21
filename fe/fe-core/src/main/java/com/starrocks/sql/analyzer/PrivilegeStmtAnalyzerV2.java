@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -227,31 +228,6 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
-        private FunctionName parseFunctionName(BaseGrantRevokePrivilegeStmt stmt)
-                throws PrivilegeException, AnalysisException {
-            stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
-            String[] name = stmt.getFunctionName().split("\\.");
-            FunctionName functionName;
-            if (stmt.getObjectType() == ObjectType.GLOBAL_FUNCTION) {
-                if (name.length != 1) {
-                    throw new SemanticException("global function has no database");
-                }
-                functionName = new FunctionName(name[0]);
-                functionName.setAsGlobalFunction();
-            } else {
-                if (name.length == 2) {
-                    functionName = new FunctionName(name[0], name[1]);
-                } else {
-                    String dbName = ConnectContext.get().getDatabase();
-                    if (dbName.equals("")) {
-                        throw new SemanticException("database not selected");
-                    }
-                    functionName = new FunctionName(dbName, name[0]);
-                }
-            }
-            return functionName;
-        }
-
         private PEntryObject parseFunctionObject(BaseGrantRevokePrivilegeStmt stmt, FunctionSearchDesc searchDesc)
                 throws PrivilegeException {
             FunctionName name = searchDesc.getName();
@@ -348,15 +324,28 @@ public class PrivilegeStmtAnalyzerV2 {
                                 objectList.add(privilegeManager.generateObject(stmt.getObjectType(), tokens));
                             }
                         }
-                    } else if (stmt.getFunctionArgsDef() != null) {
-                        FunctionName functionName = parseFunctionName(stmt);
-                        FunctionArgsDef argsDef = stmt.getFunctionArgsDef();
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(),
-                                argsDef.isVariadic());
-                        PEntryObject object = parseFunctionObject(stmt, searchDesc);
-                        objectList.add(object);
+                    } else if (stmt.getFunctions() != null) {
+                        stmt.setObjectType(analyzeObjectType(stmt.getObjectTypeUnResolved()));
+
+                        for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
+                            FunctionName functionName = f.first;
+                            if (functionName.getDb() == null) {
+                                String dbName = ConnectContext.get().getDatabase();
+                                if (dbName.equals("")) {
+                                    throw new SemanticException("database not selected");
+                                }
+                                functionName.setDb(dbName);
+                            }
+
+                            FunctionArgsDef argsDef = f.second;
+                            argsDef.analyze();
+                            FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                    argsDef.getArgTypes(),
+                                    argsDef.isVariadic());
+                            PEntryObject object = parseFunctionObject(stmt, searchDesc);
+                            objectList.add(object);
+                        }
+
                     } else {
                         // all statement
                         // TABLES -> TABLE

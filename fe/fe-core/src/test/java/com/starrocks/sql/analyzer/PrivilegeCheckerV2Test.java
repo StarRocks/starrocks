@@ -2347,6 +2347,7 @@ public class PrivilegeCheckerV2Test {
 
         ctxToTestUser();
         String selectSQL = "select my_udf_json_get('hello', 'world')";
+        String selectSQL2 = "select my_udf_json_get2('hello', 'world')";
         try {
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
@@ -2377,6 +2378,49 @@ public class PrivilegeCheckerV2Test {
         try {
             Config.enable_udf = true;
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        } finally {
+            Config.enable_udf = false;
+        }
+
+
+        fn = FunctionName.createFnName("my_udf_json_get2");
+        fn.setAsGlobalFunction();
+        function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        // grant usage on global function
+        ctxToRoot();
+        grantOrRevoke("grant usage on global function my_udf_json_get(string,string), my_udf_json_get2(string,string) to test");
+        ctxToTestUser();
+
+        try {
+            Config.enable_udf = true;
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
+            statement = UtFrameUtils.parseStmtWithNewParser(selectSQL2, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        } finally {
+            Config.enable_udf = false;
+        }
+
+        // grant on all global functions.
+        ctxToRoot();
+        grantOrRevoke("revoke usage on global function my_udf_json_get(string,string), " +
+                "my_udf_json_get2(string,string) from test");
+        grantOrRevoke("grant usage on all global functions to test");
+        ctxToTestUser();
+        try {
+            Config.enable_udf = true;
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
+            statement = UtFrameUtils.parseStmtWithNewParser(selectSQL2, starRocksAssert.getCtx());
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
         } finally {
             Config.enable_udf = false;
