@@ -114,10 +114,10 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 > | v1.19.x | N/A | | No |
 > | v2.0.x | Must be upgraded from v1.19.x | Disable clone before upgrading. | No|
 > | v2.1.x | Must be upgraded from v2.0.x | Modify <code>vector_chunk_size</code> and <code>batch_size</code> before grayscale upgrade. | No |
-> | v2.2.x | Can be upgraded from v2.1.x and v2.0.x | Set <code>ignore_unknown_log_id</code> to <code>true</code> before rollback. | Yes |
-> | v2.3.x | Can be upgraded from v2.2.x, v2.1.x, and v2.0.x | We do not recommend rollback across major versions. Set <code>ignore_unknown_log_id</code> to <code>true</code> before rollback. | No |
-> | v2.4.x | Can be upgraded from v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend rollback across major versions. Switch to IP address access before rollback if you enabled [FQDN access](../administration/enable_fqdn.md). | No |
-> | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend rollback across major versions. If you have a partitioned table that uses LIST partitioning, you must delete this table before the upgrade. | Yes |
+> | v2.2.x | Can be upgraded from v2.1.x and v2.0.x | Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | Yes |
+> | v2.3.x | Can be upgraded from v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | No |
+> | v2.4.x | Can be upgraded from v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Switch to IP address access before downgrading if you enabled [FQDN access](../administration/enable_fqdn.md). | No |
+> | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. If you have a partitioned table that uses LIST partitioning, you must delete this table before the upgrade. | Yes |
 
 ### Before you begin
 
@@ -255,20 +255,22 @@ By using this method, the Compute Node waits until the currently running task fi
 
 5. Repeat the above procedures to upgrade other Broker nodes.
 
-## Roll back StarRocks
+## Downgrade StarRocks
 
-All StarRocks versions support rollbacks. You need to first roll back the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to roll back the cluster to the previous version. This way, you can quickly recover the cluster.
+All StarRocks versions support downgrading. You need to first downgrade the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to downgrade the cluster to the previous version. This way, you can quickly recover the cluster.
 
 ### Before you begin
 
-- Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
+1. Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-  - For a minor version rollback (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
-  - For a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
+    - For a minor version downgrading (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+    - For a major version downgrading (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
-### Roll back FE
+2. Before downgrading StarRocks v2.2 and later versions, you must add the item `ignore_unknown_log_id=true` to the FE configuration files **fe.conf** on all FE nodes. Otherwise, StarRocks may fail to restart. When CheckPoint is completed after StarRocks is restarted, you can then set `ignore_unknown_log_id` to `false`, and restart all FE nodes to allow the change to take effect.
 
-You must roll back all Follower FE nodes first and then the Leader FE node.
+### Downgrade FE
+
+You must downgrade all Follower FE nodes first and then the Leader FE node.
 
 1. Navigate to the FE working directory and stop the FE node.
 
@@ -299,9 +301,9 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep StarRocksFE
     ```
 
-5. Repeat the above procedures to rollback other Follower FE nodes, and finally the Leader FE node.
+5. Repeat the above procedures to downgrade other Follower FE nodes, and finally the Leader FE node.
 
-### Roll back BE
+### Downgrade BE
 
 1. Navigate to the BE working directory and stop the BE node.
 
@@ -331,9 +333,9 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep starrocks_be
     ```
 
-5. Repeat the above procedures to roll back other BE nodes.
+5. Repeat the above procedures to downgrade other BE nodes.
 
-#### Roll back Broker
+#### Downgrade Broker
 
 1. Navigate to the Broker working directory and stop the Broker node.
 
@@ -363,7 +365,7 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep broker
     ```
 
-5. Repeat the above procedures to roll back other Broker nodes.
+5. Repeat the above procedures to downgrade other Broker nodes.
 
 ### Usage notes for grayscale upgrade from StarRocks 2.0 to StarRocks 2.1
 
