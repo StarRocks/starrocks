@@ -118,8 +118,6 @@ import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -136,7 +134,6 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
-import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -1887,7 +1884,7 @@ public class ShowExecutor {
         }
 
         List<List<String>> snapshotInfos = repo.getSnapshotInfos(showStmt.getSnapshotName(), showStmt.getTimestamp(),
-                                                                 showStmt.getSnapshotNames());
+                showStmt.getSnapshotNames());
         resultSet = new ShowResultSet(showStmt.getMetaData(), snapshotInfos);
     }
 
@@ -1906,9 +1903,9 @@ public class ShowExecutor {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
                 continue;
             }
-    
+
             BackupJob backupJob = (BackupJob) jobI;
-    
+
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                 // check privilege
                 List<TableRef> tableRefs = backupJob.getTableRef();
@@ -1925,7 +1922,7 @@ public class ShowExecutor {
                     return;
                 }
             }
-    
+
             List<String> info = backupJob.getInfo();
             infos.add(info);
         }
@@ -1947,7 +1944,7 @@ public class ShowExecutor {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
                 continue;
             }
-    
+
             RestoreJob restoreJob = (RestoreJob) jobI;
             List<String> info = restoreJob.getInfo();
             infos.add(info);
@@ -2006,60 +2003,25 @@ public class ShowExecutor {
             try {
                 List<List<String>> infos = new ArrayList<>();
                 if (showStmt.getRole() != null) {
-                    Long roleId = privilegeManager.getRoleIdByNameAllowNull(showStmt.getRole());
-                    if (roleId == null) {
-                        throw new SemanticException("There is no such grant defined for role " + showStmt.getRole());
-                    }
-
-                    RolePrivilegeCollection rolePrivilegeCollection =
-                            privilegeManager.getRolePrivilegeCollectionUnlocked(roleId, true);
-
-                    List<String> parentRoleNameList = new ArrayList<>();
-                    for (Long parentRoleId : rolePrivilegeCollection.getParentRoleIds()) {
-                        RolePrivilegeCollection parentRolePriv =
-                                privilegeManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
-                        parentRoleNameList.add(parentRolePriv.getName());
-                    }
-
-                    if (!parentRoleNameList.isEmpty()) {
-                        try {
-                            List<String> info = Lists.newArrayList(showStmt.getRole(), null,
-                                    AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, showStmt.getRole())));
-                            infos.add(info);
-
-                        } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                            //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
-                        }
+                    List<String> granteeRole = privilegeManager.getGranteeRoleDetailsForRole(showStmt.getRole());
+                    if (granteeRole != null) {
+                        infos.add(granteeRole);
                     }
 
                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            rolePrivilegeCollection.getTypeToPrivilegeEntryList();
-
+                            privilegeManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
                     infos.addAll(privilegeToRowString(privilegeManager,
-                            new GrantRevokeClause(null, showStmt.getRole()),
-                            typeToPrivilegeEntryList));
+                            new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
                 } else {
-                    UserIdentity userIdentity = showStmt.getUserIdent();
-                    UserPrivilegeCollection userPrivilegeCollection =
-                            privilegeManager.getUserPrivilegeCollectionUnlocked(userIdentity);
-
-                    Set<Long> allRoles = userPrivilegeCollection.getAllRoles();
-                    if (!allRoles.isEmpty()) {
-                        infos.add(Lists.newArrayList(userIdentity.toString(), null, AstToSQLBuilder.toSQL(
-                                new GrantRoleStmt(allRoles.stream().map(roleId -> {
-                                    try {
-                                        return privilegeManager
-                                                .getRolePrivilegeCollectionUnlocked(roleId, true).getName();
-                                    } catch (PrivilegeException e) {
-                                        throw new RuntimeException(e);
-                                    }
-                                }).collect(Collectors.toList()), userIdentity))));
+                    List<String> granteeRole = privilegeManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
+                    if (granteeRole != null) {
+                        infos.add(granteeRole);
                     }
 
                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            userPrivilegeCollection.getTypeToPrivilegeEntryList();
-                    infos.addAll(privilegeToRowString(privilegeManager, new GrantRevokeClause(userIdentity, null),
-                            typeToPrivilegeEntryList));
+                            privilegeManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
+                    infos.addAll(privilegeToRowString(privilegeManager,
+                            new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
                 }
                 resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
             } catch (PrivilegeException e) {
@@ -2071,28 +2033,16 @@ public class ShowExecutor {
         }
     }
 
-    private void handleShowRoles() throws AnalysisException {
+    private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            try {
-                List<List<String>> infos = new ArrayList<>();
-                PrivilegeManager privilegeManager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-                Map<Long, RolePrivilegeCollection> rolePrivilegeCollectionMap = privilegeManager.getRoleIdToPrivilegeCollection();
-                for (Map.Entry<Long, RolePrivilegeCollection> rolePrivilegeCollectionEntry
-                        : rolePrivilegeCollectionMap.entrySet()) {
-                    List<String> info = new ArrayList<>();
-                    RolePrivilegeCollection rolePrivilegeCollection =
-                            privilegeManager.getRolePrivilegeCollectionUnlocked(rolePrivilegeCollectionEntry.getKey(), true);
-                    info.add(rolePrivilegeCollection.getName());
-                    infos.add(info);
-                }
+            List<List<String>> infos = new ArrayList<>();
+            PrivilegeManager privilegeManager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+            List<String> roles = privilegeManager.getAllRoles();
+            roles.forEach(e -> infos.add(Lists.newArrayList(e)));
 
-                resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-
-            } catch (PrivilegeException e) {
-                throw new AnalysisException(e.getMessage());
-            }
+            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
         } else {
             List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
             resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
@@ -2104,13 +2054,9 @@ public class ShowExecutor {
 
         ShowUserStmt showUserStmt = (ShowUserStmt) stmt;
         if (showUserStmt.isAll()) {
-            Set<UserIdentity> userIdentities =
-                    GlobalStateMgr.getCurrentState().getPrivilegeManager().getUserToPrivilegeCollection().keySet();
-            for (UserIdentity userIdentity : userIdentities) {
-                List<String> row = Lists.newArrayList();
-                row.add(userIdentity.toString());
-                rowSet.add(row);
-            }
+            PrivilegeManager privilegeManager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+            List<String> users = privilegeManager.getAllUsers();
+            users.forEach(u -> rowSet.add(Lists.newArrayList(u)));
         } else {
             List<String> row = Lists.newArrayList();
             row.add(connectContext.getCurrentUserIdentity().toString());

@@ -43,6 +43,7 @@ public class UserPrivilegeCollection extends PrivilegeCollection {
 
     public void revokeRole(Long roleId) {
         roleIds.remove(roleId);
+        defaultRoleIds.remove(roleId);
     }
 
     public Set<Long> getAllRoles() {

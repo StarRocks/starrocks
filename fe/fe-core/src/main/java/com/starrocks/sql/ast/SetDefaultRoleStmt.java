@@ -31,7 +31,7 @@ public class SetDefaultRoleStmt extends StatementBase {
         this.setRoleType = setRoleType;
     }
 
-    public UserIdentity getUserIdentifier() {
+    public UserIdentity getUserIdentity() {
         return userIdentity;
     }
 

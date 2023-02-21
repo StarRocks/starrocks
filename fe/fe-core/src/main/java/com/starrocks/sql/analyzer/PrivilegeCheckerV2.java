@@ -64,7 +64,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -105,6 +104,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
@@ -120,7 +120,9 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
@@ -1091,25 +1093,57 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
-        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
-            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
+        public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeManager.CLUSTER_ADMIN_ROLE_NAME))) {
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                if (!userIdentity.equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
+                }
+            }
+
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }
 
         @Override
-        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext context) {
-            if (statement.getGranteeRole().stream().anyMatch(
-                    r -> r.equalsIgnoreCase("root") || r.equalsIgnoreCase("cluster_admin"))) {
+        public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME)
+                    || r.equalsIgnoreCase(PrivilegeManager.CLUSTER_ADMIN_ROLE_NAME))) {
                 UserIdentity userIdentity = context.getCurrentUserIdentity();
                 if (!userIdentity.equals(UserIdentity.ROOT)) {
-                    throw new SemanticException("Can not grant/revoke root or cluster_admin role except root user");
+                    throw new SemanticException("Can not grant root or cluster_admin role except root user");
+                }
+            }
+
+            if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeManager.ROOT_ROLE_NAME))) {
+                if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not revoke root role from root user");
                 }
             }
 
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdentity();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
+            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;

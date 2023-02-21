@@ -4090,14 +4090,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoleStatement(StarRocksParser.CreateRoleStatementContext context) {
-        Identifier role = (Identifier) visit(context.identifierOrString());
-        return new CreateRoleStmt(role.getValue(), context.NOT() != null);
+        List<String> roles = new ArrayList<>();
+        roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
+                s -> ((Identifier) s).getValue()).collect(toList()));
+        return new CreateRoleStmt(roles, context.NOT() != null);
     }
 
     @Override
     public ParseNode visitDropRoleStatement(StarRocksParser.DropRoleStatementContext context) {
-        Identifier role = (Identifier) visit(context.identifierOrString());
-        return new DropRoleStmt(role.getValue(), context.EXISTS() != null);
+        List<String> roles = new ArrayList<>();
+        roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
+                s -> ((Identifier) s).getValue()).collect(toList()));
+        return new DropRoleStmt(roles, context.EXISTS() != null);
     }
 
     @Override

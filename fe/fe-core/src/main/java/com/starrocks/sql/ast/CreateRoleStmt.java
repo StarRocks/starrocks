@@ -15,18 +15,19 @@
 
 package com.starrocks.sql.ast;
 
-public class CreateRoleStmt extends DdlStmt {
+import java.util.List;
 
-    private final String role;
+public class CreateRoleStmt extends DdlStmt {
+    private final List<String> roles;
     private final boolean ifNotExists;
 
-    public CreateRoleStmt(String role, boolean ifNotExists) {
-        this.role = role;
+    public CreateRoleStmt(List<String> roles, boolean ifNotExists) {
+        this.roles = roles;
         this.ifNotExists = ifNotExists;
     }
 
-    public String getQualifiedRole() {
-        return role;
+    public List<String> getRoles() {
+        return roles;
     }
 
     public boolean isIfNotExists() {

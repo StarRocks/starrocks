@@ -28,4 +28,9 @@ public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
     public RevokeRoleStmt(List<String> granteeRole, String role) {
         super(granteeRole, role);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRevokeRoleStatement(this, context);
+    }
 }
