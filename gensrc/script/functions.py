@@ -264,8 +264,8 @@ vectorized_functions = [
     [30151, 'ucase', 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
 
     [30160, 'reverse', 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
-    
-    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim', 
+
+    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim',
         'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
     [30171, 'trim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim',
         'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
@@ -277,7 +277,7 @@ vectorized_functions = [
         'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
     [30191, 'rtrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
         'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
-    
+
     [30200, 'ascii', 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -295,8 +295,11 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
-    [30331, 'replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
+    # @Deprecated: 'replace_old' will be deleted in the future version, keep it just for compatible
+    [30331, 'replace_old', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
+    [30332, 'replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::replace',
+     'StringFunctions::replace_prepare', 'StringFunctions::replace_close'],
     [30400, "money_format", "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -796,7 +799,7 @@ vectorized_functions = [
     [150219, 'arrays_overlap', 'BOOLEAN',    ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],      'ArrayFunctions::array_overlap_double'],
     [150220, 'arrays_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],   'ArrayFunctions::array_overlap_decimalv2'],
     [150221, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],     'ArrayFunctions::array_overlap_varchar'],
-    
+
     [150230, 'array_intersect', 'ARRAY_DATE',      ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect_date'],
     [150231, 'array_intersect', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect_datetime'],
     [150232, 'array_intersect', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN', "..."],     'ArrayFunctions::array_intersect_boolean'],
