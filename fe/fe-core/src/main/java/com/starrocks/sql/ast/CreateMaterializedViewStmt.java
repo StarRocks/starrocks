@@ -69,6 +69,7 @@ import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnPercentileUnionPattern;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -132,6 +133,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private boolean isReplay = false;
 
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
+        this(mvName, queryStatement, properties, NodePosition.ZERO);
+    }
+
+    public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties,
+                                      NodePosition pos) {
+        super(pos);
         this.mvName = mvName;
         this.queryStatement = queryStatement;
         this.properties = properties;

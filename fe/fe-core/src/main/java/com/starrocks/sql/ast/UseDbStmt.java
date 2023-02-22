@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Representation of a USE [catalog.]db statement.
@@ -27,6 +28,11 @@ public class UseDbStmt extends StatementBase {
     private final String database;
 
     public UseDbStmt(String catalog, String database) {
+        this(catalog, database, NodePosition.ZERO);
+    }
+
+    public UseDbStmt(String catalog, String database, NodePosition pos) {
+        super(pos);
         this.catalog = catalog;
         this.database = database;
     }

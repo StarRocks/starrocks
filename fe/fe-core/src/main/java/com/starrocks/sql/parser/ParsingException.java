@@ -14,25 +14,48 @@
 
 package com.starrocks.sql.parser;
 
+import org.apache.commons.lang3.StringUtils;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 
 public class ParsingException extends RuntimeException {
-    //TODO: we should add more message in parsing exception
-    //eg. line, offset
-    public ParsingException(String message) {
-        super(message, null);
+
+    private final String detailMsg;
+
+    private final NodePosition pos;
+
+    public ParsingException(String detailMsg, NodePosition pos) {
+        super(detailMsg);
+        this.detailMsg = detailMsg;
+        this.pos = pos;
     }
 
+    // error message should contain position info. This method will be removed in the future.
     public ParsingException(String formatString, Object... args) {
-        super(format(formatString, args));
-    }
-
-    public String getErrorMessage() {
-        return super.getMessage();
+        this(format(formatString, args), NodePosition.ZERO);
     }
 
     @Override
     public String getMessage() {
-        return getErrorMessage();
+        StringBuilder builder = new StringBuilder("Getting syntax error");
+        if (pos == null || pos.isZero()) {
+            // no position info. do nothing.
+
+        } else if (pos.getLine() == pos.getEndLine() && pos.getCol() == pos.getEndCol()) {
+            builder.append(" ");
+            builder.append(PARSER_ERROR_MSG.nodePositionPoint(pos.getLine(), pos.getCol()));
+        } else {
+            builder.append(" ");
+            builder.append(PARSER_ERROR_MSG.nodePositionRange(pos.getLine(), pos.getCol(),
+                    pos.getEndLine(), pos.getEndCol()));
+        }
+
+        if (StringUtils.isNotEmpty(detailMsg)) {
+            builder.append(". Detail message: ");
+            builder.append(detailMsg);
+            builder.append(".");
+        }
+        return builder.toString();
     }
 }

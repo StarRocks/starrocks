@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowCatalogsStmt extends ShowStmt {
 
@@ -29,7 +30,11 @@ public class ShowCatalogsStmt extends ShowStmt {
                     .build();
 
     public ShowCatalogsStmt() {
+        this(NodePosition.ZERO);
+    }
 
+    public ShowCatalogsStmt(NodePosition pos) {
+        super(pos);
     }
 
     @Override

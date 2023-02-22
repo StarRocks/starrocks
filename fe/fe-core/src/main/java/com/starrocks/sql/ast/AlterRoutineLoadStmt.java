@@ -25,6 +25,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,14 @@ public class AlterRoutineLoadStmt extends DdlStmt {
     public AlterRoutineLoadStmt(LabelName labelName, List<ParseNode> loadPropertyList,
                                 Map<String, String> jobProperties,
                                 RoutineLoadDataSourceProperties dataSourceProperties) {
+        this(labelName, loadPropertyList, jobProperties, dataSourceProperties, NodePosition.ZERO);
+    }
+
+    public AlterRoutineLoadStmt(LabelName labelName, List<ParseNode> loadPropertyList,
+                                Map<String, String> jobProperties,
+                                RoutineLoadDataSourceProperties dataSourceProperties,
+                                NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
         this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties != null ? jobProperties : Maps.newHashMap();

@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowUserStmt extends ShowStmt {
     private final boolean isAll;
@@ -28,6 +29,11 @@ public class ShowUserStmt extends ShowStmt {
                     .build();
 
     public ShowUserStmt(boolean isAll) {
+        this(isAll, NodePosition.ZERO);
+    }
+
+    public ShowUserStmt(boolean isAll, NodePosition pos) {
+        super(pos);
         this.isAll = isAll;
     }
 

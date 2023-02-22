@@ -29,6 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,11 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
+        this(partitionColNames, partitionDescs, NodePosition.ZERO);
+    }
+
+    public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs, NodePosition pos) {
+        super(pos);
         type = PartitionType.RANGE;
         this.partitionColNames = partitionColNames;
 

@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW CREATE EXTERNAL CATALOG statement.
 public class ShowCreateExternalCatalogStmt extends ShowStmt {
@@ -30,6 +31,11 @@ public class ShowCreateExternalCatalogStmt extends ShowStmt {
     private final String catalogName;
 
     public ShowCreateExternalCatalogStmt(String catalogName) {
+        this(catalogName, NodePosition.ZERO);
+    }
+
+    public ShowCreateExternalCatalogStmt(String catalogName, NodePosition pos) {
+        super(pos);
         this.catalogName = catalogName;
     }
 

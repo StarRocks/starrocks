@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class SetUserPropertyVar extends SetListItem {
     public static final String DOT_SEPARATOR = ".";
 
@@ -22,6 +24,11 @@ public class SetUserPropertyVar extends SetListItem {
     private final String value;
 
     public SetUserPropertyVar(String key, String value) {
+        this(key, value, NodePosition.ZERO);
+    }
+
+    public SetUserPropertyVar(String key, String value, NodePosition pos) {
+        super(pos);
         this.key = key;
         this.value = value;
     }

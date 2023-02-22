@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 import javax.annotation.Nonnull;
@@ -25,7 +26,11 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
     private final Map<String, String> properties;
 
     public ModifyTablePropertiesClause(Map<String, String> properties) {
-        super(AlterOpType.MODIFY_TABLE_PROPERTY);
+        this(properties, NodePosition.ZERO);
+    }
+
+    public ModifyTablePropertiesClause(Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.MODIFY_TABLE_PROPERTY, pos);
         this.properties = properties;
     }
 

@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 // GRANT rolex TO userx
@@ -26,8 +28,16 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
         super(granteeRole, userIdent);
     }
 
+    public GrantRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
+        super(granteeRole, userIdent, pos);
+    }
+
     public GrantRoleStmt(List<String> granteeRole, String role) {
         super(granteeRole, role);
+    }
+
+    public GrantRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(granteeRole, role, pos);
     }
 
     @Override

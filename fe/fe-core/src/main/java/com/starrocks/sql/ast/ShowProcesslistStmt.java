@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROCESSLIST statement.
 // Used to show connection belong to this user.
@@ -40,6 +41,11 @@ public class ShowProcesslistStmt extends ShowStmt {
     private final boolean isShowFull;
 
     public ShowProcesslistStmt(boolean isShowFull) {
+        this(isShowFull, NodePosition.ZERO);
+    }
+
+    public ShowProcesslistStmt(boolean isShowFull, NodePosition pos) {
+        super(pos);
         this.isShowFull = isShowFull;
     }
 

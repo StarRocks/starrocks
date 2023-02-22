@@ -14,5 +14,15 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class SetTransaction extends SetListItem {
+
+    public SetTransaction() {
+        this(NodePosition.ZERO);
+    }
+
+    public SetTransaction(NodePosition pos) {
+        super(pos);
+    }
 }

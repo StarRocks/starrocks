@@ -609,7 +609,7 @@ public class Alter {
                 }
                 GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof TruncatePartitionClause) {
-                // This logic is use to adapt mysql syntax.
+                // This logic is used to adapt mysql syntax.
                 // ALTER TABLE test TRUNCATE PARTITION p1;
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());

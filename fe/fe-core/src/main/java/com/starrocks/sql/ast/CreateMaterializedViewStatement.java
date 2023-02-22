@@ -22,6 +22,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -69,6 +70,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
+        this(tableName, ifNotExists, comment, refreshSchemeDesc, expressionPartitionDesc, distributionDesc,
+                properties, queryStatement, NodePosition.ZERO);
+    }
+
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
+                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
+                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;

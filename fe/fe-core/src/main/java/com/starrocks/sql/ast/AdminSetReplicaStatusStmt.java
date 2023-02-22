@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -39,6 +40,11 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     private ReplicaStatus status;
 
     public AdminSetReplicaStatusStmt(Map<String, String> properties) {
+        this(properties, NodePosition.ZERO);
+    }
+
+    public AdminSetReplicaStatusStmt(Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.properties = properties;
     }
 

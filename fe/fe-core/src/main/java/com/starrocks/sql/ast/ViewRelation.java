@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.View;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ViewRelation extends Relation {
     private final TableName name;
@@ -23,6 +24,11 @@ public class ViewRelation extends Relation {
     private final QueryStatement queryStatement;
 
     public ViewRelation(TableName name, View view, QueryStatement queryStatement) {
+        this(name, view, queryStatement, NodePosition.ZERO);
+    }
+
+    public ViewRelation(TableName name, View view, QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.view = view;
         this.queryStatement = queryStatement;

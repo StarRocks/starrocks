@@ -19,17 +19,25 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 public class PartitionValue implements ParseNode {
     public static final PartitionValue MAX_VALUE = new PartitionValue();
 
+    private final NodePosition pos;
+
     private String value;
 
     private PartitionValue() {
-
+        this.pos = NodePosition.ZERO;
     }
 
     public PartitionValue(String value) {
+        this(value, NodePosition.ZERO);
+    }
+
+    public PartitionValue(String value, NodePosition pos) {
+        this.pos = pos;
         this.value = value;
     }
 
@@ -62,5 +70,10 @@ public class PartitionValue implements ParseNode {
         } else {
             return value;
         }
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

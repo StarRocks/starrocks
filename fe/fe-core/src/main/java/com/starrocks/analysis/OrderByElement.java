@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,8 +55,14 @@ public class OrderByElement implements ParseNode {
     // "NULLS LAST", and null if not specified.
     private final Boolean nullsFirstParam;
 
+    private final NodePosition pos;
+
     public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam) {
-        super();
+        this(expr, isAsc, nullsFirstParam, NodePosition.ZERO);
+    }
+
+    public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam, NodePosition pos) {
+        this.pos = pos;
         this.expr = expr;
         this.isAsc = isAsc;
         this.nullsFirstParam = nullsFirstParam;
@@ -148,6 +155,11 @@ public class OrderByElement implements ParseNode {
             }
         }
         return strBuilder.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public String explain() {

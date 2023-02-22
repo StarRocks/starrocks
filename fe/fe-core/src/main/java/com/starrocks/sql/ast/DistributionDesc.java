@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
@@ -22,6 +21,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.io.DataInput;
@@ -33,8 +33,14 @@ import java.util.Set;
 public class DistributionDesc implements ParseNode, Writable {
     protected DistributionInfoType type;
 
-    public DistributionDesc() {
+    protected final NodePosition pos;
 
+    public DistributionDesc() {
+        this(NodePosition.ZERO);
+    }
+
+    public DistributionDesc(NodePosition pos) {
+        this.pos = pos;
     }
 
     public void analyze(Set<String> colSet) {
@@ -67,5 +73,10 @@ public class DistributionDesc implements ParseNode, Writable {
 
     public void readFields(DataInput in) throws IOException {
         throw new NotImplementedException();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

@@ -48,6 +48,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -63,15 +64,22 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     @SerializedName(value = "fullDb")
     private String fullDb;
 
-    public TableName() {
+    private final NodePosition pos;
 
+    public TableName() {
+        pos = NodePosition.ZERO;
     }
 
     public TableName(String db, String tbl) {
-        this(null, db, tbl);
+        this(null, db, tbl, NodePosition.ZERO);
     }
 
     public TableName(String catalog, String db, String tbl) {
+        this(catalog, db, tbl, NodePosition.ZERO);
+    }
+
+    public TableName(String catalog, String db, String tbl, NodePosition pos) {
+        this.pos = pos;
         this.catalog = catalog;
         this.db = db;
         this.tbl = tbl;
@@ -165,6 +173,10 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         } else {
             return db + "." + tbl;
         }
+    }
+
+    public NodePosition getPos() {
+        return pos;
     }
 
     @Override

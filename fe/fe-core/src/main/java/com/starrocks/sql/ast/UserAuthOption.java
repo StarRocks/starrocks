@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 public class UserAuthOption implements ParseNode {
     private final String password;
@@ -22,7 +23,15 @@ public class UserAuthOption implements ParseNode {
     private final String authString;
     private final boolean passwordPlain;
 
+    private final NodePosition pos;
+
     public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain) {
+        this(password, authPlugin, authString, passwordPlain, NodePosition.ZERO);
+    }
+
+    public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain,
+                          NodePosition pos) {
+        this.pos = pos;
         this.password = password;
         this.authPlugin = authPlugin;
         this.authString = authString;
@@ -43,5 +52,10 @@ public class UserAuthOption implements ParseNode {
 
     public boolean isPasswordPlain() {
         return passwordPlain;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

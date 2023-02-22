@@ -19,9 +19,14 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public abstract class ShowStmt extends StatementBase {
     protected Predicate predicate;
+
+    protected ShowStmt(NodePosition pos) {
+        super(pos);
+    }
 
     public void setPredicate(Predicate predicate) {
         this.predicate = predicate;

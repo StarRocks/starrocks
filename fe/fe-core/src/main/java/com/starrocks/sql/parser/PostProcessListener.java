@@ -15,24 +15,27 @@
 
 package com.starrocks.sql.parser;
 
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-public class TokenNumberListener extends StarRocksBaseListener {
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
+public class PostProcessListener extends StarRocksBaseListener {
 
     private final int maxTokensNum;
     private final int maxExprChildCount;
 
-    public TokenNumberListener(int maxTokensNum, int maxExprChildCount) {
+    public PostProcessListener(int maxTokensNum, int maxExprChildCount) {
         this.maxTokensNum = maxTokensNum;
         this.maxExprChildCount = maxExprChildCount;
     }
 
     @Override
     public void visitTerminal(TerminalNode node) {
-        int index = node.getSymbol().getTokenIndex();
+        Token token = node.getSymbol();
+        int index = token.getTokenIndex();
         if (index >= maxTokensNum) {
-            throw new OperationNotAllowedException("Statement exceeds maximum length limit, please consider modify " +
-                    "parse_tokens_limit variable.");
+            throw new ParsingException(PARSER_ERROR_MSG.tokenExceedLimit());
         }
     }
 
@@ -40,8 +43,8 @@ public class TokenNumberListener extends StarRocksBaseListener {
     public void exitExpressionList(StarRocksParser.ExpressionListContext ctx) {
         long childCount = ctx.children.stream().filter(child -> child instanceof StarRocksParser.ExpressionContext).count();
         if (childCount > maxExprChildCount) {
-            throw new OperationNotAllowedException(String.format("Expression child number %d exceeded the maximum %d",
-                    childCount, maxExprChildCount));
+            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            throw new ParsingException(PARSER_ERROR_MSG.exprsExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
 
@@ -49,8 +52,8 @@ public class TokenNumberListener extends StarRocksBaseListener {
     public void exitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext ctx) {
         long childCount = ctx.expressionOrDefault().size();
         if (childCount > maxExprChildCount) {
-            throw new OperationNotAllowedException(String.format("Expression child number %d exceeded the maximum %d",
-                    childCount, maxExprChildCount));
+            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            throw new ParsingException(PARSER_ERROR_MSG.argsOfExprExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
 
@@ -58,8 +61,8 @@ public class TokenNumberListener extends StarRocksBaseListener {
     public void exitInsertStatement(StarRocksParser.InsertStatementContext ctx) {
         long childCount = ctx.expressionsWithDefault().size();
         if (childCount > maxExprChildCount) {
-            throw new OperationNotAllowedException(String.format("Expression child number %d exceeded the maximum %d",
-                    childCount, maxExprChildCount));
+            NodePosition pos = new NodePosition(ctx.start, ctx.getStop());
+            throw new ParsingException(PARSER_ERROR_MSG.insertRowsExceedLimit(childCount, maxExprChildCount), pos);
         }
     }
 }

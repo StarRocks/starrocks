@@ -27,6 +27,7 @@ import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
 
@@ -35,8 +36,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
+
     public ShowAnalyzeJobStmt(Predicate predicate) {
-        setPredicate(predicate);
+        this(predicate, NodePosition.ZERO);
+    }
+
+    public ShowAnalyzeJobStmt(Predicate predicate, NodePosition pos) {
+        super(pos);
+        this.predicate = predicate;
     }
 
     private static final ShowResultSetMetaData META_DATA =

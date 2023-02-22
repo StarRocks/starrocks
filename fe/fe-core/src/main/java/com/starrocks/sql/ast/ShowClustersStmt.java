@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // show clusters of a warehouse
 public class ShowClustersStmt extends ShowStmt {
@@ -30,6 +31,11 @@ public class ShowClustersStmt extends ShowStmt {
 
 
     public ShowClustersStmt(String warehouseName) {
+        this(warehouseName, NodePosition.ZERO);
+    }
+
+    public ShowClustersStmt(String warehouseName, NodePosition pos) {
+        super(pos);
         this.warehouseName = warehouseName;
     }
 

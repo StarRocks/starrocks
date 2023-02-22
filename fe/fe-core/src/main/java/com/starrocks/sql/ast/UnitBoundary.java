@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
  * UnitBoundary used to specify time boundary of time_slice:
@@ -25,11 +26,23 @@ import com.starrocks.analysis.ParseNode;
 public class UnitBoundary implements ParseNode {
     private final String description;
 
+    private final NodePosition pos;
+
     public UnitBoundary(String description) {
+        this(description, NodePosition.ZERO);
+    }
+
+    public UnitBoundary(String description, NodePosition pos) {
+        this.pos = pos;
         this.description = description.toUpperCase();
     }
 
     public String getDescription() {
         return description;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

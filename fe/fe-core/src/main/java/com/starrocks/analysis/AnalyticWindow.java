@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
 import com.starrocks.thrift.TAnalyticWindowBoundaryType;
@@ -147,6 +148,8 @@ public class AnalyticWindow implements ParseNode {
     }
 
     public static class Boundary implements ParseNode {
+
+        private final NodePosition pos;
         private BoundaryType type;
 
         // Offset expr. Only set for PRECEDING/FOLLOWING. Needed for toSql().
@@ -170,9 +173,14 @@ public class AnalyticWindow implements ParseNode {
 
         // c'tor used by clone()
         public Boundary(BoundaryType type, Expr e, BigDecimal offsetValue) {
+            this(type, e, offsetValue, NodePosition.ZERO);
+        }
+
+        public Boundary(BoundaryType type, Expr e, BigDecimal offsetValue, NodePosition pos) {
             Preconditions.checkState(
                     (type.isOffset() && e != null)
                             || (!type.isOffset() && e == null));
+            this.pos = pos;
             this.type = type;
             this.expr = e;
             this.offsetValue = offsetValue;
@@ -187,6 +195,11 @@ public class AnalyticWindow implements ParseNode {
 
             sb.append(type.toString());
             return sb.toString();
+        }
+
+        @Override
+        public NodePosition getPos() {
+            return pos;
         }
 
         public TAnalyticWindowBoundary toThrift(Type windowType) {
@@ -248,6 +261,8 @@ public class AnalyticWindow implements ParseNode {
         }
     }
 
+    private final NodePosition pos;
+
     private final Type type_;
     private final Boundary leftBoundary_;
     private Boundary rightBoundary_;  // may be null before analyze()
@@ -270,6 +285,11 @@ public class AnalyticWindow implements ParseNode {
     }
 
     public AnalyticWindow(Type type, Boundary b) {
+        this(type, b, NodePosition.ZERO);
+    }
+
+    public AnalyticWindow(Type type, Boundary b, NodePosition pos) {
+        this.pos = pos;
         type_ = type;
         Preconditions.checkNotNull(b);
         leftBoundary_ = b;
@@ -277,6 +297,11 @@ public class AnalyticWindow implements ParseNode {
     }
 
     public AnalyticWindow(Type type, Boundary l, Boundary r) {
+        this(type, l, r, NodePosition.ZERO);
+    }
+
+    public AnalyticWindow(Type type, Boundary l, Boundary r, NodePosition pos) {
+        this.pos = pos;
         type_ = type;
         Preconditions.checkNotNull(l);
         leftBoundary_ = l;
@@ -288,6 +313,7 @@ public class AnalyticWindow implements ParseNode {
      * Clone c'tor
      */
     private AnalyticWindow(AnalyticWindow other) {
+        pos = other.pos;
         type_ = other.type_;
         Preconditions.checkNotNull(other.leftBoundary_);
         leftBoundary_ = other.leftBoundary_.clone();
@@ -309,7 +335,7 @@ public class AnalyticWindow implements ParseNode {
             newLeftBoundary = rightBoundary_.converse();
         }
 
-        return new AnalyticWindow(type_, newLeftBoundary, newRightBoundary);
+        return new AnalyticWindow(type_, newLeftBoundary, newRightBoundary, pos);
     }
 
     public String toSql() {
@@ -328,6 +354,11 @@ public class AnalyticWindow implements ParseNode {
         }
 
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public TAnalyticWindow toThrift() {

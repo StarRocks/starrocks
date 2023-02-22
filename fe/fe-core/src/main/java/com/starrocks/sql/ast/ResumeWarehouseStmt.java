@@ -14,10 +14,17 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class ResumeWarehouseStmt extends DdlStmt {
     private String whName;
 
     public ResumeWarehouseStmt(String whName) {
+        this(whName, NodePosition.ZERO);
+    }
+
+    public ResumeWarehouseStmt(String whName, NodePosition pos) {
+        super(pos);
         this.whName = whName;
     }
 

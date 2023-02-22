@@ -34,6 +34,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -215,6 +216,13 @@ public class CreateFunctionStmt extends DdlStmt {
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
+        this(functionType, functionName, argsDef, returnType, intermediateType, properties, NodePosition.ZERO);
+    }
+
+    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
+                              TypeDef returnType, TypeDef intermediateType, Map<String, String> properties,
+                              NodePosition pos) {
+        super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");

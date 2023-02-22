@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -32,6 +33,11 @@ public class AdminSetConfigStmt extends DdlStmt {
     private Map<String, String> configs;
 
     public AdminSetConfigStmt(ConfigType type, Map<String, String> configs) {
+        this(type, configs, NodePosition.ZERO);
+    }
+
+    public AdminSetConfigStmt(ConfigType type, Map<String, String> configs, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.configs = configs;
         if (this.configs == null) {

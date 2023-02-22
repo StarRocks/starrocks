@@ -24,6 +24,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -115,6 +116,26 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys) {
+        this(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
+                partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
+                sortKeys, NodePosition.ZERO);
+    }
+
+    public CreateTableStmt(boolean ifNotExists,
+                           boolean isExternal,
+                           TableName tableName,
+                           List<ColumnDef> columnDefinitions,
+                           List<IndexDef> indexDefs,
+                           String engineName,
+                           String charsetName,
+                           KeysDesc keysDesc,
+                           PartitionDesc partitionDesc,
+                           DistributionDesc distributionDesc,
+                           Map<String, String> properties,
+                           Map<String, String> extProperties,
+                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys,
+                           NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         if (columnDefinitions == null) {
             this.columnDefs = Lists.newArrayList();

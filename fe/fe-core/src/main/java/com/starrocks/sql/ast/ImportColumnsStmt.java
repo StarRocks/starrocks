@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -23,6 +24,11 @@ public class ImportColumnsStmt extends StatementBase {
     private final List<ImportColumnDesc> columns;
 
     public ImportColumnsStmt(List<ImportColumnDesc> columns) {
+        this(columns, NodePosition.ZERO);
+    }
+
+    public ImportColumnsStmt(List<ImportColumnDesc> columns, NodePosition pos) {
+        super(pos);
         this.columns = columns;
     }
 

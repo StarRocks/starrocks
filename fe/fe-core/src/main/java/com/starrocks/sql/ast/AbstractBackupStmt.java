@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,8 @@ public class AbstractBackupStmt extends DdlStmt {
     protected long timeoutMs;
 
     public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRef> tableRefs,
-                              Map<String, String> properties) {
+                              Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
         this.repoName = repoName;
         this.tblRefs = tableRefs;

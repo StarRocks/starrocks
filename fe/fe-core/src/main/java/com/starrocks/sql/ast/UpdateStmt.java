@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -34,6 +35,12 @@ public class UpdateStmt extends DmlStmt {
 
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
+        this(tableName, assignments, fromRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
+    }
+
+    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         this.assignments = assignments;
         this.fromRelations = fromRelations;

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.LinkedList;
@@ -28,8 +29,8 @@ public class BackendClause extends AlterClause {
 
     protected List<Pair<String, Integer>> hostPortPairs;
 
-    protected BackendClause(List<String> hostPorts) {
-        super(AlterOpType.ALTER_OTHER);
+    protected BackendClause(List<String> hostPorts, NodePosition pos) {
+        super(AlterOpType.ALTER_OTHER, pos);
         this.hostPorts = hostPorts;
         this.hostPortPairs = new LinkedList<>();
     }

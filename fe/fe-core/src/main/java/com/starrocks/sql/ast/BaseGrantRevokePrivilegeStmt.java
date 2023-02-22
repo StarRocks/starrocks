@@ -24,6 +24,7 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -50,6 +51,15 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
             String objectTypeUnResolved,
             GrantRevokeClause clause,
             GrantRevokePrivilegeObjects objects) {
+        this(privilegeTypeUnResolved, objectTypeUnResolved, clause, objects, NodePosition.ZERO);
+    }
+
+    public BaseGrantRevokePrivilegeStmt(
+            List<String> privilegeTypeUnResolved,
+            String objectTypeUnResolved,
+            GrantRevokeClause clause,
+            GrantRevokePrivilegeObjects objects, NodePosition pos) {
+        super(pos);
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;

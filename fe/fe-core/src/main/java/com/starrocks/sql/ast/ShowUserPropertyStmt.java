@@ -26,6 +26,7 @@ import com.starrocks.common.proc.UserPropertyProcNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +40,11 @@ public class ShowUserPropertyStmt extends ShowStmt {
     private String pattern;
 
     public ShowUserPropertyStmt(String user, String pattern) {
+        this(user, pattern, NodePosition.ZERO);
+    }
+
+    public ShowUserPropertyStmt(String user, String pattern, NodePosition pos) {
+        super(pos);
         this.user = user;
         this.pattern = pattern;
     }

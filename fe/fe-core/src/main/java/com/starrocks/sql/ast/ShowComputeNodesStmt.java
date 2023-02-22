@@ -19,8 +19,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowComputeNodesStmt extends ShowStmt {
+
+    public ShowComputeNodesStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowComputeNodesStmt(NodePosition pos) {
+        super(pos);
+    }
 
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();

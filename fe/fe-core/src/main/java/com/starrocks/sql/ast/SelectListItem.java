@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class SelectListItem implements ParseNode {
     private Expr expr;
@@ -27,23 +28,34 @@ public class SelectListItem implements ParseNode {
     private final boolean isStar;
     private String alias;
 
+    private final NodePosition pos;
+
     public SelectListItem(Expr expr, String alias) {
-        super();
+        this(expr, alias, NodePosition.ZERO);
+    }
+
+    public SelectListItem(TableName tblName) {
+        this(tblName, NodePosition.ZERO);
+    }
+
+    public SelectListItem(Expr expr, String alias, NodePosition pos) {
         Preconditions.checkNotNull(expr);
+        this.pos = pos;
         this.expr = expr;
         this.alias = alias;
         this.tblName = null;
         this.isStar = false;
     }
 
-    public SelectListItem(TableName tblName) {
-        super();
+    public SelectListItem(TableName tblName, NodePosition pos) {
+        this.pos = pos;
         this.expr = null;
         this.tblName = tblName;
         this.isStar = true;
     }
 
     protected SelectListItem(SelectListItem other) {
+        pos = other.pos;
         if (other.expr == null) {
             expr = null;
         } else {
@@ -54,6 +66,10 @@ public class SelectListItem implements ParseNode {
         alias = other.alias;
     }
 
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
     @Override
     public SelectListItem clone() {
         return new SelectListItem(this);

@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +24,12 @@ public abstract class SetOperationRelation extends QueryRelation {
     private List<QueryRelation> relations;
     private final SetQualifier qualifier;
 
-    public SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier) {
+    protected SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier) {
+        this(relations, qualifier, NodePosition.ZERO);
+    }
+
+    protected SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
+        super(pos);
         this.relations = new ArrayList<>(relations);
         this.qualifier = qualifier;
     }

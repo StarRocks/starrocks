@@ -20,8 +20,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowFrontendsStmt extends ShowStmt {
+
+    public ShowFrontendsStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowFrontendsStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

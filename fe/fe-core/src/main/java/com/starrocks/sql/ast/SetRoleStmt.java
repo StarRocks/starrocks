@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,11 @@ public class SetRoleStmt extends StatementBase {
     private final SetRoleType setRoleType;
 
     public SetRoleStmt(SetRoleType setRoleType, List<String> roles) {
+        this(setRoleType, roles, NodePosition.ZERO);
+    }
+
+    public SetRoleStmt(SetRoleType setRoleType, List<String> roles, NodePosition pos) {
+        super(pos);
         this.roles.addAll(roles);
         this.setRoleType = setRoleType;
     }

@@ -34,6 +34,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.parser.NodePosition;
+
 /**
  * captures info of a single WHEN expr THEN expr clause.
  */
@@ -41,8 +43,14 @@ public class CaseWhenClause implements ParseNode {
     private final Expr whenExpr;
     private final Expr thenExpr;
 
+    private final NodePosition pos;
+
     public CaseWhenClause(Expr whenExpr, Expr thenExpr) {
-        super();
+        this(whenExpr, thenExpr, NodePosition.ZERO);
+    }
+
+    public CaseWhenClause(Expr whenExpr, Expr thenExpr, NodePosition pos) {
+        this.pos = pos;
         this.whenExpr = whenExpr;
         this.thenExpr = thenExpr;
     }
@@ -53,5 +61,10 @@ public class CaseWhenClause implements ParseNode {
 
     public Expr getThenExpr() {
         return thenExpr;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

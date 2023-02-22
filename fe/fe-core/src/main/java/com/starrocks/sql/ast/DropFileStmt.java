@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -29,6 +30,11 @@ public class DropFileStmt extends DdlStmt {
     private String catalogName;
 
     public DropFileStmt(String fileName, String dbName, Map<String, String> properties) {
+        this(fileName, dbName, properties, NodePosition.ZERO);
+    }
+
+    public DropFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.fileName = fileName;
         this.dbName = dbName;
         this.properties = properties;

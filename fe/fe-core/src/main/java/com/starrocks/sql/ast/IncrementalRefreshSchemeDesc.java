@@ -16,10 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.parser.NodePosition;
 
 public class IncrementalRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public IncrementalRefreshSchemeDesc() {
-        super(MaterializedView.RefreshType.INCREMENTAL);
+        this(NodePosition.ZERO);
+    }
+
+    public IncrementalRefreshSchemeDesc(NodePosition pos) {
+        super(MaterializedView.RefreshType.INCREMENTAL, pos);
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -31,7 +32,11 @@ public class RollupRenameClause extends AlterTableClause {
     private String newRollupName;
 
     public RollupRenameClause(String rollupName, String newRollupName) {
-        super(AlterOpType.RENAME);
+        this(rollupName, newRollupName, NodePosition.ZERO);
+    }
+
+    public RollupRenameClause(String rollupName, String newRollupName, NodePosition pos) {
+        super(AlterOpType.RENAME, pos);
         this.rollupName = rollupName;
         this.newRollupName = newRollupName;
         this.needTableStable = false;

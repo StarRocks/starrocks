@@ -20,6 +20,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,14 @@ public abstract class QueryRelation extends Relation {
     protected List<OrderByElement> sortClause;
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
+
+    protected QueryRelation() {
+        this(NodePosition.ZERO);
+    }
+
+    protected QueryRelation(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public List<String> getColumnOutputNames() {

@@ -15,22 +15,24 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class DropBackendClause extends BackendClause {
     private final boolean force;
 
     public DropBackendClause(List<String> hostPorts) {
-        super(hostPorts);
+        super(hostPorts, NodePosition.ZERO);
         this.force = true;
     }
 
     public DropBackendClause(List<String> hostPorts, boolean force) {
-        this(hostPorts, force, false);
+        this(hostPorts, force, NodePosition.ZERO);
     }
 
-    public DropBackendClause(List<String> hostPorts, boolean force, boolean oldStyle) {
-        super(hostPorts);
+    public DropBackendClause(List<String> hostPorts, boolean force, NodePosition pos) {
+        super(hostPorts, pos);
         this.force = force;
     }
 

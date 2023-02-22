@@ -606,17 +606,28 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
 
         analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 35 to line 1, column 45. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select [1,2,3,4,5,6]",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 8 to line 1, column 18. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select array<int>[1,2,3,4,5,6]",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 18 to line 1, column 28. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select * from (values(1,2,3,4,5,6)) t",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 22 to line 1, column 32. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("insert into t0 values(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 0 to line 1, column 67. " +
+                        "Detail message: The inserted rows are 6 exceeded the maximum limit 5");
+
         analyzeFail("insert into t0 values(1,2,3,4,5,6)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 21 to line 1, column 33. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
 
         Config.expr_children_limit = 100000;
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5,6)");
@@ -664,7 +675,8 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testColumnAlias() {
-        analyzeFail("select * from test.t0 as t(a,b,c)", "You have an error in your SQL syntax");
+        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 27. " +
+                "Detail message: Input 'a' is not valid at this position, please check the SQL Reference.");
         analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
         QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();

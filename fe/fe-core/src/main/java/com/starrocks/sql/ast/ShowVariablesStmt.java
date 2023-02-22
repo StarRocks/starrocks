@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
@@ -24,6 +25,7 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show variables statement.
 public class ShowVariablesStmt extends ShowStmt {
@@ -49,12 +51,17 @@ public class ShowVariablesStmt extends ShowStmt {
     private final String pattern;
     private Expr where;
 
+    @VisibleForTesting
     public ShowVariablesStmt(SetType type, String pattern) {
-        this.type = type;
-        this.pattern = pattern;
+        this(type, pattern, null, NodePosition.ZERO);
     }
 
     public ShowVariablesStmt(SetType type, String pattern, Expr where) {
+        this(type, pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowVariablesStmt(SetType type, String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.pattern = pattern;
         this.where = where;

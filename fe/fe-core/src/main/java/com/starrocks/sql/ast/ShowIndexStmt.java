@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowIndexStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -41,6 +42,11 @@ public class ShowIndexStmt extends ShowStmt {
     private final TableName tableName;
 
     public ShowIndexStmt(String dbName, TableName tableName) {
+        this(dbName, tableName, NodePosition.ZERO);
+    }
+
+    public ShowIndexStmt(String dbName, TableName tableName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.tableName = tableName;
     }

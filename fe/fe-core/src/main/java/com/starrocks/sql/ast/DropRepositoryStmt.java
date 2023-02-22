@@ -15,11 +15,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class DropRepositoryStmt extends DdlStmt {
 
     private final String repoName;
 
     public DropRepositoryStmt(String repoName) {
+        this(repoName, NodePosition.ZERO);
+    }
+
+    public DropRepositoryStmt(String repoName, NodePosition pos) {
+        super(pos);
         this.repoName = repoName;
     }
 

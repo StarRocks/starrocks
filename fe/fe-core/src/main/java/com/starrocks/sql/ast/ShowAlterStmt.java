@@ -27,6 +27,7 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,6 +56,12 @@ public class ShowAlterStmt extends ShowStmt {
 
     public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
                          LimitElement limitElement) {
+        this(type, dbName, whereClause, orderByElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
+                         LimitElement limitElement, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.dbName = dbName;
         this.whereClause = whereClause;

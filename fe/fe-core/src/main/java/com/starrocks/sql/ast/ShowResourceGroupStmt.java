@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show ResourceGroups
 // 1. Show ResourceGroup specified by name
@@ -31,6 +32,11 @@ public class ShowResourceGroupStmt extends ShowStmt {
     private final boolean listAll;
 
     public ShowResourceGroupStmt(String name, boolean listAll) {
+        this(name, listAll, NodePosition.ZERO);
+    }
+
+    public ShowResourceGroupStmt(String name, boolean listAll, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.listAll = listAll;
     }

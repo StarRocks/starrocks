@@ -15,19 +15,26 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ModifyFrontendAddressClause extends FrontendClause {
 
     protected String srcHost;
     protected String destHost;
 
+    @VisibleForTesting
     public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
-        super(hostPort, role);
+        super(hostPort, role, NodePosition.ZERO);
     }
 
     public ModifyFrontendAddressClause(String srcHost, String destHost) {
-        super("", FrontendNodeType.UNKNOWN);
+        this(srcHost, destHost, NodePosition.ZERO);
+    }
+
+    public ModifyFrontendAddressClause(String srcHost, String destHost, NodePosition pos) {
+        super("", FrontendNodeType.UNKNOWN, pos);
         this.srcHost = srcHost;
         this.destHost = destHost;
     }

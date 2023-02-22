@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Representation of a Kill statement.
@@ -27,6 +28,11 @@ public class KillStmt extends StatementBase {
     private final long connectionId;
 
     public KillStmt(boolean isConnectionKill, long connectionId) {
+        this(isConnectionKill, connectionId, NodePosition.ZERO);
+    }
+
+    public KillStmt(boolean isConnectionKill, long connectionId, NodePosition pos) {
+        super(pos);
         this.isConnectionKill = isConnectionKill;
         this.connectionId = connectionId;
     }

@@ -15,10 +15,16 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class SetWarehouseStmt extends StatementBase {
     private String warehouseName;
     public SetWarehouseStmt(String warehouseName) {
+        this(warehouseName, NodePosition.ZERO);
+    }
+
+    public SetWarehouseStmt(String warehouseName, NodePosition pos) {
+        super(pos);
         this.warehouseName = warehouseName;
     }
 

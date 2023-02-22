@@ -27,6 +27,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
 import java.util.List;
@@ -62,6 +63,12 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
                               LimitElement limitElement, boolean isTempPartition) {
+        this(tableName, whereClause, orderByElements, limitElement, isTempPartition, NodePosition.ZERO);
+    }
+
+    public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
+                              LimitElement limitElement, boolean isTempPartition, NodePosition pos) {
+        super(pos);
         this.dbName = tableName.getDb();
         this.tableName = tableName.getTbl();
         this.whereClause = whereClause;
