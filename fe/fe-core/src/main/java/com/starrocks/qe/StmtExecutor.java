@@ -432,6 +432,7 @@ public class StmtExecutor {
 
                 int retryTime = Config.max_query_retry_time;
                 for (int i = 0; i < retryTime; i++) {
+                    boolean needRetry = false;
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -445,10 +446,6 @@ public class StmtExecutor {
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
 
                         handleQueryStmt(execPlan);
-
-                        if (context.getSessionVariable().isEnableProfile()) {
-                            writeProfile(beginTimeInNanoSecond);
-                        }
                         break;
                     } catch (RpcException e) {
                         if (i == retryTime - 1) {
@@ -461,11 +458,15 @@ public class StmtExecutor {
                             } else {
                                 originStmt = this.originStmt.originStmt;
                             }
+                            needRetry = true;
                             LOG.warn("retry {} times. stmt: {}", (i + 1), originStmt);
                         } else {
                             throw e;
                         }
                     } finally {
+                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
+                            writeProfile(beginTimeInNanoSecond);
+                        }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
                 }
