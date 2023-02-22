@@ -18,6 +18,11 @@ public class EquivalenceClasses {
         columnToEquivalenceClass = Maps.newHashMap();
     }
 
+    public EquivalenceClasses(EquivalenceClasses other) {
+        columnToEquivalenceClass = Maps.newHashMap();
+        columnToEquivalenceClass.putAll(other.columnToEquivalenceClass);
+    }
+
     public void addEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
         Set<ColumnRefOperator> s1 = columnToEquivalenceClass.get(left);
         Set<ColumnRefOperator> s2 = columnToEquivalenceClass.get(right);

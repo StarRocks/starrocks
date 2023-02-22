@@ -679,6 +679,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitionInfo;
     }
 
+    public List<Column> getKeyColumns() {
+        return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
     // partition Name -> Range
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
         Preconditions.checkArgument(partitionInfo.getType() == PartitionType.RANGE);
