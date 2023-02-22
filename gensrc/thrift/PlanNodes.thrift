@@ -420,6 +420,7 @@ struct TSchemaScanNode {
   11: optional Types.TUserIdentity current_user_ident   // to replace the user and user_ip
 }
 
+// If you find yourself changing this code, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
@@ -447,6 +448,7 @@ struct TJDBCScanNode {
   5: optional i64 limit
 }
 
+// If you find yourself changing this code, see also TOlapScanNode
 struct TLakeScanNode {
   1: required Types.TTupleId tuple_id
   2: required list<string> key_column_name
