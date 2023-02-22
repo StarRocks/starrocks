@@ -113,6 +113,36 @@ public class SchemaTable extends Table {
                                     .column("CREATE_OPTIONS", ScalarType.createVarchar(255))
                                     .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
                                     .build()))
+                    .put("partitions", new SchemaTable(
+                            SystemId.PARTITIONS_ID,
+                            "partitions",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
+                                    .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SUBPARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PARTITION_DESCRIPTION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("AVG_ROW_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MAX_DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("INDEX_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("DATA_FREE", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("UPDATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_COMMENT", ScalarType.createVarchar(2048))
+                                    .column("NODEGROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLESPACE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .put("table_privileges", new SchemaTable(
                             SystemId.TABLE_PRIVILEGES_ID,
                             "table_privileges",
