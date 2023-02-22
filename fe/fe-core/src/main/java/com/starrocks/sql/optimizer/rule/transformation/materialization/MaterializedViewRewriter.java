@@ -335,9 +335,8 @@ public class MaterializedViewRewriter {
         Preconditions.checkState(parentTableScanDesc.getTable() instanceof OlapTable);
         OlapTable parentOlapTable = (OlapTable) parentTableScanDesc.getTable();
         OlapTable childTable = (OlapTable) tableScanDesc.getTable();
-        LogicalJoinOperator joinOperator = parentTableScanDesc.getParentJoin();
-        Preconditions.checkState(joinOperator != null);
-        if (joinOperator.getJoinType().isInnerJoin()) {
+        JoinOperator parentJoinType = parentTableScanDesc.getParentJoinType();
+        if (parentJoinType.isInnerJoin()) {
             // to check:
             // 1. childKeys should be foreign key
             // 2. childKeys should be not null
@@ -349,7 +348,7 @@ public class MaterializedViewRewriter {
             if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull())) {
                 return false;
             }
-        } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
+        } else if (parentJoinType.isLeftOuterJoin()) {
             // make sure that all join keys are in foreign keys
             // the join keys of parent table should be unique
             if (!isUniqueKeys(parentOlapTable, parentKeys)) {
@@ -428,11 +427,14 @@ public class MaterializedViewRewriter {
         if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
             List<String> tableKeyColumns = table.getKeyColumns()
                     .stream().map(column -> column.getName()).collect(Collectors.toList());
-            if (!keys.equals(tableKeyColumns)) {
+            if (!keys.containsAll(tableKeyColumns) || !tableKeyColumns.containsAll(keys)) {
                 return false;
             }
         } else if (tableKeyType == KeysType.DUP_KEYS) {
             List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
+            if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
+                return false;
+            }
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
                 if (uniqueConstraint.getUniqueColumns().equals(keys)) {
                     return true;

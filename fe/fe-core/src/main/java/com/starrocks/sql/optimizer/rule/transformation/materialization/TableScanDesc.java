@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -26,13 +27,14 @@ public class TableScanDesc {
     // there may have multi same tables in the query. so assign it an index to distinguish them
     private final int index;
     private final LogicalScanOperator scanOperator;
-    private final LogicalJoinOperator parentJoin;
+    // join type of LogicalJoinOperator above scan operator
+    private final JoinOperator parentJoinType;
 
-    public TableScanDesc(Table table, int index, LogicalScanOperator scanOperator, LogicalJoinOperator parentJoin) {
+    public TableScanDesc(Table table, int index, LogicalScanOperator scanOperator, JoinOperator parentJoinType) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
-        this.parentJoin = parentJoin;
+        this.parentJoinType = parentJoinType;
     }
 
     public Table getTable() {
@@ -43,8 +45,8 @@ public class TableScanDesc {
         return index;
     }
 
-    public LogicalJoinOperator getParentJoin() {
-        return parentJoin;
+    public JoinOperator getParentJoinType() {
+        return parentJoinType;
     }
 
     public String getName() {
