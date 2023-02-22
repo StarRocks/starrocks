@@ -136,15 +136,15 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         boolean prevEnable = connectContext.getSessionVariable().isAbleFilterUnusedColumnsInScanStage();
 
         try {
-            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+            connectContext.getSessionVariable().setEnableFilterUnusedColumnsInScanStage(true);
 
             String sql;
             String plan;
 
-            // Key columns cannot be pruned in the non-skip-aggr scan stage of MV.
+            // Key columns can be pruned in the skip-aggr scan stage of MV.
             sql = "select distinct d_day_name from tpcds_100g_date_dim where d_dow > 1";
             plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[d_dow]");
             assertContains(plan, "rollup_name:tpcds_100g_date_dim_mv");
 
             // Columns can be pruned when not using MV.
@@ -154,7 +154,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             assertContains(plan, "rollup_name:tpcds_100g_date_dim");
 
         } finally {
-            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
+            connectContext.getSessionVariable().setEnableFilterUnusedColumnsInScanStage(prevEnable);
         }
     }
 
