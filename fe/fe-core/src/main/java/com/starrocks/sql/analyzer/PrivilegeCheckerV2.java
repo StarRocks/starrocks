@@ -1727,7 +1727,8 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ---------------------------------------- FUNC stmt --------------------------------------------------
+        // ------------------------------------------- UDF Statement ----------------------------------------------------
+
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             FunctionName name = statement.getFunctionName();
@@ -1747,38 +1748,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
-            // Don't do any privilege check on show global functions.
-            if (statement.getIsGlobal()) {
-                return null;
-            }
-            if (!PrivilegeActions.checkAnyActionOnDb(context, statement.getDbName())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        context.getQualifiedUser(), statement.getDbName());
-            }
-            List<Table> tableList = GlobalStateMgr.getCurrentState().getDb(statement.getDbName()).getTables();
-            boolean hasPrivilege = false;
-            for (Table table : tableList) {
-                if (table.getType().equals(Table.TableType.VIEW)) {
-                    if (PrivilegeActions.checkAnyActionOnView(context, statement.getDbName(), table.getName())) {
-                        hasPrivilege = true;
-                        break;
-                    }
-                } else if (table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
-                    if (PrivilegeActions.checkAnyActionOnMaterializedView(context, statement.getDbName(),
-                            table.getName())) {
-                        hasPrivilege = true;
-                        break;
-                    }
-                }
-                if (PrivilegeActions.checkAnyActionOnTable(context, statement.getDbName(), table.getName())) {
-                    hasPrivilege = true;
-                    break;
-                }
-            }
-            if (!hasPrivilege) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_ANY_ACTION_IN_DB_ACCESS_DENIED_ERROR,
-                        statement.getDbName());
-            }
+            // Don't do any privilege check on show functions
             return null;
         }
 
