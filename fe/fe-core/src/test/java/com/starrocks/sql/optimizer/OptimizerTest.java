@@ -156,6 +156,7 @@ public class OptimizerTest {
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
 
         // test timeout
+        long timeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
         TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
         // just give a valid RuleType
@@ -168,7 +169,7 @@ public class OptimizerTest {
         } catch (Exception e) {
             e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase");
         } finally {
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(timeout);
         }
     }
 
