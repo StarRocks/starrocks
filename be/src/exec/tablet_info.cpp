@@ -400,7 +400,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
-                            (*partition_not_exist_row_values)[0].emplace_back(std::move(column->debug_item(i)));
+                            (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
                         (*partitions)[i] = nullptr;
@@ -418,7 +418,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
-                            (*partition_not_exist_row_values)[0].emplace_back(std::move(column->debug_item(i)));
+                            (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
                         (*partitions)[i] = nullptr;
