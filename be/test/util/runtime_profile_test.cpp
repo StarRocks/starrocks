@@ -256,7 +256,7 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     }
     auto profile2 = std::make_shared<RuntimeProfile>("profile");
     {
-        profile2->add_info_string("key1", "value2"); // key1__DUP(0)
+        profile2->add_info_string("key1", "value2");
         profiles.push_back(profile2.get());
     }
     auto profile3 = std::make_shared<RuntimeProfile>("profile");
@@ -266,14 +266,14 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     }
     auto profile4 = std::make_shared<RuntimeProfile>("profile");
     {
-        profile4->add_info_string("key1__DUP(1)", "value3"); // key1__DUP(1)
-        profile4->add_info_string("key1", "value4");         // key1__DUP(2)
+        profile4->add_info_string("key1__DUP(1)", "value3");
+        profile4->add_info_string("key1", "value4");
         profiles.push_back(profile4.get());
     }
     auto profile5 = std::make_shared<RuntimeProfile>("profile");
     {
-        profile5->add_info_string("key1", "value5");         // key1__DUP(3)
-        profile5->add_info_string("key1__DUP(1)", "value6"); // key1__DUP(4)
+        profile5->add_info_string("key1", "value5");
+        profile5->add_info_string("key1__DUP(1)", "value6");
         profiles.push_back(profile5.get());
     }
 
