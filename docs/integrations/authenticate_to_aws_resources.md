@@ -174,10 +174,10 @@ Creating an external catalog in your StarRocks cluster means building integratio
 
 StarRocks supports the following types of catalogs:
 
-- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
+- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
 The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster. For detailed syntax and parameters, see [Hive catalog](../data_source/catalog/hive_catalog.md).
 

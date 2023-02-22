@@ -41,10 +41,10 @@
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
-    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](./data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
@@ -62,6 +62,9 @@
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
++ Integration
+  + [Integrate with StarRocks](./integrations/intro.md)
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -609,9 +612,6 @@
     + [Build_Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
-+ Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
-  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)
