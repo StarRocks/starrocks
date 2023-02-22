@@ -44,10 +44,10 @@
   + Catalog
     + [概述](/data_source/catalog/catalog_overview.md)
     + [Default catalog](/data_source/catalog/default_catalog.md)
-    + [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](/data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](/data_source/catalog/hudi_catalog.md)
+    + [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)
     + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
   + [文件外部表](/data_source/file_external_table.md)
@@ -65,6 +65,9 @@
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [使用 Lateral Join 实现行转列](/using_starrocks/Lateral_join.md)
   + [Query Cache](/using_starrocks/query_cache.md)
++ 外部系统集成
+  + [概述](/integrations/intro.md)
+  + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
 + 管理手册
   + 部署集群
     + [通过 StarGo 部署](/administration/stargo.md)
@@ -598,9 +601,12 @@
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + 开发指南
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
+<<<<<<< HEAD
 + 外部系统集成
   + [概述](./integrations/intro.md)
   + [配置 AWS 认证方式](./integrations/authenticate_to_aws_resources.md)
+=======
+>>>>>>> cd1cfb0 ([Doc] adjust catalog docs sequence (#4524))
 + Release Notes
   + [v2.5](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
